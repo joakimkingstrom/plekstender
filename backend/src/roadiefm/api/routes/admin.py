@@ -55,7 +55,7 @@ async def list_all_servers(db: DbDep, _: AdminDep) -> list[AdminServerOut]:
             approved=s.approved,
             user_count=count,
         )
-        for s, count in rows.tuples()
+        for s, count in rows.all()
     ]
 
 
@@ -101,7 +101,7 @@ async def list_users(db: DbDep, _: AdminDep) -> list[AdminUserOut]:
         .group_by(User.id)
         .order_by(User.created_at)
     )
-    return [_admin_user_out(u, count) for u, count in rows.tuples()]
+    return [_admin_user_out(u, count) for u, count in rows.all()]
 
 
 @router.put("/users/{user_id}", response_model=AdminUserOut)

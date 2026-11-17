@@ -163,7 +163,7 @@ async def connect_server(
     if chosen is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "RoadieFM couldn't reach this server on any of its addresses.",
+            "roadie.fm couldn't reach this server on any of its addresses.",
         )
 
     if server is None:

@@ -1,5 +1,12 @@
-__pycache__/
-*.py[cod]
+node_modules/
+dist/
 .venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .env
-.DS_Store
+backend/openapi.json
+compose.override.yaml
+# Local spike output (may contain server names)
+backend/report*.json

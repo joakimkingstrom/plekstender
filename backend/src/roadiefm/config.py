@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # Directory containing the built frontend (index.html + assets). None = API only.
     static_dir: Path | None = None
 
-    plex_product: str = "RoadieFM"
+    plex_product: str = "roadie.fm"
     plex_tv_url: str = "https://plex.tv"
     plex_clients_url: str = "https://clients.plex.tv"
     plex_app_url: str = "https://app.plex.tv"
@@ -108,4 +108,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

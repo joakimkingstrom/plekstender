@@ -1,0 +1,29 @@
+# SearXNG configuration for RoadieFM's artist-logo image search.
+# The instance is only reachable from inside the compose network, so the rate limiter
+# and public-instance features are off. The secret comes from SEARXNG_SECRET.
+use_default_settings:
+  engines:
+    keep_only:
+      - google images
+      - bing images
+      - duckduckgo images
+      - qwant images
+
+general:
+  instance_name: "RoadieFM search"
+  enable_metrics: false
+
+server:
+  secret_key: "set-via-SEARXNG_SECRET"
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json
+
+valkey:
+  url: false

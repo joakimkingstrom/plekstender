@@ -54,7 +54,7 @@ def apply_procrastinate_schema(conninfo: str) -> list[str]:
 
         if not installed:
             log.info("installing procrastinate schema")
-            conn.execute(SchemaManager.get_schema())  # type: ignore[arg-type]
+            conn.execute(SchemaManager.get_schema())
             for f in files:
                 conn.execute(
                     f"INSERT INTO {TRACKING_TABLE} (name) VALUES (%s) ON CONFLICT DO NOTHING",  # noqa: S608
@@ -71,7 +71,7 @@ def apply_procrastinate_schema(conninfo: str) -> list[str]:
                 if f.name in done:
                     continue
                 log.info("applying procrastinate migration %s", f.name)
-                conn.execute(f.read_text())  # type: ignore[arg-type]
+                conn.execute(f.read_text())
                 conn.execute(f"INSERT INTO {TRACKING_TABLE} (name) VALUES (%s)", (f.name,))  # noqa: S608
                 applied.append(f.name)
         conn.commit()
