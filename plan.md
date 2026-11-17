@@ -103,7 +103,7 @@ Almost every feature (weighted rating queues, "top 10 artists in genre X", popul
 - `plex_servers`: machine identifier, name, owner account id
 - `user_servers`: user ↔ server, encrypted access token, `is_owner`, preferred connection URI, selected music section(s)
 - `server_settings`: library path mapping (Plex path → container path), capability flags
-- `artists`, `albums`, `tracks`: keyed by `(server_id, rating_key)`; title, sort title, parent keys, MBID/guid, year, duration, summary, popularity (`ratingCount`), thumb path, `raw jsonb`
+- `artists`, `albums`, `tracks`: keyed by `(server_id, rating_key)`; title, sort title, parent keys, MBID/guid, year, duration, summary, popularity (tracks: Plex `ratingCount`; albums/artists: derived from their tracks), thumb path, `raw jsonb`
 - `tags` + `item_tags`: genres/moods/styles (normalised, per server)
 - `similar_artists`: `(server_id, artist_key, similar_name, similar_key nullable, source)`
 - `user_item_state`: `(user_id, server_id, item_type, rating_key)` → user_rating, view_count, last_viewed_at
@@ -257,10 +257,24 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
 - [x] CI: lint (ruff, oxlint), type check (mypy strict, tsc), tests (pytest against Postgres, vitest), API-types drift check, image build
 - [ ] Verify the Docker image and compose stack on a Docker host (not available on the machine Phase 0 was built on)
 - [ ] Spikes (scripts in `backend/scripts/spikes/`, to be run against a real server):
-  - [ ] What popularity fields Plex exposes on tracks / albums / artists (`plex_probe.py`)
-  - [ ] Similar and sonically-similar endpoints (needs Plex Pass + sonic analysis; define the fallback) (`plex_probe.py`)
-  - [ ] Confirm that fetching a track file directly does not create a play (`plex_probe.py --stream-test`)
-  - [ ] SearXNG image result quality for "<artist> logo" (`searxng_probe.py`)
+  - [x] What popularity fields Plex exposes on tracks / albums / artists (`plex_probe.py`)
+  - [x] Similar and sonically-similar endpoints (`plex_probe.py`)
+  - [x] Confirm that fetching a track file directly does not create a play (`plex_probe.py --stream-test`)
+  - [ ] SearXNG image result quality for "<artist> logo" (`searxng_probe.py`; needs SearXNG running on a Docker host)
+
+#### Spike results (Plex Media Server 1.43, Plex Pass, ~1.3k artists / 7.3k albums / 98k tracks)
+
+| Question | Finding | Consequence |
+|---|---|---|
+| Popularity fields | `ratingCount` (Last.fm listener count) exists **only on tracks**, and 97% of tracks have it. Albums and artists have no popularity field. | Store track popularity in the mirror and **derive** album and artist popularity from their tracks (e.g. sum of the top 3 tracks for albums, top 10 for artists; settle the formula in Phase 1). |
+| Duplicate recordings | Different tracks share identical `ratingCount` values: likely the same recording on several releases (compilations, remasters). | Rating queues and playlists should group a recording's duplicates (artist + normalised title), preferring the original album, so the same song doesn't show up twice. |
+| Genres / moods / styles | On artists and albums (e.g. 10 moods on one artist), **not on tracks**. | Track-level genre and mood filters inherit from the album, falling back to the artist. |
+| Similar artists | Artist metadata includes a `Similar` list (30 for the sampled artist). | Used for "add similar artists" in playlists. |
+| Artist page hubs | `artist.mostpopulartracks` (10 tracks) exists. | Not needed (popularity is in the mirror), but useful as a cross-check. |
+| Sonic similarity | `/library/metadata/{id}/nearest` works for artists, albums and tracks. | Use it when available; servers without Plex Pass or sonic analysis fall back to `Similar` plus shared genres and styles. |
+| Critic ratings | Albums have `rating` (critic score) for about two-thirds of the sample. | Show it next to the album review in the album rating view. |
+| Existing ratings | Most sampled artists, albums and tracks already have a `userRating`. | The "Everything" rating mode, with already-rated items labelled, matters. |
+| Preview playback | Downloading the first 512 KB of a track file changed neither `viewCount`, `lastViewedAt` nor play history. | Previews through direct file access don't affect stats. Re-check once the real preview (ffmpeg reading ~45 s) exists. |
 
 ### Phase 1 — Library mirror
 - [ ] Full + incremental sync jobs with progress UI
@@ -305,6 +319,6 @@ Plex has no supported API to write play history with historical timestamps, so t
 - Should skip plays that are already in Plex (overlap since Plexamp was adopted), using timestamps.
 
 ## Open questions
-- Album and artist popularity: if Plex only exposes it on tracks, derive it (e.g. sum or max of track popularity). Decide after the Phase 0 spike.
+- Exact formula for derived album and artist popularity (see the Phase 0 spike results); decide in Phase 1 by comparing candidates against a few known artists.
 - Should playlists be shareable between users of the same server (e.g. "copy definition")?
 - Licence of shared logo packs: fanart.tv images come with their own terms; the export should keep `source` per image so people can decide what they share.
