@@ -46,7 +46,7 @@ GIFs have a solid background because GIF transparency is 1-bit and leaves jagged
 
 ### Spinning variant
 
-The whole pick does one full turn per loop (1.2 s), easing in and out like a flicked pick.
+The pick spins in 3D around a vertical axis through its tip, like a coin spun on its edge: the tip stays put while the shoulders swing round. One full turn per loop (1.6 s), pausing briefly face-on. The SVG fakes the 3D turn with a sampled horizontal scale, since SMIL has no 3D rotation.
 
 | File | Use |
 |---|---|

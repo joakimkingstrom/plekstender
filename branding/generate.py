@@ -247,40 +247,51 @@ def write_loader(frames=36):
 
 
 # --- Spinning loader ----------------------------------------------------------
-# The whole pick (star included) does one full turn around its centre per loop,
-# speeding up and settling like a flicked pick.
-SPIN_S = 1.2
+# The pick spins in 3D around a vertical axis through its tip (x = 32), like a
+# coin spun on its edge: the tip stays put while the shoulders swing round.
+# The pick is symmetric, so the back face looks the same as the front.
+SPIN_S = 1.6
 SPIN_C = (32, 31.75)        # centre of the pick's bounding box
-SPIN_EASE = "0.65 0 0.35 1"
+SPIN_EASE = "0.45 0 0.55 1"  # brief pause face-on, fastest edge-on
+SPIN_SAMPLES = 48
+MIN_SCALE = 0.03             # keep a sliver visible when edge-on
+
+
+def spin_scale(t):
+    sx = math.cos(math.radians(360 * _bezier(t, *[float(v) for v in SPIN_EASE.split()])))
+    return math.copysign(max(abs(sx), MIN_SCALE), sx)
 
 
 def svg_loader_spin():
     cx, cy = SPIN_C
-    # Farthest point from the centre is ~28.7 units, so a 64-unit box clears it.
+    # SMIL can't animate a 3D rotation, so the turn is sampled as a horizontal
+    # scale of cos(angle) around the axis.
+    values = ";".join(f"{spin_scale(i / SPIN_SAMPLES):.3f} 1" for i in range(SPIN_SAMPLES + 1))
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 {cy - 32} 64 64" width="64" height="64" role="img" aria-label="Loading">
 <style>.p{{fill:{AMBER_LIGHT}}}@media (prefers-color-scheme:dark){{.p{{fill:{AMBER_DARK}}}}}</style>
-<path class="p" fill-rule="evenodd" d="{MARK_PATH}"><animateTransform attributeName="transform" type="rotate" values="0 {cx} {cy};360 {cx} {cy}" keyTimes="0;1" calcMode="spline" keySplines="{SPIN_EASE}" dur="{SPIN_S}s" repeatCount="indefinite"/></path>
+<g transform="translate({cx} 0)"><g><animateTransform attributeName="transform" type="scale" values="{values}" dur="{SPIN_S}s" repeatCount="indefinite"/>
+<path class="p" fill-rule="evenodd" transform="translate({-cx} 0)" d="{MARK_PATH}"/></g></g>
 </svg>
 '''
 
 
 def spin_frame(size, t, color, bg):
-    deg = 360 * _bezier(t, *[float(v) for v in SPIN_EASE.split()])
+    sx = spin_scale(t)
     big = size * SS
     unit = big / 64
-    tf = lambda pts: [(big / 2 + (x - SPIN_C[0]) * unit, big / 2 + (y - SPIN_C[1]) * unit) for x, y in pts]
+    tf = lambda pts: [(big / 2 + (x - SPIN_C[0]) * sx * unit, big / 2 + (y - SPIN_C[1]) * unit) for x, y in pts]
 
     mask = Image.new("L", (big, big), 0)
     md = ImageDraw.Draw(mask)
-    md.polygon(tf(_rot(pick_polygon(), SPIN_C, deg)), fill=255)
-    md.polygon(tf(_rot(star_points(*STAR_C, STAR_R, STAR_r), SPIN_C, deg)), fill=0)
+    md.polygon(tf(pick_polygon()), fill=255)
+    md.polygon(tf(star_points(*STAR_C, STAR_R, STAR_r)), fill=0)
 
     img = Image.new("RGB", (big, big), bg)
     img.paste(Image.new("RGB", (big, big), color), (0, 0), mask)
     return img.resize((size, size), Image.LANCZOS)
 
 
-def write_loader_spin(frames=36):
+def write_loader_spin(frames=48):
     (OUT / "roadie-loader-spin.svg").write_text(svg_loader_spin())
     ms = round(SPIN_S * 1000 / frames)
     for name, color, bg in (("light", AMBER_LIGHT, "#ffffff"), ("dark", AMBER_DARK, PLATE_DARK)):
