@@ -246,8 +246,53 @@ def write_loader(frames=36):
                          duration=ms, loop=0, optimize=True, disposal=1)
 
 
+# --- Spinning loader ----------------------------------------------------------
+# The whole pick (star included) does one full turn around its centre per loop,
+# speeding up and settling like a flicked pick.
+SPIN_S = 1.2
+SPIN_C = (32, 31.75)        # centre of the pick's bounding box
+SPIN_EASE = "0.65 0 0.35 1"
+
+
+def svg_loader_spin():
+    cx, cy = SPIN_C
+    # Farthest point from the centre is ~28.7 units, so a 64-unit box clears it.
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 {cy - 32} 64 64" width="64" height="64" role="img" aria-label="Loading">
+<style>.p{{fill:{AMBER_LIGHT}}}@media (prefers-color-scheme:dark){{.p{{fill:{AMBER_DARK}}}}}</style>
+<path class="p" fill-rule="evenodd" d="{MARK_PATH}"><animateTransform attributeName="transform" type="rotate" values="0 {cx} {cy};360 {cx} {cy}" keyTimes="0;1" calcMode="spline" keySplines="{SPIN_EASE}" dur="{SPIN_S}s" repeatCount="indefinite"/></path>
+</svg>
+'''
+
+
+def spin_frame(size, t, color, bg):
+    deg = 360 * _bezier(t, *[float(v) for v in SPIN_EASE.split()])
+    big = size * SS
+    unit = big / 64
+    tf = lambda pts: [(big / 2 + (x - SPIN_C[0]) * unit, big / 2 + (y - SPIN_C[1]) * unit) for x, y in pts]
+
+    mask = Image.new("L", (big, big), 0)
+    md = ImageDraw.Draw(mask)
+    md.polygon(tf(_rot(pick_polygon(), SPIN_C, deg)), fill=255)
+    md.polygon(tf(_rot(star_points(*STAR_C, STAR_R, STAR_r), SPIN_C, deg)), fill=0)
+
+    img = Image.new("RGB", (big, big), bg)
+    img.paste(Image.new("RGB", (big, big), color), (0, 0), mask)
+    return img.resize((size, size), Image.LANCZOS)
+
+
+def write_loader_spin(frames=36):
+    (OUT / "roadie-loader-spin.svg").write_text(svg_loader_spin())
+    ms = round(SPIN_S * 1000 / frames)
+    for name, color, bg in (("light", AMBER_LIGHT, "#ffffff"), ("dark", AMBER_DARK, PLATE_DARK)):
+        for size in (128, 256):
+            imgs = [spin_frame(size, i / frames, color, bg).quantize(colors=64) for i in range(frames)]
+            imgs[0].save(OUT / f"loader-spin-{name}-{size}.gif", save_all=True, append_images=imgs[1:],
+                         duration=ms, loop=0, optimize=True, disposal=1)
+
+
 if __name__ == "__main__":
     write_svgs()
     write_pngs()
     write_loader()
+    write_loader_spin()
     print("wrote assets to", OUT)

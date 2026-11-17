@@ -43,3 +43,13 @@ The pick strums: it rocks ±10° from near its top, and the star turns one point
 | `loader-dark-{128,256}.gif` | GIF on the dark plate (`#17181c`) |
 
 GIFs have a solid background because GIF transparency is 1-bit and leaves jagged edges.
+
+### Spinning variant
+
+The whole pick does one full turn per loop (1.2 s), easing in and out like a flicked pick.
+
+| File | Use |
+|---|---|
+| `roadie-loader-spin.svg` | Animated SVG, theme-aware like the strum loader |
+| `loader-spin-light-{128,256}.gif` | GIF on white |
+| `loader-spin-dark-{128,256}.gif` | GIF on the dark plate |
