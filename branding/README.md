@@ -31,3 +31,15 @@ python3 branding/generate.py
 | `icons/mark-512.png` | Transparent PNG of the mark |
 
 The star is cut out with `fill-rule="evenodd"`, so the background always shows through it.
+
+## Loading animation
+
+The pick strums: it rocks ±10° from near its top, and the star turns one point on each stroke (1.2 s loop).
+
+| File | Use |
+|---|---|
+| `roadie-loader.svg` | Animated SVG (SMIL) for the web app; switches amber shade with `prefers-color-scheme`. Works in `<img>` and inline. |
+| `loader-light-{128,256}.gif` | GIF on white, for places that need a GIF |
+| `loader-dark-{128,256}.gif` | GIF on the dark plate (`#17181c`) |
+
+GIFs have a solid background because GIF transparency is 1-bit and leaves jagged edges.

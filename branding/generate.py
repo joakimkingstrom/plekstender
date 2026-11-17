@@ -170,7 +170,84 @@ def write_pngs():
     sheet.save(OUT / "preview.png")
 
 
+# --- Animated loader ----------------------------------------------------------
+# The pick strums: it rocks +-SWING degrees around a point near its top, and the
+# star turns one point (72 deg) on each stroke. One cycle = two strokes.
+LOOP_S = 1.2
+SWING = 10
+PIVOT = (32, 6)
+EASE = "0.45 0 0.55 1"   # sine-like, for the swing
+SNAP = "0.6 0 0.2 1"     # quick turn that settles, for the star
+
+
+def svg_loader():
+    cx, cy = STAR_C
+    px, py = PIVOT
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -6 80 72" width="80" height="72" role="img" aria-label="Loading">
+<style>.p{{fill:{AMBER_LIGHT}}}@media (prefers-color-scheme:dark){{.p{{fill:{AMBER_DARK}}}}}</style>
+<mask id="roadie-star" maskUnits="userSpaceOnUse" x="-8" y="-6" width="80" height="72">
+<rect x="-8" y="-6" width="80" height="72" fill="#fff"/>
+<path fill="#000" d="{star_d()}"><animateTransform attributeName="transform" type="rotate" values="0 {cx} {cy};72 {cx} {cy};144 {cx} {cy}" keyTimes="0;0.5;1" calcMode="spline" keySplines="{SNAP};{SNAP}" dur="{LOOP_S}s" repeatCount="indefinite"/></path>
+</mask>
+<g><animateTransform attributeName="transform" type="rotate" values="-{SWING} {px} {py};{SWING} {px} {py};-{SWING} {px} {py}" keyTimes="0;0.5;1" calcMode="spline" keySplines="{EASE};{EASE}" dur="{LOOP_S}s" repeatCount="indefinite"/>
+<path class="p" d="{pick_d()}" mask="url(#roadie-star)"/></g>
+</svg>
+'''
+
+
+def _bezier(t, x1, y1, x2, y2):
+    """CSS/SMIL cubic-bezier timing: progress at time fraction t."""
+    lo, hi = 0.0, 1.0
+    for _ in range(40):
+        s = (lo + hi) / 2
+        x = 3 * (1 - s) ** 2 * s * x1 + 3 * (1 - s) * s * s * x2 + s**3
+        lo, hi = (s, hi) if x < t else (lo, s)
+    s = (lo + hi) / 2
+    return 3 * (1 - s) ** 2 * s * y1 + 3 * (1 - s) * s * s * y2 + s**3
+
+
+def _rot(pts, c, deg):
+    a = math.radians(deg)
+    ca, sa = math.cos(a), math.sin(a)
+    return [(c[0] + (x - c[0]) * ca - (y - c[1]) * sa, c[1] + (x - c[0]) * sa + (y - c[1]) * ca) for x, y in pts]
+
+
+def loader_frame(size, t, color, bg):
+    half, local = divmod(t * 2, 1)
+    ease = [float(v) for v in EASE.split()]
+    snap = [float(v) for v in SNAP.split()]
+    p = _bezier(local, *ease)
+    swing = -SWING + 2 * SWING * p if half == 0 else SWING - 2 * SWING * p
+    star_deg = 72 * (half + _bezier(local, *snap))
+
+    big = size * SS
+    unit = big / 80  # same 80-unit box as the SVG viewBox width
+    ox, oy = 8 * unit, (8 + 4) * unit  # centre the 72-unit-tall box vertically
+    tf = lambda pts: [(ox + x * unit, oy + y * unit) for x, y in pts]
+
+    star = _rot(star_points(*STAR_C, STAR_R, STAR_r), STAR_C, star_deg)
+    mask = Image.new("L", (big, big), 0)
+    md = ImageDraw.Draw(mask)
+    md.polygon(tf(_rot(pick_polygon(), PIVOT, swing)), fill=255)
+    md.polygon(tf(_rot(star, PIVOT, swing)), fill=0)
+
+    img = Image.new("RGB", (big, big), bg)
+    img.paste(Image.new("RGB", (big, big), color), (0, 0), mask)
+    return img.resize((size, size), Image.LANCZOS)
+
+
+def write_loader(frames=36):
+    (OUT / "roadie-loader.svg").write_text(svg_loader())
+    ms = round(LOOP_S * 1000 / frames)
+    for name, color, bg in (("light", AMBER_LIGHT, "#ffffff"), ("dark", AMBER_DARK, PLATE_DARK)):
+        for size in (128, 256):
+            imgs = [loader_frame(size, i / frames, color, bg).quantize(colors=64) for i in range(frames)]
+            imgs[0].save(OUT / f"loader-{name}-{size}.gif", save_all=True, append_images=imgs[1:],
+                         duration=ms, loop=0, optimize=True, disposal=1)
+
+
 if __name__ == "__main__":
     write_svgs()
     write_pngs()
+    write_loader()
     print("wrote assets to", OUT)
