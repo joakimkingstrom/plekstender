@@ -9,4 +9,4 @@ __pycache__/
 backend/openapi.json
 compose.override.yaml
 # Local spike output (may contain server names)
-backend/report*.json
+backend/*report*.json

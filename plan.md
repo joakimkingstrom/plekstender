@@ -204,7 +204,7 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
 - `ImageSearchProvider` interface; implementations: `searxng` (default when `SEARXNG_URL` is set), `brave` (API key), `none`.
 - SearXNG config shipped in the repo (`searxng/settings.yml`):
   - JSON output format enabled (`search.formats: [html, json]`)
-  - only image engines enabled (google images, bing images, duckduckgo images, qwant images)
+  - only image engines enabled (bing, duckduckgo and qwant images; google images ships disabled because Google blocks most server IPs)
   - limiter off (it's not publicly reachable), `server.secret_key` from env
   - no published port and no Traefik labels: only `frontend`/`worker` can reach it
 - Results go through the safe outbound fetcher before being shown (proxied thumbnails, so the user's browser never connects to random hosts).
@@ -260,7 +260,7 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
   - [x] What popularity fields Plex exposes on tracks / albums / artists (`plex_probe.py`)
   - [x] Similar and sonically-similar endpoints (`plex_probe.py`)
   - [x] Confirm that fetching a track file directly does not create a play (`plex_probe.py --stream-test`)
-  - [ ] SearXNG image result quality for "<artist> logo" (`searxng_probe.py`; needs SearXNG running on a Docker host)
+  - [x] SearXNG image result quality for "<artist> logo" (`searxng_probe.py`)
 
 #### Spike results (Plex Media Server 1.43, Plex Pass, ~1.3k artists / 7.3k albums / 98k tracks)
 
@@ -275,6 +275,8 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
 | Critic ratings | Albums have `rating` (critic score) for about two-thirds of the sample. | Show it next to the album review in the album rating view. |
 | Existing ratings | Most sampled artists, albums and tracks already have a `userRating`. | The "Everything" rating mode, with already-rated items labelled, matters. |
 | Preview playback | Downloading the first 512 KB of a track file changed neither `viewCount`, `lastViewedAt` nor play history. | Previews through direct file access don't affect stats. Re-check once the real preview (ffmpeg reading ~45 s) exists. |
+| Image search: engines | From a home server, Google Images returned "access denied" on every query and SearXNG suspended it. Bing, DuckDuckGo and Qwant images each worked, together returning ~150 results per artist, with many duplicates across engines. | Google is off in the shipped `settings.yml`. Deduplicate results by image URL. |
+| Image search: quality | For well-known artists (Radiohead, The Beatles) the top results are real logos from logo sites, often large PNGs. For smaller artists (Nathaniel Rateliff, St. Paul & The Broken Bones) real logos are mixed with merch (TeePublic, Redbubble, Etsy, Amazon), tour posters and ticket-site banners. | Search is a source of **candidates to pick from**, never used by the bulk "apply automatically" action. Rank candidates: PNG/SVG and "logo" in the title first; merch and ticket sites last. fanart.tv stays the first choice. |
 
 ### Phase 1 — Library mirror
 - [ ] Full + incremental sync jobs with progress UI
