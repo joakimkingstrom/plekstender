@@ -26,6 +26,7 @@ const finished = {
 }
 
 function renderPage(responses: Record<string, unknown>) {
+  responses = { 'GET /api/listens/plex': [], ...responses }
   const fetch = vi.fn(async (input: Request) => {
     const path = new URL(input.url).pathname
     const body = responses[`${input.method} ${path}`]
@@ -89,5 +90,21 @@ describe('ListeningSettingsPage', () => {
     expect(await screen.findByText("Importing Joakim's scrobbles…")).toBeInTheDocument()
     expect(screen.getByText('400 / 1,000')).toBeInTheDocument()
     expect(screen.queryByLabelText('Last.fm username')).not.toBeInTheDocument()
+  })
+})
+
+describe('Plays from Plex', () => {
+  it('shows each server with its play count and state', async () => {
+    renderPage({
+      'GET /api/auth/me': user,
+      'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
+      'GET /api/listens/plex': [
+        { server_id: 1, server_name: 'Home', via_owner: true, checked_at: '2026-11-18T12:00:00Z', backfilled: false, error: null, listens: 41746 },
+        { server_id: 2, server_name: 'Cabin', via_owner: false, checked_at: '2026-11-18T12:00:00Z', backfilled: true, error: "Plex didn't allow reading play history with this account.", listens: 0 },
+      ],
+    })
+    expect(await screen.findByText('41,746 plays')).toBeInTheDocument()
+    expect(screen.getByText('Reading past plays…')).toBeInTheDocument()
+    expect(screen.getByText(/didn't allow reading play history/)).toBeInTheDocument()
   })
 })

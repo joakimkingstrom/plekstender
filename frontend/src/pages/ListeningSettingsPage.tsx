@@ -6,6 +6,7 @@ import {
   useDeleteListens,
   useLastFmKey,
   useLastFmStatus,
+  usePlexCapture,
   useResumeImport,
   useSetLastFmKey,
   useStartLastFmImport,
@@ -26,6 +27,7 @@ export function ListeningSettingsPage() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="space-y-4">
+        <PlexPlaysCard />
         <LastFmImportCard isAdmin={isAdmin} />
         <DeleteHistoryCard />
       </div>
@@ -36,6 +38,51 @@ export function ListeningSettingsPage() {
       )}
     </div>
   )
+}
+
+function PlexPlaysCard() {
+  const capture = usePlexCapture()
+  return (
+    <Card title="Plays from Plex">
+      <p className="mb-4 text-sm text-muted">
+        Plekstender reads your servers' play history every 5 minutes, including plays from before
+        you connected. A Last.fm scrobble of the same play counts only once.
+      </p>
+      {capture.isPending ? (
+        <Spinner small />
+      ) : capture.isError ? (
+        <Notice tone="error">{errorMessage(capture.error)}</Notice>
+      ) : capture.data.length === 0 ? (
+        <p className="text-sm text-muted">
+          <Link to="/settings" className="text-accent underline">
+            Connect a server
+          </Link>{' '}
+          to start.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {capture.data.map((s) => (
+            <li key={s.server_id} className="space-y-1 py-2 first:pt-0 last:pb-0">
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="font-medium">{s.server_name}</span>
+                <span className="text-muted tabular-nums">
+                  {formatCount(s.listens)} {s.listens === 1 ? 'play' : 'plays'}
+                </span>
+              </div>
+              <p className="text-xs text-muted">{describeCapture(s)}</p>
+              {s.error && <Notice tone="error">{s.error}</Notice>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+function describeCapture(s: Schemas['PlexCaptureOut']): string {
+  if (!s.checked_at) return 'Waiting for the first library sync to finish.'
+  if (!s.backfilled) return 'Reading past plays…'
+  return `Checked ${formatRelative(s.checked_at)}.`
 }
 
 function ImportProgress({ job }: { job: Schemas['ListenImportOut'] }) {

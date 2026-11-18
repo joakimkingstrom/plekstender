@@ -19,9 +19,10 @@ from plekstender.api.schemas import (
     ListenPage,
     ListenSource,
     ListenSummary,
+    PlexCaptureOut,
 )
 from plekstender.db.instance import get_lastfm_api_key
-from plekstender.db.models import Listen, ListenImport, User
+from plekstender.db.models import HistoryCursor, Listen, ListenImport, User, UserServer
 from plekstender.history.lastfm import LastFmClient, LastFmError
 from plekstender.history.lastfm_import import next_window_start
 from plekstender.worker import ACTIVE, enqueue_listen_import
@@ -123,6 +124,62 @@ async def delete_listen(listen_id: int, db: DbDep, user: UserDep) -> Response:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Listen not found")
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Plex plays ----------------------------------------------------------------------------
+
+
+@router.get("/plex", response_model=list[PlexCaptureOut])
+async def plex_capture_status(db: DbDep, user: UserDep) -> list[PlexCaptureOut]:
+    """How Plex play history is read for each of the user's servers."""
+    own = list(
+        await db.scalars(
+            select(UserServer).where(UserServer.user_id == user.id).order_by(UserServer.id)
+        )
+    )
+    counts = dict(
+        (
+            await db.execute(
+                select(Listen.server_id, func.count())
+                .where(Listen.user_id == user.id, Listen.source == "plex")
+                .group_by(Listen.server_id)
+            )
+        ).all()
+    )
+    out = []
+    for us in own:
+        owner = (
+            us
+            if us.is_owner
+            else await db.scalar(
+                select(UserServer).where(
+                    UserServer.server_id == us.server_id, UserServer.is_owner.is_(True)
+                )
+            )
+        )
+        reader = owner or us
+        cursors = list(
+            await db.scalars(select(HistoryCursor).where(HistoryCursor.user_server_id == reader.id))
+        )
+        sections = set(reader.music_section_keys)
+        current = [c for c in cursors if c.section_key in sections]
+        complete = bool(sections) and len(current) == len(sections)
+        out.append(
+            PlexCaptureOut(
+                server_id=us.id,
+                server_name=us.server.name,
+                via_owner=owner is not None,
+                checked_at=(
+                    min((c.last_run_at for c in current if c.last_run_at), default=None)
+                    if complete
+                    else None
+                ),
+                backfilled=complete and all(c.backfilled_at for c in current),
+                error=next((c.last_error for c in current if c.last_error), None),
+                listens=counts.get(us.server_id, 0),
+            )
+        )
+    return out
 
 
 # --- Last.fm import ------------------------------------------------------------------------

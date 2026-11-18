@@ -351,7 +351,10 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - Every entry has `historyKey` (dedupe key), `ratingKey` (all 50 sampled still exist), `viewedAt`, `accountID`, `deviceID` and album / album-artist titles. There's no `originalTitle`, so compilation tracks only name the album artist: take the track artist from the mirror via `ratingKey`, falling back to `grandparentTitle`.
   - Accounts: the owner is account `1` (their plex.tv ID isn't listed); 11 other accounts use plex.tv IDs.
   - Consecutive plays are ~4 minutes apart (median), which doesn't settle whether `viewedAt` marks the start or the end of a play. Keep start = `viewedAt − duration` and check against Last.fm duplicates once both are imported.
-- [ ] Plex play capture: history polling + backfill, account mapping, cross-source duplicates
+- [x] Plex play capture: history polling + backfill, account mapping, cross-source duplicates
+  - Every 5 minutes the worker reads each server's history per music library (oldest first, from 10 minutes before the newest play seen; the first read backfills everything). It waits until the connection's libraries have had a full sync, since names and durations come from the mirror.
+  - Only the owner's connection is read when the owner uses Plekstender (account `1` = owner, others by plex.tv ID); plays by accounts that haven't connected the server are skipped. Without the owner, each user's own connection is read and only their own plays are kept. A shared user's token reading history is still unverified on a real server; failures show on Settings → Listening.
+  - Each Plex play is stored once (`user_id, server_id, historyKey`). After a capture or a Last.fm import, imported listens of the same song within its duration + 5 minutes of a Plex play are paired one-to-one (nearest first) and marked `duplicate_of`; stats skip them.
 - [ ] ListenBrainz scrobbling: token, outbox, batched submit, retries
 - [ ] Stats pages and per-item listen stats
 - [ ] ListenBrainz import (API + export file), history export, delete all

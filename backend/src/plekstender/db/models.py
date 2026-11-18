@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -346,6 +347,15 @@ class Listen(Base):
         ),
         Index("ix_listens_user_time", "user_id", "listened_at"),
         Index("ix_listens_user_track", "user_id", "artist_key", "track_key"),
+        # A Plex history entry is stored once, however often it's read.
+        Index(
+            "uq_listens_source_ref",
+            "user_id",
+            "server_id",
+            "source_ref",
+            unique=True,
+            postgresql_where=text("source_ref IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -366,8 +376,29 @@ class Listen(Base):
     artist_mbid: Mapped[str | None] = mapped_column(String(36))
     release_mbid: Mapped[str | None] = mapped_column(String(36))
     recording_mbid: Mapped[str | None] = mapped_column(String(36))
+    # Plex plays: the server and track played, and Plex's `historyKey`.
+    server_id: Mapped[int | None] = mapped_column(
+        ForeignKey("plex_servers.id", ondelete="SET NULL")
+    )
+    rating_key: Mapped[int | None] = mapped_column(BigInteger)
+    source_ref: Mapped[str | None] = mapped_column(Text)
     # Same play recorded by another source (e.g. a Plexamp play also scrobbled to Last.fm).
     duplicate_of: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("listens.id", ondelete="SET NULL")
     )
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class HistoryCursor(Base):
+    """How far Plex's play history has been read, per server connection and music library."""
+
+    __tablename__ = "history_cursors"
+    __table_args__ = (PrimaryKeyConstraint("user_server_id", "section_key"),)
+
+    user_server_id: Mapped[int] = mapped_column(ForeignKey("user_servers.id", ondelete="CASCADE"))
+    section_key: Mapped[str] = mapped_column(String(16))
+    # Newest `viewedAt` read so far; the next read starts a little before it.
+    viewed_through: Mapped[dt.datetime | None]
+    backfilled_at: Mapped[dt.datetime | None]  # when all older history had been read
+    last_run_at: Mapped[dt.datetime | None]
+    last_error: Mapped[str | None] = mapped_column(Text)

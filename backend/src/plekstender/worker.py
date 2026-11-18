@@ -18,6 +18,7 @@ from plekstender.db import get_sessionmaker
 from plekstender.db.instance import get_library_settings, record_worker_heartbeat
 from plekstender.db.models import ListenImport, PlexServer, SyncRun, UserSectionSync, UserServer
 from plekstender.history.lastfm_import import run_lastfm_import
+from plekstender.history.plex_capture import capture_plays
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
@@ -167,6 +168,70 @@ async def enqueue_listen_import(db: AsyncSession, job: ListenImport) -> None:
         ).defer_async(import_id=job.id)
     except AlreadyEnqueued:
         pass  # already waiting to run
+
+
+async def capture_connections(db: AsyncSession) -> list[UserServer]:
+    """Connections to read Plex play history through.
+
+    Per server, the owner's connection sees every account's plays, so it's the only one
+    used when the owner has connected. Otherwise each user's own connection is read. A
+    connection waits until its libraries have had a full sync (names come from there).
+    """
+    connections = [us for us in await db.scalars(select(UserServer)) if us.music_section_keys]
+    synced: dict[int, set[str]] = {}
+    for row in await db.scalars(
+        select(UserSectionSync).where(UserSectionSync.last_full_sync_at.is_not(None))
+    ):
+        synced.setdefault(row.user_server_id, set()).add(row.section_key)
+    by_server: dict[int, list[UserServer]] = {}
+    for us in connections:
+        by_server.setdefault(us.server_id, []).append(us)
+    chosen = []
+    for group in by_server.values():
+        owners = [us for us in group if us.is_owner]
+        for us in owners or group:
+            if set(us.music_section_keys) <= synced.get(us.id, set()):
+                chosen.append(us)
+    return chosen
+
+
+@app.task(queue="history")
+async def capture_plex_plays(user_server_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        us = await db.get(UserServer, user_server_id)
+        if us is None or not us.music_section_keys:
+            return
+        result = await capture_plays(db, http, get_settings(), us)
+    if result.added:
+        log.info("captured %d Plex plays via connection %s", result.added, user_server_id)
+    for section, error in result.errors.items():
+        log.warning("play history of section %s via %s: %s", section, user_server_id, error)
+
+
+async def schedule_play_capture() -> int:
+    """Queue a play-history read for every connection that should be read. Returns count."""
+    async with get_sessionmaker()() as db:
+        connections = await capture_connections(db)
+    queued = 0
+    for us in connections:
+        try:
+            await capture_plex_plays.configure(
+                lock=f"capture-server-{us.server_id}", queueing_lock=f"capture-us-{us.id}"
+            ).defer_async(user_server_id=us.id)
+            queued += 1
+        except AlreadyEnqueued:
+            pass
+    return queued
+
+
+@app.periodic(cron="*/5 * * * *", periodic_id="capture-plays")
+@app.task(queue="maintenance", queueing_lock="capture-plays")
+async def capture_plays_periodically(timestamp: int) -> None:
+    """Every 5 minutes: read new plays from Plex's play history."""
+    await schedule_play_capture()
 
 
 # --- housekeeping --------------------------------------------------------------------

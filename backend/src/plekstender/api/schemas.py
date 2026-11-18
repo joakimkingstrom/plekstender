@@ -320,3 +320,13 @@ class LastFmKeyOut(BaseModel):
 
 class LastFmKeyIn(BaseModel):
     api_key: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{32}$")
+
+
+class PlexCaptureOut(BaseModel):
+    server_id: int = Field(description="The user's server, as in /api/servers.")
+    server_name: str
+    via_owner: bool = Field(description="Read through the server owner's connection.")
+    checked_at: dt.datetime | None
+    backfilled: bool = Field(description="All plays from before connecting have been read.")
+    error: str | None
+    listens: int

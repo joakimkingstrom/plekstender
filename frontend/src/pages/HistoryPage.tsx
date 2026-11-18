@@ -56,11 +56,12 @@ export function HistoryPage() {
       {items.length === 0 ? (
         <Card>
           <p className="text-sm text-muted">
-            No listens yet. Import your Last.fm history on{' '}
+            No listens yet. Plays from your Plex servers are added every few minutes once a
+            library has synced, and you can import your Last.fm history on{' '}
             <Link to="/settings/listening" className="text-accent underline">
               Settings → Listening
             </Link>
-            . Plays from Plex will be added automatically in a later update.
+            .
           </p>
         </Card>
       ) : (

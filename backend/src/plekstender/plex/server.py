@@ -138,6 +138,29 @@ class PlexServerClient:
         total = int(mc.get("totalSize", mc.get("size", len(items))))
         return items, total
 
+    async def history(
+        self, section_key: str, *, start: int, size: int, viewed_since: int | None
+    ) -> tuple[list[dict[str, Any]], int]:
+        """One page of a music library's play history, oldest first.
+
+        Plex ignores `type=` here, so plays are selected by library section. With
+        `viewed_since`, only plays from that time on (inclusive) are returned. The token
+        owner's account decides whose plays are visible: the server owner sees everyone's.
+        """
+        params: dict[str, Any] = {
+            "librarySectionID": section_key,
+            "sort": "viewedAt:asc",
+            "X-Plex-Container-Start": start,
+            "X-Plex-Container-Size": size,
+        }
+        if viewed_since is not None:
+            params["viewedAt>"] = viewed_since
+        data = await self._get("/status/sessions/history/all", params=params)
+        mc = data.get("MediaContainer", {})
+        items = mc.get("Metadata", [])
+        total = int(mc.get("totalSize", mc.get("size", len(items))))
+        return items, total
+
     async def metadata(self, rating_keys: list[int]) -> list[dict[str, Any]]:
         """Full metadata (incl. Genre/Mood/Style/Similar) for several items in one request."""
         if not rating_keys:

@@ -10,6 +10,7 @@ export const listenKeys = {
   summary: ['listens', 'summary'] as const,
   list: ['listens', 'list'] as const,
   lastfm: ['listens', 'lastfm'] as const,
+  plex: ['listens', 'plex'] as const,
   lastfmKey: ['admin', 'lastfm'] as const,
 }
 
@@ -101,5 +102,15 @@ export function useSetLastFmKey() {
       qc.setQueryData(listenKeys.lastfmKey, data)
       void qc.invalidateQueries({ queryKey: listenKeys.lastfm })
     },
+  })
+}
+
+/** How Plex play history is read for each of the user's servers. */
+export function usePlexCapture() {
+  return useQuery({
+    queryKey: listenKeys.plex,
+    queryFn: () => unwrap(api.GET('/api/listens/plex')),
+    // Poll while past plays are still being read in.
+    refetchInterval: (query) => (query.state.data?.some((s) => !s.backfilled) ? 15_000 : false),
   })
 }

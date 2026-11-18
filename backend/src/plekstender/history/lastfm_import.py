@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from plekstender.config import Settings
 from plekstender.db.instance import get_lastfm_api_key
 from plekstender.db.models import ListenImport
+from plekstender.history.duplicates import mark_duplicates
 from plekstender.history.lastfm import LastFmClient, LastFmError, RecentTracksPage
 from plekstender.history.store import insert_listens, scrobble_row
 
@@ -118,6 +119,7 @@ async def run_lastfm_import(
                 break
             page += 1
             await sleep(REQUEST_INTERVAL)
+        await mark_duplicates(db, job.user_id)
         job.status = "succeeded"
     except Exception as exc:
         if not isinstance(exc, LastFmError):

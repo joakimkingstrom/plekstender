@@ -123,6 +123,9 @@ class FakeLibrary:
         self.activity_filters_supported = True
         self.multi_key_metadata = True
         self.requests: Counter[str] = Counter()
+        # Play history, as /status/sessions/history/all lists it.
+        self.history: list[dict[str, Any]] = []
+        self.history_denied: set[str] = set()  # tokens Plex refuses history to
 
         for item in (
             _artist(100, "Radiohead", Guid=[{"id": "mbid://a74b1b7f"}]),
@@ -184,6 +187,27 @@ class FakeLibrary:
             userRating=rating, lastRatedAt=int(time.time()) + 1
         )
 
+    def play(self, account: int, key: int, viewed_at: int, *, section: str = SECTION) -> None:
+        """Record a play in the history, as Plex does when a track (nearly) finishes."""
+        item = self.items.get(key, {"type": "movie", "title": f"Movie {key}"})
+        album = self.items.get(int(item.get("parentRatingKey", 0)), {})
+        artist = self.items.get(int(item.get("grandparentRatingKey", 0)), {})
+        self.history.append(
+            {
+                "historyKey": f"/status/sessions/history/{len(self.history) + 1}",
+                "ratingKey": str(key),
+                "key": f"/library/metadata/{key}",
+                "librarySectionID": section,
+                "type": item["type"],
+                "title": item["title"],
+                "parentTitle": album.get("title"),
+                "grandparentTitle": artist.get("title"),
+                "viewedAt": viewed_at,
+                "accountID": account,
+                "deviceID": 7,
+            }
+        )
+
     # --- request handlers ------------------------------------------------------------------
 
     def _visible(self, token: str) -> list[dict[str, Any]]:
@@ -233,6 +257,31 @@ class FakeLibrary:
             return httpx.Response(404)
         return httpx.Response(200, json={"MediaContainer": {"Metadata": found}})
 
+    def history_list(self, request: httpx.Request) -> httpx.Response:
+        """The owner sees everyone's plays; a shared user (account 2) only their own."""
+        token = request.headers.get("X-Plex-Token", "")
+        if token not in SERVER_TOKENS:
+            return httpx.Response(401)
+        if token in self.history_denied:
+            return httpx.Response(403)
+        self.requests["history"] += 1
+        params = request.url.params
+        entries = [e for e in self.history if token == "srv-owner" or e["accountID"] == 2]
+        if "librarySectionID" in params:
+            entries = [e for e in entries if e["librarySectionID"] == params["librarySectionID"]]
+        if "viewedAt>" in params:
+            entries = [e for e in entries if e["viewedAt"] >= int(params["viewedAt>"])]
+        entries.sort(key=lambda e: e["viewedAt"])
+        start = int(params.get("X-Plex-Container-Start", 0))
+        size = int(params.get("X-Plex-Container-Size", 50))
+        page = entries[start : start + size]
+        return httpx.Response(
+            200,
+            json={
+                "MediaContainer": {"size": len(page), "totalSize": len(entries), "Metadata": page}
+            },
+        )
+
     def photo(self, request: httpx.Request) -> httpx.Response:
         if request.headers.get("X-Plex-Token") not in SERVER_TOKENS:
             return httpx.Response(401)
@@ -267,6 +316,9 @@ class FakePlex:
             side_effect=self.library.metadata
         )
         router.get(f"{SERVER_URI}/photo/:/transcode").mock(side_effect=self.library.photo)
+        router.get(f"{SERVER_URI}/status/sessions/history/all").mock(
+            side_effect=self.library.history_list
+        )
 
     def _create_pin(self, request: httpx.Request) -> httpx.Response:
         self.next_pin += 1
