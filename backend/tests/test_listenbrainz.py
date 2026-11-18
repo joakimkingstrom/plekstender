@@ -54,14 +54,15 @@ async def test_new_plex_plays_are_scrobbled(
     connected = await connect_listenbrainz(owner)
     assert (connected["username"], connected["pending"], connected["sent"]) == ("joakim_lb", 0, 0)
 
-    lib.play(1, 300, later(0))
+    viewed_at = later(0)  # computed once: a second may tick over before the assertion
+    lib.play(1, 300, viewed_at)
     await capture()
     assert (await status(owner))["pending"] == 1
     await submit(user_id)
     [body] = listenbrainz.submissions
     assert body["listen_type"] == "single"
     [listen] = body["payload"]
-    assert listen["listened_at"] == later(0) - 240  # start of the play
+    assert listen["listened_at"] == viewed_at - 240  # start of the play
     assert listen["track_metadata"] == {
         "artist_name": "Radiohead",
         "track_name": "Paranoid Android",
