@@ -1,0 +1,149 @@
+name: roadiefm
+
+# Shared settings for the services that run the RoadieFM image.
+x-roadiefm: &roadiefm
+  image: ${ROADIEFM_IMAGE:-ghcr.io/joakimkingstrom/roadiefm:latest}
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    POSTGRES_HOST: db
+    TZ: ${TZ:-UTC}
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-roadiefm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-roadiefm}
+    volumes:
+      - db:/var/lib/postgresql
+    networks:
+      - db
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Applies database migrations, then exits. The app services wait for it.
+  db-init:
+    <<: *roadiefm
+    command: ["roadiefm", "migrate"]
+    restart: "no"
+    networks:
+      - db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Web app: serves the API under /api and the frontend for everything else.
+  frontend:
+    <<: *roadiefm
+    # Builds the shared image (used by db-init and worker too) until it's published.
+    build: .
+    command: ["roadiefm", "web"]
+    ports:
+      - "${ROADIEFM_PORT:-8080}:8080"
+    networks:
+      - db
+      - default
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "roadiefm", "healthcheck", "web"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    labels:
+      - "traefik.enable=${TRAEFIK_ENABLE:-false}"
+      - "traefik.http.routers.roadiefm.rule=Host(`${ROADIEFM_HOST:-roadiefm.localhost}`)"
+      - "traefik.http.routers.roadiefm.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.roadiefm.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.roadiefm.loadbalancer.server.port=8080"
+
+  # Background jobs (library sync, bulk artwork, playlist refreshes...).
+  worker:
+    <<: *roadiefm
+    command: ["roadiefm", "worker"]
+    networks:
+      - db
+      - default
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "roadiefm", "healthcheck", "worker"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+  # Optional image search for artist logos: `docker compose --profile search up -d`.
+  # Not published on any port; only RoadieFM can reach it.
+  searxng:
+    image: searxng/searxng:latest
+    profiles: ["search"]
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?set SEARXNG_SECRET in .env to use the search profile}
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    networks:
+      - default
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+
+  # Optional reverse proxy with Let's Encrypt, for setups without one:
+  # `docker compose --profile traefik up -d` (and set TRAEFIK_ENABLE=true, ROADIEFM_HOST).
+  # Already run Traefik? See compose.override.example.yaml instead.
+  traefik:
+    image: traefik:v3
+    profiles: ["traefik"]
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL:-}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      - default
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  # Database traffic only; no internet access.
+  db:
+    internal: true
+  default:
+
+volumes:
+  db:
+  letsencrypt:

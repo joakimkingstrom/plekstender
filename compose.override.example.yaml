@@ -1,0 +1,22 @@
+# Example for running behind a Traefik instance you already have, on an external
+# Docker network (here called "proxy"). Copy to compose.override.yaml and adjust;
+# Docker Compose merges it automatically. In .env, set:
+#   TRAEFIK_ENABLE=true
+#   ROADIEFM_HOST=roadiefm.example.com
+#   TRAEFIK_ENTRYPOINT=websecure            # your entrypoint name
+#   TRAEFIK_CERTRESOLVER=myresolver         # your cert resolver name
+#   FORWARDED_ALLOW_IPS=*
+#   APP_URL=https://roadiefm.example.com
+services:
+  frontend:
+    ports: !reset []
+    networks:
+      - db
+      - default
+      - proxy
+    labels:
+      - "traefik.docker.network=proxy"
+
+networks:
+  proxy:
+    external: true

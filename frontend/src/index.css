@@ -1,0 +1,60 @@
+@import 'tailwindcss';
+
+/* Theme tokens. Dark is the default; light applies via [data-theme='light']. */
+@theme {
+  /* Brand colours: see branding/README.md (plate, ink and amber tokens). */
+  --color-bg: #17181c;
+  --color-surface: #1f2025;
+  --color-surface-2: #292a30;
+  --color-border: #34353c;
+  --color-text: #f1efe9;
+  --color-muted: #a19f99;
+  --color-accent: #f2ad45;
+  --color-accent-strong: #f6c06d;
+  --color-on-accent: #1c1d21;
+  --color-ok: #3ccf91;
+  --color-warn: #f5c451;
+  --color-danger: #f0616d;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Bricolage Grotesque', var(--font-sans);
+}
+
+:root[data-theme='light'] {
+  --color-bg: #f7f5f0;
+  --color-surface: #ffffff;
+  --color-surface-2: #efece5;
+  --color-border: #dedad1;
+  --color-text: #1c1d21;
+  --color-muted: #66645e;
+  --color-accent: #d9821a;
+  --color-accent-strong: #b86c12;
+  --color-on-accent: #1c1d21;
+  --color-ok: #198754;
+  --color-warn: #a86b00;
+  --color-danger: #c62f3c;
+}
+
+html {
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+h1,
+h2 {
+  font-family: var(--font-display);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
