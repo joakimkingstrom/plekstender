@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useLogout, useMe } from '../api/hooks'
 import { useTheme } from '../theme'
@@ -14,13 +15,31 @@ const NAV = [
 ]
 
 const PICK_PATH =
-  'M32 4C48 4 59 9.5 59 22C59 35.5 44 52 35.5 58C33.4 59.5 30.6 59.5 28.5 58C20 52 5 35.5 5 22C5 9.5 16 4 32 4ZM32 15L34.94 22.45L42.94 22.95L36.76 28.05L38.76 35.8L32 31.5L25.24 35.8L27.24 28.05L21.06 22.95L29.06 22.45Z'
+  'M32 4C48 4 59 9.5 59 22C59 35.5 44 52 35.5 58C33.4 59.5 30.6 59.5 28.5 58C20 52 5 35.5 5 22C5 9.5 16 4 32 4Z'
+const STAR_PATH =
+  'M32 16L34.94 23.45L42.94 23.95L36.76 29.05L38.76 36.8L32 32.5L25.24 36.8L27.24 29.05L21.06 23.95L29.06 23.45Z'
 
-/** The guitar-pick mark (branding/plekstender-mark-mono.svg), coloured by `currentColor`. */
+/**
+ * The guitar-pick mark (branding/plekstender-mark.svg): the pick takes `currentColor`
+ * (the text colour by default) and holds a half-filled star in `--color-mark-star`.
+ */
 export function Mark({ className = 'size-6' }: { className?: string }) {
+  const clipId = `mark-half-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden>
-      <path fill="currentColor" fillRule="evenodd" d={PICK_PATH} />
+      <clipPath id={clipId}>
+        <rect x="-8" y="-8" width="40" height="80" />
+      </clipPath>
+      <path fill="currentColor" d={PICK_PATH} />
+      <path
+        fill="none"
+        stroke="var(--color-mark-star)"
+        strokeWidth={2.4}
+        strokeLinejoin="miter"
+        strokeMiterlimit={4}
+        d={STAR_PATH}
+      />
+      <path fill="var(--color-mark-star)" clipPath={`url(#${clipId})`} d={STAR_PATH} />
     </svg>
   )
 }
@@ -28,7 +47,7 @@ export function Mark({ className = 'size-6' }: { className?: string }) {
 export function Wordmark({ size = 'text-lg' }: { size?: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 font-display font-bold tracking-tight ${size}`}>
-      <Mark className="size-[1.15em] text-accent" />
+      <Mark className="size-[1.15em]" />
       <span>plekstender</span>
     </span>
   )

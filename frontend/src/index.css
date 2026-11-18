@@ -12,6 +12,8 @@
   --color-accent: #f2ad45;
   --color-accent-strong: #f6c06d;
   --color-on-accent: #1c1d21;
+  /* Star in the logo: the amber that contrasts with the pick (white pick here). */
+  --color-mark-star: #d9821a;
   --color-ok: #3ccf91;
   --color-warn: #f5c451;
   --color-danger: #f0616d;
@@ -29,6 +31,7 @@
   --color-accent: #d9821a;
   --color-accent-strong: #b86c12;
   --color-on-accent: #1c1d21;
+  --color-mark-star: #f2ad45;
   --color-ok: #198754;
   --color-warn: #a86b00;
   --color-danger: #c62f3c;
