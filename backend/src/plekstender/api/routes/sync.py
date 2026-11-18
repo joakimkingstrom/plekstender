@@ -40,7 +40,7 @@ async def library_counts(db: DbDep, user_id: int, us: UserServer) -> LibraryCoun
         await db.execute(
             select(
                 func.count().filter(s.user_rating.is_not(None)),
-                func.coalesce(func.sum(s.view_count), 0),
+                func.coalesce(func.sum(func.greatest(s.view_count, s.listens)), 0),
             ).where(*visible, s.item_type == "track")
         )
     ).one()

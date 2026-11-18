@@ -231,3 +231,31 @@ async def test_friends_rate_with_their_own_account(app: FastAPI, plex: FakePlex)
     )
     assert hidden.status_code == 404  # not visible to the friend's Plex account
     assert 305 not in await queue(friend, fsid, kind="track", pool="all", limit=50)
+
+
+@pytest.mark.db
+async def test_library_plays_include_the_listening_history(app: FastAPI, plex: FakePlex) -> None:
+    """Plex only knows plays from when it was in use; imported history counts too."""
+    owner, sid = await owner_with_library(app, plex)
+    user_id = (await owner.get("/api/auth/me")).json()["id"]
+    await add_listens(
+        user_id,
+        [(10 + i, "Portishead", "Dummy", "Glory Box") for i in range(8)]
+        + [(30, "Radiohead", "OK Computer", "Paranoid Android")],
+    )
+    # Before the per-item counts are refreshed, detail pages already include the history.
+    portishead = (await owner.get(f"/api/servers/{sid}/library/artists/101")).json()
+    assert portishead["plays"] == 8
+    dummy = (await owner.get(f"/api/servers/{sid}/library/albums/202")).json()
+    assert dummy["plays"] == 8
+
+    await refresh(owner)
+    by_plays = (
+        await owner.get(f"/api/servers/{sid}/library/artists", params={"sort": "plays"})
+    ).json()["items"]
+    assert [(a["title"], a["plays"]) for a in by_plays][:2] == [("Portishead", 8), ("Radiohead", 1)]
+    # Plex's own count wins where it's higher (Paranoid Android: 5 Plex plays, 1 listen).
+    radiohead = (await owner.get(f"/api/servers/{sid}/library/artists/100")).json()
+    assert {t["title"]: t["plays"] for t in radiohead["top_tracks"]}["Paranoid Android"] == 5
+    status = (await owner.get(f"/api/servers/{sid}/sync")).json()
+    assert status["counts"]["plays"] == 5 + 8  # per song: the higher of the two

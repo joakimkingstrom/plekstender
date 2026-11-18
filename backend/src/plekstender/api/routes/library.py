@@ -63,6 +63,13 @@ def visible(model: type[Artist] | type[Album] | type[Track], user_id: int, us: U
     return state, condition, where
 
 
+def plays_of(state: Any) -> Any:
+    """Plays shown for an item: Plex's own count or the listens in the user's history
+    (Plex plays plus imported Last.fm / ListenBrainz scrobbles), whichever is higher.
+    Plex only knows plays from when it was in use; the history usually goes further back."""
+    return func.greatest(state.view_count, state.listens)
+
+
 def _like(q: str) -> str:
     escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
@@ -120,7 +127,7 @@ async def list_artists(
     orders: dict[str, list[Any]] = {
         "title": [func.lower(func.coalesce(Artist.title_sort, Artist.title))],
         "popularity": [Artist.popularity.desc().nulls_last()],
-        "plays": [state.view_count.desc()],
+        "plays": [plays_of(state).desc()],
         "rating": [state.user_rating.desc().nulls_last()],
         "added": [Artist.added_at.desc().nulls_last()],
     }
@@ -130,7 +137,7 @@ async def list_artists(
         select(func.count()).select_from(Artist).join(state, cond).where(*filters)
     )
     rows = await db.execute(
-        select(Artist, state.user_rating, state.view_count, _album_count(user.id, us))
+        select(Artist, state.user_rating, plays_of(state), _album_count(user.id, us))
         .join(state, cond)
         .where(*filters)
         .order_by(*order, Artist.rating_key)
@@ -186,7 +193,7 @@ async def _tags_for(db: DbDep, server_id: int, rating_key: int) -> list[TagOut]:
 async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> list[AlbumSummary]:
     state, cond, where = visible(Album, user_id, us)
     rows = await db.execute(
-        select(Album, state.user_rating, state.view_count)
+        select(Album, state.user_rating, plays_of(state))
         .join(state, cond)
         .where(*where, *filters)
         .order_by(Album.year.nulls_last(), Album.title)
@@ -245,7 +252,7 @@ async def _top_tracks(
     )
     state2, cond2, _ = visible(Track, user_id, us)
     rows = await db.execute(
-        select(Track, state2.user_rating, state2.view_count, Album)
+        select(Track, state2.user_rating, plays_of(state2), Album)
         .join(ranked, and_(ranked.c.rating_key == Track.rating_key, ranked.c.rn == 1))
         .join(state2, cond2)
         .outerjoin(
@@ -306,7 +313,7 @@ async def get_artist(
     state, cond, where = visible(Artist, user.id, us)
     row = (
         await db.execute(
-            select(Artist, state.user_rating, state.view_count, _album_count(user.id, us))
+            select(Artist, state.user_rating, plays_of(state), _album_count(user.id, us))
             .join(state, cond)
             .where(*where, Artist.rating_key == rating_key)
         )
@@ -338,8 +345,10 @@ async def get_artist(
     listens = await stats.item_listens(db, user.id, _zone(tz), {normalise_artist(artist.title)})
     top_tracks = await _top_tracks(db, user.id, us, rating_key)
     titles = await _title_norms(db, us.server_id, [t.rating_key for t in top_tracks])
+    summary = _artist_summary(row)
+    summary.plays = max(summary.plays, listens.listens)
     return ArtistDetail(
-        **_artist_summary(row).model_dump(),
+        **summary.model_dump(),
         summary=artist.summary,
         art=artist.art,
         tags=await _tags_for(db, us.server_id, rating_key),
@@ -367,7 +376,7 @@ async def get_album(
     )
     state, cond, where = visible(Track, user.id, us)
     rows = await db.execute(
-        select(Track, state.user_rating, state.view_count)
+        select(Track, state.user_rating, plays_of(state))
         .join(state, cond)
         .where(*where, Track.album_rating_key == rating_key)
         .order_by(Track.disc.nulls_last(), Track.number.nulls_last(), Track.title)
@@ -382,6 +391,7 @@ async def get_album(
         db, user.id, _zone(tz), artist_keys, normalise_title(album.title)
     )
     tracks = [_track_out(t, r, p, album) for t, r, p in track_rows]
+    found[0].plays = max(found[0].plays, listens.listens)
     return AlbumDetail(
         **found[0].model_dump(),
         summary=album.summary,

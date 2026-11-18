@@ -341,7 +341,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
           <h1 className="text-3xl font-bold tracking-tight">{a.title}</h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             <Stars rating={a.user_rating} />
-            <span>{formatCount(a.plays)} plays</span>
+            <span title="Plex plays or listens in your history, whichever is higher">{formatCount(a.plays)} plays</span>
             {a.popularity !== null && <span title="Sum of top-song Last.fm listeners">Popularity {formatCompact(a.popularity)}</span>}
           </div>
           <TagBadges tags={a.tags} />
@@ -431,7 +431,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             <Stars rating={al.user_rating} />
             {al.critic_rating !== null && <span>Critics {al.critic_rating.toFixed(1)}/10</span>}
-            <span>{formatCount(al.plays)} plays</span>
+            <span title="Plex plays or listens in your history, whichever is higher">{formatCount(al.plays)} plays</span>
           </div>
           <TagBadges tags={al.tags} />
           <Summary text={al.summary} />
