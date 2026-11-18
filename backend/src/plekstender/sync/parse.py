@@ -117,7 +117,8 @@ def _common(item: Item, server_id: int, section_key: str, seen: dt.datetime) -> 
 
 
 def artist_row(item: Item, server_id: int, section_key: str, seen: dt.datetime) -> dict[str, Any]:
-    return _common(item, server_id, section_key, seen)
+    row = _common(item, server_id, section_key, seen)
+    return row | {"name_key": normalise_artist(row["title"])}
 
 
 def album_row(item: Item, server_id: int, section_key: str, seen: dt.datetime) -> dict[str, Any]:
@@ -128,6 +129,7 @@ def album_row(item: Item, server_id: int, section_key: str, seen: dt.datetime) -
         "studio": item.get("studio"),
         "critic_rating": _float(item.get("rating")),
         "track_count": _int(item.get("leafCount")),
+        "title_norm": normalise_title(str(item.get("title") or "")),
     }
 
 
@@ -146,6 +148,9 @@ def track_row(item: Item, server_id: int, section_key: str, seen: dt.datetime) -
         "popularity": _int(item.get("ratingCount")),
         "original_title": item.get("originalTitle"),
         "title_norm": normalise_title(title),
+        "artist_key": normalise_artist(
+            str(item.get("originalTitle") or item.get("grandparentTitle") or "")
+        ),
         "part_key": part.get("key"),
         "file_path": part.get("file"),
     }

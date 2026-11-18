@@ -47,7 +47,12 @@ from plekstender.history.listenbrainz import (
     listen_payload,
 )
 from plekstender.history.listenbrainz_import import ListenBrainzImportError, listen_count
-from plekstender.worker import ACTIVE, enqueue_listen_import, enqueue_listenbrainz
+from plekstender.worker import (
+    ACTIVE,
+    enqueue_listen_counts,
+    enqueue_listen_import,
+    enqueue_listenbrainz,
+)
 
 router = APIRouter(prefix="/api/listens", tags=["listens"])
 
@@ -168,6 +173,7 @@ async def delete_listens(
             forget = forget.where(ListenImport.source == source)
         await db.execute(forget)
     await db.commit()
+    await enqueue_listen_counts([user.id])
     return DeletedOut(deleted=int(getattr(result, "rowcount", 0) or 0))
 
 

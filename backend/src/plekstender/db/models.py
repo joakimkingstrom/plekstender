@@ -191,6 +191,8 @@ class Artist(_LibraryItem, Base):
     __table_args__ = (Index("ix_artists_server_section", "server_id", "section_key"),)
 
     country: Mapped[str | None] = mapped_column(String(128))
+    # Normalised name, to match listens (see plekstender.sync.parse.normalise_artist).
+    name_key: Mapped[str | None] = mapped_column(Text)
 
 
 class Album(_LibraryItem, Base):
@@ -206,6 +208,8 @@ class Album(_LibraryItem, Base):
     studio: Mapped[str | None] = mapped_column(Text)
     critic_rating: Mapped[float | None] = mapped_column(Float)
     track_count: Mapped[int | None]
+    # Normalised title, to match listens' album names.
+    title_norm: Mapped[str | None] = mapped_column(Text)
 
 
 class Track(_LibraryItem, Base):
@@ -225,6 +229,8 @@ class Track(_LibraryItem, Base):
     original_title: Mapped[str | None] = mapped_column(Text)
     # Lower-cased title without "(2011 Remaster)"-style suffixes; groups duplicates.
     title_norm: Mapped[str] = mapped_column(Text)
+    # Normalised track artist (original title, else album artist), to match listens.
+    artist_key: Mapped[str | None] = mapped_column(Text)
     part_key: Mapped[str | None] = mapped_column(Text)
     file_path: Mapped[str | None] = mapped_column(Text)
 
@@ -281,6 +287,8 @@ class UserItemState(Base):
     last_viewed_at: Mapped[dt.datetime | None]
     last_rated_at: Mapped[dt.datetime | None]
     seen_at: Mapped[dt.datetime]
+    # The user's listens from Plekstender's history (Plex plays + imports), matched by name.
+    listens: Mapped[int] = mapped_column(default=0, server_default="0")
 
 
 class SyncRun(Base):
@@ -424,3 +432,20 @@ class ListenBrainzLink(TimestampMixin, Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     # ListenBrainz rejected the token: nothing is sent until it's replaced.
     paused: Mapped[bool] = mapped_column(default=False)
+
+
+class RatingEvent(Base):
+    """A rating set in Plekstender: an append-only log for undo and history."""
+
+    __tablename__ = "rating_events"
+    __table_args__ = (Index("ix_rating_events_user", "user_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    rating_key: Mapped[int] = mapped_column(BigInteger)
+    item_type: Mapped[str] = mapped_column(String(8))
+    old_rating: Mapped[float | None] = mapped_column(Float)  # 0-10; None = unrated
+    new_rating: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    undone_at: Mapped[dt.datetime | None]

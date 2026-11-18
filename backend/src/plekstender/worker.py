@@ -25,6 +25,7 @@ from plekstender.db.models import (
     UserServer,
 )
 from plekstender.history.lastfm_import import run_lastfm_import
+from plekstender.history.listen_counts import refresh_listen_counts
 from plekstender.history.listenbrainz import submit_pending
 from plekstender.history.listenbrainz_import import run_listenbrainz_import
 from plekstender.history.plex_capture import capture_plays
@@ -57,6 +58,10 @@ async def sync_library(run_id: int) -> None:
         get_sessionmaker()() as db,
     ):
         await run_sync(db, http, get_settings(), run_id)
+        run = await db.get(SyncRun, run_id, populate_existing=True)
+        us = await db.get(UserServer, run.user_server_id) if run else None
+    if run is not None and run.status == "succeeded" and us is not None:
+        await enqueue_listen_counts([us.user_id])  # new or changed items to match
 
 
 async def enqueue_sync(db: AsyncSession, us: UserServer, kind: str, trigger: str) -> SyncRun:
@@ -167,6 +172,7 @@ async def import_lastfm(import_id: int) -> None:
         get_sessionmaker()() as db,
     ):
         await run_lastfm_import(db, http, get_settings(), import_id)
+    await _after_import(import_id)
 
 
 @app.task(queue="imports")
@@ -176,6 +182,14 @@ async def import_listenbrainz(import_id: int) -> None:
         get_sessionmaker()() as db,
     ):
         await run_listenbrainz_import(db, http, get_settings(), import_id)
+    await _after_import(import_id)
+
+
+async def _after_import(import_id: int) -> None:
+    async with get_sessionmaker()() as db:
+        job = await db.get(ListenImport, import_id)
+    if job is not None and job.status == "succeeded":
+        await enqueue_listen_counts([job.user_id])
 
 
 async def enqueue_listen_import(db: AsyncSession, job: ListenImport) -> None:
@@ -227,8 +241,27 @@ async def capture_plex_plays(user_server_id: int) -> None:
     if result.added:
         log.info("captured %d Plex plays via connection %s", result.added, user_server_id)
         await enqueue_listenbrainz(list(result.earliest))
+        await enqueue_listen_counts(list(result.earliest))
     for section, error in result.errors.items():
         log.warning("play history of section %s via %s: %s", section, user_server_id, error)
+
+
+@app.task(queue="history")
+async def update_listen_counts(user_id: int) -> None:
+    """Re-match a user's listens to the library (see history.listen_counts)."""
+    async with get_sessionmaker()() as db:
+        await refresh_listen_counts(db, user_id)
+        await db.commit()
+
+
+async def enqueue_listen_counts(user_ids: list[int]) -> None:
+    for user_id in set(user_ids):
+        try:
+            await update_listen_counts.configure(
+                lock=f"listen-counts-{user_id}", queueing_lock=f"listen-counts-{user_id}"
+            ).defer_async(user_id=user_id)
+        except AlreadyEnqueued:
+            pass  # one is already waiting and will see the latest listens
 
 
 async def schedule_play_capture() -> int:

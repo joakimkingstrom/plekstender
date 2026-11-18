@@ -366,7 +366,10 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - Export: Settings → Listening → "Download all listens" streams ListenBrainz JSON lines, oldest first, duplicates left out. Delete per source (Last.fm, ListenBrainz) or everything.
 
 ### Phase 3 — Ratings
-- [ ] Queue builders (3 pools × 3 strategies) with tests for distribution and artist interleaving
+- [x] Queue builders (3 pools × 3 strategies) with tests for distribution and artist interleaving
+  - `POST /api/servers/{id}/rate/queue` {kind, pool, order, exclude, limit}: pools *listened* (Plex plays or listens in the history), *unrated*, *all*; orders *weighted* (random, weight `(plays+1)^0.7 × (1 + ln(1 + popularity/1000))`), *plays* and *popular* (top 400 candidates, then artists drawn at random weighted by `(best remaining + 1)^0.6`, no artist twice within 5). Songs released more than once appear once (earliest release; a rating on any release counts). ~0.3 s per page of songs on a 98k-track library.
+  - Listen counts per item (`user_item_state.listens`): the history matched to the library by normalised names, refreshed after captures, imports, syncs and deletes. Mirror rows get `artists.name_key`, `albums.title_norm`, `tracks.artist_key` (backfilled by the migration).
+  - `POST /ratings` writes to Plex with the user's own token (`PUT /:/rate`, -1 clears), then the mirror, and logs a `rating_events` row; `POST /ratings/undo` steps back one change at a time.
 - [ ] Mobile swipe UI + undo
 - [ ] Desktop songs / albums / artists layouts + layout toggle
 

@@ -423,3 +423,44 @@ class StatsActivityOut(BaseModel):
     bucket: Literal["day", "week", "month"]
     points: list[ActivityPoint]
     heatmap: list[list[int]] = Field(description="7 rows (Monday first) x 24 hours.")
+
+
+# --- ratings -----------------------------------------------------------------------------
+
+RateKind = Literal["track", "album", "artist"]
+
+
+class RateQueueIn(BaseModel):
+    kind: RateKind
+    pool: Literal["listened", "unrated", "all"] = "listened"
+    order: Literal["weighted", "plays", "popular"] = "weighted"
+    exclude: list[int] = Field(default_factory=list, max_length=5000)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class RateItemOut(BaseModel):
+    rating_key: int
+    kind: RateKind
+    title: str
+    subtitle: str | None = Field(description="Artist, for songs and albums.")
+    album_title: str | None
+    album_rating_key: int | None
+    thumb: str | None = Field(description="Album cover for songs.")
+    year: int | None
+    duration_ms: int | None
+    popularity: int | None
+    summary: str | None = Field(description="Album review or artist biography.")
+    critic_rating: float | None
+    user_rating: float | None = Field(description="0-10; for songs, of any release.")
+    plays: int = Field(description="Plex plays or listens in your history, whichever is more.")
+
+
+class RatingIn(BaseModel):
+    rating_key: int
+    rating: int | None = Field(ge=0, le=10, description="0-10 (half stars = 1); None clears.")
+
+
+class RatingOut(BaseModel):
+    rating_key: int
+    item_type: RateKind
+    user_rating: float | None

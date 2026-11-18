@@ -486,6 +486,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/rate/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rate Queue
+         * @description The next items to rate. POST because the list of already-shown items can be long.
+         */
+        post: operations["rate_queue_api_servers__server_id__rate_queue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/ratings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rate
+         * @description Rate a song, album or artist in Plex (with your own Plex account).
+         */
+        post: operations["rate_api_servers__server_id__ratings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/ratings/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo
+         * @description Undo your latest rating on this server (repeatable, newest first).
+         */
+        post: operations["undo_api_servers__server_id__ratings_undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/export/tracks.csv": {
         parameters: {
             query?: never;
@@ -1196,6 +1256,104 @@ export interface components {
             ok: boolean;
             /** Error */
             error: string | null;
+        };
+        /** RateItemOut */
+        RateItemOut: {
+            /** Rating Key */
+            rating_key: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "track" | "album" | "artist";
+            /** Title */
+            title: string;
+            /**
+             * Subtitle
+             * @description Artist, for songs and albums.
+             */
+            subtitle: string | null;
+            /** Album Title */
+            album_title: string | null;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /**
+             * Thumb
+             * @description Album cover for songs.
+             */
+            thumb: string | null;
+            /** Year */
+            year: number | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Popularity */
+            popularity: number | null;
+            /**
+             * Summary
+             * @description Album review or artist biography.
+             */
+            summary: string | null;
+            /** Critic Rating */
+            critic_rating: number | null;
+            /**
+             * User Rating
+             * @description 0-10; for songs, of any release.
+             */
+            user_rating: number | null;
+            /**
+             * Plays
+             * @description Plex plays or listens in your history, whichever is more.
+             */
+            plays: number;
+        };
+        /** RateQueueIn */
+        RateQueueIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "track" | "album" | "artist";
+            /**
+             * Pool
+             * @default listened
+             * @enum {string}
+             */
+            pool: "listened" | "unrated" | "all";
+            /**
+             * Order
+             * @default weighted
+             * @enum {string}
+             */
+            order: "weighted" | "plays" | "popular";
+            /** Exclude */
+            exclude?: number[];
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
+        };
+        /** RatingIn */
+        RatingIn: {
+            /** Rating Key */
+            rating_key: number;
+            /**
+             * Rating
+             * @description 0-10 (half stars = 1); None clears.
+             */
+            rating: number | null;
+        };
+        /** RatingOut */
+        RatingOut: {
+            /** Rating Key */
+            rating_key: number;
+            /**
+             * Item Type
+             * @enum {string}
+             */
+            item_type: "track" | "album" | "artist";
+            /** User Rating */
+            user_rating: number | null;
         };
         /** SectionOut */
         SectionOut: {
@@ -2419,6 +2577,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatsActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_queue_api_servers__server_id__rate_queue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateQueueIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_api_servers__server_id__ratings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RatingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_api_servers__server_id__ratings_undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatingOut"];
                 };
             };
             /** @description Validation Error */

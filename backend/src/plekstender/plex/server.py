@@ -65,11 +65,13 @@ class PlexServerClient:
         params: dict[str, Any] | None = None,
         request_timeout: httpx.Timeout = API_TIMEOUT,
         accept_json: bool = True,
+        method: str = "GET",
     ) -> httpx.Response:
         headers = plex_headers(self._settings, self._token)
         if not accept_json:
             headers["Accept"] = "image/*"
-        resp = await self._http.get(
+        resp = await self._http.request(
+            method,
             f"{self._base}{path}",
             params=params,
             headers=headers,
@@ -169,6 +171,18 @@ class PlexServerClient:
         data = await self._get(f"/library/metadata/{keys}", params={"includeGuids": 1})
         items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Metadata", [])
         return items
+
+    async def rate(self, rating_key: int, rating: float | None) -> None:
+        """Set the token owner's rating (0-10, half stars = 1), or clear it with None."""
+        await self._request(
+            "/:/rate",
+            params={
+                "key": rating_key,
+                "identifier": "com.plexapp.plugins.library",
+                "rating": -1 if rating is None else rating,
+            },
+            method="PUT",
+        )
 
     async def photo(self, path: str, size: int) -> tuple[bytes, str]:
         """A resized image from Plex's photo transcoder. Returns (bytes, content type)."""

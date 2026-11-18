@@ -19,6 +19,7 @@ from plekstender.api.routes import (
     health,
     library,
     listens,
+    ratings,
     servers,
     stats,
     sync,
@@ -56,7 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(CSRFMiddleware, allowed_origin=settings.app_origin)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    for module in (health, auth, servers, sync, library, listens, stats, export, admin):
+    for module in (health, auth, servers, sync, library, listens, stats, ratings, export, admin):
         app.include_router(module.router)
 
     if settings.static_dir:

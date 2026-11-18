@@ -127,6 +127,8 @@ class FakeLibrary:
         # Play history, as /status/sessions/history/all lists it.
         self.history: list[dict[str, Any]] = []
         self.history_denied: set[str] = set()  # tokens Plex refuses history to
+        self.rates: list[tuple[str, int, float]] = []  # (token, key, rating) as Plex got them
+        self.rate_fails = False
 
         for item in (
             _artist(100, "Radiohead", Guid=[{"id": "mbid://a74b1b7f"}]),
@@ -258,6 +260,24 @@ class FakeLibrary:
             return httpx.Response(404)
         return httpx.Response(200, json={"MediaContainer": {"Metadata": found}})
 
+    def rate_request(self, request: httpx.Request) -> httpx.Response:
+        """PUT /:/rate: -1 clears the token owner's rating."""
+        token = request.headers.get("X-Plex-Token", "")
+        if token not in SERVER_TOKENS:
+            return httpx.Response(401)
+        if self.rate_fails:
+            return httpx.Response(500)
+        params = request.url.params
+        assert params["identifier"] == "com.plexapp.plugins.library"
+        key, rating = int(params["key"]), float(params["rating"])
+        self.rates.append((token, key, rating))
+        state = self.state[token].setdefault(key, {})
+        if rating < 0:
+            state.pop("userRating", None)
+        else:
+            state["userRating"] = rating
+        return httpx.Response(200)
+
     def history_list(self, request: httpx.Request) -> httpx.Response:
         """The owner sees everyone's plays; a shared user (account 2) only their own."""
         token = request.headers.get("X-Plex-Token", "")
@@ -317,6 +337,7 @@ class FakePlex:
             side_effect=self.library.metadata
         )
         router.get(f"{SERVER_URI}/photo/:/transcode").mock(side_effect=self.library.photo)
+        router.put(f"{SERVER_URI}/:/rate").mock(side_effect=self.library.rate_request)
         router.get(f"{SERVER_URI}/status/sessions/history/all").mock(
             side_effect=self.library.history_list
         )
