@@ -10,6 +10,7 @@ export const keys = {
   adminAccess: ['admin', 'access'] as const,
   adminServers: ['admin', 'servers'] as const,
   adminUsers: ['admin', 'users'] as const,
+  librarySettings: ['admin', 'library'] as const,
 }
 
 /** The signed-in user, or null when signed out. */
@@ -165,5 +166,37 @@ export function useRemoveUser() {
     mutationFn: (id: number) =>
       unwrap(api.DELETE('/api/admin/users/{user_id}', { params: { path: { user_id: id } } })),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.adminUsers }),
+  })
+}
+
+// --- library settings (admin) ----------------------------------------------------------
+
+export function useLibrarySettings() {
+  return useQuery({ queryKey: keys.librarySettings, queryFn: () => unwrap(api.GET('/api/admin/library')) })
+}
+
+export function useUpdateLibrarySettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['LibrarySettings']) => unwrap(api.PUT('/api/admin/library', { body })),
+    onSuccess: (data) => {
+      qc.setQueryData(keys.librarySettings, data)
+      // Sync status shows the schedule; library pages show popularity.
+      void qc.invalidateQueries({ queryKey: ['servers'] })
+    },
+  })
+}
+
+export function usePopularityPreview(serverId: number | null, artistTopN: number) {
+  return useQuery({
+    queryKey: [...keys.librarySettings, 'preview', serverId, artistTopN],
+    enabled: serverId !== null && artistTopN >= 1 && artistTopN <= 50,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/admin/library/preview', {
+          params: { query: { server_id: serverId!, artist_top_n: artistTopN, limit: 15 } },
+        }),
+      ),
+    placeholderData: (previous) => previous,
   })
 }

@@ -22,7 +22,13 @@ const csrf: Middleware = {
   },
 }
 
-export const api = createClient<paths>({ baseUrl: '', credentials: 'same-origin' })
+export const api = createClient<paths>({
+  // Absolute same-origin URLs: browsers resolve relative ones, but Node (tests) can't.
+  baseUrl: globalThis.location?.origin ?? '',
+  credentials: 'same-origin',
+  // Look fetch up per request (openapi-fetch would otherwise keep the one from import time).
+  fetch: (request) => globalThis.fetch(request),
+})
 api.use(csrf)
 
 function detailOf(error: unknown): string | undefined {

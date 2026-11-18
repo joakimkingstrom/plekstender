@@ -35,3 +35,34 @@ export function formatRelative(iso: string, now = Date.now()): string {
   }
   return 'just now'
 }
+
+/** "every 30 minutes, with a full sync weekly" */
+export function describeSchedule(minutes: number, days: number): string {
+  const every =
+    minutes % 60 === 0
+      ? minutes === 60
+        ? 'every hour'
+        : `every ${minutes / 60} hours`
+      : `every ${minutes} minutes`
+  const full = days === 1 ? 'daily' : days === 7 ? 'weekly' : `every ${days} days`
+  return `Changes are picked up ${every}, with a full sync ${full}.`
+}
+
+const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+const timeFormat = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
+const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+
+/** "Wed, 18 Nov 2026" in the viewer's time zone. */
+export function formatDay(iso: string): string {
+  return dayFormat.format(new Date(iso))
+}
+
+/** "21:04" in the viewer's time zone. */
+export function formatTime(iso: string): string {
+  return timeFormat.format(new Date(iso))
+}
+
+/** "18 Nov 2026" */
+export function formatDate(iso: string): string {
+  return dateFormat.format(new Date(iso))
+}

@@ -8,16 +8,19 @@ import logging
 import httpx
 from procrastinate import App, PsycopgConnector
 from procrastinate.exceptions import AlreadyEnqueued
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from roadiefm import __version__
 from roadiefm.auth.sessions import delete_expired_sessions
 from roadiefm.config import get_settings
 from roadiefm.db import get_sessionmaker
-from roadiefm.db.instance import record_worker_heartbeat
-from roadiefm.db.models import SyncRun, UserServer
+from roadiefm.db.instance import get_library_settings, record_worker_heartbeat
+from roadiefm.db.models import ListenImport, PlexServer, SyncRun, UserSectionSync, UserServer
+from roadiefm.history.lastfm_import import run_lastfm_import
+from roadiefm.sync.popularity import recompute_popularity
 from roadiefm.sync.runner import run_sync
+from roadiefm.sync.schedule import due_sync
 
 log = logging.getLogger(__name__)
 
@@ -78,31 +81,92 @@ async def enqueue_sync(db: AsyncSession, us: UserServer, kind: str, trigger: str
     return run
 
 
-async def _schedule_all(kind_for: str) -> int:
-    count = 0
+async def schedule_due_syncs(now: dt.datetime | None = None) -> dict[str, int]:
+    """Queue a sync for every connection that's due one. Returns counts per kind."""
+    now = now or dt.datetime.now(dt.UTC)
+    queued: dict[str, int] = {"full": 0, "incremental": 0}
     async with get_sessionmaker()() as db:
-        connections = list(await db.scalars(select(UserServer)))
+        settings = await get_library_settings(db)
+        connections = [us for us in await db.scalars(select(UserServer)) if us.music_section_keys]
+        if not connections:
+            return queued
+        ids = [us.id for us in connections]
+        last_attempts = dict(
+            (
+                await db.execute(
+                    select(SyncRun.user_server_id, func.max(SyncRun.created_at))
+                    .where(SyncRun.user_server_id.in_(ids))
+                    .group_by(SyncRun.user_server_id)
+                )
+            ).all()
+        )
+        full_syncs: dict[tuple[int, str], dt.datetime | None] = {
+            (row.user_server_id, row.section_key): row.last_full_sync_at
+            for row in await db.scalars(
+                select(UserSectionSync).where(UserSectionSync.user_server_id.in_(ids))
+            )
+        }
         for us in connections:
-            if us.music_section_keys:
-                await enqueue_sync(db, us, kind_for, "schedule")
-                count += 1
-    return count
+            fulls = [full_syncs.get((us.id, key)) for key in us.music_section_keys]
+            last_full = None if any(f is None for f in fulls) else min(f for f in fulls if f)
+            kind = due_sync(
+                now,
+                last_attempt=last_attempts.get(us.id),
+                last_full=last_full,
+                settings=settings,
+            )
+            if kind is not None:
+                await enqueue_sync(db, us, kind, "schedule")
+                queued[kind] += 1
+    return queued
 
 
-@app.periodic(cron="*/30 * * * *", periodic_id="incremental-sync")
-@app.task(queue="maintenance", queueing_lock="schedule-incremental-sync")
-async def schedule_incremental_syncs(timestamp: int) -> None:
-    """Pick up plays, ratings and library changes every 30 minutes."""
-    count = await _schedule_all("incremental")
-    log.info("queued incremental syncs for %d server connections", count)
+@app.periodic(cron="*/5 * * * *", periodic_id="schedule-syncs")
+@app.task(queue="maintenance", queueing_lock="schedule-syncs")
+async def schedule_syncs(timestamp: int) -> None:
+    """Every 5 minutes: queue the syncs that are due (intervals are set on Settings)."""
+    queued = await schedule_due_syncs()
+    if any(queued.values()):
+        log.info("queued syncs: %s", queued)
 
 
-@app.periodic(cron="30 4 * * 0", periodic_id="weekly-full-sync")
-@app.task(queue="maintenance", queueing_lock="schedule-full-sync")
-async def schedule_full_syncs(timestamp: int) -> None:
-    """Weekly full sync: catches deletions and anything incremental syncs can't see."""
-    count = await _schedule_all("full")
-    log.info("queued full syncs for %d server connections", count)
+@app.task(queue="maintenance", queueing_lock="recompute-popularity")
+async def recompute_all_popularity() -> None:
+    """Re-score albums and artists on every server after the popularity settings change."""
+    async with get_sessionmaker()() as db:
+        settings = await get_library_settings(db)
+        for server_id in list(await db.scalars(select(PlexServer.id))):
+            await recompute_popularity(db, server_id, settings)
+            await db.commit()
+
+
+async def enqueue_popularity_recompute() -> None:
+    try:
+        await recompute_all_popularity.defer_async()
+    except AlreadyEnqueued:
+        pass  # one is already waiting and will use the latest settings
+
+
+# --- listening history ------------------------------------------------------------------
+
+
+@app.task(queue="imports")
+async def import_lastfm(import_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"RoadieFM/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_lastfm_import(db, http, get_settings(), import_id)
+
+
+async def enqueue_listen_import(db: AsyncSession, job: ListenImport) -> None:
+    """Queue a (new or resumed) import. One import per user runs at a time."""
+    try:
+        await import_lastfm.configure(
+            lock=f"import-user-{job.user_id}", queueing_lock=f"import-{job.id}"
+        ).defer_async(import_id=job.id)
+    except AlreadyEnqueued:
+        pass  # already waiting to run
 
 
 # --- housekeeping --------------------------------------------------------------------
@@ -130,7 +194,17 @@ async def cleanup_sessions(timestamp: int) -> None:
             )
             .values(status="failed", error="Interrupted (the worker stopped during the sync).")
         )
+        stale_imports = await db.execute(
+            update(ListenImport)
+            .where(
+                ListenImport.status == "running",
+                ListenImport.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
+            )
+            .values(status="failed", error="Interrupted (the worker stopped). Resume to continue.")
+        )
         await db.commit()
+    if stale_import_count := int(getattr(stale_imports, "rowcount", 0) or 0):
+        log.warning("marked %d interrupted listen imports as failed", stale_import_count)
     if removed:
         log.info("removed %d expired sessions", removed)
     if stale_count := int(getattr(stale, "rowcount", 0) or 0):

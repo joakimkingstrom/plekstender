@@ -246,6 +246,7 @@ class FakePlex:
     """Mocks plex.tv and one Plex server with a small music library."""
 
     def __init__(self, router: respx.MockRouter) -> None:
+        self.router = router
         self.next_pin = 100
         self.approved: dict[int, str] = {}
         self.library = FakeLibrary()
@@ -318,3 +319,104 @@ async def sign_in(app: FastAPI, plex: FakePlex, token: str) -> tuple[httpx.Async
     result = await client.post("/api/auth/plex/check", headers=CSRF)
     assert result.status_code == 200
     return client, result.json()
+
+
+LASTFM_URL = "https://ws.audioscrobbler.com/2.0/"
+LASTFM_KEY = "0123456789abcdef0123456789abcdef"
+
+
+class FakeLastFm:
+    """Mocks the Last.fm API: one public user with a scrobble history, one private user."""
+
+    def __init__(self, router: respx.MockRouter) -> None:
+        self.valid_keys = {LASTFM_KEY}
+        self.private = {"hidden"}
+        self.users: dict[str, list[dict[str, Any]]] = {"Joakim": []}
+        self.fail_pages: dict[int, int] = {}  # page -> remaining temporary failures
+        self.requests: list[dict[str, str]] = []
+        router.get(LASTFM_URL).mock(side_effect=self._handle)
+
+    def add_scrobbles(self, user: str, count: int, *, start: int, step: int = 3600) -> None:
+        """`count` scrobbles from `start` (epoch seconds), every `step` seconds."""
+        history = self.users.setdefault(user, [])
+        for i in range(count):
+            n = len(history)
+            history.append(
+                {
+                    "uts": start + i * step,
+                    "artist": "The Beatles" if n % 2 else "Radiohead",
+                    "album": "Abbey Road" if n % 2 else "OK Computer",
+                    "track": f"Song {n}",
+                    "mbid": "c3e6f8a2-1111-4222-8333-944455556666" if n == 0 else "",
+                }
+            )
+
+    def _error(self, code: int, message: str) -> httpx.Response:
+        return httpx.Response(200 if code != 29 else 429, json={"error": code, "message": message})
+
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        q = dict(request.url.params)
+        self.requests.append(q)
+        if q.get("api_key") not in self.valid_keys:
+            return self._error(10, "Invalid API key - You must be granted a valid key by last.fm")
+        method = q["method"].lower()
+        if method == "chart.gettopartists":
+            return httpx.Response(200, json={"artists": {"artist": []}})
+        user = next(
+            (u for u in [*self.users, *self.private] if u.lower() == q["user"].lower()), None
+        )
+        if user is None:
+            return self._error(6, "User not found")
+        if method == "user.getinfo":
+            return httpx.Response(
+                200,
+                json={
+                    "user": {
+                        "name": user,
+                        "playcount": str(len(self.users.get(user, []))),
+                        "registered": {"unixtime": "1100000000"},
+                    }
+                },
+            )
+        assert method == "user.getrecenttracks"
+        if user in self.private:
+            return self._error(17, "Login: User required to be logged in")
+        page, limit = int(q.get("page", 1)), int(q.get("limit", 50))
+        if self.fail_pages.get(page, 0) > 0:
+            self.fail_pages[page] -= 1
+            return self._error(16, "There was a temporary error processing your request.")
+        lo, hi = int(q.get("from", 0)), int(q.get("to", 2**62))
+        matching = sorted(
+            (s for s in self.users[user] if lo <= s["uts"] <= hi), key=lambda s: -s["uts"]
+        )
+        chunk = matching[(page - 1) * limit : page * limit]
+        tracks: list[dict[str, Any]] = [
+            {
+                "artist": {"mbid": "", "#text": s["artist"]},
+                "album": {"mbid": "", "#text": s["album"]},
+                "name": s["track"],
+                "mbid": s["mbid"],
+                "date": {"uts": str(s["uts"]), "#text": "whenever"},
+            }
+            for s in chunk
+        ]
+        if page == 1:  # "now playing" comes first and must be skipped
+            tracks.insert(
+                0, {"artist": {"#text": "X"}, "name": "Y", "@attr": {"nowplaying": "true"}}
+            )
+        pages = (len(matching) + limit - 1) // limit
+        return httpx.Response(
+            200,
+            json={
+                "recenttracks": {
+                    "track": tracks[0] if len(tracks) == 1 else tracks,
+                    "@attr": {
+                        "user": user,
+                        "page": str(page),
+                        "perPage": str(limit),
+                        "totalPages": str(pages),
+                        "total": str(len(matching)),
+                    },
+                }
+            },
+        )

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Schemas } from '../api/client'
 import { imageUrl, useStartSync, useSyncStatus } from '../api/library'
 import { errorMessage } from '../api/client'
-import { formatCount, formatRelative } from '../format'
+import { describeSchedule, formatCount, formatRelative } from '../format'
 import { Button, Notice, Spinner } from './ui'
 
 /** Square artwork from Plex, with a lettered placeholder when there's none (or it fails). */
@@ -123,7 +123,7 @@ export function SyncPanel({ serverId, compact = false }: { serverId: number; com
 
   if (status.isPending) return <Spinner small />
   if (status.isError) return <Notice tone="error">{errorMessage(status.error)}</Notice>
-  const { active, last, last_sync_at, counts } = status.data
+  const { active, last, last_sync_at, counts, incremental_minutes, full_days } = status.data
 
   return (
     <div className="space-y-4">
@@ -132,7 +132,7 @@ export function SyncPanel({ serverId, compact = false }: { serverId: number; com
       ) : (
         <p className="text-sm text-muted">
           {last_sync_at ? `Synced ${formatRelative(last_sync_at)}.` : 'Not synced yet.'}{' '}
-          {!compact && 'Changes are picked up every 30 minutes, with a full sync weekly.'}
+          {!compact && describeSchedule(incremental_minutes, full_days)}
         </p>
       )}
       {!active && last?.status === 'failed' && (

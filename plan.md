@@ -9,7 +9,9 @@ Companion to [app-features.md](app-features.md). This document covers *how* the 
 | Name | **RoadieFM** (no "Plex" in the name, per Plex's trademark guidelines; "for Plex & Plexamp" is fine in descriptions). Logo is being designed separately. |
 | Stack | FastAPI (Python) backend + React/Vite/TypeScript frontend |
 | Users | Multi-user: anyone with a Plex account can sign in and connect a server they have access to. Must be safe to expose publicly. |
-| Last.fm import | Moved to *Later*. Will be a one-off importer rather than a continuous sync. |
+| Listening history | RoadieFM keeps its own per-user listening history (Plex plays + imported history) and shows stats on it (Phase 2). Inspired by Koito, but built natively: Koito is single-user, Go + SQLite, with its own catalogue. |
+| Last.fm | One-off history import only, no scrobbling to Last.fm. From 1 Dec 2026 a Last.fm API key only works if its owner has Last.fm Pro, so the importer ships first. |
+| ListenBrainz | New plays are scrobbled to ListenBrainz (opt-in per user, with their own token). ListenBrainz history can also be imported. |
 | Image search | SearXNG as an optional, internal-only service (compose profile), behind a pluggable provider interface. |
 
 ## Architecture
@@ -111,6 +113,9 @@ Almost every feature (weighted rating queues, "top 10 artists in genre X", popul
 - `artist_artwork`: status (todo/custom/done), source, transform settings jsonb, image hash, updated_by
 - `playlists`: owner, server, Plex playlist key, name, `definition jsonb`, schedule, last build result
 - `sync_runs`: job bookkeeping and progress for the UI
+- `listens`: one row per play per user: time, artist/album/track names as played, MBIDs, duration, source + source reference, matched `(server_id, track rating_key)` (nullable), `duplicate_of`, ListenBrainz submission status
+- `listen_imports`: import jobs (Last.fm, ListenBrainz) with resumable cursor, progress and counts
+- `user_integrations`: per-user Last.fm username, encrypted ListenBrainz token, scrobbling on/off
 
 ## Authentication, multi-user & security
 
@@ -147,7 +152,7 @@ The UI hides or disables features based on these flags rather than failing.
 **Scale:** Plex `userRating` is 0–10 (half stars = 1 unit). Write via `PUT /:/rate?key=…&identifier=com.plexapp.plugins.library&rating=…`.
 
 **Item pools** (songs / albums / artists × 3 modes):
-- *Listened*: `view_count > 0`
+- *Listened*: `view_count > 0`, or listened to according to RoadieFM's history (Phase 2), which includes imported Last.fm plays
 - *Unrated*: `user_rating IS NULL`
 - *Everything*: all items; already-rated ones carry a "Rated ★3.5" badge plus a skip action
 
@@ -247,6 +252,46 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
   - ListenBrainz-compatible listen history (for plays with known timestamps)
 - Later: write ratings into file tags (ID3 `POPM`, Vorbis `RATING`/`FMPS_RATING`) so other players can read them.
 
+### 6. Listening history & stats
+
+RoadieFM keeps every user's plays in its own `listens` table. Stats, the ratings "Listened" pool and play-count weighting all read from it, so years of Last.fm history count without writing anything into Plex.
+
+**Where plays come from**
+- **Plex play history** (main source). The worker polls `/status/sessions/history/all` every few minutes per server with a `viewedAt>` watermark, and backfills all existing music history the first time. Plex records a play once a track is ~90% played, so these are finished listens.
+  - The server owner's token sees every account's plays; `accountID` is mapped to RoadieFM users (the owner is account 1, others by plex.tv account ID). Plays by accounts that don't use RoadieFM are not stored.
+  - If the owner doesn't use RoadieFM, try the shared user's own token (to be confirmed by the spike). Last resort: derive plays from `view_count` increases during incremental sync, timed by `last_viewed_at` (approximate; marked as such).
+  - Plex's `viewedAt` is when the track finished; Last.fm and ListenBrainz use the start time. Stored as start time (`viewedAt − duration`), to be checked against real data.
+- **Last.fm import** (one-off per user, see below).
+- **ListenBrainz import**: through the API (`/1/user/{name}/listens`, free) or an uploaded ListenBrainz export. This is also the route after 1 Dec for anyone who moved their Last.fm history into ListenBrainz with its own importer.
+
+**Matching to the library.** Each listen keeps the names it was played under, so plays of music that isn't (or is no longer) in the library still count. Matching tries recording MBID → normalised artist + title (+ album to pick the release) and otherwise leaves the listen unmatched. A re-match job runs after syncs, so newly added albums pick up their old plays. Same song on several releases: prefer the album from the listen, otherwise the original album.
+
+**Duplicates across sources.** Plexamp plays that were also scrobbled to Last.fm appear twice. Two listens by the same user of the same normalised artist + title within *duration + 5 minutes* of each other are one play: the Plex one is kept and the other gets `duplicate_of`, so stats skip it.
+
+**Last.fm import**
+- Instance API key from `LASTFM_API_KEY` or Settings (admin, encrypted). From 1 Dec 2026 the key's owner needs Last.fm Pro; without it the import page says so and points to ListenBrainz import.
+- The user enters their Last.fm username (checked with `user.getInfo`, which also gives the total to show progress). The job pages backwards through `user.getRecentTracks` (200 per page, `to=` cursor, ≤5 requests/s), saving the cursor so it resumes after restarts. ~100k scrobbles ≈ 500 requests, a few minutes. Running it again only fetches newer scrobbles.
+- Profiles with hidden recent listening can't be read with an API key alone; the job fails with that explanation.
+- Any public username can be entered. That only affects the importer's own stats, so it isn't verified.
+
+**Scrobbling to ListenBrainz**
+- Per user, opt-in: paste the user token from listenbrainz.org/settings, checked with `/1/validate-token` and stored encrypted (purpose `user.listenbrainz_token`).
+- New Plex listens go into an outbox and are sent in batches as `single` listens: names, `duration_ms`, MBIDs when known (recording/release/artist), `media_player` from the Plex device when known, `submission_client: "roadie.fm"`. Retries with backoff, honours `X-RateLimit-*` headers; a rejected token pauses scrobbling and shows a warning.
+- Only plays after scrobbling was turned on are sent. Imported Last.fm history isn't sent (ListenBrainz has its own Last.fm importer); sending it as `import` listens can be an explicit option later.
+- Warn that scrobbling from another tool too (e.g. multi-scrobbler) causes doubles.
+- Later: "playing now" from `/status/sessions`.
+
+**Stats (per user)**
+- Overview for a period (7 days, 30 days, year, all time, custom): listens, listening time, top artists / albums / tracks with change vs the previous period.
+- Activity: listens per day / week / month, weekday × hour heatmap, streaks.
+- Artist, album and track pages get "your listens": count, first and last listen, plays over time.
+- History: list of listens with source badges and unmatched plays, deletable.
+- Day boundaries use the user's time zone (from the browser, stored per user).
+- Plain aggregates over `(user_id, listened_at)` indexes; daily rollups only if it gets slow.
+- Later: year in review.
+
+**Privacy.** Listens are only visible to the user who made them, not to other users or admins. Each user can export their history (ListenBrainz JSONL) and delete all of it.
+
 ## Phasing
 
 ### Phase 0 — Skeleton & spikes
@@ -289,33 +334,48 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
 
 - **Shared metadata, personal visibility.** Artists, albums, tracks, tags and similar artists are stored once per server. Each user's own sync records `user_item_state` rows for every item *their* token can list, and every library query joins on them. A shared user restricted to part of a library only sees that part, even if the owner's sync stored the rest.
 - **Who may delete.** Only a server owner's full sync removes metadata for items that are gone; other users' full syncs only drop their own visibility rows.
-- **When syncs run.** A full sync is queued when a library is first chosen, then incremental syncs run every 30 minutes and a full one weekly (Sunday 04:30), plus "Sync changes" / "Full resync" buttons. Syncs for the same server never overlap.
+- **When syncs run.** A full sync is queued when a library is first chosen. After that the worker checks every 5 minutes and queues an incremental sync every 30 minutes and a full one every 7 days per connection (both adjustable on Settings → Library), plus "Sync changes" / "Full resync" buttons. It waits a full interval after any attempt, so a failing server isn't retried on every check. Syncs for the same server never overlap.
 - **Incremental sync** fetches items with `updatedAt`, `lastViewedAt` or `lastRatedAt` after the previous sync (minus 5 minutes), and re-reads all personal state if a server rejects those filters. Deletions are only detected by full syncs.
 - **Details** (genres, moods, styles, countries, similar artists) come from batched `/library/metadata/{k1,k2,...}` requests, 50 items each, falling back to one item per request.
-- **Popularity:** album = sum of its top 3 tracks; artist = sum of its top 10 songs, with releases of the same song (normalised title) counted once.
+- **Popularity:** album = sum of its top 3 tracks; artist = sum of its top 10 songs, with releases of the same song (normalised title) counted once. Admins can change both numbers on Settings → Library, with a live preview of the resulting top artists; saving re-scores every server in a background job.
 - **Exports** stream straight from the database: `tracks.csv` and `library.json` (lossless, with tags, similar artists and personal state).
 - **Benchmark** against a generated 101k-track library on a laptop: full sync ~56 s and ~400 Plex requests; incremental sync 0.2 s and ~10 requests.
 
-### Phase 2 — Ratings
+### Phase 2 — Listening history
+Ordered by the Last.fm deadline (1 Dec 2026):
+- [x] **Before 1 Dec:** `listens` + `listen_imports`, Last.fm API key (Settings → Listening or `LASTFM_API_KEY`), per-user Last.fm import job with progress UI, resume after failures, History page, delete one / imported / all listens
+- [ ] Link listens to library items (artist / album / track pages, "not in library" in stats)
+- [x] Spike: `plex_probe.py --history` (owner token; a shared user's token not tested yet)
+  - **41,746 music plays back to 30 Jun 2021** in library 3 (of 45k history entries in total). Library 7 has none.
+  - Filtering: `type=10` returns nothing and `metadataType=10` is ignored, but `librarySectionID` and `viewedAt>` both work, so capture polls per music library with a `viewedAt` watermark. `accountID=1` returned the full total; either every play is the owner's or the filter is ignored, so filter client-side.
+  - Every entry has `historyKey` (dedupe key), `ratingKey` (all 50 sampled still exist), `viewedAt`, `accountID`, `deviceID` and album / album-artist titles. There's no `originalTitle`, so compilation tracks only name the album artist: take the track artist from the mirror via `ratingKey`, falling back to `grandparentTitle`.
+  - Accounts: the owner is account `1` (their plex.tv ID isn't listed); 11 other accounts use plex.tv IDs.
+  - Consecutive plays are ~4 minutes apart (median), which doesn't settle whether `viewedAt` marks the start or the end of a play. Keep start = `viewedAt − duration` and check against Last.fm duplicates once both are imported.
+- [ ] Plex play capture: history polling + backfill, account mapping, cross-source duplicates
+- [ ] ListenBrainz scrobbling: token, outbox, batched submit, retries
+- [ ] Stats pages and per-item listen stats
+- [ ] ListenBrainz import (API + export file), history export, delete all
+
+### Phase 3 — Ratings
 - [ ] Queue builders (3 pools × 3 strategies) with tests for distribution and artist interleaving
 - [ ] Mobile swipe UI + undo
 - [ ] Desktop songs / albums / artists layouts + layout toggle
 
-### Phase 3 — Artwork
+### Phase 4 — Artwork
 - [ ] Port transforms/text logos/fonts with tests
 - [ ] Sources: fanart.tv (+ MusicBrainz fallback), Plex posters, upload, SearXNG
 - [ ] Editor UI, status tracking, bulk apply job
 - [ ] Folder save with path mapping
 - [ ] Export/import zip with matching preview
 
-### Phase 4 — Smart playlists
+### Phase 5 — Smart playlists
 - [ ] Definition schema + builder service + preview endpoint
 - [ ] Builder UI
 - [ ] Scheduled refresh
 
-### Phase 5 — Polish
+### Phase 6 — Polish
 - [ ] PWA install, offline shell
-- [ ] M3U / ListenBrainz exports
+- [ ] M3U playlist exports
 - [ ] Docs, screenshots, published images (GHCR)
 
 ## Later
@@ -323,16 +383,14 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
 ### Preview playback
 Fetch the track file directly from Plex (`/library/parts/…`) and trim it to 30–60 s with ffmpeg on the server (`-t 45 -c:a libopus`), streamed to an `<audio>` element. Plex counts plays from client timeline/scrobble reports, so direct file access should not affect stats (to be confirmed in a Phase 0 spike). Useful inside the playlist builder.
 
-### Last.fm history import (one-off)
-Plex has no supported API to write play history with historical timestamps, so this will be a one-off tool rather than a continuous sync:
-- Run as `docker compose run --rm lastfm-import` (same image, CLI entry point), with a dry-run report first.
-- Track matching: MBID → normalised artist + title (+ album) with fuzzy fallback; unmatched list exported as CSV.
-- Two write modes to evaluate:
-  - **API mode:** `/:/scrobble` per play. Raises play counts, but every play gets the current timestamp. Safe, but distorts "recently played" and time-based stats.
-  - **Database mode:** write `metadata_item_views` / `metadata_item_settings` in Plex's SQLite database with the real timestamps. Requires Plex to be stopped, a backup taken first, and the database file mounted. Unsupported by Plex, so it is opt-in with explicit warnings.
-- Should skip plays that are already in Plex (overlap since Plexamp was adopted), using timestamps.
+### Writing imported plays back to Plex
+RoadieFM's own history makes this optional: the ratings queues and stats already count imported plays. If Plex's own play counts should include them too:
+- **API mode:** `/:/scrobble` per play. Raises play counts, but every play gets the current timestamp, which distorts "recently played".
+- **Database mode:** write `metadata_item_views` / `metadata_item_settings` in Plex's SQLite database with the real timestamps. Requires Plex to be stopped, a backup first and the database file mounted. Unsupported by Plex, so opt-in with explicit warnings.
+- Either way, skip plays Plex already has (matched listens with `source = plex` are the overlap).
 
 ## Open questions
-- Does the derived popularity (top 3 tracks per album, top 10 songs per artist) rank artists sensibly on the real library? Sort the Library page by Popularity and adjust `ALBUM_TOP_N` / `ARTIST_TOP_N` in `backend/src/roadiefm/sync/popularity.py` if not.
+- Does the derived popularity (top 3 tracks per album, top 10 songs per artist) rank artists sensibly on the real library? Tune it on Settings → Library using the preview.
+- Plex history timestamps: is `viewedAt` really the end of the track, and does the account mapping hold for shared users? (`plex_probe.py --history`)
 - Should playlists be shareable between users of the same server (e.g. "copy definition")?
 - Licence of shared logo packs: fanart.tv images come with their own terms; the export should keep `source` per image so people can decide what they share.

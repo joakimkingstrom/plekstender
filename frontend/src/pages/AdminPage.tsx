@@ -165,7 +165,8 @@ function UsersCard({ selfId }: { selfId: number }) {
 }
 
 export function AdminPage() {
-  const { data: me } = useMe()
+  const { data: me, isPending } = useMe()
+  if (isPending) return <Spinner />
   if (!me?.is_admin) return <Navigate to="/" replace />
   return (
     <>
