@@ -350,3 +350,66 @@ def _next(day: dt.date, bucket: Bucket) -> dt.date:
     if bucket == "week":
         return day + dt.timedelta(days=7)
     return (day.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
+
+
+@dataclass
+class ItemListens:
+    listens: int
+    first_at: dt.datetime | None
+    last_at: dt.datetime | None
+    years: list[tuple[int, int]]
+    songs: list[tuple[str, int]]
+    by_track_key: dict[str, int]
+
+
+async def item_listens(
+    db: AsyncSession,
+    user_id: int,
+    tz: ZoneInfo,
+    artist_keys: set[str],
+    album_key: str | None = None,
+) -> ItemListens:
+    """A user's listens of one artist (or one of their albums), matched by normalised names."""
+    conditions = [
+        Listen.user_id == user_id,
+        Listen.duplicate_of.is_(None),
+        Listen.artist_key.in_(artist_keys),
+    ]
+    if album_key is not None:
+        conditions.append(Listen.album_key == album_key)
+    total, first, last = (
+        await db.execute(
+            select(func.count(), func.min(Listen.listened_at), func.max(Listen.listened_at)).where(
+                *conditions
+            )
+        )
+    ).one()
+    if not total:
+        return ItemListens(0, None, None, [], [], {})
+
+    year = func.extract("year", func.timezone(tz.key, Listen.listened_at))
+    per_year = dict(
+        (int(y), n)
+        for y, n in (
+            await db.execute(select(year, func.count()).where(*conditions).group_by(year))
+        ).all()
+    )
+    years = [(y, per_year.get(y, 0)) for y in range(min(per_year), max(per_year) + 1)]
+
+    count = func.count().label("n")
+    tracks = (
+        await db.execute(
+            select(Listen.track_key, func.mode().within_group(Listen.track_name), count)
+            .where(*conditions)
+            .group_by(Listen.track_key)
+            .order_by(count.desc(), Listen.track_key)
+        )
+    ).all()
+    return ItemListens(
+        listens=total,
+        first_at=first,
+        last_at=last,
+        years=years,
+        songs=[(name, n) for _, name, n in tracks[:10]],
+        by_track_key={key: n for key, _, n in tracks},
+    )

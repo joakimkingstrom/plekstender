@@ -163,3 +163,52 @@ async def test_stats_are_private(app: FastAPI, plex: FakePlex) -> None:
     assert (
         await friend.get("/api/stats/overview", params={"range": "all", "server_id": sid})
     ).status_code == 404
+
+
+@pytest.mark.db
+async def test_your_listens_on_artist_and_album_pages(app: FastAPI, plex: FakePlex) -> None:
+    owner, sid = await owner_with_library(app, plex)
+    user_id = (await owner.get("/api/auth/me")).json()["id"]
+    await add_listens(
+        user_id,
+        [
+            (0, "Radiohead", "OK Computer", "Paranoid Android"),
+            (1, "Radiohead", "OK Computer", "Paranoid Android"),
+            (2, "Radiohead", "OK Computer", "Karma Police"),
+            (3, "Radiohead", "OK Computer OKNOTOK 1997 2017", "Karma Police (Remastered)"),
+            (800, "Radiohead", "OK Computer", "Airbag"),
+            (0, "Portishead", "Dummy", "Glory Box"),
+        ],
+    )
+
+    artist = (
+        await owner.get(f"/api/servers/{sid}/library/artists/100", params={"tz": "UTC"})
+    ).json()
+    mine = artist["your_listens"]
+    assert mine["listens"] == 5
+    assert [(s["name"], s["listens"]) for s in mine["songs"]] == [
+        ("Karma Police", 2),
+        ("Paranoid Android", 2),
+        ("Airbag", 1),
+    ]
+    this_year = dt.datetime.now(dt.UTC).year
+    assert mine["years"][-1] == {"year": this_year, "listens": 4}
+    assert sum(y["listens"] for y in mine["years"]) == 5
+    first_year = mine["years"][0]["year"]
+    assert [y["year"] for y in mine["years"]] == list(range(first_year, this_year + 1))  # no gaps
+    # Remasters are one song: "Karma Police" counts both releases' listens.
+    assert {t["title"]: t["listens"] for t in artist["top_tracks"]} == {
+        "Karma Police": 2,
+        "Paranoid Android": 2,
+        "Lucky": 0,
+    }
+
+    album = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
+    assert album["your_listens"]["listens"] == 4  # not the OKNOTOK play
+    assert {t["title"]: t["listens"] for t in album["tracks"]} == {
+        "Paranoid Android": 2,
+        "Karma Police": 1,
+    }
+
+    nothing = (await owner.get(f"/api/servers/{sid}/library/albums/203")).json()["your_listens"]
+    assert nothing == {"listens": 0, "first_at": None, "last_at": None, "years": [], "songs": []}

@@ -359,7 +359,7 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - Settings → Listening: paste the user token (checked with `/1/validate-token`, stored encrypted). Plex plays that start after connecting are sent a few minutes after capture, oldest first, 100 per request (`single` for one, `import` for several), with duration, album and `submission_client: "Plekstender"`. A listens-id watermark tracks what's been handled.
   - A listen ListenBrainz refuses (400) is found by resending the batch one by one and skipped. Other failures stay pending and are retried every 15 minutes; a rejected token pauses scrobbling until a new token for the same account is pasted (a different account starts over).
 - [x] Stats pages: History → Overview with periods (7 days, 30 days, 12 months, each year since the first listen, all time) in the viewer's time zone; totals with change vs the previous period, new artists, listening streaks; listens over time; top artists / albums / songs with rank changes, linked to the library (and its artwork) where a match exists; weekday × hour heatmap. Duplicates are skipped and listens without a length count as 3:35. ~0.2 s for a year and <1 s for all time on 280k listens.
-- [ ] Per-item listen stats on artist / album pages ("your listens": count, first and last listen, plays over time)
+- [x] Per-item listen stats: artist and album pages show "Your listens" (count, first and last listen, listens per year, an artist's most played songs) and each track row shows your listens of that song. Matched by normalised names (albums also by their track artists, for compilations); remasters count as the same song.
 - [ ] ListenBrainz import (API + export file), history export, delete all
 
 ### Phase 3 — Ratings

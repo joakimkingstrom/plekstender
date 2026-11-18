@@ -10,9 +10,10 @@ import {
   useTags,
   type ArtistSort,
 } from '../api/library'
+import { ColumnChart } from '../components/charts'
 import { Artwork, Stars, SyncPanel } from '../components/library'
 import { Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
-import { formatCompact, formatCount, formatDuration } from '../format'
+import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
 
 const SORTS: { value: ArtistSort; label: string }[] = [
   { value: 'title', label: 'Name' },
@@ -226,9 +227,12 @@ function ArtistGrid({
 function TrackList({
   tracks,
   showAlbum = false,
+  showListens = false,
 }: {
   tracks: Schemas['TrackOut'][]
   showAlbum?: boolean
+  /** A column with the user's own listens of each song. */
+  showListens?: boolean
 }) {
   return (
     <ol className="divide-y divide-border">
@@ -248,6 +252,11 @@ function TrackList({
           <span className="hidden w-14 text-right text-xs text-muted tabular-nums sm:block" title="Last.fm listeners">
             {formatCompact(t.popularity)}
           </span>
+          {showListens && (
+            <span className="w-10 text-right text-xs text-muted tabular-nums" title="Your listens">
+              {t.listens ? `${formatCount(t.listens)}×` : ''}
+            </span>
+          )}
           <Stars rating={t.user_rating} className="w-20 justify-end" />
           <span className="w-10 text-right text-xs text-muted tabular-nums">{formatDuration(t.duration_ms)}</span>
         </li>
@@ -294,6 +303,51 @@ function BackLink({ to, label }: { to: string; label: string }) {
   )
 }
 
+function YourListens({ listens, showSongs }: { listens: Schemas['ItemListensOut']; showSongs: boolean }) {
+  if (!listens.listens) {
+    return (
+      <Card title="Your listens">
+        <p className="text-sm text-muted">
+          None yet. Your listening history includes plays from Plex and imported Last.fm scrobbles.
+        </p>
+      </Card>
+    )
+  }
+  const unit = (n: number) => `${formatCount(n)} ${n === 1 ? 'listen' : 'listens'}`
+  return (
+    <Card title="Your listens">
+      <div className="space-y-4">
+        <div>
+          <p className="font-display text-3xl font-bold">{formatCount(listens.listens)}</p>
+          <p className="text-xs text-muted">
+            {listens.first_at && `First ${formatDate(listens.first_at)}`}
+            {listens.last_at && ` · last ${formatRelative(listens.last_at)}`}
+          </p>
+        </div>
+        {listens.years.length > 1 && (
+          <ColumnChart
+            height={120}
+            caption="Your listens per year"
+            unit={unit}
+            points={listens.years.map((y) => ({ label: String(y.year), axis: String(y.year), value: y.listens }))}
+          />
+        )}
+        {showSongs && (
+          <ol className="space-y-1.5">
+            {listens.songs.slice(0, 5).map((song, i) => (
+              <li key={song.name} className="flex items-center gap-3 text-sm">
+                <span className="w-4 text-right text-xs text-muted tabular-nums">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate">{song.name}</span>
+                <span className="text-xs text-muted tabular-nums">{formatCount(song.listens)}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 export function ArtistPage() {
   const { blocker, active } = useLibraryServer()
   const key = Number(useParams().key)
@@ -324,11 +378,11 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
           {a.top_tracks.length > 0 && (
             <Card title="Most popular songs">
-              <TrackList tracks={a.top_tracks} showAlbum />
+              <TrackList tracks={a.top_tracks} showAlbum showListens={a.your_listens.listens > 0} />
             </Card>
           )}
           <Card title="Albums">
@@ -348,6 +402,8 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
             </ul>
           </Card>
         </div>
+        <div className="space-y-6">
+        <YourListens listens={a.your_listens} showSongs />
         {a.similar.length > 0 && (
           <Card title="Similar artists">
             <ul className="flex flex-wrap gap-2">
@@ -367,6 +423,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
             </ul>
           </Card>
         )}
+        </div>
       </div>
     </>
   )
@@ -409,14 +466,22 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           <Summary text={al.summary} />
         </div>
       </div>
-      <Card>
-        {[...discs].sort((a, b) => a - b).map((disc) => (
-          <div key={disc}>
-            {discs.size > 1 && <h3 className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wider text-muted">Disc {disc}</h3>}
-            <TrackList tracks={al.tracks.filter((t) => (t.disc ?? 1) === disc)} />
-          </div>
-        ))}
-      </Card>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+        <Card>
+          {[...discs].sort((a, b) => a - b).map((disc) => (
+            <div key={disc}>
+              {discs.size > 1 && <h3 className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wider text-muted">Disc {disc}</h3>}
+              <TrackList
+                tracks={al.tracks.filter((t) => (t.disc ?? 1) === disc)}
+                showListens={al.your_listens.listens > 0}
+              />
+            </div>
+          ))}
+        </Card>
+        <div>
+          <YourListens listens={al.your_listens} showSongs={false} />
+        </div>
+      </div>
     </>
   )
 }

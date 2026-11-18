@@ -7,7 +7,8 @@ their own Plex account can access, in the music libraries they selected.
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -22,9 +23,12 @@ from plekstender.api.schemas import (
     ArtistDetail,
     ArtistPage,
     ArtistSummary,
+    ItemListensOut,
     SimilarArtistOut,
+    SongListens,
     TagOut,
     TrackOut,
+    YearListens,
 )
 from plekstender.db.models import (
     Album,
@@ -36,7 +40,9 @@ from plekstender.db.models import (
     UserItemState,
     UserServer,
 )
+from plekstender.history import stats
 from plekstender.plex.tv import PlexError
+from plekstender.sync.parse import normalise_artist, normalise_title
 
 router = APIRouter(prefix="/api/servers/{server_id}", tags=["library"])
 
@@ -253,8 +259,49 @@ async def _top_tracks(
     return [_track_out(t, r, p, a) for t, r, p, a in rows.all()]
 
 
+TzQuery = Annotated[str, Query(max_length=64, description="IANA time zone for yearly counts")]
+
+
+def _zone(name: str) -> ZoneInfo:
+    try:
+        return stats.zone(name)
+    except stats.StatsError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+
+def _listens_out(found: stats.ItemListens) -> ItemListensOut:
+    return ItemListensOut(
+        listens=found.listens,
+        first_at=found.first_at,
+        last_at=found.last_at,
+        years=[YearListens(year=y, listens=n) for y, n in found.years],
+        songs=[SongListens(name=name, listens=n) for name, n in found.songs],
+    )
+
+
+def _with_listens(
+    tracks: list[TrackOut], titles: dict[int, str], found: stats.ItemListens
+) -> list[TrackOut]:
+    for track in tracks:
+        track.listens = found.by_track_key.get(titles.get(track.rating_key, ""), 0)
+    return tracks
+
+
+async def _title_norms(db: DbDep, server_id: int, keys: list[int]) -> dict[int, str]:
+    if not keys:
+        return {}
+    rows = await db.execute(
+        select(Track.rating_key, Track.title_norm).where(
+            Track.server_id == server_id, Track.rating_key.in_(keys)
+        )
+    )
+    return {k: t for k, t in rows.all()}
+
+
 @router.get("/library/artists/{rating_key}", response_model=ArtistDetail)
-async def get_artist(server_id: int, rating_key: int, db: DbDep, user: UserDep) -> ArtistDetail:
+async def get_artist(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep, tz: TzQuery = "UTC"
+) -> ArtistDetail:
     us = await get_user_server(db, user, server_id)
     state, cond, where = visible(Artist, user.id, us)
     row = (
@@ -288,6 +335,9 @@ async def get_artist(server_id: int, rating_key: int, db: DbDep, user: UserDep) 
         )
         in_library = {name: key for name, key in matches.all()}
 
+    listens = await stats.item_listens(db, user.id, _zone(tz), {normalise_artist(artist.title)})
+    top_tracks = await _top_tracks(db, user.id, us, rating_key)
+    titles = await _title_norms(db, us.server_id, [t.rating_key for t in top_tracks])
     return ArtistDetail(
         **_artist_summary(row).model_dump(),
         summary=artist.summary,
@@ -295,12 +345,15 @@ async def get_artist(server_id: int, rating_key: int, db: DbDep, user: UserDep) 
         tags=await _tags_for(db, us.server_id, rating_key),
         similar=[SimilarArtistOut(name=n, rating_key=in_library.get(n.lower())) for n in names],
         albums=await _albums(db, user.id, us, Album.artist_rating_key == rating_key),
-        top_tracks=await _top_tracks(db, user.id, us, rating_key),
+        top_tracks=_with_listens(top_tracks, titles, listens),
+        your_listens=_listens_out(listens),
     )
 
 
 @router.get("/library/albums/{rating_key}", response_model=AlbumDetail)
-async def get_album(server_id: int, rating_key: int, db: DbDep, user: UserDep) -> AlbumDetail:
+async def get_album(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep, tz: TzQuery = "UTC"
+) -> AlbumDetail:
     us = await get_user_server(db, user, server_id)
     found = await _albums(db, user.id, us, Album.rating_key == rating_key)
     if not found:
@@ -319,6 +372,16 @@ async def get_album(server_id: int, rating_key: int, db: DbDep, user: UserDep) -
         .where(*where, Track.album_rating_key == rating_key)
         .order_by(Track.disc.nulls_last(), Track.number.nulls_last(), Track.title)
     )
+    track_rows = rows.all()
+    # Compilations: listens are stored under each track's own artist.
+    artist_keys = {normalise_artist(artist.title)} if artist else set()
+    artist_keys |= {
+        normalise_artist(t.original_title) for t, _, _ in track_rows if t.original_title
+    }
+    listens = await stats.item_listens(
+        db, user.id, _zone(tz), artist_keys, normalise_title(album.title)
+    )
+    tracks = [_track_out(t, r, p, album) for t, r, p in track_rows]
     return AlbumDetail(
         **found[0].model_dump(),
         summary=album.summary,
@@ -327,7 +390,10 @@ async def get_album(server_id: int, rating_key: int, db: DbDep, user: UserDep) -
         artist_rating_key=album.artist_rating_key,
         artist_title=artist.title if artist else None,
         tags=await _tags_for(db, us.server_id, rating_key),
-        tracks=[_track_out(t, r, p, album) for t, r, p in rows.all()],
+        tracks=_with_listens(
+            tracks, {t.rating_key: t.title_norm for t, _, _ in track_rows}, listens
+        ),
+        your_listens=_listens_out(listens),
     )
 
 

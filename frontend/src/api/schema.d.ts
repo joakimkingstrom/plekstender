@@ -741,6 +741,7 @@ export interface components {
             tags: components["schemas"]["TagOut"][];
             /** Tracks */
             tracks: components["schemas"]["TrackOut"][];
+            your_listens: components["schemas"]["ItemListensOut"];
         };
         /** AlbumSummary */
         AlbumSummary: {
@@ -791,6 +792,7 @@ export interface components {
             albums: components["schemas"]["AlbumSummary"][];
             /** Top Tracks */
             top_tracks: components["schemas"]["TrackOut"][];
+            your_listens: components["schemas"]["ItemListensOut"];
         };
         /** ArtistPage */
         ArtistPage: {
@@ -873,6 +875,23 @@ export interface components {
             /** Database */
             database: boolean;
             worker: components["schemas"]["WorkerHealth"];
+        };
+        /**
+         * ItemListensOut
+         * @description The user's own listening history for an artist or album (from Plekstender's
+         *     history, incl. imported Last.fm scrobbles; not Plex's play count).
+         */
+        ItemListensOut: {
+            /** Listens */
+            listens: number;
+            /** First At */
+            first_at: string | null;
+            /** Last At */
+            last_at: string | null;
+            /** Years */
+            years: components["schemas"]["YearListens"][];
+            /** Songs */
+            songs: components["schemas"]["SongListens"][];
         };
         /** LastFmImportIn */
         LastFmImportIn: {
@@ -1175,6 +1194,13 @@ export interface components {
             /** Rating Key */
             rating_key: number | null;
         };
+        /** SongListens */
+        SongListens: {
+            /** Name */
+            name: string;
+            /** Listens */
+            listens: number;
+        };
         /** StatsActivityOut */
         StatsActivityOut: {
             /**
@@ -1367,6 +1393,12 @@ export interface components {
             album_title: string | null;
             /** Album Thumb */
             album_thumb: string | null;
+            /**
+             * Listens
+             * @description Your listens of this song (all sources).
+             * @default 0
+             */
+            listens: number;
         };
         /** UserOut */
         UserOut: {
@@ -1400,6 +1432,13 @@ export interface components {
             healthy: boolean;
             /** Last Heartbeat */
             last_heartbeat: string | null;
+        };
+        /** YearListens */
+        YearListens: {
+            /** Year */
+            year: number;
+            /** Listens */
+            listens: number;
         };
     };
     responses: never;
@@ -1815,7 +1854,10 @@ export interface operations {
     };
     get_artist_api_servers__server_id__library_artists__rating_key__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description IANA time zone for yearly counts */
+                tz?: string;
+            };
             header?: never;
             path: {
                 server_id: number;
@@ -1847,7 +1889,10 @@ export interface operations {
     };
     get_album_api_servers__server_id__library_albums__rating_key__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description IANA time zone for yearly counts */
+                tz?: string;
+            };
             header?: never;
             path: {
                 server_id: number;

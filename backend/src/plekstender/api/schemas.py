@@ -220,11 +220,33 @@ class TrackOut(BaseModel):
     album_rating_key: int | None
     album_title: str | None
     album_thumb: str | None
+    listens: int = Field(default=0, description="Your listens of this song (all sources).")
 
 
 class SimilarArtistOut(BaseModel):
     name: str
     rating_key: int | None  # set when the artist is in your library
+
+
+class YearListens(BaseModel):
+    year: int
+    listens: int
+
+
+class SongListens(BaseModel):
+    name: str
+    listens: int
+
+
+class ItemListensOut(BaseModel):
+    """The user's own listening history for an artist or album (from Plekstender's
+    history, incl. imported Last.fm scrobbles; not Plex's play count)."""
+
+    listens: int
+    first_at: dt.datetime | None
+    last_at: dt.datetime | None
+    years: list[YearListens]
+    songs: list[SongListens]
 
 
 class ArtistDetail(ArtistSummary):
@@ -234,6 +256,7 @@ class ArtistDetail(ArtistSummary):
     similar: list[SimilarArtistOut]
     albums: list[AlbumSummary]
     top_tracks: list[TrackOut]
+    your_listens: ItemListensOut
 
 
 class AlbumDetail(AlbumSummary):
@@ -244,6 +267,7 @@ class AlbumDetail(AlbumSummary):
     artist_title: str | None
     tags: list[TagOut]
     tracks: list[TrackOut]
+    your_listens: ItemListensOut
 
 
 # --- library settings (admin) -------------------------------------------------------------

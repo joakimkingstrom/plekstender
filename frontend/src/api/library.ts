@@ -8,6 +8,7 @@ import {
 import { useState } from 'react'
 import { api, unwrap, type Schemas } from './client'
 import { useServers } from './hooks'
+import { localTimeZone } from './stats'
 
 export type ArtistSort = 'title' | 'popularity' | 'plays' | 'rating' | 'added'
 export type TagKind = 'genre' | 'mood' | 'style' | 'country'
@@ -137,7 +138,7 @@ export function useArtist(serverId: number, key: number) {
     queryFn: () =>
       unwrap(
         api.GET('/api/servers/{server_id}/library/artists/{rating_key}', {
-          params: { path: { server_id: serverId, rating_key: key } },
+          params: { path: { server_id: serverId, rating_key: key }, query: { tz: localTimeZone() } },
         }),
       ),
   })
@@ -149,7 +150,7 @@ export function useAlbum(serverId: number, key: number) {
     queryFn: () =>
       unwrap(
         api.GET('/api/servers/{server_id}/library/albums/{rating_key}', {
-          params: { path: { server_id: serverId, rating_key: key } },
+          params: { path: { server_id: serverId, rating_key: key }, query: { tz: localTimeZone() } },
         }),
       ),
   })
