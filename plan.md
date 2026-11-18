@@ -382,7 +382,9 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - fanart.tv HD + SD logos sorted by likes (key from `FANART_API_KEY` or Settings, checked on save); missing MBIDs are looked up on MusicBrainz by exact normalised name (≤1 request/s) and stored. Plex posters via `/library/metadata/{id}/posters`, read through Plex's photo transcoder. SearXNG results ranked (logo / PNG hints first, merch and ticket sites last), cached 30 days. Uploads are re-encoded to PNG under `DATA_DIR/uploads` and removed after a day.
   - Outside images only through `artwork/fetch.py`: http(s) on ports 80/443, every resolved address must be public, redirects re-checked, 15 MB cap. The browser only gets signed (HMAC, 24 h) references, so the image proxy can't be pointed elsewhere.
   - Applying uploads the 1000 px JPEG to Plex (`POST /library/metadata/{id}/posters`), records source / settings / hash in `artist_artwork`, and refreshes the mirror's thumb. Artwork endpoints are owner-only.
-- [ ] Editor UI, status tracking, bulk apply job
+- [x] Editor UI and status tracking
+  - Artwork page (server owners): artist list with search and To do / Custom / Done filters; per artist, candidates from fanart.tv, Plex, Search, Upload or Text, adjustments (fit or zoom, contrast, invert, greyscale, all white, tint, background), a live preview next to the current image, and "Save to Plex". "Edit current" re-works the image Plex has. fanart.tv key on Settings → Library.
+- [ ] Bulk apply job (most-liked fanart.tv logo for a selection of artists)
 - [ ] Folder save with path mapping
 - [ ] Export/import zip with matching preview
 

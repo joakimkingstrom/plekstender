@@ -3,6 +3,7 @@ import { Navigate, NavLink, Outlet } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useLibrarySettings, useMe, usePopularityPreview, useUpdateLibrarySettings } from '../api/hooks'
 import { useActiveServer } from '../api/library'
+import { useFanartKey, useSetFanartKey } from '../api/artwork'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
@@ -95,7 +96,87 @@ export function LibrarySettingsPage() {
   if (!me.data?.is_admin) return <Navigate to="/settings" replace />
   if (settings.isPending) return <Spinner />
   if (settings.isError) return <Notice tone="error">{errorMessage(settings.error)}</Notice>
-  return <LibrarySettingsForm initial={settings.data} />
+  return (
+    <div className="space-y-4">
+      <LibrarySettingsForm initial={settings.data} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <FanartKeyCard />
+      </div>
+    </div>
+  )
+}
+
+function FanartKeyCard() {
+  const key = useFanartKey(true)
+  const save = useSetFanartKey()
+  const [value, setValue] = useState('')
+  const [saved, setSaved] = useState(false)
+  const valid = /^[0-9A-Fa-f]{32}$/.test(value.trim())
+  return (
+    <Card title="fanart.tv API key">
+      <div className="space-y-3">
+        <p className="text-sm text-muted">
+          Used by the Artwork page to find artist logos. Get a free key at{' '}
+          <a href="https://fanart.tv/get-an-api-key/" target="_blank" rel="noreferrer" className="text-accent underline">
+            fanart.tv/get-an-api-key
+          </a>
+          .
+        </p>
+        {key.isPending ? (
+          <Spinner small />
+        ) : key.isError ? (
+          <Notice tone="error">{errorMessage(key.error)}</Notice>
+        ) : (
+          <p className="text-sm">
+            {key.data.source === 'settings'
+              ? 'A key is set on this page.'
+              : key.data.source === 'environment'
+                ? 'Using FANART_API_KEY from the environment. A key saved here takes precedence.'
+                : 'No key is set.'}
+          </p>
+        )}
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (valid)
+              save.mutate(value.trim(), {
+                onSuccess: () => {
+                  setValue('')
+                  setSaved(true)
+                },
+              })
+          }}
+        >
+          <label className="min-w-0 flex-1">
+            <span className="mb-1 block text-sm font-medium">{key.data?.configured ? 'Replace key' : 'API key'}</span>
+            <input
+              type="password"
+              value={value}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => {
+                setSaved(false)
+                setValue(e.target.value)
+              }}
+              placeholder="32 characters"
+              className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm"
+            />
+          </label>
+          <Button type="submit" variant="primary" disabled={!valid} busy={save.isPending && save.variables !== null}>
+            Check and save
+          </Button>
+          {key.data?.source === 'settings' && (
+            <Button variant="ghost" busy={save.isPending && save.variables === null} onClick={() => save.mutate(null)}>
+              Remove
+            </Button>
+          )}
+        </form>
+        {saved && <Notice>Saved. fanart.tv accepted the key.</Notice>}
+        {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+      </div>
+    </Card>
+  )
 }
 
 function LibrarySettingsForm({ initial }: { initial: Settings }) {

@@ -1,0 +1,89 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ArtworkPage } from './ArtworkPage'
+
+const radiohead = { rating_key: 100, title: 'Radiohead', thumb: null, status: 'none', source: null, applied_at: null, has_mbid: true }
+let owner = true
+let fetchMock: ReturnType<typeof vi.fn<(input: Request | string, init?: RequestInit) => Promise<Response>>>
+
+beforeEach(() => {
+  owner = true
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:preview', revokeObjectURL: () => undefined }))
+  fetchMock = vi.fn<(input: Request | string, init?: RequestInit) => Promise<Response>>(async (input) => {
+    const url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost')
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+    switch (url.pathname) {
+      case '/api/auth/me':
+        return json({ id: 1, username: 'owner', email: null, thumb_url: null, is_admin: true })
+      case '/api/servers':
+        return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: owner, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
+      case '/api/servers/1/sync':
+        return json({ active: null, last: null, last_sync_at: null, counts: { artists: 1, albums: 1, tracks: 2, rated_tracks: 0, plays: 0 }, incremental_minutes: 30, full_days: 7 })
+      case '/api/servers/1/artwork/artists':
+        return json({ items: [radiohead], total: 1, counts: { none: 1 } })
+      case '/api/servers/1/artwork/artists/100/candidates':
+        return json({
+          candidates: [{ token: 'tok-1', thumb: '/api/servers/1/artwork/image?t=tok-1', label: 'HD logo · 30 likes', likes: 30, width: null, height: null }],
+          note: null,
+        })
+      case '/api/servers/1/artwork/artists/100/preview':
+        return new Response(new Blob(['jpeg']), { headers: { 'content-type': 'image/jpeg' } })
+      case '/api/servers/1/artwork/artists/100/apply':
+        return json({ ...radiohead, status: 'done', source: 'fanart', applied_at: '2026-11-18T12:00:00Z' })
+      default:
+        return json({ detail: 'Not found' }, 404)
+    }
+  })
+  vi.stubGlobal('fetch', fetchMock)
+})
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+function renderPage() {
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <ArtworkPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+function bodiesFor(path: string) {
+  return fetchMock.mock.calls
+    .filter(([input]) => new URL(typeof input === 'string' ? input : input.url, 'http://localhost').pathname === path)
+    .map(([input, init]) => (typeof input === 'string' ? JSON.parse(String(init?.body)) : null))
+}
+
+describe('ArtworkPage', () => {
+  it('picks a fanart.tv logo, previews it and saves it to Plex', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: /Radiohead/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /HD logo · 30 likes/ }))
+    expect(await screen.findByAltText('New image for Radiohead')).toHaveAttribute('src', 'blob:preview')
+    expect(bodiesFor('/api/servers/1/artwork/artists/100/preview')[0]).toEqual({
+      source: { kind: 'candidate', token: 'tok-1' },
+      transform: expect.objectContaining({ fit: true, invert: false }),
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Invert' }))
+    await vi.waitFor(() =>
+      expect(bodiesFor('/api/servers/1/artwork/artists/100/preview').at(-1)?.transform.invert).toBe(true),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Plex' }))
+    expect(await screen.findByText('Saved to Plex.')).toBeInTheDocument()
+  })
+
+  it('tells people who don’t own the server', async () => {
+    owner = false
+    renderPage()
+    expect(await screen.findByText(/Only the owner of Home can change artist images/)).toBeInTheDocument()
+  })
+})

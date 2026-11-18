@@ -9,6 +9,7 @@ import { ApiError } from './api/client'
 import { Layout } from './components/Layout'
 import './index.css'
 import { AdminPage } from './pages/AdminPage'
+import { ArtworkPage } from './pages/ArtworkPage'
 import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { ComingSoonPage, HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
@@ -54,7 +55,7 @@ const router = createBrowserRouter([
       },
       {
         path: 'artwork',
-        element: <ComingSoonPage title="Artwork" text="The artist artwork editor arrives in a later phase." />,
+        element: <ArtworkPage />,
       },
       {
         path: 'playlists',
