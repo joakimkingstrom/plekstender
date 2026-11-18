@@ -68,6 +68,10 @@ _ARTISTS = text(
 )
 
 # Top artists the user can see, scored with a candidate N, next to their current rank.
+# Plex's album artist for compilations isn't a real artist; it would top every ranking.
+VARIOUS_ARTISTS_MBID = "89ad4ac3-39f7-470e-963a-56509c546377"
+VARIOUS_ARTISTS_TITLES = ("various artists", "various", "va")
+
 _PREVIEW = text(
     f"""
     WITH visible AS (
@@ -76,6 +80,8 @@ _PREVIEW = text(
         JOIN user_item_state s
           ON s.user_id = :user_id AND s.server_id = a.server_id AND s.rating_key = a.rating_key
         WHERE a.server_id = :server_id AND a.section_key = ANY(:sections)
+          AND lower(btrim(a.title)) <> ALL(:various_titles)
+          AND a.mbid IS DISTINCT FROM :various_mbid
     ),
     current AS (
         SELECT rating_key, rank() OVER (ORDER BY popularity DESC NULLS LAST) AS current_rank
@@ -124,6 +130,8 @@ async def preview_artist_ranking(
             "sections": sections,
             "top_n": artist_top_n,
             "limit": limit,
+            "various_titles": list(VARIOUS_ARTISTS_TITLES),
+            "various_mbid": VARIOUS_ARTISTS_MBID,
         },
     )
     return [PreviewRow(int(k), str(t), int(p), int(r)) for k, t, p, r in rows.all()]

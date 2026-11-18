@@ -13,7 +13,7 @@ from plekstender.db.instance import LibrarySettings, get_library_settings
 from plekstender.db.models import SyncRun
 from plekstender.sync.schedule import due_sync
 from plekstender.worker import recompute_all_popularity, schedule_due_syncs
-from tests.fakes import CSRF, FakePlex, sign_in
+from tests.fakes import CSRF, FakePlex, _album, _artist, _track, sign_in
 from tests.test_sync import connect, owner_with_library
 
 NOW = dt.datetime(2026, 11, 18, 12, 0, tzinfo=dt.UTC)
@@ -135,3 +135,21 @@ async def test_scheduler_queues_due_syncs(app: FastAPI, plex: FakePlex) -> None:
     async with get_sessionmaker()() as db:
         kinds = list(await db.scalars(select(SyncRun.kind).order_by(SyncRun.id)))
     assert kinds == ["full", "incremental", "full"]
+
+
+@pytest.mark.db
+async def test_preview_leaves_out_various_artists(app: FastAPI, plex: FakePlex) -> None:
+    # A compilation by "Various Artists" with a huge hit: not an artist to rank.
+    plex.library.items[110] = _artist(110, "Various Artists")
+    plex.library.items[210] = _album(210, "Now That's What I Call Music", 110, 2001)
+    plex.library.items[310] = _track(310, "Big Hit", 210, 110, 1, 9_000_000)
+    owner, sid = await owner_with_library(app, plex)
+
+    preview = (
+        await owner.get("/api/admin/library/preview", params={"server_id": sid, "artist_top_n": 10})
+    ).json()
+    assert [(p["title"], p["current_rank"]) for p in preview] == [
+        ("Radiohead", 1),
+        ("Portishead", 2),
+        ("Secret Band", 3),
+    ]
