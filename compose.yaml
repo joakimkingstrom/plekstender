@@ -15,6 +15,9 @@ x-plekstender: &plekstender
   read_only: true
   tmpfs:
     - /tmp
+  volumes:
+    # Downloaded fonts, uploads, artwork exports.
+    - data:/data
   cap_drop:
     - ALL
   security_opt:
@@ -148,4 +151,5 @@ networks:
 
 volumes:
   db:
+  data:
   letsencrypt:

@@ -449,3 +449,35 @@ class RatingEvent(Base):
     new_rating: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
     undone_at: Mapped[dt.datetime | None]
+
+
+class ArtistArtwork(Base):
+    """Artwork work-in-progress per artist: a to-do status and what was applied."""
+
+    __tablename__ = "artist_artwork"
+    __table_args__ = (PrimaryKeyConstraint("server_id", "rating_key"),)
+
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    rating_key: Mapped[int] = mapped_column(BigInteger)
+    # none: not looked at | custom: needs a custom image | done: happy with it
+    status: Mapped[str] = mapped_column(String(8), default="none")
+    # What was applied last: fanart | plex | search | upload | text
+    source: Mapped[str | None] = mapped_column(String(16))
+    source_url: Mapped[str | None] = mapped_column(Text)
+    settings: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    # MusicBrainz ID found by name when Plex has none.
+    mbid: Mapped[str | None] = mapped_column(String(36))
+    image_sha256: Mapped[str | None] = mapped_column(String(64))
+    applied_at: Mapped[dt.datetime | None]
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class ImageSearchCache(Base):
+    """Image search results, cached so repeated lookups don't hit search engines."""
+
+    __tablename__ = "image_search_cache"
+
+    query: Mapped[str] = mapped_column(Text, primary_key=True)
+    results: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

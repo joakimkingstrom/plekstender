@@ -128,6 +128,17 @@ class FakeLibrary:
         self.history: list[dict[str, Any]] = []
         self.history_denied: set[str] = set()  # tokens Plex refuses history to
         self.rates: list[tuple[str, int, float]] = []  # (token, key, rating) as Plex got them
+        self.posters: dict[int, list[dict[str, Any]]] = {
+            100: [
+                {"key": "https://images.example-agent.com/radiohead.jpg", "provider": "agent"},
+                {
+                    "key": "/library/metadata/100/file?url=upload%3A%2F%2Fposters%2Fabc",
+                    "provider": "upload",
+                    "selected": True,
+                },
+            ]
+        }
+        self.uploaded: list[tuple[int, bytes]] = []
         self.rate_fails = False
 
         for item in (
@@ -278,6 +289,18 @@ class FakeLibrary:
             state["userRating"] = rating
         return httpx.Response(200)
 
+    def poster_request(self, request: httpx.Request) -> httpx.Response:
+        """GET lists an item's posters; POST uploads one (Plex then selects it)."""
+        if request.headers.get("X-Plex-Token") != "srv-owner":
+            return httpx.Response(401)
+        key = int(request.url.path.split("/")[3])
+        if request.method == "POST":
+            self.uploaded.append((key, request.content))
+            self.items[key]["thumb"] = f"/library/metadata/{key}/thumb/{len(self.uploaded)}"
+            return httpx.Response(200)
+        posters = self.posters.get(key, [])
+        return httpx.Response(200, json={"MediaContainer": {"Metadata": posters}})
+
     def history_list(self, request: httpx.Request) -> httpx.Response:
         """The owner sees everyone's plays; a shared user (account 2) only their own."""
         token = request.headers.get("X-Plex-Token", "")
@@ -308,7 +331,7 @@ class FakeLibrary:
             return httpx.Response(401)
         self.requests["photo"] += 1
         return httpx.Response(
-            200, content=b"\xff\xd8fake-jpeg", headers={"content-type": "image/jpeg"}
+            200, content=sample_image("JPEG"), headers={"content-type": "image/jpeg"}
         )
 
 
@@ -338,6 +361,9 @@ class FakePlex:
         )
         router.get(f"{SERVER_URI}/photo/:/transcode").mock(side_effect=self.library.photo)
         router.put(f"{SERVER_URI}/:/rate").mock(side_effect=self.library.rate_request)
+        router.route(url__regex=rf"{re.escape(SERVER_URI)}/library/metadata/\d+/posters").mock(
+            side_effect=self.library.poster_request
+        )
         router.get(f"{SERVER_URI}/status/sessions/history/all").mock(
             side_effect=self.library.history_list
         )
@@ -374,6 +400,20 @@ class FakePlex:
                 }
             },
         )
+
+
+def sample_image(fmt: str = "PNG", size: tuple[int, int] = (300, 120)) -> bytes:
+    """A small real image: a white box on a transparent (PNG) or black background."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    mode = "RGBA" if fmt == "PNG" else "RGB"
+    img = Image.new(mode, size, (0, 0, 0, 0) if mode == "RGBA" else (0, 0, 0))
+    ImageDraw.Draw(img).rectangle((50, 20, size[0] - 50, size[1] - 20), fill="white")
+    out = io.BytesIO()
+    img.save(out, fmt)
+    return out.getvalue()
 
 
 def client_for(app: FastAPI) -> httpx.AsyncClient:

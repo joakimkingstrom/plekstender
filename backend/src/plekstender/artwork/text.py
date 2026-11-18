@@ -1,0 +1,135 @@
+"""Text logos in Google Fonts (ported from plex-artist-logos)."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+from pathlib import Path
+from typing import Literal
+
+import httpx
+from PIL import Image, ImageDraw, ImageFont
+from pydantic import BaseModel, Field, field_validator
+
+from plekstender.artwork.images import hex_rgb
+
+log = logging.getLogger(__name__)
+
+# The curated list from plex-artist-logos, grouped as there.
+FONTS: dict[str, list[str]] = {
+    "Sans serif": ["Anton", "Raleway"],
+    "Serif": ["Cinzel", "Merriweather"],
+    "Display": [
+        "Allerta Stencil", "Audiowide", "Caesar Dressing", "Coiny", "Fascinate Inline",
+        "Faster One", "Frijole", "Germania One", "Gravitas One", "Honk", "Lobster",
+        "Metal Mania", "Monoton", "Nosifer", "Orbitron", "Pirata One", "Protest Guerrilla",
+        "Rubik Burned", "Rubik Doodle Shadow", "Rubik Glitch", "Rubik Spray Paint",
+        "Russo One", "Rye", "Tourney", "UnifrakturMaguntia", "Workbench",
+    ],
+    "Handwriting": [
+        "Alex Brush", "Allura", "Dancing Script", "Gochi Hand", "Great Vibes",
+        "Indie Flower", "Italianno", "Mr Dafoe", "Pacifico", "Permanent Marker", "Rock Salt",
+    ],
+    "Monospace": ["Press Start 2P", "Special Elite", "Bitcount Grid Double Ink"],
+}  # fmt: skip
+ALL_FONTS = {name for group in FONTS.values() for name in group}
+GOOGLE_CSS = "https://fonts.googleapis.com/css2"
+FONT_SIZE = 400
+LINE_GAP = 50
+
+_locks: dict[str, asyncio.Lock] = {}
+
+
+class FontError(RuntimeError):
+    pass
+
+
+class TextLogo(BaseModel):
+    text: str = Field(min_length=1, max_length=120)
+    font: str
+    rows: int = Field(default=1, ge=1, le=4)
+    color: str = "#ffffff"
+    case: Literal["none", "upper", "lower"] = "none"
+
+    @field_validator("font")
+    @classmethod
+    def _known_font(cls, value: str) -> str:
+        if value not in ALL_FONTS:
+            raise ValueError(f"unknown font {value!r}")
+        return value
+
+    @field_validator("color")
+    @classmethod
+    def _colour(cls, value: str) -> str:
+        hex_rgb(value)
+        return value
+
+
+def _file_name(font: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", font) + ".ttf"
+
+
+def _store(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".part")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+
+
+async def font_path(http: httpx.AsyncClient, fonts_dir: Path, font: str) -> Path:
+    """The font's TTF, downloaded from Google Fonts the first time it's used."""
+    if font not in ALL_FONTS:
+        raise FontError(f"unknown font {font!r}")
+    path = fonts_dir / _file_name(font)
+    if await asyncio.to_thread(path.exists):
+        return path
+    async with _locks.setdefault(font, asyncio.Lock()):
+        if await asyncio.to_thread(path.exists):
+            return path
+        try:
+            # Without a browser User-Agent, Google serves TrueType (which FreeType reads).
+            css = await http.get(GOOGLE_CSS, params={"family": f"{font}:wght@400"}, timeout=20)
+            css.raise_for_status()
+            urls = re.findall(r"url\((https://[^)]+)\)", css.text)
+            if not urls:
+                raise FontError(f"Google Fonts returned no file for {font!r}")
+            data = await http.get(urls[-1], timeout=30)
+            data.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise FontError(f"Could not download the font {font!r}.") from exc
+        await asyncio.to_thread(_store, path, data.content)
+        log.info("downloaded font %s", font)
+        return path
+
+
+def render_text(spec: TextLogo, font_file: Path) -> Image.Image:
+    """The text on a transparent background, in up to `rows` centred lines."""
+    text = spec.text.upper() if spec.case == "upper" else spec.text
+    text = text.lower() if spec.case == "lower" else text
+    words = text.split() or [text]
+    per_line = -(-len(words) // spec.rows)
+    lines = [" ".join(words[i : i + per_line]) for i in range(0, len(words), per_line)]
+    try:
+        font: ImageFont.FreeTypeFont | ImageFont.ImageFont = ImageFont.truetype(
+            str(font_file), FONT_SIZE
+        )
+    except OSError as exc:
+        raise FontError(f"The font {spec.font!r} couldn't be read.") from exc
+
+    colour = hex_rgb(spec.color)
+    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    rendered = []
+    for line in lines:
+        left, top, right, bottom = probe.textbbox((0, 0), line, font=font)
+        img = Image.new("RGBA", (max(1, int(right - left)), max(1, int(bottom - top))))
+        ImageDraw.Draw(img).text((-left, -top), line, font=font, fill=(*colour, 255))
+        rendered.append(img)
+    width = max(i.width for i in rendered)
+    height = sum(i.height for i in rendered) + LINE_GAP * (len(rendered) - 1)
+    combined = Image.new("RGBA", (width, height))
+    y = 0
+    for img in rendered:
+        combined.paste(img, ((width - img.width) // 2, y), img)
+        y += img.height + LINE_GAP
+    return combined

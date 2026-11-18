@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     lastfm_api_url: str = "https://ws.audioscrobbler.com/2.0/"
     listenbrainz_api_url: str = "https://api.listenbrainz.org"
 
+    # Artwork. fanart.tv key can also be set on Settings by an admin (that value wins).
+    fanart_api_key: SecretStr | None = None
+    fanart_api_url: str = "https://webservice.fanart.tv/v3"
+    musicbrainz_api_url: str = "https://musicbrainz.org/ws/2"
+    # Image search (SearXNG with JSON output), e.g. http://searxng:8080. None = off.
+    searxng_url: str | None = None
+    # Writable directory for downloaded fonts, uploads and exports.
+    data_dir: Path = Path("data")
+
     @field_validator("app_url")
     @classmethod
     def _strip_trailing_slash(cls, v: str) -> str:

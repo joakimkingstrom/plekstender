@@ -26,13 +26,15 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
 
 COPY --from=web /web/dist /app/static
 
-RUN useradd --system --uid 1000 --no-create-home --home-dir /app plekstender
+RUN useradd --system --uid 1000 --no-create-home --home-dir /app plekstender \
+    && mkdir -p /data && chown plekstender /data
 USER plekstender
 
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     STATIC_DIR=/app/static \
+    DATA_DIR=/data \
     PORT=8080
 EXPOSE 8080
 

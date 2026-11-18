@@ -14,6 +14,7 @@ from plekstender import __version__
 from plekstender.api.middleware import CSRFMiddleware, RateLimiter, SecurityHeadersMiddleware
 from plekstender.api.routes import (
     admin,
+    artwork,
     auth,
     export,
     health,
@@ -57,8 +58,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(CSRFMiddleware, allowed_origin=settings.app_origin)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    for module in (health, auth, servers, sync, library, listens, stats, ratings, export, admin):
+    for module in (
+        health,
+        auth,
+        servers,
+        sync,
+        library,
+        listens,
+        stats,
+        ratings,
+        artwork,
+        export,
+        admin,
+    ):
         app.include_router(module.router)
+    app.include_router(artwork.fonts_router)
 
     if settings.static_dir:
         _mount_spa(app, settings.static_dir)

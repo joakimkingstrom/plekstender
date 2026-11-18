@@ -137,3 +137,33 @@ async def set_lastfm_api_key(db: AsyncSession, settings: Settings, api_key: str 
         )
     else:
         await _put(db, LASTFM_KEY, {})
+
+
+# --- fanart.tv API key --------------------------------------------------------------------
+
+FANART_KEY = "fanart"
+FANART_PURPOSE = "instance.fanart_api_key"
+
+
+async def get_fanart_api_key(
+    db: AsyncSession, settings: Settings
+) -> tuple[str | None, Literal["settings", "environment"] | None]:
+    """The fanart.tv API key and where it came from: Settings page first, then FANART_API_KEY."""
+    stored = await _get(db, FANART_KEY) or {}
+    if encrypted := stored.get("api_key_enc"):
+        try:
+            return _cipher(settings).decrypt(encrypted, purpose=FANART_PURPOSE), "settings"
+        except DecryptionError:
+            pass
+    if settings.fanart_api_key and (env := settings.fanart_api_key.get_secret_value().strip()):
+        return env, "environment"
+    return None, None
+
+
+async def set_fanart_api_key(db: AsyncSession, settings: Settings, api_key: str | None) -> None:
+    value = (
+        {"api_key_enc": _cipher(settings).encrypt(api_key, purpose=FANART_PURPOSE)}
+        if api_key
+        else {}
+    )
+    await _put(db, FANART_KEY, value)

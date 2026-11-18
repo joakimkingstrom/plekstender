@@ -11,3 +11,5 @@ compose.override.yaml
 # Local spike output (may contain server names)
 backend/*report*.json
 .todo.md
+# Local data directory (fonts, uploads, exports) when running outside Docker
+backend/data/

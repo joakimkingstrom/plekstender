@@ -546,6 +546,137 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/artists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Artists */
+        get: operations["list_artists_api_servers__server_id__artwork_artists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/artists/{rating_key}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Status */
+        put: operations["put_status_api_servers__server_id__artwork_artists__rating_key__status_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/artists/{rating_key}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Candidates */
+        get: operations["get_candidates_api_servers__server_id__artwork_artists__rating_key__candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Candidate Image
+         * @description A candidate's thumbnail, fetched by the server (only signed references).
+         */
+        get: operations["candidate_image_api_servers__server_id__artwork_image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload
+         * @description Upload an image file (the raw bytes as the request body).
+         */
+        post: operations["upload_api_servers__server_id__artwork_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/artists/{rating_key}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description The poster as it would be applied (1000 x 1000 JPEG).
+         */
+        post: operations["preview_api_servers__server_id__artwork_artists__rating_key__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/artists/{rating_key}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply
+         * @description Make the rendered image the artist's poster in Plex.
+         */
+        post: operations["apply_api_servers__server_id__artwork_artists__rating_key__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/export/tracks.csv": {
         parameters: {
             query?: never;
@@ -722,6 +853,44 @@ export interface paths {
          * @description Set (after checking it with Last.fm) or clear the instance's Last.fm API key.
          */
         put: operations["put_lastfm_api_admin_lastfm_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/fanart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Fanart */
+        get: operations["get_fanart_api_admin_fanart_get"];
+        /**
+         * Put Fanart
+         * @description Set (after checking it with fanart.tv) or clear the instance's fanart.tv API key.
+         */
+        put: operations["put_fanart_api_admin_fanart_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/artwork/fonts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fonts */
+        get: operations["fonts_api_artwork_fonts_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -923,6 +1092,48 @@ export interface components {
             /** Album Count */
             album_count: number;
         };
+        /** ArtworkArtistOut */
+        ArtworkArtistOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "none" | "custom" | "done";
+            /** Source */
+            source: string | null;
+            /** Applied At */
+            applied_at: string | null;
+            /** Has Mbid */
+            has_mbid: boolean;
+        };
+        /** ArtworkArtistPage */
+        ArtworkArtistPage: {
+            /** Items */
+            items: components["schemas"]["ArtworkArtistOut"][];
+            /** Total */
+            total: number;
+            /**
+             * Counts
+             * @description Artists per status, for the filter.
+             */
+            counts: {
+                [key: string]: number;
+            };
+        };
+        /** ArtworkStatusIn */
+        ArtworkStatusIn: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "none" | "custom" | "done";
+        };
         /**
          * AvailableServerOut
          * @description A server the user can see on plex.tv.
@@ -943,6 +1154,34 @@ export interface components {
             /** Allowed */
             allowed: boolean;
         };
+        /** CandidateOut */
+        CandidateOut: {
+            /**
+             * Token
+             * @description Signed reference: pass it back to preview or apply.
+             */
+            token: string;
+            /**
+             * Thumb
+             * @description Proxied thumbnail URL for <img>.
+             */
+            thumb: string;
+            /** Label */
+            label: string | null;
+            /** Likes */
+            likes: number | null;
+            /** Width */
+            width: number | null;
+            /** Height */
+            height: number | null;
+        };
+        /** CandidatesOut */
+        CandidatesOut: {
+            /** Candidates */
+            candidates: components["schemas"]["CandidateOut"][];
+            /** Note */
+            note: string | null;
+        };
         /** ConnectServerIn */
         ConnectServerIn: {
             /** Machine Identifier */
@@ -958,6 +1197,25 @@ export interface components {
         DeletedOut: {
             /** Deleted */
             deleted: number;
+        };
+        /** FanartKeyIn */
+        FanartKeyIn: {
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /** FanartKeyOut */
+        FanartKeyOut: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source: ("settings" | "environment") | null;
+        };
+        /** FontGroup */
+        FontGroup: {
+            /** Name */
+            name: string;
+            /** Fonts */
+            fonts: string[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1355,6 +1613,22 @@ export interface components {
             /** User Rating */
             user_rating: number | null;
         };
+        /** RenderIn */
+        RenderIn: {
+            source: components["schemas"]["SourceSpec"];
+            /**
+             * @default {
+             *       "fit": true,
+             *       "zoom": 1,
+             *       "contrast": 1,
+             *       "invert": false,
+             *       "greyscale": false,
+             *       "white": false,
+             *       "background": "#000000"
+             *     }
+             */
+            transform: components["schemas"]["Transform"];
+        };
         /** SectionOut */
         SectionOut: {
             /** Key */
@@ -1404,6 +1678,22 @@ export interface components {
             name: string;
             /** Listens */
             listens: number;
+        };
+        /**
+         * SourceSpec
+         * @description The image to start from.
+         */
+        SourceSpec: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "candidate" | "upload" | "text" | "current";
+            /** Token */
+            token?: string | null;
+            /** Upload Id */
+            upload_id?: string | null;
+            text?: components["schemas"]["TextLogo"] | null;
         };
         /** StatsActivityOut */
         StatsActivityOut: {
@@ -1547,6 +1837,29 @@ export interface components {
             /** Count */
             count?: number | null;
         };
+        /** TextLogo */
+        TextLogo: {
+            /** Text */
+            text: string;
+            /** Font */
+            font: string;
+            /**
+             * Rows
+             * @default 1
+             */
+            rows: number;
+            /**
+             * Color
+             * @default #ffffff
+             */
+            color: string;
+            /**
+             * Case
+             * @default none
+             * @enum {string}
+             */
+            case: "none" | "upper" | "lower";
+        };
         /** TopItemOut */
         TopItemOut: {
             /** Name */
@@ -1603,6 +1916,61 @@ export interface components {
              * @default 0
              */
             listens: number;
+        };
+        /**
+         * Transform
+         * @description How a source image becomes an artist poster.
+         */
+        Transform: {
+            /**
+             * Fit
+             * @description Fit the logo into 80% of the square.
+             * @default true
+             */
+            fit: boolean;
+            /**
+             * Zoom
+             * @description Scale when not fitting.
+             * @default 1
+             */
+            zoom: number;
+            /**
+             * Contrast
+             * @default 1
+             */
+            contrast: number;
+            /**
+             * Invert
+             * @default false
+             */
+            invert: boolean;
+            /**
+             * Greyscale
+             * @default false
+             */
+            greyscale: boolean;
+            /**
+             * White
+             * @description Paint every visible pixel white.
+             * @default false
+             */
+            white: boolean;
+            /**
+             * Tint
+             * @description #RRGGBB multiplied over the result.
+             */
+            tint?: string | null;
+            /**
+             * Background
+             * @description Canvas colour behind the logo.
+             * @default #000000
+             */
+            background: string;
+        };
+        /** UploadOut */
+        UploadOut: {
+            /** Upload Id */
+            upload_id: string;
         };
         /** UserOut */
         UserOut: {
@@ -2691,6 +3059,252 @@ export interface operations {
             };
         };
     };
+    list_artists_api_servers__server_id__artwork_artists_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                status?: ("none" | "custom" | "done") | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkArtistPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_status_api_servers__server_id__artwork_artists__rating_key__status_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtworkStatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_candidates_api_servers__server_id__artwork_artists__rating_key__candidates_get: {
+        parameters: {
+            query: {
+                source: "fanart" | "plex" | "search";
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidatesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    candidate_image_api_servers__server_id__artwork_image_get: {
+        parameters: {
+            query: {
+                t: string;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                    "image/jpeg": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_api_servers__server_id__artwork_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": unknown;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_servers__server_id__artwork_artists__rating_key__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_api_servers__server_id__artwork_artists__rating_key__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkArtistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_tracks_csv_api_servers__server_id__export_tracks_csv_get: {
         parameters: {
             query?: never;
@@ -3076,6 +3690,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_fanart_api_admin_fanart_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FanartKeyOut"];
+                };
+            };
+        };
+    };
+    put_fanart_api_admin_fanart_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FanartKeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FanartKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fonts_api_artwork_fonts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FontGroup"][];
                 };
             };
         };

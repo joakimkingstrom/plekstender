@@ -376,8 +376,12 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - Lists layout: songs fill the window without scrolling (keys 1–5, Shift for halves, ↑↓ between rows, "Next N songs"); albums show the cover (click across it: left edge 1 star, right edge 5), review and every song with stars; artists show the image (same click rating), biography, six most popular albums and five most popular songs, all rateable. The Cards / Lists toggle works on any screen size; choices are remembered per browser.
 
 ### Phase 4 — Artwork
-- [ ] Port transforms/text logos/fonts with tests
-- [ ] Sources: fanart.tv (+ MusicBrainz fallback), Plex posters, upload, SearXNG
+- [x] Port transforms/text logos/fonts with tests
+  - `artwork/images.py`: crop to the visible logo, white / greyscale / invert / contrast, fit into 80% of a 1000 px square (or zoom), background colour, tint. Untrusted bytes are decoded by Pillow (PNG, JPEG, WebP, GIF, BMP; 40 MP cap) and re-encoded. `artwork/text.py`: the 44 Google Fonts from plex-artist-logos, downloaded once into `DATA_DIR/fonts` (TrueType), 1–4 rows, case, colour.
+- [x] Sources: fanart.tv (+ MusicBrainz fallback), Plex posters, upload, SearXNG
+  - fanart.tv HD + SD logos sorted by likes (key from `FANART_API_KEY` or Settings, checked on save); missing MBIDs are looked up on MusicBrainz by exact normalised name (≤1 request/s) and stored. Plex posters via `/library/metadata/{id}/posters`, read through Plex's photo transcoder. SearXNG results ranked (logo / PNG hints first, merch and ticket sites last), cached 30 days. Uploads are re-encoded to PNG under `DATA_DIR/uploads` and removed after a day.
+  - Outside images only through `artwork/fetch.py`: http(s) on ports 80/443, every resolved address must be public, redirects re-checked, 15 MB cap. The browser only gets signed (HMAC, 24 h) references, so the image proxy can't be pointed elsewhere.
+  - Applying uploads the 1000 px JPEG to Plex (`POST /library/metadata/{id}/posters`), records source / settings / hash in `artist_artwork`, and refreshes the mirror's thumb. Artwork endpoints are owner-only.
 - [ ] Editor UI, status tracking, bulk apply job
 - [ ] Folder save with path mapping
 - [ ] Export/import zip with matching preview

@@ -66,6 +66,7 @@ class PlexServerClient:
         request_timeout: httpx.Timeout = API_TIMEOUT,
         accept_json: bool = True,
         method: str = "GET",
+        content: bytes | None = None,
     ) -> httpx.Response:
         headers = plex_headers(self._settings, self._token)
         if not accept_json:
@@ -75,6 +76,7 @@ class PlexServerClient:
             f"{self._base}{path}",
             params=params,
             headers=headers,
+            content=content,
             timeout=request_timeout,
             follow_redirects=False,
         )
@@ -171,6 +173,21 @@ class PlexServerClient:
         data = await self._get(f"/library/metadata/{keys}", params={"includeGuids": 1})
         items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Metadata", [])
         return items
+
+    async def posters(self, rating_key: int) -> list[dict[str, Any]]:
+        """The posters Plex offers for an item (agent images and uploads)."""
+        data = await self._get(f"/library/metadata/{rating_key}/posters")
+        items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Metadata", [])
+        return items
+
+    async def upload_poster(self, rating_key: int, image: bytes) -> None:
+        """Upload an image as the item's poster; Plex selects it."""
+        await self._request(
+            f"/library/metadata/{rating_key}/posters",
+            method="POST",
+            content=image,
+            request_timeout=httpx.Timeout(60.0, connect=10.0),
+        )
 
     async def rate(self, rating_key: int, rating: float | None) -> None:
         """Set the token owner's rating (0-10, half stars = 1), or clear it with None."""

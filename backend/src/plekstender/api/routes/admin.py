@@ -14,16 +14,21 @@ from plekstender.api.schemas import (
     AdminServerOut,
     AdminUserIn,
     AdminUserOut,
+    FanartKeyIn,
+    FanartKeyOut,
     LastFmKeyIn,
     LastFmKeyOut,
     PopularityPreviewItem,
 )
+from plekstender.artwork.sources import SourceError, fanart_logos
 from plekstender.db.instance import (
     LibrarySettings,
     get_access_settings,
+    get_fanart_api_key,
     get_lastfm_api_key,
     get_library_settings,
     set_access_settings,
+    set_fanart_api_key,
     set_lastfm_api_key,
     set_library_settings,
 )
@@ -204,3 +209,28 @@ async def put_lastfm(
     await set_lastfm_api_key(db, settings, body.api_key)
     await db.commit()
     return await get_lastfm(db, admin, settings)
+
+
+# Radiohead: a well-known artist to check a fanart.tv key against.
+FANART_CHECK_MBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+
+
+@router.get("/fanart", response_model=FanartKeyOut)
+async def get_fanart(db: DbDep, _: AdminDep, settings: SettingsDep) -> FanartKeyOut:
+    key, source = await get_fanart_api_key(db, settings)
+    return FanartKeyOut(configured=key is not None, source=source)
+
+
+@router.put("/fanart", response_model=FanartKeyOut)
+async def put_fanart(
+    body: FanartKeyIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
+) -> FanartKeyOut:
+    """Set (after checking it with fanart.tv) or clear the instance's fanart.tv API key."""
+    if body.api_key:
+        try:
+            await fanart_logos(http, settings.fanart_api_url, body.api_key, FANART_CHECK_MBID)
+        except SourceError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await set_fanart_api_key(db, settings, body.api_key)
+    await db.commit()
+    return await get_fanart(db, admin, settings)

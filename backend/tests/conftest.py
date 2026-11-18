@@ -7,6 +7,7 @@ TEST_DATABASE_URL (CI provides one); its public schema is wiped at the start of 
 from __future__ import annotations
 
 import os
+import tempfile
 from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,8 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL or "postgresql://unused@localhost
 os.environ.pop("INITIAL_ADMIN", None)
 os.environ.pop("ACCESS_MODE", None)
 os.environ.pop("STATIC_DIR", None)
+# Uploads, fonts and exports go to a throwaway folder, not the working tree.
+os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="plekstender-test-")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

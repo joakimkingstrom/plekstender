@@ -464,3 +464,60 @@ class RatingOut(BaseModel):
     rating_key: int
     item_type: RateKind
     user_rating: float | None
+
+
+# --- artwork -----------------------------------------------------------------------------
+
+ArtworkStatus = Literal["none", "custom", "done"]
+
+
+class ArtworkArtistOut(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+    status: ArtworkStatus
+    source: str | None
+    applied_at: dt.datetime | None
+    has_mbid: bool
+
+
+class ArtworkArtistPage(BaseModel):
+    items: list[ArtworkArtistOut]
+    total: int
+    counts: dict[str, int] = Field(description="Artists per status, for the filter.")
+
+
+class ArtworkStatusIn(BaseModel):
+    status: ArtworkStatus
+
+
+class CandidateOut(BaseModel):
+    token: str = Field(description="Signed reference: pass it back to preview or apply.")
+    thumb: str = Field(description="Proxied thumbnail URL for <img>.")
+    label: str | None
+    likes: int | None
+    width: int | None
+    height: int | None
+
+
+class CandidatesOut(BaseModel):
+    candidates: list[CandidateOut]
+    note: str | None
+
+
+class UploadOut(BaseModel):
+    upload_id: str
+
+
+class FontGroup(BaseModel):
+    name: str
+    fonts: list[str]
+
+
+class FanartKeyOut(BaseModel):
+    configured: bool
+    source: Literal["settings", "environment"] | None
+
+
+class FanartKeyIn(BaseModel):
+    api_key: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{32}$")
