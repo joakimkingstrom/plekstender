@@ -12,6 +12,7 @@ export const listenKeys = {
   lastfm: ['listens', 'lastfm'] as const,
   plex: ['listens', 'plex'] as const,
   listenbrainz: ['listens', 'listenbrainz'] as const,
+  listenbrainzImport: ['listens', 'imports', 'listenbrainz'] as const,
   lastfmKey: ['admin', 'lastfm'] as const,
 }
 
@@ -50,21 +51,42 @@ export function useDeleteListens() {
   })
 }
 
-/** Last.fm import status; polls while an import is queued or running. */
-export function useLastFmStatus() {
+/** Import status for one source; polls while an import is queued or running. */
+function useImportStatus(key: readonly string[], fetch: () => Promise<Schemas['ImportStatusOut']>) {
   const qc = useQueryClient()
   return useQuery({
-    queryKey: listenKeys.lastfm,
+    queryKey: key,
     queryFn: async () => {
-      const data = await unwrap(api.GET('/api/listens/lastfm'))
-      const previous = qc.getQueryData<Schemas['LastFmStatusOut']>(listenKeys.lastfm)
+      const data = await fetch()
+      const previous = qc.getQueryData<Schemas['ImportStatusOut']>(key)
       if (previous?.active && !data.active) {
+        // An import just finished: history and stats changed.
         void qc.invalidateQueries({ queryKey: ['listens', 'summary'] })
         void qc.invalidateQueries({ queryKey: ['listens', 'list'] })
+        void qc.invalidateQueries({ queryKey: ['listens', 'stats'] })
       }
       return data
     },
     refetchInterval: (query) => (query.state.data?.active ? 2000 : false),
+  })
+}
+
+export function useLastFmStatus() {
+  return useImportStatus(listenKeys.lastfm, () => unwrap(api.GET('/api/listens/lastfm')))
+}
+
+export function useListenBrainzImport() {
+  return useImportStatus(listenKeys.listenbrainzImport, () =>
+    unwrap(api.GET('/api/listens/imports/listenbrainz')),
+  )
+}
+
+export function useStartListenBrainzImport() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (username: string) =>
+      unwrap(api.POST('/api/listens/imports/listenbrainz', { body: { username } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: listenKeys.listenbrainzImport }),
   })
 }
 
@@ -83,7 +105,10 @@ export function useResumeImport() {
       unwrap(
         api.POST('/api/listens/imports/{import_id}/resume', { params: { path: { import_id: id } } }),
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: listenKeys.lastfm }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: listenKeys.lastfm })
+      void qc.invalidateQueries({ queryKey: listenKeys.listenbrainzImport })
+    },
   })
 }
 

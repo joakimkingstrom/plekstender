@@ -26,6 +26,7 @@ from plekstender.db.models import (
 )
 from plekstender.history.lastfm_import import run_lastfm_import
 from plekstender.history.listenbrainz import submit_pending
+from plekstender.history.listenbrainz_import import run_listenbrainz_import
 from plekstender.history.plex_capture import capture_plays
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
@@ -168,10 +169,20 @@ async def import_lastfm(import_id: int) -> None:
         await run_lastfm_import(db, http, get_settings(), import_id)
 
 
+@app.task(queue="imports")
+async def import_listenbrainz(import_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_listenbrainz_import(db, http, get_settings(), import_id)
+
+
 async def enqueue_listen_import(db: AsyncSession, job: ListenImport) -> None:
     """Queue a (new or resumed) import. One import per user runs at a time."""
+    task = import_listenbrainz if job.source == "listenbrainz" else import_lastfm
     try:
-        await import_lastfm.configure(
+        await task.configure(
             lock=f"import-user-{job.user_id}", queueing_lock=f"import-{job.id}"
         ).defer_async(import_id=job.id)
     except AlreadyEnqueued:

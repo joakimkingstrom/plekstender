@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ListeningSettingsPage } from './ListeningSettingsPage'
@@ -28,6 +28,7 @@ const finished = {
 function renderPage(responses: Record<string, unknown>) {
   responses = {
     'GET /api/listens/plex': [],
+    'GET /api/listens/imports/listenbrainz': { available: true, username: null, active: null, last: null },
     'GET /api/listens/listenbrainz': { connected: false, username: null, enabled_at: null, sent: 0, pending: 0, last_submitted_at: null, paused: false, error: null },
     ...responses,
   }
@@ -78,7 +79,7 @@ describe('ListeningSettingsPage', () => {
     )
 
     fireEvent.change(input, { target: { value: 'x' } })
-    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled() // too short
+    expect(within(input.closest('section')!).getByRole('button', { name: 'Import' })).toBeDisabled() // too short
   })
 
   it('shows progress while an import runs', async () => {
@@ -157,5 +158,25 @@ describe('Scrobble to ListenBrainz', () => {
     })
     expect(await screen.findByText(/scrobbling is paused/)).toBeInTheDocument()
     expect(screen.getByLabelText('New user token')).toBeInTheDocument()
+  })
+})
+
+describe('Import from ListenBrainz', () => {
+  it('starts an import for a username and offers the history download', async () => {
+    const fetch = renderPage({
+      'GET /api/auth/me': user,
+      'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
+      'POST /api/listens/imports/listenbrainz': { ...finished, id: 9, source: 'listenbrainz', status: 'queued' },
+    })
+    const input = await screen.findByLabelText('ListenBrainz username')
+    fireEvent.change(input, { target: { value: 'joakim_lb' } })
+    const card = input.closest('section')!
+    fireEvent.click(within(card).getByRole('button', { name: 'Import' }))
+    await vi.waitFor(() =>
+      expect(
+        fetch.mock.calls.some(([r]) => r.method === 'POST' && r.url.endsWith('/api/listens/imports/listenbrainz')),
+      ).toBe(true),
+    )
+    expect(screen.getByRole('link', { name: 'Download all listens' })).toHaveAttribute('href', '/api/listens/export.jsonl')
   })
 })

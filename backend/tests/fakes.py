@@ -486,8 +486,58 @@ class FakeListenBrainz:
         self.submissions: list[dict[str, Any]] = []
         self.refused_tracks: set[str] = set()  # 400 for listens of these tracks
         self.next_status: list[int] = []  # forced responses for the next submissions
+        # Public listen history per username, newest first when listed.
+        self.histories: dict[str, list[dict[str, Any]]] = {}
+        self.fail_listens_from: int | None = None  # 503 from this listen-page request on
+        self.listen_requests: list[dict[str, str]] = []
         router.get(f"{LISTENBRAINZ_URL}/1/validate-token").mock(side_effect=self._validate)
         router.post(f"{LISTENBRAINZ_URL}/1/submit-listens").mock(side_effect=self._submit)
+        router.get(url__regex=rf"{LISTENBRAINZ_URL}/1/user/[^/]+/listen-count").mock(
+            side_effect=self._count
+        )
+        router.get(url__regex=rf"{LISTENBRAINZ_URL}/1/user/[^/]+/listens").mock(
+            side_effect=self._listens
+        )
+
+    def add_history(self, user: str, ts: int, artist: str, track: str, **info: Any) -> None:
+        listen: dict[str, Any] = {
+            "listened_at": ts,
+            "track_metadata": {
+                "artist_name": artist,
+                "track_name": track,
+                "release_name": info.pop("album", None),
+                "additional_info": info,
+            },
+        }
+        self.histories.setdefault(user, []).append(listen)
+
+    def _user(self, request: httpx.Request) -> str:
+        return request.url.path.split("/")[3]
+
+    def _count(self, request: httpx.Request) -> httpx.Response:
+        user = self._user(request)
+        if user not in self.histories:
+            return httpx.Response(404, json={"code": 404, "error": "Cannot find user"})
+        return httpx.Response(200, json={"payload": {"count": len(self.histories[user])}})
+
+    def _listens(self, request: httpx.Request) -> httpx.Response:
+        user = self._user(request)
+        if user not in self.histories:
+            return httpx.Response(404, json={"code": 404, "error": "Cannot find user"})
+        params = dict(request.url.params)
+        self.listen_requests.append(params)
+        if (
+            self.fail_listens_from is not None
+            and len(self.listen_requests) >= self.fail_listens_from
+        ):
+            return httpx.Response(503)
+        max_ts = int(params.get("max_ts", 2**62))
+        count = min(int(params.get("count", 25)), 1000)
+        page = sorted(
+            (x for x in self.histories[user] if x["listened_at"] < max_ts),
+            key=lambda x: -x["listened_at"],
+        )[:count]
+        return httpx.Response(200, json={"payload": {"count": len(page), "listens": page}})
 
     def _token(self, request: httpx.Request) -> str:
         return request.headers.get("Authorization", "").removeprefix("Token ")

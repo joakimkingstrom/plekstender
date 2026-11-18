@@ -309,7 +309,7 @@ class ListenSummary(BaseModel):
 
 class ListenImportOut(BaseModel):
     id: int
-    source: Literal["lastfm"]
+    source: Literal["lastfm", "listenbrainz"]
     username: str
     status: Literal["queued", "running", "succeeded", "failed"]
     window_from: dt.datetime | None
@@ -322,15 +322,19 @@ class ListenImportOut(BaseModel):
     error: str | None
 
 
-class LastFmStatusOut(BaseModel):
-    available: bool = Field(description="Whether this instance has a Last.fm API key.")
-    username: str | None = Field(description="Last.fm username used by the latest import.")
+class ImportStatusOut(BaseModel):
+    available: bool = Field(description="Whether this kind of import can run on this instance.")
+    username: str | None = Field(description="Username used by the latest import.")
     active: ListenImportOut | None
     last: ListenImportOut | None
 
 
 class LastFmImportIn(BaseModel):
     username: str = Field(min_length=2, max_length=15, pattern=r"^[A-Za-z][A-Za-z0-9_-]+$")
+
+
+class ListenBrainzImportIn(BaseModel):
+    username: str = Field(min_length=1, max_length=64, pattern=r"^[^/?#\s][^/?#]*$")
 
 
 class DeletedOut(BaseModel):

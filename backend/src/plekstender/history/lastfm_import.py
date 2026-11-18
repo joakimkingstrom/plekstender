@@ -32,12 +32,14 @@ def utcnow() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
-async def next_window_start(db: AsyncSession, user_id: int, username: str) -> dt.datetime | None:
-    """Where a new import for this Last.fm user can start: the end of the last finished one."""
+async def next_window_start(
+    db: AsyncSession, user_id: int, username: str, source: str = "lastfm"
+) -> dt.datetime | None:
+    """Where a new import for this account can start: the end of the last finished one."""
     return await db.scalar(
         select(func.max(ListenImport.window_to)).where(
             ListenImport.user_id == user_id,
-            ListenImport.source == "lastfm",
+            ListenImport.source == source,
             ListenImport.status == "succeeded",
             func.lower(ListenImport.username) == username.lower(),
         )

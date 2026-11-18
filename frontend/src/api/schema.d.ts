@@ -311,6 +311,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/listens/export.jsonl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Listens
+         * @description All your listens (duplicates left out), oldest first, as ListenBrainz JSON lines.
+         */
+        get: operations["export_listens_api_listens_export_jsonl_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/listens/{listen_id}": {
         parameters: {
             query?: never;
@@ -383,6 +403,27 @@ export interface paths {
          * @description Continue a failed import from the last page it stored.
          */
         post: operations["resume_import_api_listens_imports__import_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listens/imports/listenbrainz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listenbrainz Import Status */
+        get: operations["listenbrainz_import_status_api_listens_imports_listenbrainz_get"];
+        put?: never;
+        /**
+         * Start Listenbrainz Import
+         * @description Import a ListenBrainz user's public listens (only newer ones if imported before).
+         */
+        post: operations["start_listenbrainz_import_api_listens_imports_listenbrainz_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -876,6 +917,21 @@ export interface components {
             database: boolean;
             worker: components["schemas"]["WorkerHealth"];
         };
+        /** ImportStatusOut */
+        ImportStatusOut: {
+            /**
+             * Available
+             * @description Whether this kind of import can run on this instance.
+             */
+            available: boolean;
+            /**
+             * Username
+             * @description Username used by the latest import.
+             */
+            username: string | null;
+            active: components["schemas"]["ListenImportOut"] | null;
+            last: components["schemas"]["ListenImportOut"] | null;
+        };
         /**
          * ItemListensOut
          * @description The user's own listening history for an artist or album (from Plekstender's
@@ -909,21 +965,6 @@ export interface components {
             configured: boolean;
             /** Source */
             source: ("settings" | "environment") | null;
-        };
-        /** LastFmStatusOut */
-        LastFmStatusOut: {
-            /**
-             * Available
-             * @description Whether this instance has a Last.fm API key.
-             */
-            available: boolean;
-            /**
-             * Username
-             * @description Last.fm username used by the latest import.
-             */
-            username: string | null;
-            active: components["schemas"]["ListenImportOut"] | null;
-            last: components["schemas"]["ListenImportOut"] | null;
         };
         /** LibraryCounts */
         LibraryCounts: {
@@ -968,6 +1009,11 @@ export interface components {
              */
             full_days: number;
         };
+        /** ListenBrainzImportIn */
+        ListenBrainzImportIn: {
+            /** Username */
+            username: string;
+        };
         /** ListenBrainzStatusOut */
         ListenBrainzStatusOut: {
             /** Connected */
@@ -1004,9 +1050,9 @@ export interface components {
             id: number;
             /**
              * Source
-             * @constant
+             * @enum {string}
              */
-            source: "lastfm";
+            source: "lastfm" | "listenbrainz";
             /** Username */
             username: string;
             /**
@@ -2039,6 +2085,26 @@ export interface operations {
             };
         };
     };
+    export_listens_api_listens_export_jsonl_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": unknown;
+                };
+            };
+        };
+    };
     delete_listen_api_listens__listen_id__delete: {
         parameters: {
             query?: never;
@@ -2103,7 +2169,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LastFmStatusOut"];
+                    "application/json": components["schemas"]["ImportStatusOut"];
                 };
             };
         };
@@ -2154,6 +2220,59 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listenbrainz_import_status_api_listens_imports_listenbrainz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportStatusOut"];
+                };
+            };
+        };
+    };
+    start_listenbrainz_import_api_listens_imports_listenbrainz_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListenBrainzImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

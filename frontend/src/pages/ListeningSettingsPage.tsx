@@ -7,12 +7,14 @@ import {
   useDeleteListens,
   useDisconnectListenBrainz,
   useListenBrainz,
+  useListenBrainzImport,
   useLastFmKey,
   useLastFmStatus,
   usePlexCapture,
   useResumeImport,
   useSetLastFmKey,
   useStartLastFmImport,
+  useStartListenBrainzImport,
   type ListenSource,
 } from '../api/listens'
 import { Button, Card, Notice, Spinner } from '../components/ui'
@@ -32,6 +34,7 @@ export function ListeningSettingsPage() {
       <div className="space-y-4">
         <PlexPlaysCard />
         <LastFmImportCard isAdmin={isAdmin} />
+        <ListenBrainzImportCard />
         <DeleteHistoryCard />
       </div>
       <div className="space-y-4">
@@ -88,13 +91,14 @@ function describeCapture(s: Schemas['PlexCaptureOut']): string {
 }
 
 function ImportProgress({ job }: { job: Schemas['ListenImportOut'] }) {
+  const noun = job.source === 'lastfm' ? 'scrobbles' : 'listens'
   const { done = 0, total = 0 } = job.progress as { done?: number; total?: number }
   const pct = total ? Math.min(100, Math.round((done / total) * 100)) : null
   return (
     <div className="space-y-2" aria-live="polite">
       <div className="flex justify-between gap-3 text-sm">
         <span>
-          {job.status === 'queued' ? 'Waiting for the background worker…' : `Importing ${job.username}'s scrobbles…`}
+          {job.status === 'queued' ? 'Waiting for the background worker…' : `Importing ${job.username}'s ${noun}…`}
         </span>
         {total > 0 && (
           <span className="text-muted tabular-nums">
@@ -113,6 +117,7 @@ function ImportProgress({ job }: { job: Schemas['ListenImportOut'] }) {
 }
 
 function LastImport({ job }: { job: Schemas['ListenImportOut'] }) {
+  const noun = job.source === 'lastfm' ? 'scrobbles' : 'listens'
   const resume = useResumeImport()
   const added = Number(job.stats.added ?? 0)
   const read = Number((job.progress as { done?: number }).done ?? 0)
@@ -121,7 +126,7 @@ function LastImport({ job }: { job: Schemas['ListenImportOut'] }) {
     return (
       <div className="space-y-3">
         <Notice tone="error">
-          The import of {job.username}'s scrobbles stopped {when}: {job.error ?? 'unknown error'}
+          The import of {job.username}'s {noun} stopped {when}: {job.error ?? 'unknown error'}
         </Notice>
         <p className="text-sm text-muted">
           {formatCount(added)} listens were saved before it stopped. Resuming continues where it left off.
@@ -205,6 +210,61 @@ function LastFmImportCard({ isAdmin }: { isAdmin: boolean }) {
             <p className="text-xs text-muted">
               Your profile's recent listening must be public (Last.fm → Settings → Privacy).
             </p>
+          </>
+        )}
+        {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}
+      </div>
+    </Card>
+  )
+}
+
+function ListenBrainzImportCard() {
+  const status = useListenBrainzImport()
+  const start = useStartListenBrainzImport()
+  const [username, setUsername] = useState<string | null>(null)
+
+  if (status.isPending) return <Card title="Import from ListenBrainz"><Spinner small /></Card>
+  if (status.isError) return <Card title="Import from ListenBrainz"><Notice tone="error">{errorMessage(status.error)}</Notice></Card>
+  const { active, last } = status.data
+  const name = username ?? status.data.username ?? ''
+  const valid = /^[^/?#\s][^/?#]{0,63}$/.test(name.trim())
+  const repeat = last?.status === 'succeeded' && last.username === name.trim()
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (valid) start.mutate(name.trim())
+  }
+
+  return (
+    <Card title="Import from ListenBrainz">
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Copies a ListenBrainz user's public listens into your history. Useful after 1 December if
+          you've moved your Last.fm history to ListenBrainz with its own importer. Listens you also
+          have from Last.fm or Plex count once.
+        </p>
+        {active ? (
+          <ImportProgress job={active} />
+        ) : (
+          <>
+            {last && <LastImport job={last} />}
+            <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
+              <label className="min-w-0 flex-1">
+                <span className="mb-1 block text-sm font-medium">ListenBrainz username</span>
+                <input
+                  value={name}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  maxLength={64}
+                  className={inputClass}
+                />
+              </label>
+              <Button type="submit" variant="primary" disabled={!valid} busy={start.isPending}>
+                {repeat ? 'Import new listens' : 'Import'}
+              </Button>
+            </form>
           </>
         )}
         {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}
@@ -334,13 +394,29 @@ function ConfirmDelete({ label, source }: { label: string; source: ListenSource 
 
 function DeleteHistoryCard() {
   return (
-    <Card title="Delete history">
-      <p className="mb-4 text-sm text-muted">
-        Removes listens from Plekstender only. Last.fm and Plex keep their own copies.
-      </p>
-      <div className="flex flex-wrap gap-4">
-        <ConfirmDelete label="Delete imported Last.fm listens" source="lastfm" />
-        <ConfirmDelete label="Delete all listening history" source={null} />
+    <Card title="Your history">
+      <div className="space-y-4">
+        <div>
+          <a
+            href="/api/listens/export.jsonl"
+            download
+            className="inline-flex items-center rounded-lg bg-surface-2 px-4 py-2 text-sm font-semibold hover:bg-border"
+          >
+            Download all listens
+          </a>
+          <p className="mt-2 text-xs text-muted">
+            One file in ListenBrainz's format (JSON lines), oldest first, with each play once.
+          </p>
+        </div>
+        <p className="text-sm text-muted">
+          Deleting removes listens from Plekstender only. Last.fm, ListenBrainz and Plex keep their own
+          copies.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <ConfirmDelete label="Delete imported Last.fm listens" source="lastfm" />
+          <ConfirmDelete label="Delete imported ListenBrainz listens" source="listenbrainz" />
+          <ConfirmDelete label="Delete all listening history" source={null} />
+        </div>
       </div>
     </Card>
   )

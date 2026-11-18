@@ -80,10 +80,11 @@ class ListenBrainzClient:
 
 def listen_payload(listen: Listen) -> dict[str, Any]:
     info: dict[str, Any] = {
-        "media_player": "Plex",
         "submission_client": "Plekstender",
         "submission_client_version": __version__,
     }
+    if listen.source == "plex":
+        info = {"media_player": "Plex", **info}
     if listen.duration_ms:
         info["duration_ms"] = listen.duration_ms
     for key in ("recording_mbid", "release_mbid"):

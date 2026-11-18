@@ -66,14 +66,19 @@ def _text(value: Any) -> str | None:
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
-def _mbid(value: Any) -> str | None:
-    """An MBID given directly (track) or as {"mbid": ...} (artist, album)."""
-    if isinstance(value, dict):
-        value = value.get("mbid")
+def clean_mbid(value: Any) -> str | None:
+    """A well-formed MusicBrainz ID (lower case), or None."""
     if not isinstance(value, str):
         return None
     value = value.strip().lower()
     return value if _UUID.match(value) else None
+
+
+def _mbid(value: Any) -> str | None:
+    """An MBID given directly (track) or as {"mbid": ...} (artist, album)."""
+    if isinstance(value, dict):
+        value = value.get("mbid")
+    return clean_mbid(value)
 
 
 def _int(value: Any, default: int = 0) -> int:
