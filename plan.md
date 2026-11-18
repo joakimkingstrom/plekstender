@@ -370,8 +370,10 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - `POST /api/servers/{id}/rate/queue` {kind, pool, order, exclude, limit}: pools *listened* (Plex plays or listens in the history), *unrated*, *all*; orders *weighted* (random, weight `(plays+1)^0.7 × (1 + ln(1 + popularity/1000))`), *plays* and *popular* (top 400 candidates, then artists drawn at random weighted by `(best remaining + 1)^0.6`, no artist twice within 5). Songs released more than once appear once (earliest release; a rating on any release counts). ~0.3 s per page of songs on a 98k-track library.
   - Listen counts per item (`user_item_state.listens`): the history matched to the library by normalised names, refreshed after captures, imports, syncs and deletes. Mirror rows get `artists.name_key`, `albums.title_norm`, `tracks.artist_key` (backfilled by the migration).
   - `POST /ratings` writes to Plex with the user's own token (`PUT /:/rate`, -1 clears), then the mirror, and logs a `rating_events` row; `POST /ratings/undo` steps back one change at a time.
-- [ ] Mobile swipe UI + undo
-- [ ] Desktop songs / albums / artists layouts + layout toggle
+- [x] Mobile swipe UI + undo
+  - Rate → Cards: one card at a time (album cover or artist image). Swipe right for 2½–5 stars, left for 2–½ (further = higher / lower, a vibration tick per half star where supported), down to skip; a live star readout while dragging. Stars below the card for tapping or keyboard. Undo steps back through your ratings and brings a swiped card back.
+- [x] Desktop songs / albums / artists layouts + layout toggle
+  - Lists layout: songs fill the window without scrolling (keys 1–5, Shift for halves, ↑↓ between rows, "Next N songs"); albums show the cover (click across it: left edge 1 star, right edge 5), review and every song with stars; artists show the image (same click rating), biography, six most popular albums and five most popular songs, all rateable. The Cards / Lists toggle works on any screen size; choices are remembered per browser.
 
 ### Phase 4 — Artwork
 - [ ] Port transforms/text logos/fonts with tests

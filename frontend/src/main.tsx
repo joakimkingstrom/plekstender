@@ -13,6 +13,7 @@ import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { ComingSoonPage, HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
+import { RatePage } from './pages/RatePage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
@@ -49,7 +50,7 @@ const router = createBrowserRouter([
       },
       {
         path: 'rate',
-        element: <ComingSoonPage title="Rate" text="Rating arrives in the next phase." />,
+        element: <RatePage />,
       },
       {
         path: 'artwork',
