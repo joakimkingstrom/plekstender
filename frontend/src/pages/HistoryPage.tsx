@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { Link, NavLink, Outlet } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useDeleteListen, useListens, useListenSummary } from '../api/listens'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
@@ -40,7 +40,29 @@ function groupByDay(items: Schemas['ListenOut'][]) {
   return days
 }
 
-export function HistoryPage() {
+/** History shell: stats overview and the list of listens. */
+export function HistoryLayout() {
+  const tab = ({ isActive }: { isActive: boolean }) =>
+    `border-b-2 px-1 pb-2 text-sm font-medium ${
+      isActive ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'
+    }`
+  return (
+    <>
+      <PageTitle subtitle="What you've listened to. Only you can see this.">History</PageTitle>
+      <nav className="mb-6 flex gap-6 border-b border-border" aria-label="History">
+        <NavLink to="/history" end className={tab}>
+          Overview
+        </NavLink>
+        <NavLink to="/history/listens" className={tab}>
+          Listens
+        </NavLink>
+      </nav>
+      <Outlet />
+    </>
+  )
+}
+
+export function ListensPage() {
   const summary = useListenSummary()
   const listens = useListens()
   const remove = useDeleteListen()
@@ -52,7 +74,6 @@ export function HistoryPage() {
   const items = listens.data.pages.flatMap((p) => p.items)
   return (
     <>
-      <PageTitle subtitle="Everything you've listened to. Only you can see this.">History</PageTitle>
       {items.length === 0 ? (
         <Card>
           <p className="text-sm text-muted">

@@ -9,13 +9,14 @@ import { ApiError } from './api/client'
 import { Layout } from './components/Layout'
 import './index.css'
 import { AdminPage } from './pages/AdminPage'
-import { HistoryPage } from './pages/HistoryPage'
+import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { ComingSoonPage, HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
+import { StatsPage } from './pages/StatsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,7 +39,14 @@ const router = createBrowserRouter([
       { path: 'library', element: <LibraryPage /> },
       { path: 'library/artists/:key', element: <ArtistPage /> },
       { path: 'library/albums/:key', element: <AlbumPage /> },
-      { path: 'history', element: <HistoryPage /> },
+      {
+        path: 'history',
+        element: <HistoryLayout />,
+        children: [
+          { index: true, element: <StatsPage /> },
+          { path: 'listens', element: <ListensPage /> },
+        ],
+      },
       {
         path: 'rate',
         element: <ComingSoonPage title="Rate" text="Rating arrives in the next phase." />,

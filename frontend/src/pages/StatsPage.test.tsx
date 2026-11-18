@@ -1,0 +1,100 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { formatChange, formatListeningTime } from '../format'
+import { StatsPage } from './StatsPage'
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+const totals = { listens: 1200, listening_ms: 4_300 * 60_000, artists: 210, tracks: 900 }
+const overview = {
+  period: { key: '30d', start: '2026-10-20T00:00:00Z', end: '2026-11-18T12:00:00Z', previous_start: '2026-09-20T00:00:00Z' },
+  totals,
+  previous: { ...totals, listens: 1000 },
+  new_artists: 14,
+  top_artists: [
+    { name: 'Radiohead', artist: null, listens: 120, previous_rank: 3, rating_key: 100, thumb: '/library/metadata/100/thumb/1' },
+    { name: 'Unknown Band', artist: null, listens: 40, previous_rank: null, rating_key: null, thumb: null },
+  ],
+  top_albums: [],
+  top_tracks: [{ name: 'Airbag', artist: 'Radiohead', listens: 12, previous_rank: 1, rating_key: 200, thumb: null }],
+  current_streak: 9,
+  longest_streak: 41,
+  first_listen_at: '2019-03-01T10:00:00Z',
+}
+const activity = {
+  bucket: 'day',
+  points: [
+    { start: '2026-11-17', listens: 30 },
+    { start: '2026-11-18', listens: 12 },
+  ],
+  heatmap: Array.from({ length: 7 }, (_, d) => Array.from({ length: 24 }, (_, h) => (d === 1 && h === 21 ? 34 : 0))),
+}
+
+function renderPage() {
+  const fetch = vi.fn(async (input: Request) => {
+    const path = new URL(input.url).pathname
+    const body: Record<string, unknown> = {
+      '/api/stats/overview': overview,
+      '/api/stats/activity': activity,
+      '/api/servers': [],
+    }
+    return new Response(JSON.stringify(body[path] ?? { detail: 'Not found' }), {
+      status: path in body ? 200 : 404,
+      headers: { 'content-type': 'application/json' },
+    })
+  })
+  vi.stubGlobal('fetch', fetch)
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/history?range=30d']}>
+        <StatsPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+  return fetch
+}
+
+describe('StatsPage', () => {
+  it('shows totals, top lists with rank changes, and offers every year since the first listen', async () => {
+    const fetch = renderPage()
+    expect(await screen.findByText('1,200')).toBeInTheDocument()
+    expect(screen.getByText('+20% vs previous 30 days')).toBeInTheDocument()
+    expect(screen.getByText('14 new to you')).toBeInTheDocument()
+    expect(screen.getByText('9 days')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Radiohead' })).toHaveAttribute('href', '/library/artists/100')
+    expect(screen.getByText('Unknown Band')).toBeInTheDocument() // not in the library: no link
+    expect(screen.getByText('New')).toBeInTheDocument()
+    expect(screen.getByTitle('Previously #3')).toHaveTextContent('▲ 2')
+    expect(screen.getByRole('button', { name: '2019' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'All time' }))
+    await vi.waitFor(() =>
+      expect(fetch.mock.calls.some(([r]) => new URL(r.url).searchParams.get('range') === 'all')).toBe(true),
+    )
+    const stats = fetch.mock.calls.find(([r]) => new URL(r.url).pathname === '/api/stats/overview')
+    expect(new URL(stats![0].url).searchParams.get('tz')).toBeTruthy() // the viewer's time zone
+  })
+
+  it('has table views of the charts for screen readers', async () => {
+    renderPage()
+    expect(await screen.findByRole('table', { name: 'Listens by weekday and hour' })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Listens per day' })).toBeInTheDocument()
+    expect(screen.getByText('34')).toBeInTheDocument()
+  })
+})
+
+describe('stats formatting', () => {
+  it('formats listening time and changes', () => {
+    expect(formatListeningTime(90 * 60_000)).toBe('1 h 30 m')
+    expect(formatListeningTime(45 * 60_000)).toBe('45 m')
+    expect(formatListeningTime(125 * 3_600_000)).toBe('125 h')
+    expect(formatChange(120, 100)).toBe('+20%')
+    expect(formatChange(80, 100)).toBe('−20%')
+    expect(formatChange(5, 0)).toBeNull()
+  })
+})

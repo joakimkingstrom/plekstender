@@ -411,6 +411,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stats/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview */
+        get: operations["overview_api_stats_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activity */
+        get: operations["activity_api_stats_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/export/tracks.csv": {
         parameters: {
             query?: never;
@@ -617,6 +651,16 @@ export interface components {
             allowlist: string[];
             /** Initial Admin Configured */
             initial_admin_configured: boolean;
+        };
+        /** ActivityPoint */
+        ActivityPoint: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /** Listens */
+            listens: number;
         };
         /** AdminServerIn */
         AdminServerIn: {
@@ -1131,6 +1175,78 @@ export interface components {
             /** Rating Key */
             rating_key: number | null;
         };
+        /** StatsActivityOut */
+        StatsActivityOut: {
+            /**
+             * Bucket
+             * @enum {string}
+             */
+            bucket: "day" | "week" | "month";
+            /** Points */
+            points: components["schemas"]["ActivityPoint"][];
+            /**
+             * Heatmap
+             * @description 7 rows (Monday first) x 24 hours.
+             */
+            heatmap: number[][];
+        };
+        /** StatsOverviewOut */
+        StatsOverviewOut: {
+            period: components["schemas"]["StatsPeriodOut"];
+            totals: components["schemas"]["StatsTotals"];
+            previous: components["schemas"]["StatsTotals"] | null;
+            /** New Artists */
+            new_artists: number;
+            /** Top Artists */
+            top_artists: components["schemas"]["TopItemOut"][];
+            /** Top Albums */
+            top_albums: components["schemas"]["TopItemOut"][];
+            /** Top Tracks */
+            top_tracks: components["schemas"]["TopItemOut"][];
+            /**
+             * Current Streak
+             * @description Consecutive days with listens, up to today.
+             */
+            current_streak: number;
+            /** Longest Streak */
+            longest_streak: number;
+            /** First Listen At */
+            first_listen_at: string | null;
+        };
+        /** StatsPeriodOut */
+        StatsPeriodOut: {
+            /** Key */
+            key: string;
+            /**
+             * Start
+             * @description None for all time.
+             */
+            start: string | null;
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /**
+             * Previous Start
+             * @description Start of the comparison period.
+             */
+            previous_start: string | null;
+        };
+        /** StatsTotals */
+        StatsTotals: {
+            /** Listens */
+            listens: number;
+            /**
+             * Listening Ms
+             * @description Listens without a known length count as 3:35.
+             */
+            listening_ms: number;
+            /** Artists */
+            artists: number;
+            /** Tracks */
+            tracks: number;
+        };
         /** SyncIn */
         SyncIn: {
             /**
@@ -1200,6 +1316,30 @@ export interface components {
             name: string;
             /** Count */
             count?: number | null;
+        };
+        /** TopItemOut */
+        TopItemOut: {
+            /** Name */
+            name: string;
+            /**
+             * Artist
+             * @description For albums and tracks.
+             */
+            artist: string | null;
+            /** Listens */
+            listens: number;
+            /**
+             * Previous Rank
+             * @description Rank in the previous period, if played.
+             */
+            previous_rank: number | null;
+            /**
+             * Rating Key
+             * @description Library artist / album (for tracks: album).
+             */
+            rating_key: number | null;
+            /** Thumb */
+            thumb: string | null;
         };
         /** TrackOut */
         TrackOut: {
@@ -2055,6 +2195,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    overview_api_stats_overview_get: {
+        parameters: {
+            query?: {
+                /** @description 7d, 30d, 365d, y2024, all */
+                range?: string;
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+                /** @description Link top items to this server. */
+                server_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsOverviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activity_api_stats_activity_get: {
+        parameters: {
+            query?: {
+                /** @description 7d, 30d, 365d, y2024, all */
+                range?: string;
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

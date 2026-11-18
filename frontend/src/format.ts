@@ -66,3 +66,20 @@ export function formatTime(iso: string): string {
 export function formatDate(iso: string): string {
   return dateFormat.format(new Date(iso))
 }
+
+/** 5,400,000 ms → "1 h 30 m"; 450,000,000 ms → "125 h". */
+export function formatListeningTime(ms: number): string {
+  const minutes = Math.round(ms / 60_000)
+  const hours = Math.floor(minutes / 60)
+  if (hours >= 100) return `${formatCount(hours)} h`
+  if (hours === 0) return `${minutes} m`
+  return `${hours} h ${minutes % 60} m`
+}
+
+/** Change vs a previous value: "+12%", "−8%", or null when there's nothing to compare. */
+export function formatChange(current: number, previous: number | null | undefined): string | null {
+  if (!previous) return null
+  const pct = Math.round(((current - previous) / previous) * 100)
+  if (pct === 0) return '±0%'
+  return pct > 0 ? `+${pct}%` : `−${Math.abs(pct)}%`
+}

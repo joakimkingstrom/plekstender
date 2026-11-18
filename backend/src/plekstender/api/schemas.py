@@ -345,3 +345,53 @@ class ListenBrainzStatusOut(BaseModel):
 
 class ListenBrainzTokenIn(BaseModel):
     token: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9-]+$")
+
+
+# --- listening stats ---------------------------------------------------------------------
+
+
+class StatsPeriodOut(BaseModel):
+    key: str
+    start: dt.datetime | None = Field(description="None for all time.")
+    end: dt.datetime
+    previous_start: dt.datetime | None = Field(description="Start of the comparison period.")
+
+
+class StatsTotals(BaseModel):
+    listens: int
+    listening_ms: int = Field(description="Listens without a known length count as 3:35.")
+    artists: int
+    tracks: int
+
+
+class TopItemOut(BaseModel):
+    name: str
+    artist: str | None = Field(description="For albums and tracks.")
+    listens: int
+    previous_rank: int | None = Field(description="Rank in the previous period, if played.")
+    rating_key: int | None = Field(description="Library artist / album (for tracks: album).")
+    thumb: str | None
+
+
+class StatsOverviewOut(BaseModel):
+    period: StatsPeriodOut
+    totals: StatsTotals
+    previous: StatsTotals | None
+    new_artists: int
+    top_artists: list[TopItemOut]
+    top_albums: list[TopItemOut]
+    top_tracks: list[TopItemOut]
+    current_streak: int = Field(description="Consecutive days with listens, up to today.")
+    longest_streak: int
+    first_listen_at: dt.datetime | None
+
+
+class ActivityPoint(BaseModel):
+    start: dt.date
+    listens: int
+
+
+class StatsActivityOut(BaseModel):
+    bucket: Literal["day", "week", "month"]
+    points: list[ActivityPoint]
+    heatmap: list[list[int]] = Field(description="7 rows (Monday first) x 24 hours.")
