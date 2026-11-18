@@ -16,7 +16,7 @@ export class ApiError extends Error {
 const csrf: Middleware = {
   onRequest({ request }) {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
-      request.headers.set('X-RoadieFM', '1')
+      request.headers.set('X-Plekstender', '1')
     }
     return request
   },

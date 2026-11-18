@@ -4,9 +4,9 @@ import httpx
 import pytest
 import respx
 
-from roadiefm.config import get_settings
-from roadiefm.plex.server import choose_connection
-from roadiefm.plex.tv import PlexTvClient, Resource
+from plekstender.config import get_settings
+from plekstender.plex.server import choose_connection
+from plekstender.plex.tv import PlexTvClient, Resource
 
 MACHINE = "abc123"
 
@@ -112,7 +112,7 @@ async def test_get_servers_filters_non_servers() -> None:
 
 
 def test_auth_url_contains_forward_url() -> None:
-    from roadiefm.plex.tv import Pin
+    from plekstender.plex.tv import Pin
 
     client = PlexTvClient(get_settings(), httpx.AsyncClient())
     url = client.auth_url(Pin(id=1, code="CODE"), "http://testserver/login/callback")
@@ -124,7 +124,7 @@ def test_auth_url_contains_forward_url() -> None:
 @pytest.mark.parametrize("status", [401])
 @respx.mock
 async def test_account_auth_error(status: int) -> None:
-    from roadiefm.plex.tv import PlexAuthError
+    from plekstender.plex.tv import PlexAuthError
 
     settings = get_settings()
     respx.get(f"{settings.plex_tv_url}/api/v2/user").mock(return_value=httpx.Response(status))

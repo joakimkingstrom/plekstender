@@ -1,8 +1,12 @@
-name: roadiefm
+name: plekstender
 
-# Shared settings for the services that run the RoadieFM image.
-x-roadiefm: &roadiefm
-  image: ${ROADIEFM_IMAGE:-ghcr.io/joakimkingstrom/roadiefm:latest}
+# Shared settings for the services that run the Plekstender image.
+x-plekstender: &plekstender
+  # Built from this checkout on `docker compose up` (there's no published image yet),
+  # so Compose never tries to pull it from a registry.
+  image: plekstender:local
+  build: .
+  pull_policy: build
   restart: unless-stopped
   env_file: .env
   environment:
@@ -21,9 +25,9 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-roadiefm}
+      POSTGRES_USER: ${POSTGRES_USER:-plekstender}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-roadiefm}
+      POSTGRES_DB: ${POSTGRES_DB:-plekstender}
     volumes:
       - db:/var/lib/postgresql
     networks:
@@ -37,8 +41,8 @@ services:
 
   # Applies database migrations, then exits. The app services wait for it.
   db-init:
-    <<: *roadiefm
-    command: ["roadiefm", "migrate"]
+    <<: *plekstender
+    command: ["plekstender", "migrate"]
     restart: "no"
     networks:
       - db
@@ -48,12 +52,10 @@ services:
 
   # Web app: serves the API under /api and the frontend for everything else.
   frontend:
-    <<: *roadiefm
-    # Builds the shared image (used by db-init and worker too) until it's published.
-    build: .
-    command: ["roadiefm", "web"]
+    <<: *plekstender
+    command: ["plekstender", "web"]
     ports:
-      - "${ROADIEFM_PORT:-8080}:8080"
+      - "${PLEKSTENDER_PORT:-8080}:8080"
     networks:
       - db
       - default
@@ -61,22 +63,22 @@ services:
       db-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "roadiefm", "healthcheck", "web"]
+      test: ["CMD", "plekstender", "healthcheck", "web"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
     labels:
       - "traefik.enable=${TRAEFIK_ENABLE:-false}"
-      - "traefik.http.routers.roadiefm.rule=Host(`${ROADIEFM_HOST:-roadiefm.localhost}`)"
-      - "traefik.http.routers.roadiefm.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
-      - "traefik.http.routers.roadiefm.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
-      - "traefik.http.services.roadiefm.loadbalancer.server.port=8080"
+      - "traefik.http.routers.plekstender.rule=Host(`${PLEKSTENDER_HOST:-plekstender.localhost}`)"
+      - "traefik.http.routers.plekstender.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.plekstender.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.plekstender.loadbalancer.server.port=8080"
 
   # Background jobs (library sync, bulk artwork, playlist refreshes...).
   worker:
-    <<: *roadiefm
-    command: ["roadiefm", "worker"]
+    <<: *plekstender
+    command: ["plekstender", "worker"]
     networks:
       - db
       - default
@@ -84,14 +86,14 @@ services:
       db-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "roadiefm", "healthcheck", "worker"]
+      test: ["CMD", "plekstender", "healthcheck", "worker"]
       interval: 60s
       timeout: 10s
       retries: 3
       start_period: 90s
 
   # Optional image search for artist logos: `docker compose --profile search up -d`.
-  # Not published on any port; only RoadieFM can reach it.
+  # Not published on any port; only Plekstender can reach it.
   searxng:
     image: searxng/searxng:latest
     profiles: ["search"]
@@ -112,7 +114,7 @@ services:
       - no-new-privileges:true
 
   # Optional reverse proxy with Let's Encrypt, for setups without one:
-  # `docker compose --profile traefik up -d` (and set TRAEFIK_ENABLE=true, ROADIEFM_HOST).
+  # `docker compose --profile traefik up -d` (and set TRAEFIK_ENABLE=true, PLEKSTENDER_HOST).
   # Already run Traefik? See compose.override.example.yaml instead.
   traefik:
     image: traefik:v3

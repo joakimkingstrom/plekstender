@@ -1,4 +1,4 @@
-"""Generate the roadie.fm logo assets (SVG + PNG + ICO) from one geometry definition.
+"""Generate the Plekstender logo assets (SVG + PNG + ICO) from one geometry definition.
 
 Run from the repo root:  python3 branding/generate.py
 Needs only Pillow.
@@ -98,21 +98,21 @@ def svg_lockup(ink, accent):
     # Wordmark as live text (Bricolage Grotesque 700). Outline it before using
     # it anywhere the font isn't loaded.
     return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="300" height="72">'
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" width="340" height="72">'
         f'<g transform="translate(4 4)"><path fill="{accent}" fill-rule="evenodd" d="{MARK_PATH}"/></g>'
         '<text x="82" y="50" font-family="\'Bricolage Grotesque\', \'Avenir Next\', system-ui, sans-serif" '
-        f'font-weight="700" font-size="40" letter-spacing="-0.8" fill="{ink}">roadie'
-        f'<tspan fill="{accent}">.fm</tspan></text></svg>\n'
+        f'font-weight="700" font-size="40" letter-spacing="-0.8" fill="{ink}">plekstender'
+        "</text></svg>\n"
     )
 
 
 def write_svgs():
-    (OUT / "roadie-mark.svg").write_text(svg_mark(AMBER_LIGHT))
-    (OUT / "roadie-mark-dark.svg").write_text(svg_mark(AMBER_DARK))
-    (OUT / "roadie-mark-mono.svg").write_text(svg_mark("currentColor"))
+    (OUT / "plekstender-mark.svg").write_text(svg_mark(AMBER_LIGHT))
+    (OUT / "plekstender-mark-dark.svg").write_text(svg_mark(AMBER_DARK))
+    (OUT / "plekstender-mark-mono.svg").write_text(svg_mark("currentColor"))
     (OUT / "favicon.svg").write_text(svg_mark(AMBER_LIGHT, ADAPTIVE_STYLE))
-    (OUT / "roadie-lockup-light.svg").write_text(svg_lockup(INK_LIGHT, AMBER_LIGHT))
-    (OUT / "roadie-lockup-dark.svg").write_text(svg_lockup(INK_DARK, AMBER_DARK))
+    (OUT / "plekstender-lockup-light.svg").write_text(svg_lockup(INK_LIGHT, AMBER_LIGHT))
+    (OUT / "plekstender-lockup-dark.svg").write_text(svg_lockup(INK_DARK, AMBER_DARK))
 
 
 # --- Raster -----------------------------------------------------------------
@@ -185,12 +185,12 @@ def svg_loader():
     px, py = PIVOT
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -6 80 72" width="80" height="72" role="img" aria-label="Loading">
 <style>.p{{fill:{AMBER_LIGHT}}}@media (prefers-color-scheme:dark){{.p{{fill:{AMBER_DARK}}}}}</style>
-<mask id="roadie-star" maskUnits="userSpaceOnUse" x="-8" y="-6" width="80" height="72">
+<mask id="plekstender-star" maskUnits="userSpaceOnUse" x="-8" y="-6" width="80" height="72">
 <rect x="-8" y="-6" width="80" height="72" fill="#fff"/>
 <path fill="#000" d="{star_d()}"><animateTransform attributeName="transform" type="rotate" values="0 {cx} {cy};72 {cx} {cy};144 {cx} {cy}" keyTimes="0;0.5;1" calcMode="spline" keySplines="{SNAP};{SNAP}" dur="{LOOP_S}s" repeatCount="indefinite"/></path>
 </mask>
 <g><animateTransform attributeName="transform" type="rotate" values="-{SWING} {px} {py};{SWING} {px} {py};-{SWING} {px} {py}" keyTimes="0;0.5;1" calcMode="spline" keySplines="{EASE};{EASE}" dur="{LOOP_S}s" repeatCount="indefinite"/>
-<path class="p" d="{pick_d()}" mask="url(#roadie-star)"/></g>
+<path class="p" d="{pick_d()}" mask="url(#plekstender-star)"/></g>
 </svg>
 '''
 
@@ -237,7 +237,7 @@ def loader_frame(size, t, color, bg):
 
 
 def write_loader(frames=36):
-    (OUT / "roadie-loader.svg").write_text(svg_loader())
+    (OUT / "plekstender-loader.svg").write_text(svg_loader())
     ms = round(LOOP_S * 1000 / frames)
     for name, color, bg in (("light", AMBER_LIGHT, "#ffffff"), ("dark", AMBER_DARK, PLATE_DARK)):
         for size in (128, 256):
@@ -292,7 +292,7 @@ def spin_frame(size, t, color, bg):
 
 
 def write_loader_spin(frames=48):
-    (OUT / "roadie-loader-spin.svg").write_text(svg_loader_spin())
+    (OUT / "plekstender-loader-spin.svg").write_text(svg_loader_spin())
     ms = round(SPIN_S * 1000 / frames)
     for name, color, bg in (("light", AMBER_LIGHT, "#ffffff"), ("dark", AMBER_DARK, PLATE_DARK)):
         for size in (128, 256):

@@ -1,4 +1,4 @@
-# RoadieFM — Implementation Plan
+# Plekstender — Implementation Plan
 
 Companion to [app-features.md](app-features.md). This document covers *how* the app gets built; the feature doc covers *what* it does.
 
@@ -6,10 +6,10 @@ Companion to [app-features.md](app-features.md). This document covers *how* the 
 
 | Topic | Decision |
 |---|---|
-| Name | **RoadieFM** (no "Plex" in the name, per Plex's trademark guidelines; "for Plex & Plexamp" is fine in descriptions). Logo is being designed separately. |
+| Name | **Plekstender** (renamed from RoadieFM on 18 Nov 2026). "for Plex & Plexamp" is fine in descriptions; Plex's trademark guidelines discourage "Plex" in app names. Logo: the guitar pick in `branding/`. |
 | Stack | FastAPI (Python) backend + React/Vite/TypeScript frontend |
 | Users | Multi-user: anyone with a Plex account can sign in and connect a server they have access to. Must be safe to expose publicly. |
-| Listening history | RoadieFM keeps its own per-user listening history (Plex plays + imported history) and shows stats on it (Phase 2). Inspired by Koito, but built natively: Koito is single-user, Go + SQLite, with its own catalogue. |
+| Listening history | Plekstender keeps its own per-user listening history (Plex plays + imported history) and shows stats on it (Phase 2). Inspired by Koito, but built natively: Koito is single-user, Go + SQLite, with its own catalogue. |
 | Last.fm | One-off history import only, no scrobbling to Last.fm. From 1 Dec 2026 a Last.fm API key only works if its owner has Last.fm Pro, so the importer ships first. |
 | ListenBrainz | New plays are scrobbled to ListenBrainz (opt-in per user, with their own token). ListenBrainz history can also be imported. |
 | Image search | SearXNG as an optional, internal-only service (compose profile), behind a pluggable provider interface. |
@@ -49,7 +49,7 @@ Container hardening (as in other stacks): non-root user, `read_only: true` + `tm
 ### Repo layout
 
 ```
-plex-helper-app/                     # repo (app name: RoadieFM)
+plex-helper-app/                     # repo (app name: Plekstender)
 ├── compose.yaml                     # db, db-init, frontend, worker (+ searxng, traefik profiles)
 ├── compose.override.example.yaml    # running behind an existing Traefik
 ├── .env.example
@@ -60,8 +60,8 @@ plex-helper-app/                     # repo (app name: RoadieFM)
 │   ├── alembic.ini                  # for `alembic revision --autogenerate` in development
 │   ├── scripts/spikes/              # Phase 0 probes to run against a real server
 │   ├── tests/
-│   └── src/roadiefm/
-│       ├── cli.py                   # roadiefm web | worker | migrate | healthcheck | openapi
+│   └── src/plekstender/
+│       ├── cli.py                   # plekstender web | worker | migrate | healthcheck | openapi
 │       ├── config.py                # pydantic-settings
 │       ├── migrate.py               # Alembic + procrastinate schema management
 │       ├── migrations/              # Alembic revisions
@@ -152,7 +152,7 @@ The UI hides or disables features based on these flags rather than failing.
 **Scale:** Plex `userRating` is 0–10 (half stars = 1 unit). Write via `PUT /:/rate?key=…&identifier=com.plexapp.plugins.library&rating=…`.
 
 **Item pools** (songs / albums / artists × 3 modes):
-- *Listened*: `view_count > 0`, or listened to according to RoadieFM's history (Phase 2), which includes imported Last.fm plays
+- *Listened*: `view_count > 0`, or listened to according to Plekstender's history (Phase 2), which includes imported Last.fm plays
 - *Unrated*: `user_rating IS NULL`
 - *Everything*: all items; already-rated ones carry a "Rated ★3.5" badge plus a skip action
 
@@ -254,12 +254,12 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
 
 ### 6. Listening history & stats
 
-RoadieFM keeps every user's plays in its own `listens` table. Stats, the ratings "Listened" pool and play-count weighting all read from it, so years of Last.fm history count without writing anything into Plex.
+Plekstender keeps every user's plays in its own `listens` table. Stats, the ratings "Listened" pool and play-count weighting all read from it, so years of Last.fm history count without writing anything into Plex.
 
 **Where plays come from**
 - **Plex play history** (main source). The worker polls `/status/sessions/history/all` every few minutes per server with a `viewedAt>` watermark, and backfills all existing music history the first time. Plex records a play once a track is ~90% played, so these are finished listens.
-  - The server owner's token sees every account's plays; `accountID` is mapped to RoadieFM users (the owner is account 1, others by plex.tv account ID). Plays by accounts that don't use RoadieFM are not stored.
-  - If the owner doesn't use RoadieFM, try the shared user's own token (to be confirmed by the spike). Last resort: derive plays from `view_count` increases during incremental sync, timed by `last_viewed_at` (approximate; marked as such).
+  - The server owner's token sees every account's plays; `accountID` is mapped to Plekstender users (the owner is account 1, others by plex.tv account ID). Plays by accounts that don't use Plekstender are not stored.
+  - If the owner doesn't use Plekstender, try the shared user's own token (to be confirmed by the spike). Last resort: derive plays from `view_count` increases during incremental sync, timed by `last_viewed_at` (approximate; marked as such).
   - Plex's `viewedAt` is when the track finished; Last.fm and ListenBrainz use the start time. Stored as start time (`viewedAt − duration`), to be checked against real data.
 - **Last.fm import** (one-off per user, see below).
 - **ListenBrainz import**: through the API (`/1/user/{name}/listens`, free) or an uploaded ListenBrainz export. This is also the route after 1 Dec for anyone who moved their Last.fm history into ListenBrainz with its own importer.
@@ -276,7 +276,7 @@ RoadieFM keeps every user's plays in its own `listens` table. Stats, the ratings
 
 **Scrobbling to ListenBrainz**
 - Per user, opt-in: paste the user token from listenbrainz.org/settings, checked with `/1/validate-token` and stored encrypted (purpose `user.listenbrainz_token`).
-- New Plex listens go into an outbox and are sent in batches as `single` listens: names, `duration_ms`, MBIDs when known (recording/release/artist), `media_player` from the Plex device when known, `submission_client: "roadie.fm"`. Retries with backoff, honours `X-RateLimit-*` headers; a rejected token pauses scrobbling and shows a warning.
+- New Plex listens go into an outbox and are sent in batches as `single` listens: names, `duration_ms`, MBIDs when known (recording/release/artist), `media_player` from the Plex device when known, `submission_client: "Plekstender"`. Retries with backoff, honours `X-RateLimit-*` headers; a rejected token pauses scrobbling and shows a warning.
 - Only plays after scrobbling was turned on are sent. Imported Last.fm history isn't sent (ListenBrainz has its own Last.fm importer); sending it as `import` listens can be an explicit option later.
 - Warn that scrobbling from another tool too (e.g. multi-scrobbler) causes doubles.
 - Later: "playing now" from `/status/sessions`.
@@ -384,7 +384,7 @@ Ordered by the Last.fm deadline (1 Dec 2026):
 Fetch the track file directly from Plex (`/library/parts/…`) and trim it to 30–60 s with ffmpeg on the server (`-t 45 -c:a libopus`), streamed to an `<audio>` element. Plex counts plays from client timeline/scrobble reports, so direct file access should not affect stats (to be confirmed in a Phase 0 spike). Useful inside the playlist builder.
 
 ### Writing imported plays back to Plex
-RoadieFM's own history makes this optional: the ratings queues and stats already count imported plays. If Plex's own play counts should include them too:
+Plekstender's own history makes this optional: the ratings queues and stats already count imported plays. If Plex's own play counts should include them too:
 - **API mode:** `/:/scrobble` per play. Raises play counts, but every play gets the current timestamp, which distorts "recently played".
 - **Database mode:** write `metadata_item_views` / `metadata_item_settings` in Plex's SQLite database with the real timestamps. Requires Plex to be stopped, a backup first and the database file mounted. Unsupported by Plex, so opt-in with explicit warnings.
 - Either way, skip plays Plex already has (matched listens with `source = plex` are the overlap).

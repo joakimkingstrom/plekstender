@@ -1,10 +1,10 @@
-# RoadieFM
+# Plekstender
 
 A self-hosted helper app for Plex & Plexamp music libraries: rate songs, albums and artists quickly, replace artist photos with logos, and build playlists that are smarter than "artist title contains…" filters.
 
-> **Status:** early development. Phase 0 (sign-in, server connection, admin, Docker setup) is done; see [plan.md](plan.md) for the roadmap and [app-features.md](app-features.md) for the feature list.
+> **Status:** early development. Sign-in, server connection, library sync and browsing, and Last.fm history import work; see [plan.md](plan.md) for the roadmap and [app-features.md](app-features.md) for the feature list.
 
-RoadieFM isn't affiliated with or endorsed by Plex.
+Plekstender isn't affiliated with or endorsed by Plex.
 
 ## Running with Docker
 
@@ -48,10 +48,10 @@ Requirements: Python 3.14 with [uv](https://docs.astral.sh/uv/), Node 24+, and a
 cd backend
 uv sync
 export APP_SECRET_KEY=$(openssl rand -hex 32) APP_URL=http://localhost:5173 \
-       DATABASE_URL=postgresql://roadiefm:roadiefm@localhost:5432/roadiefm
-uv run roadiefm migrate
-uv run roadiefm web          # API
-uv run roadiefm worker       # background jobs (separate terminal)
+       DATABASE_URL=postgresql://plekstender:plekstender@localhost:5432/plekstender
+uv run plekstender migrate
+uv run plekstender web          # API
+uv run plekstender worker       # background jobs (separate terminal)
 
 # Frontend (http://localhost:5173, proxies /api to the backend)
 cd frontend
@@ -63,7 +63,7 @@ Checks:
 
 ```bash
 cd backend && uv run ruff check . && uv run mypy && \
-  TEST_DATABASE_URL=postgresql://…/roadiefm_test uv run pytest   # wipes that database
+  TEST_DATABASE_URL=postgresql://…/plekstender_test uv run pytest   # wipes that database
 cd frontend && npm run lint && npm run typecheck && npm test
 ```
 

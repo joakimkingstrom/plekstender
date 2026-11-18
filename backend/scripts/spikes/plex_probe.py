@@ -1,4 +1,4 @@
-"""Phase 0 spike: what does this Plex server expose that RoadieFM's later phases rely on?
+"""Phase 0 spike: what does this Plex server expose that Plekstender's later phases rely on?
 
 Read-only by default. Answers:
   1. Which popularity / play-count fields exist on artists, albums and tracks, and how
@@ -53,8 +53,8 @@ class Plex:
             headers={
                 "X-Plex-Token": token,
                 "Accept": "application/json",
-                "X-Plex-Product": "RoadieFM spike",
-                "X-Plex-Client-Identifier": "roadiefm-spike",
+                "X-Plex-Product": "Plekstender spike",
+                "X-Plex-Client-Identifier": "plekstender-spike",
             },
             timeout=30,
         )

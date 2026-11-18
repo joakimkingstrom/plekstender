@@ -36,7 +36,7 @@ export function HomePage() {
 
   return (
     <>
-      <PageTitle subtitle="Here's what roadie.fm is set up to work with.">
+      <PageTitle subtitle="Here's what Plekstender is set up to work with.">
         Hi {me?.username}
       </PageTitle>
 
@@ -79,7 +79,7 @@ export function HomePage() {
                 ok={health.data.worker.healthy}
                 label={health.data.worker.healthy ? 'Background worker' : 'Background worker not running'}
               />
-              <span className="text-xs text-muted">roadie.fm {health.data.version}</span>
+              <span className="text-xs text-muted">Plekstender {health.data.version}</span>
             </div>
           ) : (
             <Spinner small />

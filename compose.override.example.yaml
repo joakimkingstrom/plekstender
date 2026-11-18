@@ -2,11 +2,11 @@
 # Docker network (here called "proxy"). Copy to compose.override.yaml and adjust;
 # Docker Compose merges it automatically. In .env, set:
 #   TRAEFIK_ENABLE=true
-#   ROADIEFM_HOST=roadiefm.example.com
+#   PLEKSTENDER_HOST=plekstender.example.com
 #   TRAEFIK_ENTRYPOINT=websecure            # your entrypoint name
 #   TRAEFIK_CERTRESOLVER=myresolver         # your cert resolver name
 #   FORWARDED_ALLOW_IPS=*
-#   APP_URL=https://roadiefm.example.com
+#   APP_URL=https://plekstender.example.com
 services:
   frontend:
     ports: !reset []

@@ -26,8 +26,8 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
 
 COPY --from=web /web/dist /app/static
 
-RUN useradd --system --uid 1000 --no-create-home --home-dir /app roadiefm
-USER roadiefm
+RUN useradd --system --uid 1000 --no-create-home --home-dir /app plekstender
+USER plekstender
 
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
@@ -37,4 +37,4 @@ ENV PATH=/app/.venv/bin:$PATH \
 EXPOSE 8080
 
 # The same image runs every service; compose picks the command (web | worker | migrate).
-CMD ["roadiefm", "web"]
+CMD ["plekstender", "web"]

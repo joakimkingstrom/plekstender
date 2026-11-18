@@ -11,13 +11,13 @@ from fastapi import FastAPI
 from pydantic import SecretStr
 from sqlalchemy import func, select
 
-from roadiefm.config import get_settings
-from roadiefm.db import get_sessionmaker
-from roadiefm.db.models import Listen, ListenImport
-from roadiefm.history import lastfm_import
-from roadiefm.history.lastfm import parse_scrobble
-from roadiefm.history.lastfm_import import run_lastfm_import
-from roadiefm.sync.parse import normalise_artist, normalise_title
+from plekstender.config import get_settings
+from plekstender.db import get_sessionmaker
+from plekstender.db.models import Listen, ListenImport
+from plekstender.history import lastfm_import
+from plekstender.history.lastfm import parse_scrobble
+from plekstender.history.lastfm_import import run_lastfm_import
+from plekstender.sync.parse import normalise_artist, normalise_title
 from tests.fakes import CSRF, LASTFM_KEY, FakeLastFm, FakePlex, sign_in
 from tests.test_sync import connect
 

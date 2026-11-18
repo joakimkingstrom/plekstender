@@ -150,7 +150,7 @@ function UsersCard({ selfId }: { selfId: number }) {
                 <Button
                   variant="danger"
                   onClick={() => {
-                    if (window.confirm(`Remove ${u.username} and all their roadie.fm data?`)) remove.mutate(u.id)
+                    if (window.confirm(`Remove ${u.username} and all their Plekstender data?`)) remove.mutate(u.id)
                   }}
                 >
                   Remove
@@ -170,7 +170,7 @@ export function AdminPage() {
   if (!me?.is_admin) return <Navigate to="/" replace />
   return (
     <>
-      <PageTitle subtitle="Settings for this roadie.fm instance.">Admin</PageTitle>
+      <PageTitle subtitle="Settings for this Plekstender instance.">Admin</PageTitle>
       <div className="grid gap-4 lg:grid-cols-2">
         <AccessCard />
         <ServersCard />

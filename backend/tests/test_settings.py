@@ -8,11 +8,11 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import select, text
 
-from roadiefm.db import get_sessionmaker
-from roadiefm.db.instance import LibrarySettings, get_library_settings
-from roadiefm.db.models import SyncRun
-from roadiefm.sync.schedule import due_sync
-from roadiefm.worker import recompute_all_popularity, schedule_due_syncs
+from plekstender.db import get_sessionmaker
+from plekstender.db.instance import LibrarySettings, get_library_settings
+from plekstender.db.models import SyncRun
+from plekstender.sync.schedule import due_sync
+from plekstender.worker import recompute_all_popularity, schedule_due_syncs
 from tests.fakes import CSRF, FakePlex, sign_in
 from tests.test_sync import connect, owner_with_library
 
@@ -75,7 +75,7 @@ async def test_admin_edits_library_settings(app: FastAPI, plex: FakePlex) -> Non
         queued = await db.scalar(
             text(
                 "SELECT count(*) FROM procrastinate_jobs"
-                " WHERE task_name = 'roadiefm.worker.recompute_all_popularity'"
+                " WHERE task_name = 'plekstender.worker.recompute_all_popularity'"
             )
         )
     assert queued == 1

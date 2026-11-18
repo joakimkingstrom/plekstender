@@ -16,7 +16,7 @@ const NAV = [
 const PICK_PATH =
   'M32 4C48 4 59 9.5 59 22C59 35.5 44 52 35.5 58C33.4 59.5 30.6 59.5 28.5 58C20 52 5 35.5 5 22C5 9.5 16 4 32 4ZM32 15L34.94 22.45L42.94 22.95L36.76 28.05L38.76 35.8L32 31.5L25.24 35.8L27.24 28.05L21.06 22.95L29.06 22.45Z'
 
-/** The guitar-pick mark (branding/roadie-mark-mono.svg), coloured by `currentColor`. */
+/** The guitar-pick mark (branding/plekstender-mark-mono.svg), coloured by `currentColor`. */
 export function Mark({ className = 'size-6' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden>
@@ -29,9 +29,7 @@ export function Wordmark({ size = 'text-lg' }: { size?: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 font-display font-bold tracking-tight ${size}`}>
       <Mark className="size-[1.15em] text-accent" />
-      <span>
-        roadie<span className="text-accent">.fm</span>
-      </span>
+      <span>plekstender</span>
     </span>
   )
 }
@@ -40,7 +38,7 @@ export function Wordmark({ size = 'text-lg' }: { size?: string }) {
 export function PageLoader() {
   return (
     <div className="flex min-h-dvh items-center justify-center">
-      <img src="/brand/roadie-loader.svg" alt="Loading" className="size-16" />
+      <img src="/brand/plekstender-loader.svg" alt="Loading" className="size-16" />
     </div>
   )
 }
@@ -67,7 +65,7 @@ export function Layout() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-10 border-b border-border bg-bg/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-          <NavLink to="/" aria-label="roadie.fm home">
+          <NavLink to="/" aria-label="Plekstender home">
             <Wordmark />
           </NavLink>
           <nav className="hidden gap-1 md:flex" aria-label="Main">

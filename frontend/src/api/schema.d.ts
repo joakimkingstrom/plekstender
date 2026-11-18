@@ -558,7 +558,7 @@ export interface components {
     schemas: {
         /**
          * AccessMode
-         * @description Who may sign in to this RoadieFM instance.
+         * @description Who may sign in to this Plekstender instance.
          * @enum {string}
          */
         AccessMode: "open" | "servers" | "allowlist";
@@ -1006,7 +1006,7 @@ export interface components {
         };
         /**
          * ServerOut
-         * @description A server the current user has connected to RoadieFM.
+         * @description A server the current user has connected to Plekstender.
          */
         ServerOut: {
             /** Id */

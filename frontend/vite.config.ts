@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-// In development the API runs separately (`roadiefm web` on :8080); Vite proxies /api to it.
+// In development the API runs separately (`plekstender web` on :8080); Vite proxies /api to it.
 // Set APP_URL=http://localhost:5173 for the backend so Plex redirects back to Vite.
 export default defineConfig({
   plugins: [react(), tailwindcss()],

@@ -15,13 +15,13 @@ jobs:
       postgres:
         image: postgres:18-alpine
         env:
-          POSTGRES_USER: roadiefm
-          POSTGRES_PASSWORD: roadiefm
-          POSTGRES_DB: roadiefm_test
+          POSTGRES_USER: plekstender
+          POSTGRES_PASSWORD: plekstender
+          POSTGRES_DB: plekstender_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U roadiefm" --health-interval 5s
+          --health-cmd "pg_isready -U plekstender" --health-interval 5s
           --health-timeout 5s --health-retries 10
     defaults:
       run:
@@ -37,7 +37,7 @@ jobs:
       - run: uv run mypy
       - run: uv run pytest
         env:
-          TEST_DATABASE_URL: postgresql://roadiefm:roadiefm@localhost:5432/roadiefm_test
+          TEST_DATABASE_URL: postgresql://plekstender:plekstender@localhost:5432/plekstender_test
 
   frontend:
     runs-on: ubuntu-latest

@@ -80,7 +80,7 @@ function ConnectedServer({ server }: { server: Schemas['ServerOut'] }) {
             variant="danger"
             busy={disconnect.isPending}
             onClick={() => {
-              if (window.confirm(`Disconnect ${server.name} from roadie.fm?`)) {
+              if (window.confirm(`Disconnect ${server.name} from Plekstender?`)) {
                 disconnect.mutate(server.id)
               }
             }}
@@ -177,11 +177,11 @@ export function ServersPage({ firstRun = false }: { firstRun?: boolean }) {
   return (
     <>
       {firstRun ? (
-        <PageTitle subtitle="Connect a Plex server and pick the music library roadie.fm should work with.">
+        <PageTitle subtitle="Connect a Plex server and pick the music library Plekstender should work with.">
           Get started
         </PageTitle>
       ) : (
-        <p className="mb-4 text-sm text-muted">Plex servers connected to roadie.fm.</p>
+        <p className="mb-4 text-sm text-muted">Plex servers connected to Plekstender.</p>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-4">

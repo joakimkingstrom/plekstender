@@ -1,7 +1,7 @@
 [project]
-name = "roadiefm"
+name = "plekstender"
 version = "0.1.0"
-description = "RoadieFM: a helper app for Plex & Plexamp music libraries"
+description = "Plekstender: a helper app for Plex & Plexamp music libraries"
 requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.20.1",
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-roadiefm = "roadiefm.cli:main"
+plekstender = "plekstender.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.9,<0.14.0"]
@@ -47,7 +47,7 @@ ignore = ["S101"]
 python_version = "3.14"
 strict = true
 plugins = ["pydantic.mypy"]
-packages = ["roadiefm"]
+packages = ["plekstender"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]

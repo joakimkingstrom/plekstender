@@ -22,7 +22,7 @@ export const libraryKeys = {
   album: (serverId: number, key: number) => ['servers', serverId, 'library', 'album', key] as const,
 }
 
-const ACTIVE_SERVER_KEY = 'roadiefm.activeServer'
+const ACTIVE_SERVER_KEY = 'plekstender.activeServer'
 
 function readStoredServer(): number | null {
   try {

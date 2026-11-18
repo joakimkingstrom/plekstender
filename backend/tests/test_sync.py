@@ -12,11 +12,11 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import select, text
 
-from roadiefm.config import get_settings
-from roadiefm.db import get_sessionmaker
-from roadiefm.db.models import Artist, SyncRun
-from roadiefm.sync import runner
-from roadiefm.sync.runner import run_sync
+from plekstender.config import get_settings
+from plekstender.db import get_sessionmaker
+from plekstender.db.models import Artist, SyncRun
+from plekstender.sync import runner
+from plekstender.sync.runner import run_sync
 from tests.fakes import CSRF, FakePlex, sign_in
 
 pytestmark = pytest.mark.db
@@ -274,7 +274,7 @@ async def test_exports(app: FastAPI, plex: FakePlex) -> None:
 
     resp = await owner.get(f"/api/servers/{sid}/export/library.json")
     data: dict[str, Any] = json.loads(resp.text)
-    assert data["format"] == "roadiefm-library"
+    assert data["format"] == "plekstender-library"
     assert [len(data[k]) for k in ("artists", "albums", "tracks")] == [3, 4, 6]
     radiohead = next(a for a in data["artists"] if a["title"] == "Radiohead")
     assert radiohead["similar"] == ["Portishead", "Muse"]

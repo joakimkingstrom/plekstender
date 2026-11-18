@@ -40,8 +40,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 def migrated_db() -> None:
     import psycopg
 
-    from roadiefm.config import get_settings
-    from roadiefm.migrate import migrate
+    from plekstender.config import get_settings
+    from plekstender.migrate import migrate
 
     with psycopg.connect(get_settings().libpq_url, autocommit=True) as conn:
         conn.execute("DROP SCHEMA public CASCADE")
@@ -53,7 +53,7 @@ def migrated_db() -> None:
 async def clean_db(migrated_db: None) -> AsyncIterator[None]:
     from sqlalchemy import text
 
-    from roadiefm.db import get_sessionmaker
+    from plekstender.db import get_sessionmaker
 
     async with get_sessionmaker()() as db:
         await db.execute(
@@ -68,8 +68,8 @@ async def clean_db(migrated_db: None) -> AsyncIterator[None]:
 
 @pytest.fixture
 async def app(clean_db: None) -> AsyncIterator[FastAPI]:
-    from roadiefm.api.app import create_app
-    from roadiefm.config import get_settings
+    from plekstender.api.app import create_app
+    from plekstender.config import get_settings
 
     application = create_app(get_settings())
     async with application.router.lifespan_context(application):

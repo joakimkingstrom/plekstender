@@ -15,7 +15,7 @@ from fastapi import FastAPI
 PLEX_TV = "https://plex.tv"
 CLIENTS = "https://clients.plex.tv"
 SERVER_URI = "https://10-0-0-2.abc.plex.direct:32400"
-CSRF = {"X-RoadieFM": "1"}
+CSRF = {"X-Plekstender": "1"}
 NOW = 1_790_000_000
 SECTION = "3"
 

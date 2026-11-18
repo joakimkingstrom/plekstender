@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from roadiefm.auth.access import decide_access, decide_bootstrap
-from roadiefm.config import AccessMode, Settings
-from roadiefm.plex.server import connection_priority
-from roadiefm.plex.tv import Connection, PlexAccount
-from roadiefm.security.crypto import DecryptionError, Signer, TokenCipher
+from plekstender.auth.access import decide_access, decide_bootstrap
+from plekstender.config import AccessMode, Settings
+from plekstender.plex.server import connection_priority
+from plekstender.plex.tv import Connection, PlexAccount
+from plekstender.security.crypto import DecryptionError, Signer, TokenCipher
 
 KEY = b"k" * 32
 
@@ -52,7 +52,7 @@ def make_settings(**kw: object) -> Settings:
 
 def test_database_url_from_parts_escapes_password() -> None:
     s = make_settings(postgres_password="p@ss/word", postgres_host="db")
-    assert s.sqlalchemy_url == "postgresql+psycopg://roadiefm:p%40ss%2Fword@db:5432/roadiefm"
+    assert s.sqlalchemy_url == "postgresql+psycopg://plekstender:p%40ss%2Fword@db:5432/plekstender"
     assert s.libpq_url.startswith("postgresql://")
 
 
@@ -68,23 +68,23 @@ def test_client_identifier_is_stable_and_secret_dependent() -> None:
 
 
 def test_app_url() -> None:
-    s = make_settings(app_url="https://roadie.example.com/")
-    assert s.app_url == "https://roadie.example.com"
+    s = make_settings(app_url="https://plekstender.example.com/")
+    assert s.app_url == "https://plekstender.example.com"
     assert s.secure_cookies
-    assert s.app_origin == "https://roadie.example.com"
+    assert s.app_origin == "https://plekstender.example.com"
     with pytest.raises(ValueError, match="APP_URL"):
-        make_settings(app_url="roadie.example.com")
+        make_settings(app_url="plekstender.example.com")
 
 
 # --- access policy ------------------------------------------------------------------
 
-ACCOUNT = PlexAccount(id=1, uuid="u", username="Roadie", email="roadie@example.com")
+ACCOUNT = PlexAccount(id=1, uuid="u", username="Plek", email="plek@example.com")
 
 
 def test_bootstrap() -> None:
     assert decide_bootstrap(ACCOUNT, None).make_admin
-    assert decide_bootstrap(ACCOUNT, "roadie").make_admin  # case-insensitive username
-    assert decide_bootstrap(ACCOUNT, "ROADIE@example.com").allowed
+    assert decide_bootstrap(ACCOUNT, "plek").make_admin  # case-insensitive username
+    assert decide_bootstrap(ACCOUNT, "PLEK@example.com").allowed
     assert not decide_bootstrap(ACCOUNT, "someone-else").allowed
 
 
@@ -92,8 +92,8 @@ def test_bootstrap() -> None:
     ("mode", "allowlist", "approved", "accessible", "expected"),
     [
         (AccessMode.OPEN, [], set(), None, True),
-        (AccessMode.ALLOWLIST, ["roadie"], set(), None, True),
-        (AccessMode.ALLOWLIST, ["roadie@example.com"], set(), None, True),
+        (AccessMode.ALLOWLIST, ["plek"], set(), None, True),
+        (AccessMode.ALLOWLIST, ["plek@example.com"], set(), None, True),
         (AccessMode.ALLOWLIST, ["other"], set(), None, False),
         (AccessMode.SERVERS, [], {"srv1"}, {"srv1", "srv2"}, True),
         (AccessMode.SERVERS, [], {"srv1"}, {"srv2"}, False),
@@ -154,7 +154,7 @@ def test_connection_priority() -> None:
 
 # --- sync parsing -------------------------------------------------------------------
 
-from roadiefm.sync.parse import normalise_title, tags_of, track_row  # noqa: E402
+from plekstender.sync.parse import normalise_title, tags_of, track_row  # noqa: E402
 
 
 @pytest.mark.parametrize(

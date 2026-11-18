@@ -1,4 +1,4 @@
-# SearXNG configuration for RoadieFM's artist-logo image search.
+# SearXNG configuration for Plekstender's artist-logo image search.
 # The instance is only reachable from inside the compose network, so the rate limiter
 # and public-instance features are off. The secret comes from SEARXNG_SECRET.
 use_default_settings:
@@ -23,7 +23,7 @@ engines:
     disabled: false
 
 general:
-  instance_name: "RoadieFM search"
+  instance_name: "Plekstender search"
   enable_metrics: false
 
 server:

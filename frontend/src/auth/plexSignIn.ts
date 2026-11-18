@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, errorMessage, unwrap, type Schemas } from '../api/client'
 import { keys } from '../api/hooks'
 
-const CHANNEL = 'roadiefm-auth'
+const CHANNEL = 'plekstender-auth'
 const POLL_MS = 1500
 const GIVE_UP_MS = 10 * 60_000
 

@@ -1,5 +1,5 @@
 {
-  "name": "roadiefm-frontend",
+  "name": "plekstender-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -10,8 +10,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "preview": "vite preview",
-    "gen:api": "cd ../backend && uv run roadiefm openapi > openapi.json && cd ../frontend && npx -y openapi-typescript@7.13.0 ../backend/openapi.json -o src/api/schema.d.ts",
-    "brand:sync": "cp ../branding/favicon.svg ../branding/favicon.ico ../branding/roadie-loader.svg ../branding/icons/apple-touch-icon.png ../branding/icons/icon-192.png ../branding/icons/icon-512.png ../branding/icons/icon-maskable-512.png public/brand/"
+    "gen:api": "cd ../backend && uv run plekstender openapi > openapi.json && cd ../frontend && npx -y openapi-typescript@7.13.0 ../backend/openapi.json -o src/api/schema.d.ts",
+    "brand:sync": "cp ../branding/favicon.svg ../branding/favicon.ico ../branding/plekstender-loader.svg ../branding/icons/apple-touch-icon.png ../branding/icons/icon-192.png ../branding/icons/icon-512.png ../branding/icons/icon-maskable-512.png public/brand/"
   },
   "dependencies": {
     "@fontsource/bricolage-grotesque": "^5.3.0",

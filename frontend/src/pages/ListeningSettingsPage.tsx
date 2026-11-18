@@ -206,7 +206,7 @@ function DeleteHistoryCard() {
   return (
     <Card title="Delete history">
       <p className="mb-4 text-sm text-muted">
-        Removes listens from RoadieFM only. Last.fm and Plex keep their own copies.
+        Removes listens from Plekstender only. Last.fm and Plex keep their own copies.
       </p>
       <div className="flex flex-wrap gap-4">
         <ConfirmDelete label="Delete imported Last.fm listens" source="lastfm" />
