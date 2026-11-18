@@ -273,6 +273,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/listens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Listens */
+        get: operations["list_listens_api_listens_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Listens
+         * @description Delete the user's listens from one source, or all of them.
+         */
+        delete: operations["delete_listens_api_listens_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listens/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listen Summary */
+        get: operations["listen_summary_api_listens_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listens/{listen_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Listen */
+        delete: operations["delete_listen_api_listens__listen_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listens/lastfm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lastfm Status */
+        get: operations["lastfm_status_api_listens_lastfm_get"];
+        put?: never;
+        /**
+         * Start Lastfm Import
+         * @description Import the user's Last.fm scrobbles (only newer ones if imported before).
+         */
+        post: operations["start_lastfm_import_api_listens_lastfm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listens/imports/{import_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Import
+         * @description Continue a failed import from the last page it stored.
+         */
+        post: operations["resume_import_api_listens_imports__import_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/export/tracks.csv": {
         parameters: {
             query?: never;
@@ -428,6 +524,27 @@ export interface paths {
          */
         get: operations["preview_popularity_api_admin_library_preview_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/lastfm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lastfm */
+        get: operations["get_lastfm_api_admin_lastfm_get"];
+        /**
+         * Put Lastfm
+         * @description Set (after checking it with Last.fm) or clear the instance's Last.fm API key.
+         */
+        put: operations["put_lastfm_api_admin_lastfm_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -648,6 +765,11 @@ export interface components {
             /** Probes */
             probes: components["schemas"]["ProbeOut"][];
         };
+        /** DeletedOut */
+        DeletedOut: {
+            /** Deleted */
+            deleted: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -665,6 +787,38 @@ export interface components {
             /** Database */
             database: boolean;
             worker: components["schemas"]["WorkerHealth"];
+        };
+        /** LastFmImportIn */
+        LastFmImportIn: {
+            /** Username */
+            username: string;
+        };
+        /** LastFmKeyIn */
+        LastFmKeyIn: {
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /** LastFmKeyOut */
+        LastFmKeyOut: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source: ("settings" | "environment") | null;
+        };
+        /** LastFmStatusOut */
+        LastFmStatusOut: {
+            /**
+             * Available
+             * @description Whether this instance has a Last.fm API key.
+             */
+            available: boolean;
+            /**
+             * Username
+             * @description Last.fm username used by the latest import.
+             */
+            username: string | null;
+            active: components["schemas"]["ListenImportOut"] | null;
+            last: components["schemas"]["ListenImportOut"] | null;
         };
         /** LibraryCounts */
         LibraryCounts: {
@@ -708,6 +862,95 @@ export interface components {
              * @default 7
              */
             full_days: number;
+        };
+        /** ListenImportOut */
+        ListenImportOut: {
+            /** Id */
+            id: number;
+            /**
+             * Source
+             * @constant
+             */
+            source: "lastfm";
+            /** Username */
+            username: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /** Window From */
+            window_from: string | null;
+            /**
+             * Window To
+             * Format: date-time
+             */
+            window_to: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Progress */
+            progress: {
+                [key: string]: unknown;
+            };
+            /** Stats */
+            stats: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+        };
+        /** ListenOut */
+        ListenOut: {
+            /** Id */
+            id: number;
+            /**
+             * Listened At
+             * Format: date-time
+             */
+            listened_at: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "lastfm" | "plex" | "listenbrainz";
+            /** Artist Name */
+            artist_name: string;
+            /** Album Name */
+            album_name: string | null;
+            /** Track Name */
+            track_name: string;
+            /**
+             * Duplicate
+             * @description Also recorded by another source; not counted twice.
+             */
+            duplicate: boolean;
+        };
+        /** ListenPage */
+        ListenPage: {
+            /** Items */
+            items: components["schemas"]["ListenOut"][];
+            /** Total */
+            total: number;
+        };
+        /** ListenSummary */
+        ListenSummary: {
+            /** Total */
+            total: number;
+            /** First At */
+            first_at: string | null;
+            /** Last At */
+            last_at: string | null;
+            /** By Source */
+            by_source: {
+                [key: string]: number;
+            };
         };
         /** PinCheckOut */
         PinCheckOut: {
@@ -1430,6 +1673,202 @@ export interface operations {
             };
         };
     };
+    list_listens_api_listens_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_listens_api_listens_delete: {
+        parameters: {
+            query?: {
+                source?: ("lastfm" | "plex" | "listenbrainz") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listen_summary_api_listens_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenSummary"];
+                };
+            };
+        };
+    };
+    delete_listen_api_listens__listen_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listen_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lastfm_status_api_listens_lastfm_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LastFmStatusOut"];
+                };
+            };
+        };
+    };
+    start_lastfm_import_api_listens_lastfm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LastFmImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_import_api_listens_imports__import_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_tracks_csv_api_servers__server_id__export_tracks_csv_get: {
         parameters: {
             query?: never;
@@ -1753,6 +2192,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PopularityPreviewItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lastfm_api_admin_lastfm_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LastFmKeyOut"];
+                };
+            };
+        };
+    };
+    put_lastfm_api_admin_lastfm_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LastFmKeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LastFmKeyOut"];
                 };
             };
             /** @description Validation Error */

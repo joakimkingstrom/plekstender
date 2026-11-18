@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from roadiefm.api.deps import AdminDep, DbDep, SettingsDep
+from roadiefm.api.deps import AdminDep, DbDep, HttpDep, SettingsDep
 from roadiefm.api.routes.servers import get_user_server
 from roadiefm.api.schemas import (
     AccessSettingsIn,
@@ -14,16 +14,21 @@ from roadiefm.api.schemas import (
     AdminServerOut,
     AdminUserIn,
     AdminUserOut,
+    LastFmKeyIn,
+    LastFmKeyOut,
     PopularityPreviewItem,
 )
 from roadiefm.db.instance import (
     LibrarySettings,
     get_access_settings,
+    get_lastfm_api_key,
     get_library_settings,
     set_access_settings,
+    set_lastfm_api_key,
     set_library_settings,
 )
 from roadiefm.db.models import PlexServer, User, UserServer
+from roadiefm.history.lastfm import LastFmClient, LastFmError
 from roadiefm.sync.popularity import preview_artist_ranking
 from roadiefm.worker import enqueue_popularity_recompute
 
@@ -177,3 +182,25 @@ async def preview_popularity(
         limit=limit,
     )
     return [PopularityPreviewItem(**row.__dict__) for row in rows]
+
+
+@router.get("/lastfm", response_model=LastFmKeyOut)
+async def get_lastfm(db: DbDep, _: AdminDep, settings: SettingsDep) -> LastFmKeyOut:
+    key, source = await get_lastfm_api_key(db, settings)
+    return LastFmKeyOut(configured=key is not None, source=source)
+
+
+@router.put("/lastfm", response_model=LastFmKeyOut)
+async def put_lastfm(
+    body: LastFmKeyIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
+) -> LastFmKeyOut:
+    """Set (after checking it with Last.fm) or clear the instance's Last.fm API key."""
+    if body.api_key:
+        try:
+            await LastFmClient(http, body.api_key, settings.lastfm_api_url).check_key()
+        except LastFmError as exc:
+            code = status.HTTP_502_BAD_GATEWAY if exc.transient else status.HTTP_400_BAD_REQUEST
+            raise HTTPException(code, str(exc)) from exc
+    await set_lastfm_api_key(db, settings, body.api_key)
+    await db.commit()
+    return await get_lastfm(db, admin, settings)

@@ -299,3 +299,75 @@ class SyncRun(Base):
     progress: Mapped[dict[str, Any]] = mapped_column(default=dict)
     stats: Mapped[dict[str, Any]] = mapped_column(default=dict)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+# --- listening history ------------------------------------------------------------------
+
+
+class ListenImport(Base):
+    """One import of a user's listening history from another service."""
+
+    __tablename__ = "listen_imports"
+    __table_args__ = (Index("ix_listen_imports_user", "user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    source: Mapped[str] = mapped_column(String(16))  # lastfm
+    username: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    # queued | running | succeeded | failed
+    # Only listens in (window_from, window_to] are fetched: a repeat import picks up
+    # where the last one ended, and listens made during the import don't shift pages.
+    window_from: Mapped[dt.datetime | None]
+    window_to: Mapped[dt.datetime]
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    started_at: Mapped[dt.datetime | None]
+    finished_at: Mapped[dt.datetime | None]
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    # {"page": last page stored, "pages": n, "done": listens read, "total": n}
+    progress: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    # {"added": n, "existing": n, "skipped": n}
+    stats: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+class Listen(Base):
+    """One play by one user, from Plex or an imported history.
+
+    Listens keep the names they were played under (plus normalised keys), so plays of
+    music that isn't, or is no longer, in a library still count.
+    """
+
+    __tablename__ = "listens"
+    __table_args__ = (
+        # Makes imports idempotent: the same play from the same source is stored once.
+        UniqueConstraint(
+            "user_id", "source", "listened_at", "artist_key", "track_key", name="uq_listens_play"
+        ),
+        Index("ix_listens_user_time", "user_id", "listened_at"),
+        Index("ix_listens_user_track", "user_id", "artist_key", "track_key"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # When the track started playing (Last.fm and ListenBrainz convention).
+    listened_at: Mapped[dt.datetime]
+    source: Mapped[str] = mapped_column(String(16))  # lastfm | plex | listenbrainz
+    import_id: Mapped[int | None] = mapped_column(
+        ForeignKey("listen_imports.id", ondelete="SET NULL")
+    )
+    artist_name: Mapped[str] = mapped_column(Text)
+    album_name: Mapped[str | None] = mapped_column(Text)
+    track_name: Mapped[str] = mapped_column(Text)
+    artist_key: Mapped[str] = mapped_column(Text)
+    album_key: Mapped[str | None] = mapped_column(Text)
+    track_key: Mapped[str] = mapped_column(Text)
+    duration_ms: Mapped[int | None]
+    artist_mbid: Mapped[str | None] = mapped_column(String(36))
+    release_mbid: Mapped[str | None] = mapped_column(String(36))
+    recording_mbid: Mapped[str | None] = mapped_column(String(36))
+    # Same play recorded by another source (e.g. a Plexamp play also scrobbled to Last.fm).
+    duplicate_of: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("listens.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from roadiefm.config import AccessMode, get_settings
+from roadiefm.config import AccessMode, Settings, get_settings
 from roadiefm.db.models import InstanceSetting
+from roadiefm.security.crypto import DecryptionError, TokenCipher
 
 ACCESS_KEY = "access"
 WORKER_HEARTBEAT_KEY = "worker_heartbeat"
@@ -100,3 +101,39 @@ async def get_library_settings(db: AsyncSession) -> LibrarySettings:
 
 async def set_library_settings(db: AsyncSession, settings: LibrarySettings) -> None:
     await _put(db, LIBRARY_KEY, settings.model_dump())
+
+
+# --- Last.fm API key --------------------------------------------------------------------
+
+LASTFM_KEY = "lastfm"
+LASTFM_PURPOSE = "instance.lastfm_api_key"
+
+
+def _cipher(settings: Settings) -> TokenCipher:
+    return TokenCipher(settings.derive_key("token-encryption"))
+
+
+async def get_lastfm_api_key(
+    db: AsyncSession, settings: Settings
+) -> tuple[str | None, Literal["settings", "environment"] | None]:
+    """The Last.fm API key and where it came from: Settings page first, then LASTFM_API_KEY."""
+    stored = await _get(db, LASTFM_KEY) or {}
+    if encrypted := stored.get("api_key_enc"):
+        try:
+            return _cipher(settings).decrypt(encrypted, purpose=LASTFM_PURPOSE), "settings"
+        except DecryptionError:
+            pass  # APP_SECRET_KEY changed; fall back to the environment
+    if settings.lastfm_api_key and (env := settings.lastfm_api_key.get_secret_value().strip()):
+        return env, "environment"
+    return None, None
+
+
+async def set_lastfm_api_key(db: AsyncSession, settings: Settings, api_key: str | None) -> None:
+    if api_key:
+        await _put(
+            db,
+            LASTFM_KEY,
+            {"api_key_enc": _cipher(settings).encrypt(api_key, purpose=LASTFM_PURPOSE)},
+        )
+    else:
+        await _put(db, LASTFM_KEY, {})

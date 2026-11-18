@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     plex_clients_url: str = "https://clients.plex.tv"
     plex_app_url: str = "https://app.plex.tv"
 
+    # Last.fm API key for importing listening history. Can also be set on Settings by an
+    # admin (that value wins). From 1 Dec 2026 a key only works if its owner has Last.fm Pro.
+    lastfm_api_key: SecretStr | None = None
+    lastfm_api_url: str = "https://ws.audioscrobbler.com/2.0/"
+
     @field_validator("app_url")
     @classmethod
     def _strip_trailing_slash(cls, v: str) -> str:

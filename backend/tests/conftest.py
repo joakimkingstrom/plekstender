@@ -15,7 +15,7 @@ import pytest
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
-    from tests.fakes import FakePlex
+    from tests.fakes import FakeLastFm, FakePlex
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -84,3 +84,10 @@ def plex() -> Iterator[FakePlex]:
 
     with respx.mock(assert_all_called=False) as router:
         yield FakePlex(router)
+
+
+@pytest.fixture
+def lastfm(plex: FakePlex) -> FakeLastFm:
+    from tests.fakes import FakeLastFm
+
+    return FakeLastFm(plex.router)

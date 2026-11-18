@@ -30,6 +30,14 @@ _PUNCT = str.maketrans(
 )
 
 
+def fold(text: str) -> str:
+    """Case, accents, curly punctuation, "&" and spacing ignored."""
+    text = unicodedata.normalize("NFKD", text.translate(_PUNCT))
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = text.lower().replace("&", "and")
+    return re.sub(r"\s+", " ", text).strip(" .!?'\"")
+
+
 def normalise_title(title: str) -> str:
     """Key for grouping releases of the same song: case/accents/remaster suffixes ignored."""
     text = title.translate(_PUNCT)
@@ -37,11 +45,13 @@ def normalise_title(title: str) -> str:
     while previous != text:  # strip repeated suffixes: "Song (Mono) [2009 Remaster]"
         previous = text
         text = _SUFFIX.sub("", text)
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    text = text.lower().replace("&", "and")
-    text = re.sub(r"\s+", " ", text).strip(" .!?'\"")
-    return text or title.strip().lower()
+    return fold(text) or title.strip().lower()
+
+
+def normalise_artist(name: str) -> str:
+    """Key for matching artist names across sources: "The Beatles" == "beatles"."""
+    text = fold(name)
+    return text.removeprefix("the ") or text or name.strip().lower()
 
 
 def epoch(value: Any) -> dt.datetime | None:

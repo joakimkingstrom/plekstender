@@ -254,3 +254,69 @@ class PopularityPreviewItem(BaseModel):
     title: str
     popularity: int
     current_rank: int
+
+
+# --- listening history -------------------------------------------------------------------
+
+ListenSource = Literal["lastfm", "plex", "listenbrainz"]
+
+
+class ListenOut(BaseModel):
+    id: int
+    listened_at: dt.datetime
+    source: ListenSource
+    artist_name: str
+    album_name: str | None
+    track_name: str
+    duplicate: bool = Field(description="Also recorded by another source; not counted twice.")
+
+
+class ListenPage(BaseModel):
+    items: list[ListenOut]
+    total: int
+
+
+class ListenSummary(BaseModel):
+    total: int
+    first_at: dt.datetime | None
+    last_at: dt.datetime | None
+    by_source: dict[str, int]
+
+
+class ListenImportOut(BaseModel):
+    id: int
+    source: Literal["lastfm"]
+    username: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    window_from: dt.datetime | None
+    window_to: dt.datetime
+    created_at: dt.datetime
+    started_at: dt.datetime | None
+    finished_at: dt.datetime | None
+    progress: dict[str, Any]
+    stats: dict[str, Any]
+    error: str | None
+
+
+class LastFmStatusOut(BaseModel):
+    available: bool = Field(description="Whether this instance has a Last.fm API key.")
+    username: str | None = Field(description="Last.fm username used by the latest import.")
+    active: ListenImportOut | None
+    last: ListenImportOut | None
+
+
+class LastFmImportIn(BaseModel):
+    username: str = Field(min_length=2, max_length=15, pattern=r"^[A-Za-z][A-Za-z0-9_-]+$")
+
+
+class DeletedOut(BaseModel):
+    deleted: int
+
+
+class LastFmKeyOut(BaseModel):
+    configured: bool
+    source: Literal["settings", "environment"] | None
+
+
+class LastFmKeyIn(BaseModel):
+    api_key: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{32}$")

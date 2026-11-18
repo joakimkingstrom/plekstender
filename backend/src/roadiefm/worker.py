@@ -16,7 +16,8 @@ from roadiefm.auth.sessions import delete_expired_sessions
 from roadiefm.config import get_settings
 from roadiefm.db import get_sessionmaker
 from roadiefm.db.instance import get_library_settings, record_worker_heartbeat
-from roadiefm.db.models import PlexServer, SyncRun, UserSectionSync, UserServer
+from roadiefm.db.models import ListenImport, PlexServer, SyncRun, UserSectionSync, UserServer
+from roadiefm.history.lastfm_import import run_lastfm_import
 from roadiefm.sync.popularity import recompute_popularity
 from roadiefm.sync.runner import run_sync
 from roadiefm.sync.schedule import due_sync
@@ -146,6 +147,28 @@ async def enqueue_popularity_recompute() -> None:
         pass  # one is already waiting and will use the latest settings
 
 
+# --- listening history ------------------------------------------------------------------
+
+
+@app.task(queue="imports")
+async def import_lastfm(import_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"RoadieFM/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_lastfm_import(db, http, get_settings(), import_id)
+
+
+async def enqueue_listen_import(db: AsyncSession, job: ListenImport) -> None:
+    """Queue a (new or resumed) import. One import per user runs at a time."""
+    try:
+        await import_lastfm.configure(
+            lock=f"import-user-{job.user_id}", queueing_lock=f"import-{job.id}"
+        ).defer_async(import_id=job.id)
+    except AlreadyEnqueued:
+        pass  # already waiting to run
+
+
 # --- housekeeping --------------------------------------------------------------------
 
 
@@ -171,7 +194,17 @@ async def cleanup_sessions(timestamp: int) -> None:
             )
             .values(status="failed", error="Interrupted (the worker stopped during the sync).")
         )
+        stale_imports = await db.execute(
+            update(ListenImport)
+            .where(
+                ListenImport.status == "running",
+                ListenImport.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
+            )
+            .values(status="failed", error="Interrupted (the worker stopped). Resume to continue.")
+        )
         await db.commit()
+    if stale_import_count := int(getattr(stale_imports, "rowcount", 0) or 0):
+        log.warning("marked %d interrupted listen imports as failed", stale_import_count)
     if removed:
         log.info("removed %d expired sessions", removed)
     if stale_count := int(getattr(stale, "rowcount", 0) or 0):

@@ -6,7 +6,7 @@ import { useActiveServer } from '../api/library'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
-/** Settings shell: Servers for everyone, Library for admins. */
+/** Settings shell: Servers and Listening for everyone, Library for admins. */
 export function SettingsLayout() {
   const { data: me } = useMe()
   const tab = ({ isActive }: { isActive: boolean }) =>
@@ -19,6 +19,9 @@ export function SettingsLayout() {
       <nav className="mb-6 flex gap-6 border-b border-border" aria-label="Settings">
         <NavLink to="/settings" end className={tab}>
           Servers
+        </NavLink>
+        <NavLink to="/settings/listening" className={tab}>
+          Listening
         </NavLink>
         {me?.is_admin && (
           <NavLink to="/settings/library" className={tab}>

@@ -343,9 +343,14 @@ RoadieFM keeps every user's plays in its own `listens` table. Stats, the ratings
 
 ### Phase 2 — Listening history
 Ordered by the Last.fm deadline (1 Dec 2026):
-- [ ] **Before 1 Dec:** `listens` + `listen_imports`, Last.fm API key setting, per-user Last.fm import job with progress UI, matching to the mirror, simple history list
-- [ ] Spike: `plex_probe.py --history` (fields, filters, account IDs, what a shared user's token can read)
-  - First run (owner token): history is readable (45k entries of all types). The `type=10` filter returns **0** entries, so music plays must be selected by `librarySectionID` instead (probe updated, needs a re-run). `/accounts` lists 12 accounts; the owner's plex.tv ID isn't among them, confirming the owner is account `1` and other accounts use their plex.tv IDs.
+- [x] **Before 1 Dec:** `listens` + `listen_imports`, Last.fm API key (Settings → Listening or `LASTFM_API_KEY`), per-user Last.fm import job with progress UI, resume after failures, History page, delete one / imported / all listens
+- [ ] Link listens to library items (artist / album / track pages, "not in library" in stats)
+- [x] Spike: `plex_probe.py --history` (owner token; a shared user's token not tested yet)
+  - **41,746 music plays back to 30 Jun 2021** in library 3 (of 45k history entries in total). Library 7 has none.
+  - Filtering: `type=10` returns nothing and `metadataType=10` is ignored, but `librarySectionID` and `viewedAt>` both work, so capture polls per music library with a `viewedAt` watermark. `accountID=1` returned the full total; either every play is the owner's or the filter is ignored, so filter client-side.
+  - Every entry has `historyKey` (dedupe key), `ratingKey` (all 50 sampled still exist), `viewedAt`, `accountID`, `deviceID` and album / album-artist titles. There's no `originalTitle`, so compilation tracks only name the album artist: take the track artist from the mirror via `ratingKey`, falling back to `grandparentTitle`.
+  - Accounts: the owner is account `1` (their plex.tv ID isn't listed); 11 other accounts use plex.tv IDs.
+  - Consecutive plays are ~4 minutes apart (median), which doesn't settle whether `viewedAt` marks the start or the end of a play. Keep start = `viewedAt − duration` and check against Last.fm duplicates once both are imported.
 - [ ] Plex play capture: history polling + backfill, account mapping, cross-source duplicates
 - [ ] ListenBrainz scrobbling: token, outbox, batched submit, retries
 - [ ] Stats pages and per-item listen stats

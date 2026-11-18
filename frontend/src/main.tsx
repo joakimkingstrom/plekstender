@@ -9,8 +9,10 @@ import { ApiError } from './api/client'
 import { Layout } from './components/Layout'
 import './index.css'
 import { AdminPage } from './pages/AdminPage'
+import { HistoryPage } from './pages/HistoryPage'
 import { ComingSoonPage, HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
+import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
@@ -36,6 +38,7 @@ const router = createBrowserRouter([
       { path: 'library', element: <LibraryPage /> },
       { path: 'library/artists/:key', element: <ArtistPage /> },
       { path: 'library/albums/:key', element: <AlbumPage /> },
+      { path: 'history', element: <HistoryPage /> },
       {
         path: 'rate',
         element: <ComingSoonPage title="Rate" text="Rating arrives in the next phase." />,
@@ -53,6 +56,7 @@ const router = createBrowserRouter([
         element: <SettingsLayout />,
         children: [
           { index: true, element: <ServersPage /> },
+          { path: 'listening', element: <ListeningSettingsPage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
         ],
       },

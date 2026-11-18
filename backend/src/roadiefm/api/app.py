@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 
 from roadiefm import __version__
 from roadiefm.api.middleware import CSRFMiddleware, RateLimiter, SecurityHeadersMiddleware
-from roadiefm.api.routes import admin, auth, export, health, library, servers, sync
+from roadiefm.api.routes import admin, auth, export, health, library, listens, servers, sync
 from roadiefm.config import Settings, get_settings
 from roadiefm.db import get_engine
 from roadiefm.worker import app as jobs
@@ -46,7 +46,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(CSRFMiddleware, allowed_origin=settings.app_origin)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    for module in (health, auth, servers, sync, library, export, admin):
+    for module in (health, auth, servers, sync, library, listens, export, admin):
         app.include_router(module.router)
 
     if settings.static_dir:
