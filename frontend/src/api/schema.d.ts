@@ -397,6 +397,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Library */
+        get: operations["get_library_api_admin_library_get"];
+        /** Put Library */
+        put: operations["put_library_api_admin_library_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/library/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Popularity
+         * @description Your top artists if artist popularity used `artist_top_n`, with their current rank.
+         */
+        get: operations["preview_popularity_api_admin_library_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -641,6 +679,36 @@ export interface components {
             /** Plays */
             plays: number;
         };
+        /**
+         * LibrarySettings
+         * @description Instance-wide library tuning, editable by admins on the Settings page.
+         */
+        LibrarySettings: {
+            /**
+             * Album Top N
+             * @description Album popularity = sum of its top N tracks.
+             * @default 3
+             */
+            album_top_n: number;
+            /**
+             * Artist Top N
+             * @description Artist popularity = sum of their top N songs.
+             * @default 10
+             */
+            artist_top_n: number;
+            /**
+             * Incremental Minutes
+             * @description How often to fetch plays, ratings and changes.
+             * @default 30
+             */
+            incremental_minutes: number;
+            /**
+             * Full Days
+             * @description How often to re-read whole libraries.
+             * @default 7
+             */
+            full_days: number;
+        };
         /** PinCheckOut */
         PinCheckOut: {
             /**
@@ -656,6 +724,17 @@ export interface components {
         PinStartOut: {
             /** Auth Url */
             auth_url: string;
+        };
+        /** PopularityPreviewItem */
+        PopularityPreviewItem: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Popularity */
+            popularity: number;
+            /** Current Rank */
+            current_rank: number;
         };
         /** ProbeOut */
         ProbeOut: {
@@ -765,6 +844,10 @@ export interface components {
             /** Last Sync At */
             last_sync_at: string | null;
             counts: components["schemas"]["LibraryCounts"];
+            /** Incremental Minutes */
+            incremental_minutes: number;
+            /** Full Days */
+            full_days: number;
         };
         /** TagOut */
         TagOut: {
@@ -1585,6 +1668,92 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_library_api_admin_library_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibrarySettings"];
+                };
+            };
+        };
+    };
+    put_library_api_admin_library_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibrarySettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibrarySettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_popularity_api_admin_library_preview_get: {
+        parameters: {
+            query: {
+                server_id: number;
+                artist_top_n: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PopularityPreviewItem"][];
+                };
             };
             /** @description Validation Error */
             422: {

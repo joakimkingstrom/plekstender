@@ -176,15 +176,13 @@ export function ServersPage({ firstRun = false }: { firstRun?: boolean }) {
 
   return (
     <>
-      <PageTitle
-        subtitle={
-          firstRun
-            ? 'Connect a Plex server and pick the music library roadie.fm should work with.'
-            : 'Plex servers connected to roadie.fm.'
-        }
-      >
-        {firstRun ? 'Get started' : 'Servers'}
-      </PageTitle>
+      {firstRun ? (
+        <PageTitle subtitle="Connect a Plex server and pick the music library roadie.fm should work with.">
+          Get started
+        </PageTitle>
+      ) : (
+        <p className="mb-4 text-sm text-muted">Plex servers connected to roadie.fm.</p>
+      )}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-4">
           {servers.isPending && <Spinner />}

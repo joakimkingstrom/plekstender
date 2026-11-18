@@ -159,6 +159,9 @@ class SyncStatusOut(BaseModel):
     last_full_sync_at: dt.datetime | None
     last_sync_at: dt.datetime | None
     counts: LibraryCounts
+    # Current schedule (instance-wide, set by admins).
+    incremental_minutes: int
+    full_days: int
 
 
 class SyncIn(BaseModel):
@@ -241,3 +244,13 @@ class AlbumDetail(AlbumSummary):
     artist_title: str | None
     tags: list[TagOut]
     tracks: list[TrackOut]
+
+
+# --- library settings (admin) -------------------------------------------------------------
+
+
+class PopularityPreviewItem(BaseModel):
+    rating_key: int
+    title: str
+    popularity: int
+    current_rank: int

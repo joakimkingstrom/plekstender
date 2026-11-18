@@ -9,6 +9,7 @@ from roadiefm.api.deps import DbDep, UserDep
 from roadiefm.api.ratelimit import rate_limit
 from roadiefm.api.routes.servers import get_user_server
 from roadiefm.api.schemas import LibraryCounts, SyncIn, SyncRunOut, SyncStatusOut
+from roadiefm.db.instance import get_library_settings
 from roadiefm.db.models import SyncRun, UserItemState, UserSectionSync, UserServer
 from roadiefm.worker import ACTIVE, enqueue_sync
 
@@ -63,6 +64,7 @@ async def sync_status(server_id: int, db: DbDep, user: UserDep) -> SyncStatusOut
             .limit(5)
         )
     )
+    schedule = await get_library_settings(db)
     active = next((r for r in recent if r.status in ACTIVE), None)
     last = next((r for r in recent if r.status not in ACTIVE), None)
     times = (
@@ -82,6 +84,8 @@ async def sync_status(server_id: int, db: DbDep, user: UserDep) -> SyncStatusOut
         last_full_sync_at=times[0],
         last_sync_at=times[1],
         counts=await library_counts(db, user.id, us),
+        incremental_minutes=schedule.incremental_minutes,
+        full_days=schedule.full_days,
     )
 
 

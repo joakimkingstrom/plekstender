@@ -13,6 +13,7 @@ import { ComingSoonPage, HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
+import { LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,7 +48,14 @@ const router = createBrowserRouter([
         path: 'playlists',
         element: <ComingSoonPage title="Playlists" text="The playlist builder arrives in a later phase." />,
       },
-      { path: 'settings', element: <ServersPage /> },
+      {
+        path: 'settings',
+        element: <SettingsLayout />,
+        children: [
+          { index: true, element: <ServersPage /> },
+          { path: 'library', element: <LibrarySettingsPage /> },
+        ],
+      },
       { path: 'admin', element: <AdminPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],

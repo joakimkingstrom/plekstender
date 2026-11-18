@@ -35,3 +35,15 @@ export function formatRelative(iso: string, now = Date.now()): string {
   }
   return 'just now'
 }
+
+/** "every 30 minutes, with a full sync weekly" */
+export function describeSchedule(minutes: number, days: number): string {
+  const every =
+    minutes % 60 === 0
+      ? minutes === 60
+        ? 'every hour'
+        : `every ${minutes / 60} hours`
+      : `every ${minutes} minutes`
+  const full = days === 1 ? 'daily' : days === 7 ? 'weekly' : `every ${days} days`
+  return `Changes are picked up ${every}, with a full sync ${full}.`
+}
