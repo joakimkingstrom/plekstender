@@ -26,7 +26,11 @@ const finished = {
 }
 
 function renderPage(responses: Record<string, unknown>) {
-  responses = { 'GET /api/listens/plex': [], ...responses }
+  responses = {
+    'GET /api/listens/plex': [],
+    'GET /api/listens/listenbrainz': { connected: false, username: null, enabled_at: null, sent: 0, pending: 0, last_submitted_at: null, paused: false, error: null },
+    ...responses,
+  }
   const fetch = vi.fn(async (input: Request) => {
     const path = new URL(input.url).pathname
     const body = responses[`${input.method} ${path}`]
@@ -106,5 +110,52 @@ describe('Plays from Plex', () => {
     expect(await screen.findByText('41,746 plays')).toBeInTheDocument()
     expect(screen.getByText('Reading past plays…')).toBeInTheDocument()
     expect(screen.getByText(/didn't allow reading play history/)).toBeInTheDocument()
+  })
+})
+
+describe('Scrobble to ListenBrainz', () => {
+  it('asks for a token, then shows what was sent', async () => {
+    const connected = {
+      connected: true,
+      username: 'joakim_lb',
+      enabled_at: '2026-11-18T12:00:00Z',
+      sent: 12,
+      pending: 2,
+      last_submitted_at: '2026-11-18T12:30:00Z',
+      paused: false,
+      error: null,
+    }
+    const fetch = renderPage({
+      'GET /api/auth/me': user,
+      'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
+      'PUT /api/listens/listenbrainz': connected,
+    })
+    const input = await screen.findByLabelText('User token')
+    fireEvent.change(input, { target: { value: 'abcd-1234-efgh' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    expect(await screen.findByText('joakim_lb')).toBeInTheDocument()
+    expect(screen.getByText(/12 plays sent/)).toBeInTheDocument()
+    expect(screen.getByText(/2 waiting/)).toBeInTheDocument()
+    const put = fetch.mock.calls.find(([r]) => r.method === 'PUT')
+    expect(await put![0].json()).toEqual({ token: 'abcd-1234-efgh' })
+  })
+
+  it('asks for a new token when ListenBrainz rejected the old one', async () => {
+    renderPage({
+      'GET /api/auth/me': user,
+      'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
+      'GET /api/listens/listenbrainz': {
+        connected: true,
+        username: 'joakim_lb',
+        enabled_at: '2026-11-18T12:00:00Z',
+        sent: 3,
+        pending: 1,
+        last_submitted_at: null,
+        paused: true,
+        error: 'ListenBrainz rejected the token, so scrobbling is paused. Paste a new token to resume.',
+      },
+    })
+    expect(await screen.findByText(/scrobbling is paused/)).toBeInTheDocument()
+    expect(screen.getByLabelText('New user token')).toBeInTheDocument()
   })
 })

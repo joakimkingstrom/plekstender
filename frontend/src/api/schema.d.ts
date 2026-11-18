@@ -389,6 +389,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/listens/listenbrainz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listenbrainz Status */
+        get: operations["listenbrainz_status_api_listens_listenbrainz_get"];
+        /**
+         * Connect Listenbrainz
+         * @description Start (or resume, with a new token) scrobbling new Plex plays to ListenBrainz.
+         */
+        put: operations["connect_listenbrainz_api_listens_listenbrainz_put"];
+        post?: never;
+        /** Disconnect Listenbrainz */
+        delete: operations["disconnect_listenbrainz_api_listens_listenbrainz_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/export/tracks.csv": {
         parameters: {
             query?: never;
@@ -882,6 +904,36 @@ export interface components {
              * @default 7
              */
             full_days: number;
+        };
+        /** ListenBrainzStatusOut */
+        ListenBrainzStatusOut: {
+            /** Connected */
+            connected: boolean;
+            /** Username */
+            username: string | null;
+            /**
+             * Enabled At
+             * @description Plays from this time on are sent.
+             */
+            enabled_at: string | null;
+            /** Sent */
+            sent: number;
+            /** Pending */
+            pending: number;
+            /** Last Submitted At */
+            last_submitted_at: string | null;
+            /**
+             * Paused
+             * @description ListenBrainz rejected the token; nothing is sent.
+             */
+            paused: boolean;
+            /** Error */
+            error: string | null;
+        };
+        /** ListenBrainzTokenIn */
+        ListenBrainzTokenIn: {
+            /** Token */
+            token: string;
         };
         /** ListenImportOut */
         ListenImportOut: {
@@ -1932,6 +1984,77 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    listenbrainz_status_api_listens_listenbrainz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenBrainzStatusOut"];
+                };
+            };
+        };
+    };
+    connect_listenbrainz_api_listens_listenbrainz_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListenBrainzTokenIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenBrainzStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_listenbrainz_api_listens_listenbrainz_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -3,7 +3,10 @@ import { Link } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useMe } from '../api/hooks'
 import {
+  useConnectListenBrainz,
   useDeleteListens,
+  useDisconnectListenBrainz,
+  useListenBrainz,
   useLastFmKey,
   useLastFmStatus,
   usePlexCapture,
@@ -31,11 +34,10 @@ export function ListeningSettingsPage() {
         <LastFmImportCard isAdmin={isAdmin} />
         <DeleteHistoryCard />
       </div>
-      {isAdmin && (
-        <div>
-          <LastFmKeyCard />
-        </div>
-      )}
+      <div className="space-y-4">
+        <ListenBrainzCard />
+        {isAdmin && <LastFmKeyCard />}
+      </div>
     </div>
   )
 }
@@ -206,6 +208,87 @@ function LastFmImportCard({ isAdmin }: { isAdmin: boolean }) {
           </>
         )}
         {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}
+      </div>
+    </Card>
+  )
+}
+
+function ListenBrainzCard() {
+  const status = useListenBrainz()
+  const connect = useConnectListenBrainz()
+  const disconnect = useDisconnectListenBrainz()
+  const [token, setToken] = useState('')
+  const valid = /^[A-Za-z0-9-]{8,128}$/.test(token.trim())
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (valid) connect.mutate(token.trim(), { onSuccess: () => setToken('') })
+  }
+
+  const s = status.data
+  const tokenForm = (label: string) => (
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
+      <label className="min-w-0 flex-1">
+        <span className="mb-1 block text-sm font-medium">{label}</span>
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          className={`${inputClass} font-mono`}
+        />
+      </label>
+      <Button type="submit" variant="primary" disabled={!valid} busy={connect.isPending}>
+        Connect
+      </Button>
+    </form>
+  )
+
+  return (
+    <Card title="Scrobble to ListenBrainz">
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Sends your new Plex plays to{' '}
+          <a href="https://listenbrainz.org" target="_blank" rel="noreferrer" className="text-accent underline">
+            ListenBrainz
+          </a>{' '}
+          a few minutes after they finish. Plays from before you connect and imported Last.fm
+          scrobbles aren't sent. If another app already scrobbles your Plex plays to ListenBrainz,
+          leave this off to avoid doubles.
+        </p>
+        {status.isPending ? (
+          <Spinner small />
+        ) : status.isError ? (
+          <Notice tone="error">{errorMessage(status.error)}</Notice>
+        ) : !s?.connected ? (
+          <>
+            {tokenForm('User token')}
+            <p className="text-xs text-muted">
+              Find it at{' '}
+              <a href="https://listenbrainz.org/settings/" target="_blank" rel="noreferrer" className="text-accent underline">
+                listenbrainz.org/settings
+              </a>
+              .
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm">
+              Connected as <span className="font-medium">{s.username}</span>. {formatCount(s.sent)}{' '}
+              {s.sent === 1 ? 'play' : 'plays'} sent
+              {s.last_submitted_at && `, the last ${formatRelative(s.last_submitted_at)}`}
+              {s.pending > 0 && `; ${formatCount(s.pending)} waiting`}.
+            </p>
+            {s.error && <Notice tone={s.paused ? 'error' : 'warn'}>{s.error}</Notice>}
+            {s.paused && tokenForm('New user token')}
+            <Button variant="ghost" busy={disconnect.isPending} onClick={() => disconnect.mutate()}>
+              Disconnect
+            </Button>
+          </>
+        )}
+        {connect.isError && <Notice tone="error">{errorMessage(connect.error)}</Notice>}
+        {disconnect.isError && <Notice tone="error">{errorMessage(disconnect.error)}</Notice>}
       </div>
     </Card>
   )

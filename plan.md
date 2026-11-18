@@ -355,7 +355,9 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - Every 5 minutes the worker reads each server's history per music library (oldest first, from 10 minutes before the newest play seen; the first read backfills everything). It waits until the connection's libraries have had a full sync, since names and durations come from the mirror.
   - Only the owner's connection is read when the owner uses Plekstender (account `1` = owner, others by plex.tv ID); plays by accounts that haven't connected the server are skipped. Without the owner, each user's own connection is read and only their own plays are kept. A shared user's token reading history is still unverified on a real server; failures show on Settings → Listening.
   - Each Plex play is stored once (`user_id, server_id, historyKey`). After a capture or a Last.fm import, imported listens of the same song within its duration + 5 minutes of a Plex play are paired one-to-one (nearest first) and marked `duplicate_of`; stats skip them.
-- [ ] ListenBrainz scrobbling: token, outbox, batched submit, retries
+- [x] ListenBrainz scrobbling: token, outbox, batched submit, retries
+  - Settings → Listening: paste the user token (checked with `/1/validate-token`, stored encrypted). Plex plays that start after connecting are sent a few minutes after capture, oldest first, 100 per request (`single` for one, `import` for several), with duration, album and `submission_client: "Plekstender"`. A listens-id watermark tracks what's been handled.
+  - A listen ListenBrainz refuses (400) is found by resending the batch one by one and skipped. Other failures stay pending and are retried every 15 minutes; a rejected token pauses scrobbling until a new token for the same account is pasted (a different account starts over).
 - [ ] Stats pages and per-item listen stats
 - [ ] ListenBrainz import (API + export file), history export, delete all
 

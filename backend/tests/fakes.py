@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
 import time
 from collections import Counter
@@ -472,3 +473,54 @@ class FakeLastFm:
                 }
             },
         )
+
+
+LISTENBRAINZ_URL = "https://api.listenbrainz.org"
+
+
+class FakeListenBrainz:
+    """Mocks ListenBrainz: token validation and listen submission."""
+
+    def __init__(self, router: respx.MockRouter) -> None:
+        self.tokens = {"lb-token-1111": "joakim_lb", "lb-token-2222": "joakim_lb"}
+        self.submissions: list[dict[str, Any]] = []
+        self.refused_tracks: set[str] = set()  # 400 for listens of these tracks
+        self.next_status: list[int] = []  # forced responses for the next submissions
+        router.get(f"{LISTENBRAINZ_URL}/1/validate-token").mock(side_effect=self._validate)
+        router.post(f"{LISTENBRAINZ_URL}/1/submit-listens").mock(side_effect=self._submit)
+
+    def _token(self, request: httpx.Request) -> str:
+        return request.headers.get("Authorization", "").removeprefix("Token ")
+
+    def _validate(self, request: httpx.Request) -> httpx.Response:
+        user = self.tokens.get(self._token(request))
+        if user is None:
+            return httpx.Response(
+                200, json={"code": 200, "message": "Token invalid.", "valid": False}
+            )
+        return httpx.Response(
+            200, json={"code": 200, "message": "Token valid.", "valid": True, "user_name": user}
+        )
+
+    def _submit(self, request: httpx.Request) -> httpx.Response:
+        if self._token(request) not in self.tokens:
+            return httpx.Response(401, json={"code": 401, "error": "Invalid authorization token."})
+        if self.next_status:
+            status = self.next_status.pop(0)
+            return httpx.Response(
+                status,
+                json={"code": status, "error": "forced"},
+                headers={"X-RateLimit-Reset-In": "7"},
+            )
+        body = json.loads(request.content)
+        listens = body["payload"]
+        if body["listen_type"] == "single":
+            assert len(listens) == 1
+        if any(listen["track_metadata"]["track_name"] in self.refused_tracks for listen in listens):
+            return httpx.Response(400, json={"code": 400, "error": "Invalid listen."})
+        self.submissions.append(body)
+        return httpx.Response(200, json={"status": "ok"})
+
+    @property
+    def listens(self) -> list[dict[str, Any]]:
+        return [listen for body in self.submissions for listen in body["payload"]]

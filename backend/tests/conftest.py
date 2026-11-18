@@ -15,7 +15,7 @@ import pytest
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
-    from tests.fakes import FakeLastFm, FakePlex
+    from tests.fakes import FakeLastFm, FakeListenBrainz, FakePlex
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -91,3 +91,10 @@ def lastfm(plex: FakePlex) -> FakeLastFm:
     from tests.fakes import FakeLastFm
 
     return FakeLastFm(plex.router)
+
+
+@pytest.fixture
+def listenbrainz(plex: FakePlex) -> FakeListenBrainz:
+    from tests.fakes import FakeListenBrainz
+
+    return FakeListenBrainz(plex.router)

@@ -16,8 +16,16 @@ from plekstender.auth.sessions import delete_expired_sessions
 from plekstender.config import get_settings
 from plekstender.db import get_sessionmaker
 from plekstender.db.instance import get_library_settings, record_worker_heartbeat
-from plekstender.db.models import ListenImport, PlexServer, SyncRun, UserSectionSync, UserServer
+from plekstender.db.models import (
+    ListenBrainzLink,
+    ListenImport,
+    PlexServer,
+    SyncRun,
+    UserSectionSync,
+    UserServer,
+)
 from plekstender.history.lastfm_import import run_lastfm_import
+from plekstender.history.listenbrainz import submit_pending
 from plekstender.history.plex_capture import capture_plays
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
@@ -207,6 +215,7 @@ async def capture_plex_plays(user_server_id: int) -> None:
         result = await capture_plays(db, http, get_settings(), us)
     if result.added:
         log.info("captured %d Plex plays via connection %s", result.added, user_server_id)
+        await enqueue_listenbrainz(list(result.earliest))
     for section, error in result.errors.items():
         log.warning("play history of section %s via %s: %s", section, user_server_id, error)
 
@@ -225,6 +234,45 @@ async def schedule_play_capture() -> int:
         except AlreadyEnqueued:
             pass
     return queued
+
+
+@app.task(queue="history")
+async def submit_listenbrainz(user_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        result = await submit_pending(db, http, get_settings(), user_id)
+    if result.sent or result.skipped:
+        log.info(
+            "ListenBrainz: sent %d, skipped %d for user %s", result.sent, result.skipped, user_id
+        )
+    if result.error:
+        log.warning("ListenBrainz submission for user %s: %s", user_id, result.error)
+
+
+async def enqueue_listenbrainz(user_ids: list[int] | None = None) -> int:
+    """Queue ListenBrainz submission for these users (default: everyone linked)."""
+    async with get_sessionmaker()() as db:
+        query = select(ListenBrainzLink.user_id).where(ListenBrainzLink.paused.is_(False))
+        if user_ids is not None:
+            query = query.where(ListenBrainzLink.user_id.in_(user_ids))
+        linked = list(await db.scalars(query))
+    for user_id in linked:
+        try:
+            await submit_listenbrainz.configure(
+                lock=f"listenbrainz-user-{user_id}", queueing_lock=f"listenbrainz-{user_id}"
+            ).defer_async(user_id=user_id)
+        except AlreadyEnqueued:
+            pass
+    return len(linked)
+
+
+@app.periodic(cron="*/15 * * * *", periodic_id="retry-listenbrainz")
+@app.task(queue="maintenance", queueing_lock="retry-listenbrainz")
+async def retry_listenbrainz(timestamp: int) -> None:
+    """Every 15 minutes: send anything a failed submission left behind."""
+    await enqueue_listenbrainz()
 
 
 @app.periodic(cron="*/5 * * * *", periodic_id="capture-plays")

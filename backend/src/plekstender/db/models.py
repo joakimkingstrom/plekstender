@@ -402,3 +402,25 @@ class HistoryCursor(Base):
     backfilled_at: Mapped[dt.datetime | None]  # when all older history had been read
     last_run_at: Mapped[dt.datetime | None]
     last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class ListenBrainzLink(TimestampMixin, Base):
+    """A user's ListenBrainz account, for scrobbling their new Plex plays."""
+
+    __tablename__ = "listenbrainz_links"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    # ListenBrainz user token, encrypted (purpose "user.listenbrainz_token").
+    token_enc: Mapped[str] = mapped_column(Text)
+    username: Mapped[str] = mapped_column(String(255))
+    # Only plays that started from this time on are sent.
+    enabled_at: Mapped[dt.datetime]
+    # Listens up to this id have been handled (sent or skipped).
+    submitted_through_id: Mapped[int] = mapped_column(BigInteger, default=0)
+    sent_count: Mapped[int] = mapped_column(default=0)
+    last_submitted_at: Mapped[dt.datetime | None]
+    last_error: Mapped[str | None] = mapped_column(Text)
+    # ListenBrainz rejected the token: nothing is sent until it's replaced.
+    paused: Mapped[bool] = mapped_column(default=False)

@@ -11,6 +11,7 @@ export const listenKeys = {
   list: ['listens', 'list'] as const,
   lastfm: ['listens', 'lastfm'] as const,
   plex: ['listens', 'plex'] as const,
+  listenbrainz: ['listens', 'listenbrainz'] as const,
   lastfmKey: ['admin', 'lastfm'] as const,
 }
 
@@ -112,5 +113,30 @@ export function usePlexCapture() {
     queryFn: () => unwrap(api.GET('/api/listens/plex')),
     // Poll while past plays are still being read in.
     refetchInterval: (query) => (query.state.data?.some((s) => !s.backfilled) ? 15_000 : false),
+  })
+}
+
+export function useListenBrainz() {
+  return useQuery({
+    queryKey: listenKeys.listenbrainz,
+    queryFn: () => unwrap(api.GET('/api/listens/listenbrainz')),
+    // While plays are waiting to be sent, keep the counts fresh.
+    refetchInterval: (query) => (query.state.data?.pending ? 30_000 : false),
+  })
+}
+
+export function useConnectListenBrainz() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (token: string) => unwrap(api.PUT('/api/listens/listenbrainz', { body: { token } })),
+    onSuccess: (data) => qc.setQueryData(listenKeys.listenbrainz, data),
+  })
+}
+
+export function useDisconnectListenBrainz() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => unwrap(api.DELETE('/api/listens/listenbrainz')),
+    onSuccess: () => qc.invalidateQueries({ queryKey: listenKeys.listenbrainz }),
   })
 }

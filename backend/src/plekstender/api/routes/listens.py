@@ -8,12 +8,14 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import delete, func, select
 
-from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
+from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.schemas import (
     DeletedOut,
     LastFmImportIn,
     LastFmStatusOut,
+    ListenBrainzStatusOut,
+    ListenBrainzTokenIn,
     ListenImportOut,
     ListenOut,
     ListenPage,
@@ -22,10 +24,23 @@ from plekstender.api.schemas import (
     PlexCaptureOut,
 )
 from plekstender.db.instance import get_lastfm_api_key
-from plekstender.db.models import HistoryCursor, Listen, ListenImport, User, UserServer
+from plekstender.db.models import (
+    HistoryCursor,
+    Listen,
+    ListenBrainzLink,
+    ListenImport,
+    User,
+    UserServer,
+)
 from plekstender.history.lastfm import LastFmClient, LastFmError
 from plekstender.history.lastfm_import import next_window_start
-from plekstender.worker import ACTIVE, enqueue_listen_import
+from plekstender.history.listenbrainz import (
+    TOKEN_PURPOSE,
+    ListenBrainzClient,
+    ListenBrainzError,
+    count_pending,
+)
+from plekstender.worker import ACTIVE, enqueue_listen_import, enqueue_listenbrainz
 
 router = APIRouter(prefix="/api/listens", tags=["listens"])
 
@@ -115,7 +130,7 @@ async def delete_listens(
     return DeletedOut(deleted=int(getattr(result, "rowcount", 0) or 0))
 
 
-@router.delete("/{listen_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{listen_id:int}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_listen(listen_id: int, db: DbDep, user: UserDep) -> Response:
     result = await db.execute(
         delete(Listen).where(Listen.id == listen_id, Listen.user_id == user.id)
@@ -262,3 +277,90 @@ async def resume_import(import_id: int, db: DbDep, user: UserDep) -> ListenImpor
     await db.commit()
     await enqueue_listen_import(db, job)
     return ListenImportOut.model_validate(job, from_attributes=True)
+
+
+# --- ListenBrainz -----------------------------------------------------------------------
+
+
+async def listenbrainz_out(db: DbDep, link: ListenBrainzLink | None) -> ListenBrainzStatusOut:
+    if link is None:
+        return ListenBrainzStatusOut(
+            connected=False,
+            username=None,
+            enabled_at=None,
+            sent=0,
+            pending=0,
+            last_submitted_at=None,
+            paused=False,
+            error=None,
+        )
+    return ListenBrainzStatusOut(
+        connected=True,
+        username=link.username,
+        enabled_at=link.enabled_at,
+        sent=link.sent_count,
+        pending=await count_pending(db, link),
+        last_submitted_at=link.last_submitted_at,
+        paused=link.paused,
+        error=link.last_error,
+    )
+
+
+@router.get("/listenbrainz", response_model=ListenBrainzStatusOut)
+async def listenbrainz_status(db: DbDep, user: UserDep) -> ListenBrainzStatusOut:
+    return await listenbrainz_out(db, await db.get(ListenBrainzLink, user.id))
+
+
+@router.put(
+    "/listenbrainz",
+    response_model=ListenBrainzStatusOut,
+    dependencies=[rate_limit("listenbrainz-token", limit=10, window=60)],
+)
+async def connect_listenbrainz(
+    body: ListenBrainzTokenIn,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+    cipher: CipherDep,
+) -> ListenBrainzStatusOut:
+    """Start (or resume, with a new token) scrobbling new Plex plays to ListenBrainz."""
+    try:
+        username = await ListenBrainzClient(
+            http, settings.listenbrainz_api_url, body.token
+        ).validate()
+    except ListenBrainzError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    if username is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ListenBrainz didn't accept this token.")
+
+    token_enc = cipher.encrypt(body.token, purpose=TOKEN_PURPOSE)
+    link = await db.get(ListenBrainzLink, user.id)
+    if link is None or link.username.lower() != username.lower():
+        if link is not None:
+            await db.delete(link)
+            await db.flush()
+        link = ListenBrainzLink(
+            user_id=user.id,
+            token_enc=token_enc,
+            username=username,
+            enabled_at=dt.datetime.now(dt.UTC),
+            submitted_through_id=0,
+            sent_count=0,
+            paused=False,
+        )
+        db.add(link)
+    else:  # same account, new token: keep going where it stopped
+        link.token_enc = token_enc
+        link.paused = False
+        link.last_error = None
+    await db.commit()
+    await enqueue_listenbrainz([user.id])
+    return await listenbrainz_out(db, link)
+
+
+@router.delete("/listenbrainz", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_listenbrainz(db: DbDep, user: UserDep) -> Response:
+    await db.execute(delete(ListenBrainzLink).where(ListenBrainzLink.user_id == user.id))
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

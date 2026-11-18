@@ -330,3 +330,18 @@ class PlexCaptureOut(BaseModel):
     backfilled: bool = Field(description="All plays from before connecting have been read.")
     error: str | None
     listens: int
+
+
+class ListenBrainzStatusOut(BaseModel):
+    connected: bool
+    username: str | None
+    enabled_at: dt.datetime | None = Field(description="Plays from this time on are sent.")
+    sent: int
+    pending: int
+    last_submitted_at: dt.datetime | None
+    paused: bool = Field(description="ListenBrainz rejected the token; nothing is sent.")
+    error: str | None
+
+
+class ListenBrainzTokenIn(BaseModel):
+    token: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9-]+$")
