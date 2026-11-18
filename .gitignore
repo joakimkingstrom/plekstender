@@ -5,7 +5,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.env
 backend/openapi.json
 compose.override.yaml
 # Local spike output (may contain server names)
