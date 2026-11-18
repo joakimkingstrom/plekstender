@@ -7,10 +7,15 @@ Read-only by default. Answers:
   3. Which "hubs" Plex offers on an artist page (popular tracks etc.).
   4. Whether the sonically-similar endpoints work (needs Plex Pass + sonic analysis).
   5. (--stream-test, opt-in) Whether downloading part of a track file counts as a play.
+  6. (--history) What Plex's play history exposes for music: fields, filters, how far
+     back it goes and which accounts appear. Run it with the server owner's token, and,
+     if you have one, again with a shared user's token to see what they can read.
+     Only counts, field names and account IDs are printed, never titles or names.
 
 Usage (from backend/):
   PLEX_URL=http://192.168.1.10:32400 PLEX_TOKEN=xxxx uv run python scripts/spikes/plex_probe.py
   ... plex_probe.py --section 3 --json report.json --stream-test
+  ... plex_probe.py --history --json history-report.json
 
 The token is read from the environment and never printed.
 """
@@ -18,6 +23,7 @@ The token is read from the environment and never printed.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
 import sys
@@ -91,6 +97,11 @@ def main() -> int:
         action="store_true",
         help="download the first 512 KB of one track and check whether a play is recorded",
     )
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="only probe play history, accounts and sessions (for listening history)",
+    )
     args = parser.parse_args()
 
     url, token = os.environ.get("PLEX_URL"), os.environ.get("PLEX_TOKEN")
@@ -113,6 +124,10 @@ def main() -> int:
         return 1
     section = args.section or sections[0]["key"]
     print(f"Music libraries: {[(s['key'], s['title']) for s in sections]}; using {section}\n")
+
+    if args.history:
+        report["history"] = history_probe(plex, [s["key"] for s in sections])
+        return write_report(report, args.json)
 
     # 1. popularity fields per type, sorted by popularity where possible
     report["fields"] = {}
@@ -185,11 +200,188 @@ def main() -> int:
     if args.stream_test and samples["track"]:
         report["stream_test"] = stream_test(plex, samples["track"][0]["ratingKey"])
 
-    if args.json:
-        with open(args.json, "w") as fh:
+    return write_report(report, args.json)
+
+
+def write_report(report: dict[str, Any], path: str | None) -> int:
+    if path:
+        with open(path, "w") as fh:
             json.dump(report, fh, indent=2, default=str)
-        print(f"\nReport written to {args.json}")
+        print(f"\nReport written to {path}")
     return 0
+
+
+HISTORY = "/status/sessions/history/all"
+HISTORY_FIELDS = [
+    "historyKey",
+    "ratingKey",
+    "key",
+    "parentKey",
+    "grandparentKey",
+    "librarySectionID",
+    "type",
+    "viewedAt",
+    "accountID",
+    "deviceID",
+    "title",
+    "parentTitle",
+    "grandparentTitle",
+    "originalTitle",
+]
+
+
+def history_page(plex: Plex, size: int, **params: Any) -> tuple[int | None, dict[str, Any]]:
+    """(HTTP status, MediaContainer) without raising, so rejected filters are reported."""
+    resp = plex.http.get(
+        HISTORY,
+        params={"X-Plex-Container-Start": 0, "X-Plex-Container-Size": size, **params},
+    )
+    if resp.status_code != 200:
+        return resp.status_code, {}
+    return 200, resp.json().get("MediaContainer", {})
+
+
+def history_probe(plex: Plex, music_sections: list[str]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    print("Play history (/status/sessions/history/all):")
+
+    status, everything = history_page(plex, 0)
+    out["read_status"] = status
+    if status != 200:
+        print(f"    HTTP {status}: this token can't read play history.")
+        return out
+    out["total_all_types"] = everything.get("totalSize")
+
+    # The newest entries of any type: which types appear, and does `type=` filter at all?
+    status, newest_any = history_page(plex, 300, sort="viewedAt:desc")
+    type_counts: dict[str, int] = {}
+    for e in newest_any.get("Metadata", []):
+        type_counts[str(e.get("type"))] = type_counts.get(str(e.get("type")), 0) + 1
+    out["types_in_newest_300"] = type_counts
+    status, typed = history_page(plex, 0, type=TYPES["track"])
+    out["type_filter"] = {"status": status, "total": typed.get("totalSize")}
+    status, typed = history_page(plex, 0, metadataType=TYPES["track"])
+    out["metadataType_filter"] = {"status": status, "total": typed.get("totalSize")}
+    print(f"    all entries: {out['total_all_types']}; types in newest 300: {type_counts}")
+    print(
+        f"    type=10 filter: {out['type_filter']}; metadataType=10: {out['metadataType_filter']}"
+    )
+
+    # Music plays, per music library section.
+    tracks: list[dict[str, Any]] = []
+    out["per_section"] = {}
+    for key in music_sections:
+        status, page = history_page(plex, 200, sort="viewedAt:desc", librarySectionID=key)
+        entries = page.get("Metadata", [])
+        section_types: dict[str, int] = {}
+        for e in entries:
+            section_types[str(e.get("type"))] = section_types.get(str(e.get("type")), 0) + 1
+        status_old, oldest = history_page(plex, 1, sort="viewedAt:asc", librarySectionID=key)
+        first = (oldest.get("Metadata") or [{}])[0].get("viewedAt")
+        info = {
+            "status": status,
+            "total": page.get("totalSize"),
+            "types_in_newest_200": section_types,
+            "oldest_play": time.strftime("%Y-%m-%d", time.gmtime(int(first))) if first else None,
+            "sorted_asc_status": status_old,
+        }
+        out["per_section"][key] = info
+        print(f"    librarySectionID={key}: {info}")
+        tracks += [e for e in entries if e.get("type") == "track"]
+
+    tracks.sort(key=lambda e: int(e.get("viewedAt", 0)), reverse=True)
+    out["sample_size"] = len(tracks)
+    out["fields"] = {f: f"{sum(1 for e in tracks if f in e)}/{len(tracks)}" for f in HISTORY_FIELDS}
+    out["extra_fields"] = sorted({k for e in tracks for k in e} - set(HISTORY_FIELDS))
+    print(f"    fields on {len(tracks)} newest music plays:")
+    for f, c in out["fields"].items():
+        print(f"        {f:18} {c}")
+    print(f"        other keys: {', '.join(out['extra_fields'])}")
+
+    # Do the plays' items still resolve? (history outlives deleted / re-added tracks)
+    keys = list(dict.fromkeys(e["ratingKey"] for e in tracks if e.get("ratingKey")))[:50]
+    if keys:
+        found = plex.get(f"/library/metadata/{','.join(keys)}").get("Metadata", [])
+        out["rating_keys_resolving"] = f"{len(found)}/{len(keys)}"
+        print(f"    ratingKeys that still exist: {out['rating_keys_resolving']}")
+
+    # viewedAt vs. the track's duration: is viewedAt the start or the end of a play?
+    # Gaps between consecutive plays on the same account and device hint at it.
+    gaps = []
+    for a, b in itertools.pairwise(tracks):
+        if (a.get("accountID"), a.get("deviceID")) == (b.get("accountID"), b.get("deviceID")):
+            gaps.append(int(a["viewedAt"]) - int(b["viewedAt"]))
+    if gaps:
+        gaps.sort()
+        out["consecutive_play_gap_seconds"] = {
+            "median": gaps[len(gaps) // 2],
+            "p10": gaps[len(gaps) // 10],
+            "p90": gaps[len(gaps) * 9 // 10],
+        }
+        print(f"    seconds between consecutive plays: {out['consecutive_play_gap_seconds']}")
+
+    if tracks:
+        middle = len(tracks) // 2
+        cutoff = int(tracks[middle]["viewedAt"])
+        status, since = history_page(
+            plex, 0, librarySectionID=music_sections[0], **{"viewedAt>": cutoff}
+        )
+        out["viewedAt_filter"] = {
+            "status": status,
+            "total": since.get("totalSize"),
+            "unfiltered_section_total": out["per_section"][music_sections[0]]["total"],
+        }
+        print(f"    viewedAt> filter on section {music_sections[0]}: {out['viewedAt_filter']}")
+        # Does this server need the music library's plays to be re-requested per account?
+        status, mine = history_page(plex, 0, librarySectionID=music_sections[0], accountID=1)
+        out["accountID_filter"] = {"status": status, "total": mine.get("totalSize")}
+        print(f"    accountID=1 filter: {out['accountID_filter']}")
+
+    # Which accounts play music, and how their IDs look (IDs only, no names).
+    per_account: dict[str, int] = {}
+    for e in tracks:
+        per_account[str(e.get("accountID"))] = per_account.get(str(e.get("accountID")), 0) + 1
+    out["plays_per_account_in_sample"] = per_account
+    resp = plex.http.get("/accounts")
+    if resp.status_code == 200:
+        accounts = resp.json().get("MediaContainer", {}).get("Account", [])
+        out["server_account_ids"] = sorted(int(a["id"]) for a in accounts if "id" in a)
+    else:
+        out["server_account_ids"] = f"HTTP {resp.status_code}"
+    print(f"    plays per accountID in sample: {per_account}")
+    print(f"    accounts on server (/accounts): {out['server_account_ids']}")
+
+    me = httpx.get(
+        "https://plex.tv/api/v2/user",
+        headers={**plex.http.headers, "Accept": "application/json"},
+        timeout=30,
+    )
+    if me.status_code == 200:
+        plex_tv_id = me.json().get("id")
+        out["token_owner_plex_tv_id_in_accounts"] = plex_tv_id in (
+            out["server_account_ids"] if isinstance(out["server_account_ids"], list) else []
+        )
+        print(
+            f"    token owner's plex.tv ID listed in /accounts: "
+            f"{out['token_owner_plex_tv_id_in_accounts']} (the owner is usually account 1)"
+        )
+
+    # Now playing: what a "playing now" scrobble could use.
+    resp = plex.http.get("/status/sessions")
+    if resp.status_code == 200:
+        sessions = resp.json().get("MediaContainer", {}).get("Metadata", [])
+        music = [s for s in sessions if s.get("type") == "track"]
+        out["now_playing"] = {
+            "status": 200,
+            "music_sessions": len(music),
+            "keys": sorted({k for s in music for k in s}),
+            "user_keys": sorted({k for s in music for k in s.get("User", {})}),
+            "player_keys": sorted({k for s in music for k in s.get("Player", {})}),
+        }
+    else:
+        out["now_playing"] = {"status": resp.status_code}
+    print(f"    now playing (/status/sessions): {out['now_playing']}")
+    return out
 
 
 def stream_test(plex: Plex, rating_key: str) -> dict[str, Any]:
