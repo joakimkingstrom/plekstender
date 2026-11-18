@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -127,3 +127,117 @@ class HealthOut(BaseModel):
     version: str
     database: bool
     worker: WorkerHealth
+
+
+# --- library sync -----------------------------------------------------------------------
+
+
+class SyncRunOut(BaseModel):
+    id: int
+    kind: Literal["full", "incremental"]
+    trigger: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    created_at: dt.datetime
+    started_at: dt.datetime | None
+    finished_at: dt.datetime | None
+    progress: dict[str, Any]
+    stats: dict[str, Any]
+    error: str | None
+
+
+class LibraryCounts(BaseModel):
+    artists: int
+    albums: int
+    tracks: int
+    rated_tracks: int
+    plays: int
+
+
+class SyncStatusOut(BaseModel):
+    active: SyncRunOut | None
+    last: SyncRunOut | None
+    last_full_sync_at: dt.datetime | None
+    last_sync_at: dt.datetime | None
+    counts: LibraryCounts
+
+
+class SyncIn(BaseModel):
+    kind: Literal["full", "incremental"] = "incremental"
+
+
+# --- library browsing -------------------------------------------------------------------
+
+
+class TagOut(BaseModel):
+    id: int
+    kind: str
+    name: str
+    count: int | None = None
+
+
+class ArtistSummary(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+    popularity: int | None
+    user_rating: float | None
+    plays: int
+    album_count: int
+
+
+class ArtistPage(BaseModel):
+    items: list[ArtistSummary]
+    total: int
+    offset: int
+    limit: int
+
+
+class AlbumSummary(BaseModel):
+    rating_key: int
+    title: str
+    year: int | None
+    thumb: str | None
+    popularity: int | None
+    critic_rating: float | None
+    track_count: int | None
+    user_rating: float | None
+    plays: int
+
+
+class TrackOut(BaseModel):
+    rating_key: int
+    title: str
+    original_title: str | None
+    disc: int | None
+    number: int | None
+    duration_ms: int | None
+    popularity: int | None
+    user_rating: float | None
+    plays: int
+    album_rating_key: int | None
+    album_title: str | None
+    album_thumb: str | None
+
+
+class SimilarArtistOut(BaseModel):
+    name: str
+    rating_key: int | None  # set when the artist is in your library
+
+
+class ArtistDetail(ArtistSummary):
+    summary: str | None
+    art: str | None
+    tags: list[TagOut]
+    similar: list[SimilarArtistOut]
+    albums: list[AlbumSummary]
+    top_tracks: list[TrackOut]
+
+
+class AlbumDetail(AlbumSummary):
+    summary: str | None
+    released: dt.date | None
+    studio: str | None
+    artist_rating_key: int | None
+    artist_title: str | None
+    tags: list[TagOut]
+    tracks: list[TrackOut]

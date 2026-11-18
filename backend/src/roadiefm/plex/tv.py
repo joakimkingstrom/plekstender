@@ -17,6 +17,10 @@ TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 class PlexError(Exception):
     """Plex returned an error or an unexpected response."""
 
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
 
 class PlexAuthError(PlexError):
     """The token was rejected (401)."""
@@ -83,7 +87,7 @@ def _check(resp: httpx.Response) -> Any:
     if resp.status_code == 401:
         raise PlexAuthError("Plex rejected the token")
     if resp.is_error:
-        raise PlexError(f"plex.tv returned HTTP {resp.status_code}")
+        raise PlexError(f"plex.tv returned HTTP {resp.status_code}", resp.status_code)
     try:
         return resp.json()
     except ValueError as exc:

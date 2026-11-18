@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useHealth, useMe, useServers } from '../api/hooks'
+import { SyncPanel } from '../components/library'
 import { Badge, Card, Notice, PageTitle, Spinner, StatusDot } from '../components/ui'
 import { ServersPage } from './ServersPage'
 
@@ -48,6 +49,18 @@ export function HomePage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
+        {servers.data
+          .filter((s) => s.music_section_keys.length > 0)
+          .map((s) => (
+            <Card
+              key={s.id}
+              title={servers.data.length > 1 ? `Library · ${s.name}` : 'Library'}
+              action={<Link to="/library" className="text-sm text-accent">Browse</Link>}
+              className="md:col-span-2"
+            >
+              <SyncPanel serverId={s.id} />
+            </Card>
+          ))}
         <Card title="Servers" action={<Link to="/settings" className="text-sm text-accent">Manage</Link>}>
           <ul className="space-y-2">
             {servers.data.map((s) => (

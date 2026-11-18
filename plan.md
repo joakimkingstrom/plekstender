@@ -92,7 +92,7 @@ Frontend libraries: React Router, TanStack Query, Tailwind v4, `openapi-fetch` w
 Almost every feature (weighted rating queues, "top 10 artists in genre X", popularity percentiles, similar-artist expansion, metadata backup) is a database query once the library is mirrored locally, and slow or impossible against the Plex API. So **library sync is built first** and the metadata-backup feature is a by-product.
 
 - Full sync: walk the music section(s) for artists, albums and tracks, including genres, moods, styles, popularity, MBIDs and similar artists.
-- Incremental sync: periodic job using `updatedAt`/`addedAt` greater than the last sync; manual "sync now" button.
+- Incremental sync: periodic job using `updatedAt` (metadata) and `lastViewedAt` / `lastRatedAt` (personal state) greater than the last sync; manual "sync now" button.
 - Per-user state (ratings, play counts, last played) is per Plex account. It is synced with *each user's* token into a separate table.
 - Ratings written in the app go to Plex first, then the mirror is updated (Plex stays the source of truth).
 
@@ -255,7 +255,7 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
 - [x] Plex PIN sign-in (popup, with full-page redirect fallback for mobile), server picker, connection picker, encrypted token storage, sessions
 - [x] Instance access modes + first-user admin (optionally pinned with `INITIAL_ADMIN`), admin page
 - [x] CI: lint (ruff, oxlint), type check (mypy strict, tsc), tests (pytest against Postgres, vitest), API-types drift check, image build
-- [ ] Verify the Docker image and compose stack on a Docker host (not available on the machine Phase 0 was built on)
+- [x] Verify the Docker image and compose stack on a Docker host (docker-02: image builds, db-init migrates, web app and worker healthy)
 - [ ] Spikes (scripts in `backend/scripts/spikes/`, to be run against a real server):
   - [x] What popularity fields Plex exposes on tracks / albums / artists (`plex_probe.py`)
   - [x] Similar and sonically-similar endpoints (`plex_probe.py`)
@@ -279,10 +279,22 @@ Port `logic.py` mostly as-is (transform pipeline, text logo generation, font dow
 | Image search: quality | For well-known artists (Radiohead, The Beatles) the top results are real logos from logo sites, often large PNGs. For smaller artists (Nathaniel Rateliff, St. Paul & The Broken Bones) real logos are mixed with merch (TeePublic, Redbubble, Etsy, Amazon), tour posters and ticket-site banners. | Search is a source of **candidates to pick from**, never used by the bulk "apply automatically" action. Rank candidates: PNG/SVG and "logo" in the title first; merch and ticket sites last. fanart.tv stays the first choice. |
 
 ### Phase 1 — Library mirror
-- [ ] Full + incremental sync jobs with progress UI
-- [ ] Per-user state sync
-- [ ] Basic library browser (needed by later features anyway)
-- [ ] JSON/CSV export
+- [x] Full + incremental sync jobs with progress UI
+- [x] Per-user state sync
+- [x] Basic library browser (needed by later features anyway)
+- [x] JSON/CSV export
+- [ ] Check the popularity ranking and a first full sync against the real library
+
+#### How Phase 1 works
+
+- **Shared metadata, personal visibility.** Artists, albums, tracks, tags and similar artists are stored once per server. Each user's own sync records `user_item_state` rows for every item *their* token can list, and every library query joins on them. A shared user restricted to part of a library only sees that part, even if the owner's sync stored the rest.
+- **Who may delete.** Only a server owner's full sync removes metadata for items that are gone; other users' full syncs only drop their own visibility rows.
+- **When syncs run.** A full sync is queued when a library is first chosen, then incremental syncs run every 30 minutes and a full one weekly (Sunday 04:30), plus "Sync changes" / "Full resync" buttons. Syncs for the same server never overlap.
+- **Incremental sync** fetches items with `updatedAt`, `lastViewedAt` or `lastRatedAt` after the previous sync (minus 5 minutes), and re-reads all personal state if a server rejects those filters. Deletions are only detected by full syncs.
+- **Details** (genres, moods, styles, countries, similar artists) come from batched `/library/metadata/{k1,k2,...}` requests, 50 items each, falling back to one item per request.
+- **Popularity:** album = sum of its top 3 tracks; artist = sum of its top 10 songs, with releases of the same song (normalised title) counted once.
+- **Exports** stream straight from the database: `tracks.csv` and `library.json` (lossless, with tags, similar artists and personal state).
+- **Benchmark** against a generated 101k-track library on a laptop: full sync ~56 s and ~400 Plex requests; incremental sync 0.2 s and ~10 requests.
 
 ### Phase 2 — Ratings
 - [ ] Queue builders (3 pools × 3 strategies) with tests for distribution and artist interleaving
@@ -321,6 +333,6 @@ Plex has no supported API to write play history with historical timestamps, so t
 - Should skip plays that are already in Plex (overlap since Plexamp was adopted), using timestamps.
 
 ## Open questions
-- Exact formula for derived album and artist popularity (see the Phase 0 spike results); decide in Phase 1 by comparing candidates against a few known artists.
+- Does the derived popularity (top 3 tracks per album, top 10 songs per artist) rank artists sensibly on the real library? Sort the Library page by Popularity and adjust `ALBUM_TOP_N` / `ARTIST_TOP_N` in `backend/src/roadiefm/sync/popularity.py` if not.
 - Should playlists be shareable between users of the same server (e.g. "copy definition")?
 - Licence of shared logo packs: fanart.tv images come with their own terms; the export should keep `source` per image so people can decide what they share.

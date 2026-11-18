@@ -10,6 +10,7 @@ import { Layout } from './components/Layout'
 import './index.css'
 import { AdminPage } from './pages/AdminPage'
 import { ComingSoonPage, HomePage, NotFoundPage } from './pages/HomePage'
+import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 
@@ -31,9 +32,12 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'library', element: <LibraryPage /> },
+      { path: 'library/artists/:key', element: <ArtistPage /> },
+      { path: 'library/albums/:key', element: <AlbumPage /> },
       {
         path: 'rate',
-        element: <ComingSoonPage title="Rate" text="Rating arrives in a later phase. It needs the library sync first." />,
+        element: <ComingSoonPage title="Rate" text="Rating arrives in the next phase." />,
       },
       {
         path: 'artwork',

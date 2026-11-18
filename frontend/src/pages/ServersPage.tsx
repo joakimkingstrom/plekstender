@@ -8,6 +8,7 @@ import {
   useSelectSections,
   useServers,
 } from '../api/hooks'
+import { SyncPanel } from '../components/library'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 
 const KIND_LABEL: Record<string, string> = {
@@ -90,6 +91,22 @@ function ConnectedServer({ server }: { server: Schemas['ServerOut'] }) {
       }
     >
       <SectionPicker server={server} />
+      {server.music_section_keys.length > 0 && (
+        <div className="mt-5 space-y-4 border-t border-border pt-4">
+          <h3 className="text-sm font-semibold">Library sync</h3>
+          <SyncPanel serverId={server.id} />
+          <div className="text-sm">
+            <span className="text-muted">Export your library with your ratings and plays: </span>
+            <a className="text-accent underline" href={`/api/servers/${server.id}/export/tracks.csv`} download>
+              tracks (CSV)
+            </a>
+            <span className="text-muted"> · </span>
+            <a className="text-accent underline" href={`/api/servers/${server.id}/export/library.json`} download>
+              full library (JSON)
+            </a>
+          </div>
+        </div>
+      )}
       {connect.isError && (
         <div className="mt-3">
           <Notice tone="error">{errorMessage(connect.error)}</Notice>

@@ -7,9 +7,15 @@ TEST_DATABASE_URL (CI provides one); its public schema is wiped at the start of 
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from tests.fakes import FakePlex
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -51,7 +57,30 @@ async def clean_db(migrated_db: None) -> AsyncIterator[None]:
 
     async with get_sessionmaker()() as db:
         await db.execute(
-            text("TRUNCATE users, sessions, plex_servers, user_servers, instance_settings CASCADE")
+            text(
+                "TRUNCATE users, sessions, plex_servers, user_servers, instance_settings,"
+                " procrastinate_jobs CASCADE"
+            )
         )
         await db.commit()
     yield
+
+
+@pytest.fixture
+async def app(clean_db: None) -> AsyncIterator[FastAPI]:
+    from roadiefm.api.app import create_app
+    from roadiefm.config import get_settings
+
+    application = create_app(get_settings())
+    async with application.router.lifespan_context(application):
+        yield application
+
+
+@pytest.fixture
+def plex() -> Iterator[FakePlex]:
+    import respx
+
+    from tests.fakes import FakePlex
+
+    with respx.mock(assert_all_called=False) as router:
+        yield FakePlex(router)

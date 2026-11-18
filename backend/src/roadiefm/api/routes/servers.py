@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from roadiefm.api.deps import CipherDep, DbDep, HttpDep, PlexTvDep, SettingsDep, UserDep
 from roadiefm.api.ratelimit import rate_limit
@@ -23,10 +23,11 @@ from roadiefm.api.schemas import (
 )
 from roadiefm.config import AccessMode
 from roadiefm.db.instance import get_access_settings
-from roadiefm.db.models import PlexServer, User, UserServer
+from roadiefm.db.models import PlexServer, SyncRun, User, UserItemState, UserServer
 from roadiefm.plex.server import PlexServerClient, choose_connection
 from roadiefm.plex.tv import PlexAuthError, PlexError
 from roadiefm.security.crypto import DecryptionError, TokenCipher
+from roadiefm.worker import enqueue_sync
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/servers", tags=["servers"])
@@ -53,7 +54,7 @@ def user_plex_token(user: User, cipher: TokenCipher) -> str:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Please sign in again") from exc
 
 
-async def _get_user_server(db: DbDep, user: User, server_id: int) -> UserServer:
+async def get_user_server(db: DbDep, user: User, server_id: int) -> UserServer:
     us = await db.scalar(
         select(UserServer).where(UserServer.id == server_id, UserServer.user_id == user.id)
     )
@@ -199,7 +200,15 @@ async def connect_server(
 
     await db.commit()
     log.info("user %s connected server %s via %s", user.id, server.id, chosen.kind)
+    if us.music_section_keys and not await _has_synced(db, us):
+        await enqueue_sync(db, us, "full", "setup")
     return ConnectServerOut(server=server_out(us), probes=probe_out)
+
+
+async def _has_synced(db: DbDep, us: UserServer) -> bool:
+    return (
+        await db.scalar(select(SyncRun.id).where(SyncRun.user_server_id == us.id).limit(1))
+    ) is not None
 
 
 @router.get("/{server_id}/sections", response_model=list[SectionOut])
@@ -211,7 +220,7 @@ async def list_sections(
     settings: SettingsDep,
     http: HttpDep,
 ) -> list[SectionOut]:
-    us = await _get_user_server(db, user, server_id)
+    us = await get_user_server(db, user, server_id)
     client = server_client(us, cipher, settings, http)
     try:
         sections = await client.music_sections()
@@ -233,7 +242,7 @@ async def select_sections(
     settings: SettingsDep,
     http: HttpDep,
 ) -> ServerOut:
-    us = await _get_user_server(db, user, server_id)
+    us = await get_user_server(db, user, server_id)
     client = server_client(us, cipher, settings, http)
     try:
         valid = {s.key for s in await client.music_sections()}
@@ -242,13 +251,23 @@ async def select_sections(
     unknown = set(body.keys) - valid
     if unknown:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown music library")
+    previous = set(us.music_section_keys)
     us.music_section_keys = sorted(set(body.keys), key=body.keys.index)
     await db.commit()
+    if us.music_section_keys and set(us.music_section_keys) != previous:
+        # New libraries need a full sync before they show up.
+        await enqueue_sync(db, us, "full", "setup")
     return server_out(us)
 
 
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def disconnect_server(server_id: int, db: DbDep, user: UserDep) -> None:
-    us = await _get_user_server(db, user, server_id)
+    us = await get_user_server(db, user, server_id)
+    # Personal state is keyed by server, not connection: remove it explicitly.
+    await db.execute(
+        delete(UserItemState).where(
+            UserItemState.user_id == user.id, UserItemState.server_id == us.server_id
+        )
+    )
     await db.delete(us)
     await db.commit()

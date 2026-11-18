@@ -58,17 +58,38 @@ class PlexServerClient:
         self._base = base_uri.rstrip("/")
         self._token = token
 
-    async def _get(self, path: str, *, request_timeout: httpx.Timeout = API_TIMEOUT) -> Any:
+    async def _request(
+        self,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        request_timeout: httpx.Timeout = API_TIMEOUT,
+        accept_json: bool = True,
+    ) -> httpx.Response:
+        headers = plex_headers(self._settings, self._token)
+        if not accept_json:
+            headers["Accept"] = "image/*"
         resp = await self._http.get(
             f"{self._base}{path}",
-            headers=plex_headers(self._settings, self._token),
+            params=params,
+            headers=headers,
             timeout=request_timeout,
             follow_redirects=False,
         )
         if resp.status_code == 401:
-            raise PlexAuthError("server rejected the token")
+            raise PlexAuthError("server rejected the token", 401)
         if resp.is_error or resp.is_redirect:
-            raise PlexError(f"server returned HTTP {resp.status_code}")
+            raise PlexError(f"server returned HTTP {resp.status_code}", resp.status_code)
+        return resp
+
+    async def _get(
+        self,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        request_timeout: httpx.Timeout = API_TIMEOUT,
+    ) -> Any:
+        resp = await self._request(path, params=params, request_timeout=request_timeout)
         try:
             return resp.json()
         except ValueError as exc:
@@ -88,6 +109,61 @@ class PlexServerClient:
 
     async def music_sections(self) -> list[LibrarySection]:
         return [s for s in await self.library_sections() if s.type == "artist"]
+
+    async def list_items(
+        self,
+        section_key: str,
+        plex_type: int,
+        *,
+        start: int,
+        size: int,
+        filters: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """One page of a library listing. Returns (items, total matching items).
+
+        `filters` uses Plex's syntax, e.g. {"updatedAt>>": 1700000000} for "updated after".
+        Sorted by addedAt so new items can't shift earlier pages during a sync.
+        """
+        params: dict[str, Any] = {
+            "type": plex_type,
+            "includeGuids": 1,
+            "sort": "addedAt:asc",
+            "X-Plex-Container-Start": start,
+            "X-Plex-Container-Size": size,
+            **(filters or {}),
+        }
+        data = await self._get(f"/library/sections/{section_key}/all", params=params)
+        mc = data.get("MediaContainer", {})
+        items = mc.get("Metadata", [])
+        total = int(mc.get("totalSize", mc.get("size", len(items))))
+        return items, total
+
+    async def metadata(self, rating_keys: list[int]) -> list[dict[str, Any]]:
+        """Full metadata (incl. Genre/Mood/Style/Similar) for several items in one request."""
+        if not rating_keys:
+            return []
+        keys = ",".join(str(k) for k in rating_keys)
+        data = await self._get(f"/library/metadata/{keys}", params={"includeGuids": 1})
+        items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Metadata", [])
+        return items
+
+    async def photo(self, path: str, size: int) -> tuple[bytes, str]:
+        """A resized image from Plex's photo transcoder. Returns (bytes, content type)."""
+        resp = await self._request(
+            "/photo/:/transcode",
+            params={
+                "url": path,
+                "width": size,
+                "height": size,
+                "minSize": 1,
+                "upscale": 1,
+            },
+            accept_json=False,
+        )
+        content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
+        if not content_type.startswith("image/"):
+            raise PlexError("photo transcoder returned a non-image response")
+        return resp.content, content_type
 
 
 class ProbeResult(BaseModel):

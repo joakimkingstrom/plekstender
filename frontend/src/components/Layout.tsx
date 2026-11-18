@@ -5,6 +5,7 @@ import { Avatar } from './ui'
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
+  { to: '/library', label: 'Library' },
   { to: '/rate', label: 'Rate' },
   { to: '/artwork', label: 'Artwork' },
   { to: '/playlists', label: 'Playlists' },
@@ -107,7 +108,7 @@ export function Layout() {
 
       {/* Mobile bottom navigation */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
         aria-label="Main"
       >
         {NAV.map((item) => (
@@ -116,7 +117,7 @@ export function Layout() {
             to={item.to}
             end={item.end}
             className={({ isActive }) =>
-              `py-3 text-center text-xs font-medium ${isActive ? 'text-accent' : 'text-muted'}`
+              `py-3 text-center text-[11px] font-medium ${isActive ? 'text-accent' : 'text-muted'}`
             }
           >
             {item.label}

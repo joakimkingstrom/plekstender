@@ -12,9 +12,10 @@ from fastapi.responses import FileResponse
 
 from roadiefm import __version__
 from roadiefm.api.middleware import CSRFMiddleware, RateLimiter, SecurityHeadersMiddleware
-from roadiefm.api.routes import admin, auth, health, servers
+from roadiefm.api.routes import admin, auth, export, health, library, servers, sync
 from roadiefm.config import Settings, get_settings
 from roadiefm.db import get_engine
+from roadiefm.worker import app as jobs
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -22,10 +23,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with httpx.AsyncClient(
-            headers={"User-Agent": f"RoadieFM/{__version__}"},
-            limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
-        ) as http:
+        async with (
+            httpx.AsyncClient(
+                headers={"User-Agent": f"RoadieFM/{__version__}"},
+                limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+            ) as http,
+            jobs.open_async(),
+        ):
             app.state.http = http
             yield
         await get_engine().dispose()
@@ -42,7 +46,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(CSRFMiddleware, allowed_origin=settings.app_origin)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    for module in (health, auth, servers, admin):
+    for module in (health, auth, servers, sync, library, export, admin):
         app.include_router(module.router)
 
     if settings.static_dir:

@@ -150,3 +150,56 @@ def test_connection_priority() -> None:
     ]
     ordered = [c.uri for c in sorted(conns, key=connection_priority)]
     assert ordered == ["local", "local-http", "local-v6", "remote", "relay"]
+
+
+# --- sync parsing -------------------------------------------------------------------
+
+from roadiefm.sync.parse import normalise_title, tags_of, track_row  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Karma Police", "karma police"),
+        ("Karma Police (Remastered)", "karma police"),
+        ("Karma Police - 2009 Remaster", "karma police"),
+        ("Let It Be (Remastered 2009) [Mono Version]", "let it be"),
+        ("Don\u2019t Stop Me Now", "don't stop me now"),  # curly apostrophe
+        ("Café del Mar", "cafe del mar"),
+        ("(I Can't Get No) Satisfaction", "(i can't get no) satisfaction"),
+        ("Song (Live at Wembley)", "song (live at wembley)"),
+        ("Rock & Roll", "rock and roll"),
+    ],
+)
+def test_normalise_title(title: str, expected: str) -> None:
+    assert normalise_title(title) == expected
+
+
+def test_track_row_and_tags() -> None:
+    import datetime as dt
+
+    seen = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+    row = track_row(
+        {
+            "ratingKey": "42",
+            "title": "Song (2011 Remaster)",
+            "parentRatingKey": "7",
+            "grandparentRatingKey": "3",
+            "ratingCount": "1234",
+            "addedAt": 1_700_000_000,
+            "Guid": [{"id": "plex://track/x"}, {"id": "mbid://abc"}],
+            "Media": [{"Part": [{"key": "/library/parts/1/2/file.mp3", "file": "/m/a.mp3"}]}],
+        },
+        server_id=1,
+        section_key="3",
+        seen=seen,
+    )
+    assert row["rating_key"] == 42
+    assert row["popularity"] == 1234
+    assert row["mbid"] == "abc"
+    assert row["title_norm"] == "song"
+    assert row["file_path"] == "/m/a.mp3"
+    assert row["added_at"] == dt.datetime.fromtimestamp(1_700_000_000, dt.UTC)
+    assert tags_of({"Genre": [{"tag": "Rock"}, {"tag": "Rock"}], "Mood": [{"tag": " "}]}) == [
+        ("genre", "Rock")
+    ]

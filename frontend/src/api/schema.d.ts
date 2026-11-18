@@ -162,6 +162,151 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sync Status */
+        get: operations["sync_status_api_servers__server_id__sync_get"];
+        put?: never;
+        /** Start Sync */
+        post: operations["start_sync_api_servers__server_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/artists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Artists */
+        get: operations["list_artists_api_servers__server_id__library_artists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tags
+         * @description Tags used by artists in your libraries, most common first.
+         */
+        get: operations["list_tags_api_servers__server_id__library_tags_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/artists/{rating_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artist */
+        get: operations["get_artist_api_servers__server_id__library_artists__rating_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/albums/{rating_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Album */
+        get: operations["get_album_api_servers__server_id__library_albums__rating_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Image
+         * @description Artwork from Plex, resized by Plex, fetched with the user's own token.
+         *
+         *     Only Plex library artwork paths are accepted; this is not a general-purpose proxy.
+         */
+        get: operations["image_api_servers__server_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/export/tracks.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Tracks Csv */
+        get: operations["export_tracks_csv_api_servers__server_id__export_tracks_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/export/library.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Library Json */
+        get: operations["export_library_json_api_servers__server_id__export_library_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/access": {
         parameters: {
             query?: never;
@@ -321,6 +466,119 @@ export interface components {
             /** Server Count */
             server_count: number;
         };
+        /** AlbumDetail */
+        AlbumDetail: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Popularity */
+            popularity: number | null;
+            /** Critic Rating */
+            critic_rating: number | null;
+            /** Track Count */
+            track_count: number | null;
+            /** User Rating */
+            user_rating: number | null;
+            /** Plays */
+            plays: number;
+            /** Summary */
+            summary: string | null;
+            /** Released */
+            released: string | null;
+            /** Studio */
+            studio: string | null;
+            /** Artist Rating Key */
+            artist_rating_key: number | null;
+            /** Artist Title */
+            artist_title: string | null;
+            /** Tags */
+            tags: components["schemas"]["TagOut"][];
+            /** Tracks */
+            tracks: components["schemas"]["TrackOut"][];
+        };
+        /** AlbumSummary */
+        AlbumSummary: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Popularity */
+            popularity: number | null;
+            /** Critic Rating */
+            critic_rating: number | null;
+            /** Track Count */
+            track_count: number | null;
+            /** User Rating */
+            user_rating: number | null;
+            /** Plays */
+            plays: number;
+        };
+        /** ArtistDetail */
+        ArtistDetail: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+            /** Popularity */
+            popularity: number | null;
+            /** User Rating */
+            user_rating: number | null;
+            /** Plays */
+            plays: number;
+            /** Album Count */
+            album_count: number;
+            /** Summary */
+            summary: string | null;
+            /** Art */
+            art: string | null;
+            /** Tags */
+            tags: components["schemas"]["TagOut"][];
+            /** Similar */
+            similar: components["schemas"]["SimilarArtistOut"][];
+            /** Albums */
+            albums: components["schemas"]["AlbumSummary"][];
+            /** Top Tracks */
+            top_tracks: components["schemas"]["TrackOut"][];
+        };
+        /** ArtistPage */
+        ArtistPage: {
+            /** Items */
+            items: components["schemas"]["ArtistSummary"][];
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+        };
+        /** ArtistSummary */
+        ArtistSummary: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+            /** Popularity */
+            popularity: number | null;
+            /** User Rating */
+            user_rating: number | null;
+            /** Plays */
+            plays: number;
+            /** Album Count */
+            album_count: number;
+        };
         /**
          * AvailableServerOut
          * @description A server the user can see on plex.tv.
@@ -369,6 +627,19 @@ export interface components {
             /** Database */
             database: boolean;
             worker: components["schemas"]["WorkerHealth"];
+        };
+        /** LibraryCounts */
+        LibraryCounts: {
+            /** Artists */
+            artists: number;
+            /** Albums */
+            albums: number;
+            /** Tracks */
+            tracks: number;
+            /** Rated Tracks */
+            rated_tracks: number;
+            /** Plays */
+            plays: number;
         };
         /** PinCheckOut */
         PinCheckOut: {
@@ -432,6 +703,106 @@ export interface components {
             music_section_keys: string[];
             /** Last Connected At */
             last_connected_at: string | null;
+        };
+        /** SimilarArtistOut */
+        SimilarArtistOut: {
+            /** Name */
+            name: string;
+            /** Rating Key */
+            rating_key: number | null;
+        };
+        /** SyncIn */
+        SyncIn: {
+            /**
+             * Kind
+             * @default incremental
+             * @enum {string}
+             */
+            kind: "full" | "incremental";
+        };
+        /** SyncRunOut */
+        SyncRunOut: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "full" | "incremental";
+            /** Trigger */
+            trigger: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Progress */
+            progress: {
+                [key: string]: unknown;
+            };
+            /** Stats */
+            stats: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+        };
+        /** SyncStatusOut */
+        SyncStatusOut: {
+            active: components["schemas"]["SyncRunOut"] | null;
+            last: components["schemas"]["SyncRunOut"] | null;
+            /** Last Full Sync At */
+            last_full_sync_at: string | null;
+            /** Last Sync At */
+            last_sync_at: string | null;
+            counts: components["schemas"]["LibraryCounts"];
+        };
+        /** TagOut */
+        TagOut: {
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Count */
+            count?: number | null;
+        };
+        /** TrackOut */
+        TrackOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Original Title */
+            original_title: string | null;
+            /** Disc */
+            disc: number | null;
+            /** Number */
+            number: number | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Popularity */
+            popularity: number | null;
+            /** User Rating */
+            user_rating: number | null;
+            /** Plays */
+            plays: number;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Album Title */
+            album_title: string | null;
+            /** Album Thumb */
+            album_thumb: string | null;
         };
         /** UserOut */
         UserOut: {
@@ -725,6 +1096,299 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_status_api_servers__server_id__sync_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_sync_api_servers__server_id__sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_artists_api_servers__server_id__library_artists_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                tag?: number | null;
+                sort?: "title" | "popularity" | "plays" | "rating" | "added";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tags_api_servers__server_id__library_tags_get: {
+        parameters: {
+            query?: {
+                kind?: "genre" | "mood" | "style" | "country";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artist_api_servers__server_id__library_artists__rating_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_album_api_servers__server_id__library_albums__rating_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    image_api_servers__server_id__image_get: {
+        parameters: {
+            query: {
+                path: string;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_tracks_csv_api_servers__server_id__export_tracks_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_library_json_api_servers__server_id__export_library_json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
