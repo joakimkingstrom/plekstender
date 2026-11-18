@@ -10,3 +10,4 @@ backend/openapi.json
 compose.override.yaml
 # Local spike output (may contain server names)
 backend/*report*.json
+.todo.md
