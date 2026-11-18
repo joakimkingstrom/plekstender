@@ -384,7 +384,7 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - Applying uploads the 1000 px JPEG to Plex (`POST /library/metadata/{id}/posters`), records source / settings / hash in `artist_artwork`, and refreshes the mirror's thumb. Artwork endpoints are owner-only.
 - [x] Editor UI and status tracking
   - Artwork page (server owners): artist list with search and To do / Custom / Done filters; per artist, candidates from fanart.tv, Plex, Search, Upload or Text, adjustments (fit or zoom, contrast, invert, greyscale, all white, tint, background), a live preview next to the current image, and "Save to Plex". "Edit current" re-works the image Plex has. fanart.tv key on Settings → Library.
-- [ ] Bulk apply job (most-liked fanart.tv logo for a selection of artists)
+- [x] Bulk apply job: "Apply fanart.tv logos to all To do" (or chosen artists) runs in the worker (`artwork_jobs`, one per server at a time, resumes after a restart), applies each artist's most-liked logo with the default transform and reports applied / no logo / not on MusicBrainz / failed.
 - [ ] Folder save with path mapping
 - [ ] Export/import zip with matching preview
 

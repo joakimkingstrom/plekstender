@@ -177,3 +177,38 @@ export function useSetFanartKey() {
     },
   })
 }
+
+export type ArtworkJob = Schemas['ArtworkJobOut']
+
+/** Recent artwork jobs; polls while one is queued or running, and refreshes the list after. */
+export function useArtworkJobs(serverId: number) {
+  const qc = useQueryClient()
+  return useQuery({
+    queryKey: [...artworkKeys.all(serverId), 'jobs'],
+    queryFn: async () => {
+      const jobs = await unwrap(
+        api.GET('/api/servers/{server_id}/artwork/jobs', { params: { path: { server_id: serverId } } }),
+      )
+      const previous = qc.getQueryData<ArtworkJob[]>([...artworkKeys.all(serverId), 'jobs'])
+      const wasActive = previous?.some((j) => j.status === 'queued' || j.status === 'running')
+      if (wasActive && !jobs.some((j) => j.status === 'queued' || j.status === 'running')) {
+        void qc.invalidateQueries({ queryKey: [...artworkKeys.all(serverId), 'artists'] })
+        void qc.invalidateQueries({ queryKey: libraryKeys.library(serverId) })
+      }
+      return jobs
+    },
+    refetchInterval: (query) =>
+      query.state.data?.some((j) => j.status === 'queued' || j.status === 'running') ? 2000 : false,
+  })
+}
+
+export function useStartFanartJob(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['FanartJobIn']) =>
+      unwrap(
+        api.POST('/api/servers/{server_id}/artwork/jobs/fanart', { params: { path: { server_id: serverId } }, body }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...artworkKeys.all(serverId), 'jobs'] }),
+  })
+}

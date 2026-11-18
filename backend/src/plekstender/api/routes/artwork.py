@@ -21,10 +21,12 @@ from plekstender.api.routes.servers import get_user_server, server_client
 from plekstender.api.schemas import (
     ArtworkArtistOut,
     ArtworkArtistPage,
+    ArtworkJobOut,
     ArtworkStatus,
     ArtworkStatusIn,
     CandidateOut,
     CandidatesOut,
+    FanartJobIn,
     FontGroup,
     UploadOut,
 )
@@ -32,9 +34,10 @@ from plekstender.artwork import images
 from plekstender.artwork import service as art
 from plekstender.artwork.images import ImageError, Transform
 from plekstender.artwork.text import FONTS
-from plekstender.db.models import Artist, ArtistArtwork, User, UserServer
+from plekstender.db.models import Artist, ArtistArtwork, ArtworkJob, User, UserServer
 from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import epoch
+from plekstender.worker import ACTIVE, enqueue_artwork_job
 
 router = APIRouter(prefix="/api/servers/{server_id}/artwork", tags=["artwork"])
 fonts_router = APIRouter(prefix="/api/artwork", tags=["artwork"])
@@ -313,3 +316,63 @@ async def apply(
         applied_at=row.applied_at,
         has_mbid=bool(artist.mbid or row.mbid),
     )
+
+
+# --- jobs ----------------------------------------------------------------------------------
+
+
+def job_out(server_id: int, job: ArtworkJob) -> ArtworkJobOut:
+    out = ArtworkJobOut.model_validate(job, from_attributes=True)
+    if job.kind == "export" and job.status == "succeeded" and job.result_path:
+        out.download = f"/api/servers/{server_id}/artwork/jobs/{job.id}/download"
+    return out
+
+
+@router.get("/jobs", response_model=list[ArtworkJobOut])
+async def list_jobs(server_id: int, db: DbDep, user: UserDep) -> list[ArtworkJobOut]:
+    """Recent artwork jobs on this server, newest first."""
+    us = await owner_server(db, user, server_id)
+    jobs = await db.scalars(
+        select(ArtworkJob)
+        .where(ArtworkJob.server_id == us.server_id)
+        .order_by(ArtworkJob.id.desc())
+        .limit(10)
+    )
+    return [job_out(server_id, j) for j in jobs]
+
+
+async def start_job(
+    db: AsyncSession, us: UserServer, kind: str, params: dict[str, object]
+) -> ArtworkJob:
+    busy = await db.scalar(
+        select(ArtworkJob.id).where(
+            ArtworkJob.server_id == us.server_id, ArtworkJob.status.in_(ACTIVE)
+        )
+    )
+    if busy is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Another artwork job is running.")
+    job = ArtworkJob(
+        server_id=us.server_id,
+        user_server_id=us.id,
+        kind=kind,
+        status="queued",
+        params=params,
+        progress={},
+        stats={},
+    )
+    db.add(job)
+    await db.commit()
+    await enqueue_artwork_job(job)
+    return job
+
+
+@router.post("/jobs/fanart", response_model=ArtworkJobOut, status_code=status.HTTP_201_CREATED)
+async def start_fanart_job(
+    server_id: int, body: FanartJobIn, db: DbDep, user: UserDep
+) -> ArtworkJobOut:
+    """Apply the most-liked fanart.tv logo to the given artists (or all with a status)."""
+    us = await owner_server(db, user, server_id)
+    params: dict[str, object] = {"status": body.status, "transform": Transform().model_dump()}
+    if body.rating_keys:
+        params["rating_keys"] = body.rating_keys
+    return job_out(server_id, await start_job(db, us, "fanart", params))

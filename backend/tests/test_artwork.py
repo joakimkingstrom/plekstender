@@ -385,3 +385,38 @@ async def test_only_the_owner_edits_artwork(
     assert (
         await friend.put("/api/admin/fanart", json={"api_key": FANART_KEY}, headers=CSRF)
     ).status_code == 403
+
+
+@pytest.mark.db
+async def test_bulk_fanart_job(app: FastAPI, plex: FakePlex, web: respx.MockRouter) -> None:
+    from plekstender.worker import artwork_job
+
+    owner, sid = await setup(app, plex)
+    base = f"/api/servers/{sid}/artwork"
+    await owner.put(f"{base}/artists/102/status", json={"status": "custom"}, headers=CSRF)
+
+    started = await owner.post(f"{base}/jobs/fanart", json={}, headers=CSRF)
+    assert started.status_code == 201, started.text
+    job = started.json()
+    assert (job["kind"], job["status"]) == ("fanart", "queued")
+    busy = await owner.post(f"{base}/jobs/fanart", json={}, headers=CSRF)
+    assert busy.status_code == 409
+
+    await artwork_job.func(job_id=job["id"])  # what the worker runs
+    [done] = (await owner.get(f"{base}/jobs")).json()
+    assert done["status"] == "succeeded", done["error"]
+    assert done["progress"] == {"done": 2, "total": 2}  # the two "to do" artists
+    assert done["stats"] == {"applied": 2, "no_mbid": 0, "no_logo": 0, "failed": 0}
+    assert sorted(k for k, _ in plex.library.uploaded) == [100, 101]
+    statuses = {
+        a["title"]: a["status"] for a in (await owner.get(f"{base}/artists")).json()["items"]
+    }
+    assert statuses == {"Portishead": "done", "Radiohead": "done", "Secret Band": "custom"}
+
+    # Chosen artists only; Secret Band has no MusicBrainz match.
+    picked = (
+        await owner.post(f"{base}/jobs/fanart", json={"rating_keys": [102]}, headers=CSRF)
+    ).json()
+    await artwork_job.func(job_id=picked["id"])
+    latest = (await owner.get(f"{base}/jobs")).json()[0]
+    assert latest["stats"]["no_mbid"] == 1

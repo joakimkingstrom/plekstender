@@ -677,6 +677,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Jobs
+         * @description Recent artwork jobs on this server, newest first.
+         */
+        get: operations["list_jobs_api_servers__server_id__artwork_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/jobs/fanart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Fanart Job
+         * @description Apply the most-liked fanart.tv logo to the given artists (or all with a status).
+         */
+        post: operations["start_fanart_job_api_servers__server_id__artwork_jobs_fanart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/export/tracks.csv": {
         parameters: {
             query?: never;
@@ -1126,6 +1166,43 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** ArtworkJobOut */
+        ArtworkJobOut: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "fanart" | "export" | "import";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /** Progress */
+            progress: {
+                [key: string]: unknown;
+            };
+            /** Stats */
+            stats: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Download
+             * @description Export: where to download it.
+             */
+            download?: string | null;
+        };
         /** ArtworkStatusIn */
         ArtworkStatusIn: {
             /**
@@ -1197,6 +1274,18 @@ export interface components {
         DeletedOut: {
             /** Deleted */
             deleted: number;
+        };
+        /** FanartJobIn */
+        FanartJobIn: {
+            /** Rating Keys */
+            rating_keys?: number[] | null;
+            /**
+             * Status
+             * @description Without rating_keys: every artist with this status.
+             * @default none
+             * @enum {string}
+             */
+            status: "none" | "custom" | "done";
         };
         /** FanartKeyIn */
         FanartKeyIn: {
@@ -3292,6 +3381,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtworkArtistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_jobs_api_servers__server_id__artwork_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkJobOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_fanart_job_api_servers__server_id__artwork_jobs_fanart_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FanartJobIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkJobOut"];
                 };
             };
             /** @description Validation Error */

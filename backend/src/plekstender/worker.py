@@ -12,12 +12,14 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender import __version__
+from plekstender.artwork.jobs import run_job as run_artwork_job
 from plekstender.artwork.service import remove_old_uploads
 from plekstender.auth.sessions import delete_expired_sessions
 from plekstender.config import get_settings
 from plekstender.db import get_sessionmaker
 from plekstender.db.instance import get_library_settings, record_worker_heartbeat
 from plekstender.db.models import (
+    ArtworkJob,
     ListenBrainzLink,
     ListenImport,
     PlexServer,
@@ -327,6 +329,28 @@ async def capture_plays_periodically(timestamp: int) -> None:
     await schedule_play_capture()
 
 
+# --- artwork ------------------------------------------------------------------------------
+
+
+@app.task(queue="artwork")
+async def artwork_job(job_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_artwork_job(db, http, get_settings(), job_id)
+
+
+async def enqueue_artwork_job(job: ArtworkJob) -> None:
+    """Queue an artwork job. One runs per server at a time."""
+    try:
+        await artwork_job.configure(
+            lock=f"artwork-server-{job.server_id}", queueing_lock=f"artwork-job-{job.id}"
+        ).defer_async(job_id=job.id)
+    except AlreadyEnqueued:
+        pass
+
+
 # --- housekeeping --------------------------------------------------------------------
 
 
@@ -359,6 +383,14 @@ async def cleanup_sessions(timestamp: int) -> None:
                 ListenImport.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
             )
             .values(status="failed", error="Interrupted (the worker stopped). Resume to continue.")
+        )
+        await db.execute(
+            update(ArtworkJob)
+            .where(
+                ArtworkJob.status == "running",
+                ArtworkJob.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
+            )
+            .values(status="failed", error="Interrupted (the worker stopped). Start it again.")
         )
         await db.commit()
     remove_old_uploads(get_settings(), dt.timedelta(days=1))

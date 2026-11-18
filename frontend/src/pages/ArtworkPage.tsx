@@ -3,10 +3,12 @@ import { Link } from 'react-router'
 import {
   useApplyArtwork,
   useArtworkArtists,
+  useArtworkJobs,
   useCandidates,
   useFonts,
   usePreview,
   useSetArtworkStatus,
+  useStartFanartJob,
   useUploadImage,
   type ArtworkStatus,
   type CandidateSource,
@@ -86,6 +88,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[18rem_1fr]">
       <div className={`space-y-3 ${current ? 'hidden lg:block' : ''}`}>
+        <BulkFanart serverId={serverId} todo={counts.none ?? 0} />
         <input
           type="search"
           value={query}
@@ -536,5 +539,65 @@ function Adjustments({
         </div>
       </div>
     </Card>
+  )
+}
+
+function BulkFanart({ serverId, todo }: { serverId: number; todo: number }) {
+  const jobs = useArtworkJobs(serverId)
+  const start = useStartFanartJob(serverId)
+  const [confirming, setConfirming] = useState(false)
+  const latest = jobs.data?.find((j) => j.kind === 'fanart')
+  const running = latest && (latest.status === 'queued' || latest.status === 'running')
+  const { done = 0, total = 0 } = (latest?.progress ?? {}) as { done?: number; total?: number }
+  const stats = (latest?.stats ?? {}) as Record<string, number>
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-3 text-sm">
+      {running ? (
+        <div className="space-y-2" aria-live="polite">
+          <p>
+            Applying fanart.tv logos… <span className="text-muted tabular-nums">{done} / {total || '?'}</span>
+          </p>
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 5}%` }} />
+          </div>
+        </div>
+      ) : confirming ? (
+        <div className="space-y-2">
+          <p>
+            Give all {todo} "To do" artists their most-liked fanart.tv logo and save it to Plex? Artists without one
+            are left alone.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              busy={start.isPending}
+              onClick={() => start.mutate({ status: 'none' }, { onSettled: () => setConfirming(false) })}
+            >
+              Apply to {todo}
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <Button variant="secondary" disabled={todo === 0} onClick={() => setConfirming(true)} className="w-full">
+            Apply fanart.tv logos to all "To do"
+          </Button>
+          {latest?.status === 'succeeded' && (
+            <p className="text-xs text-muted">
+              Last run: {stats.applied ?? 0} applied
+              {stats.no_logo ? `, ${stats.no_logo} without a logo` : ''}
+              {stats.no_mbid ? `, ${stats.no_mbid} not on MusicBrainz` : ''}
+              {stats.failed ? `, ${stats.failed} failed` : ''}.
+            </p>
+          )}
+          {latest?.status === 'failed' && <p className="text-xs text-danger">Last run failed: {latest.error}</p>}
+        </div>
+      )}
+      {start.isError && <div className="mt-2"><Notice tone="error">{errorMessage(start.error)}</Notice></div>}
+    </div>
   )
 }

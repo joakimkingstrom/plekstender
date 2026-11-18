@@ -481,3 +481,26 @@ class ImageSearchCache(Base):
     query: Mapped[str] = mapped_column(Text, primary_key=True)
     results: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class ArtworkJob(Base):
+    """A background artwork job on one server: bulk fanart.tv logos, export or import."""
+
+    __tablename__ = "artwork_jobs"
+    __table_args__ = (Index("ix_artwork_jobs_server", "server_id", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    # The owner's connection the job uses (and who started it).
+    user_server_id: Mapped[int] = mapped_column(ForeignKey("user_servers.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))  # fanart | export | import
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    params: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    progress: Mapped[dict[str, Any]] = mapped_column(default=dict)  # {"done": n, "total": n}
+    stats: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    result_path: Mapped[str | None] = mapped_column(Text)  # export: the zip under DATA_DIR
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    started_at: Mapped[dt.datetime | None]
+    finished_at: Mapped[dt.datetime | None]
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

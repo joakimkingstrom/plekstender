@@ -521,3 +521,22 @@ class FanartKeyOut(BaseModel):
 
 class FanartKeyIn(BaseModel):
     api_key: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{32}$")
+
+
+class ArtworkJobOut(BaseModel):
+    id: int
+    kind: Literal["fanart", "export", "import"]
+    status: Literal["queued", "running", "succeeded", "failed"]
+    progress: dict[str, Any]
+    stats: dict[str, Any]
+    error: str | None
+    created_at: dt.datetime
+    finished_at: dt.datetime | None
+    download: str | None = Field(default=None, description="Export: where to download it.")
+
+
+class FanartJobIn(BaseModel):
+    rating_keys: list[int] | None = Field(default=None, max_length=10000)
+    status: Literal["none", "custom", "done"] = Field(
+        default="none", description="Without rating_keys: every artist with this status."
+    )
