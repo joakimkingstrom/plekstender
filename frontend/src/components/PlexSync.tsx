@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { errorMessage } from '../api/client'
 import { usePlexSync, usePlexSyncPreview, type PlexSyncRequest } from '../api/files'
 import { formatCount } from '../format'
-import { FIELD_LABELS, showValue, type TagField } from '../tags'
+import { FIELD_LABELS, fieldLabel, showValue, type TagField } from '../tags'
 import { Button, Notice } from './ui'
 
 type SyncField = NonNullable<PlexSyncRequest['fields']>[number]
@@ -66,7 +66,7 @@ export function PlexSync({
               </strong>{' '}
               in {formatCount(data.files)} {data.files === 1 ? 'file' : 'files'}:{' '}
               {Object.entries(data.by_field)
-                .map(([f, n]) => `${FIELD_LABELS[f as TagField] ?? f} ${formatCount(n)}`)
+                .map(([f, n]) => `${fieldLabel(f)} ${formatCount(n)}`)
                 .join(', ')}
               .
             </p>
@@ -78,7 +78,7 @@ export function PlexSync({
                       <td className="max-w-56 truncate px-2 py-1 font-mono text-muted" title={c.path}>
                         {c.path.split('/').at(-1)}
                       </td>
-                      <td className="px-2 py-1 text-muted">{FIELD_LABELS[c.field as TagField] ?? c.field}</td>
+                      <td className="px-2 py-1 text-muted">{fieldLabel(c.field)}</td>
                       <td className="px-2 py-1">
                         <span className="text-danger line-through decoration-1">{showValue(c.old_value)}</span> →{' '}
                         <span className="text-ok">{showValue(c.new_value)}</span>

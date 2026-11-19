@@ -13,7 +13,7 @@ Plekstender isn't affiliated with or endorsed by Plex.
 - **Artwork:** replace artist photos with logos from fanart.tv, Plex, an image search, an upload or a text logo in a Google font; fit, zoom and recolour them; optionally save `artist.jpg` into each artist's folder; share logo packs between servers.
 - **Previews:** 40-second clips of any song (cut from the file by ffmpeg, starting where the music does), in Rate and the playlist builder.
 - **Playlists:** start from artists, songs or a genre, add similar and sonically similar artists, keep only what you rate highly or each artist's best-known songs, and save the result to Plex. Playlists can refresh themselves daily, weekly or monthly, and download as M3U8.
-- **Music files** (server owners, with the music folder mounted on the worker): scan your files' tags and see them on album pages next to Plex's metadata, differences highlighted. Editing and fixing tags is on the way (see the plan).
+- **Music files** (server owners, with the music folder mounted on the worker): scan your files' tags and see them on album pages next to Plex's metadata, differences highlighted. Once turned on (Settings → Music files): edit tags, write Plex's metadata into the files for the whole library or an artist, or pick an album's release on MusicBrainz (as in Picard) and write its tags and IDs. Every change is previewed first, recorded, and can be undone.
 - **Exports:** your library with ratings and plays (CSV / JSON), and your listening history in ListenBrainz's format.
 
 See [plan.md](plan.md) for the roadmap and [app-features.md](app-features.md) for the original feature list.
@@ -108,7 +108,7 @@ New database migrations: `cd backend && uv run alembic revision --autogenerate -
 
 - IP geolocation by [DB-IP](https://db-ip.com) (IP to City Lite, CC BY 4.0), downloaded monthly to the server; lookups never leave it.
 - Country shapes from [Natural Earth](https://www.naturalearthdata.com) (public domain); rebuild with `frontend/scripts/world-map.mjs`.
-- Artist logos from [fanart.tv](https://fanart.tv), artist IDs from [MusicBrainz](https://musicbrainz.org), fonts from [Google Fonts](https://fonts.google.com). Images keep their own terms; logo packs record where each one came from.
+- Artist logos from [fanart.tv](https://fanart.tv), artist IDs and releases from [MusicBrainz](https://musicbrainz.org) (CC0), release covers from the [Cover Art Archive](https://coverartarchive.org), fonts from [Google Fonts](https://fonts.google.com). Images keep their own terms; logo packs record where each one came from.
 
 ## License
 

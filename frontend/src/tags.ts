@@ -16,6 +16,22 @@ export const FIELD_LABELS: Record<TagField, string> = {
   composer: 'Composer',
 }
 
+/** Every tag Plekstender writes (MusicBrainz's too), for history and previews. */
+const MORE_LABELS: Record<string, string> = {
+  originaldate: 'Original date',
+  releasecountry: 'Release country',
+  musicbrainz_trackid: 'MusicBrainz recording ID',
+  musicbrainz_releasetrackid: 'MusicBrainz track ID',
+  musicbrainz_albumid: 'MusicBrainz release ID',
+  musicbrainz_artistid: 'MusicBrainz artist ID',
+  musicbrainz_albumartistid: 'MusicBrainz album artist ID',
+  musicbrainz_releasegroupid: 'MusicBrainz release group ID',
+}
+
+export function fieldLabel(field: string): string {
+  return FIELD_LABELS[field as TagField] ?? MORE_LABELS[field] ?? field
+}
+
 /** Fields set for the whole album at once, and per song. */
 export const ALBUM_FIELDS: TagField[] = ['album', 'albumartist', 'date', 'genre']
 export const SONG_FIELDS: TagField[] = ['tracknumber', 'title', 'artist']

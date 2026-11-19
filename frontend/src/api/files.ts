@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap, type Schemas } from './client'
 
 export type FilesSummary = Schemas['FilesSummaryOut']
@@ -133,4 +133,60 @@ export function usePlexSync(serverId: number) {
   return useQueueTags(serverId, (body: PlexSyncRequest) =>
     unwrap(api.POST('/api/servers/{server_id}/files/plex-sync', { params: { path: { server_id: serverId } }, body })),
   )
+}
+
+export type MbRelease = Schemas['MbReleaseSummary']
+export type MbApply = Schemas['MbApplyIn']
+export type MbPreview = Schemas['MbPreviewOut']
+
+/** Releases on MusicBrainz (by album and artist, or a pasted release link). */
+export function useMbSearch(serverId: number, search: { album: string; artist: string } | null) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'musicbrainz', 'search', search],
+    enabled: search !== null && search.album.trim() !== '',
+    staleTime: Infinity,
+    retry: false,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/musicbrainz/search', {
+          params: {
+            path: { server_id: serverId },
+            query: { album: search!.album.trim(), artist: search!.artist.trim() || undefined },
+          },
+        }),
+      ),
+  })
+}
+
+/** Which file is which track of a release, and the tags that would change (nothing written). */
+export function useMbPreview(serverId: number, albumKey: number, body: MbApply | null) {
+  return useQuery({
+    queryKey: [...filesKeys.album(serverId, albumKey), 'musicbrainz', body],
+    enabled: body !== null,
+    staleTime: Infinity,
+    retry: false,
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      unwrap(
+        api.POST('/api/servers/{server_id}/files/albums/{album_key}/musicbrainz/preview', {
+          params: { path: { server_id: serverId, album_key: albumKey } },
+          body: body!,
+        }),
+      ),
+  })
+}
+
+export function useMbApply(serverId: number, albumKey: number) {
+  return useQueueTags(serverId, (body: MbApply) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/albums/{album_key}/musicbrainz', {
+        params: { path: { server_id: serverId, album_key: albumKey } },
+        body,
+      }),
+    ),
+  )
+}
+
+export function mbCoverUrl(serverId: number, releaseId: string) {
+  return `/api/servers/${serverId}/files/musicbrainz/cover/${releaseId}`
 }

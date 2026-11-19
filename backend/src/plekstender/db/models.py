@@ -14,6 +14,7 @@ from sqlalchemy import (
     Index,
     MetaData,
     PrimaryKeyConstraint,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -667,6 +668,8 @@ class MediaFile(Base):
     # Normalised tags: {"title": "...", "artist": "...", "genre": ["..."], ...}.
     tags: Mapped[dict[str, Any]] = mapped_column(default=dict)
     has_cover: Mapped[bool] = mapped_column(default=False)
+    # The tag reader's version when the file was read (older: re-read on the next scan).
+    reader: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
     # The Plex track this file is (matched by its path), if any.
     rating_key: Mapped[int | None] = mapped_column(BigInteger)
     error: Mapped[str | None] = mapped_column(Text)

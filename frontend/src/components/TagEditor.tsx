@@ -5,6 +5,7 @@ import { formatCount, formatRelative } from '../format'
 import {
   ALBUM_FIELDS,
   FIELD_LABELS,
+  fieldLabel,
   SONG_FIELDS,
   asText,
   plannedChanges,
@@ -301,7 +302,7 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                           <input
                             type="checkbox"
                             className="mt-1"
-                            aria-label={`Pick ${FIELD_LABELS[c.field as TagField] ?? c.field} of ${c.path}`}
+                            aria-label={`Pick ${fieldLabel(c.field)} of ${c.path}`}
                             disabled={!undoable(c)}
                             checked={picked.has(c.id)}
                             onChange={() => toggle(c.id)}
@@ -311,7 +312,7 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                               {c.path.split('/').at(-1)}
                             </span>
                             <span className="flex flex-wrap gap-x-2">
-                              <span className="text-muted">{FIELD_LABELS[c.field as TagField] ?? c.field}</span>
+                              <span className="text-muted">{fieldLabel(c.field)}</span>
                               <span>{showValue(c.old_value)}</span>
                               <span aria-hidden>→</span>
                               <span className="font-medium">{showValue(c.new_value)}</span>

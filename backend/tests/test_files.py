@@ -372,3 +372,214 @@ async def test_writing_plex_metadata_in_bulk(app: FastAPI, plex: FakePlex, music
     history = (await owner.get(f"{base}/changes")).json()
     assert history[1]["undoable"] == 0
     assert (await owner.post(f"{base}/undo", json={}, headers=CSRF)).status_code == 422
+
+
+# --- MusicBrainz releases --------------------------------------------------------------------
+
+RELEASE_ID = "0b6b4ba0-d36f-47bd-b4ea-6a5b91842d29"
+GROUP_ID = "b1392450-e666-3926-a536-22c65f834433"
+RADIOHEAD_ID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+OK_TITLES = [
+    "Airbag", "Paranoid Android", "Subterranean Homesick Alien", "Exit Music (For a Film)",
+    "Let Down", "Karma Police", "Fitter Happier", "Electioneering", "Climbing Up the Walls",
+    "No Surprises", "Lucky", "The Tourist",
+]  # fmt: skip
+
+
+def mb_release() -> dict[str, Any]:
+    credit = [{"name": "Radiohead", "joinphrase": "", "artist": {"id": RADIOHEAD_ID}}]
+    return {
+        "id": RELEASE_ID,
+        "title": "OK Computer",
+        "date": "1997-05-21",
+        "country": "GB",
+        "status": "Official",
+        "barcode": "724385522925",
+        "artist-credit": credit,
+        "label-info": [{"catalog-number": "NODATA 02", "label": {"name": "Parlophone"}}],
+        "release-group": {
+            "id": GROUP_ID,
+            "primary-type": "Album",
+            "first-release-date": "1997-05-21",
+        },
+        "media": [
+            {
+                "position": 1,
+                "format": "CD",
+                "tracks": [
+                    {
+                        "id": f"00000000-0000-4000-8000-0000000000{n:02d}",
+                        "position": n,
+                        "title": title,
+                        "length": 1000,
+                        "recording": {"id": f"10000000-0000-4000-8000-0000000000{n:02d}"},
+                        "artist-credit": credit,
+                    }
+                    for n, title in enumerate(OK_TITLES, start=1)
+                ],
+            }
+        ],
+    }
+
+
+class FakeMusicBrainz:
+    def __init__(self, router: Any) -> None:
+        import httpx
+
+        self.searches: list[str] = []
+        self.cover_requests = 0
+
+        def search(request: httpx.Request) -> httpx.Response:
+            self.searches.append(request.url.params["query"])
+            assert request.headers["User-Agent"].startswith("Plekstender/")
+            summary = {**mb_release(), "score": 100, "track-count": 12}
+            summary["media"] = [{"format": "CD", "track-count": 12}]
+            return httpx.Response(200, json={"releases": [summary]})
+
+        def lookup(request: httpx.Request) -> httpx.Response:
+            if not request.url.path.endswith(RELEASE_ID):
+                return httpx.Response(404, json={"error": "Not Found"})
+            return httpx.Response(200, json=mb_release())
+
+        def cover(request: httpx.Request) -> httpx.Response:
+            self.cover_requests += 1
+            if RELEASE_ID not in request.url.path:
+                return httpx.Response(404)
+            return httpx.Response(
+                200, content=b"\xff\xd8jpeg", headers={"content-type": "image/jpeg"}
+            )
+
+        router.get("https://musicbrainz.org/ws/2/release").mock(side_effect=search)
+        router.get(url__regex=r"https://musicbrainz\.org/ws/2/release/.+").mock(side_effect=lookup)
+        router.get(url__regex=r"https://coverartarchive\.org/release/.+").mock(side_effect=cover)
+
+
+@pytest.fixture
+def mb(plex: FakePlex, monkeypatch: pytest.MonkeyPatch) -> FakeMusicBrainz:
+    from plekstender import musicbrainz
+
+    monkeypatch.setattr(musicbrainz, "INTERVAL", 0.0)
+    musicbrainz.clear_cache()
+    return FakeMusicBrainz(plex.router)
+
+
+def test_matching_files_to_release_tracks() -> None:
+    from plekstender.musicbrainz import Release, ReleaseTrack
+    from plekstender.tags.mbapply import AlbumFile, match, plan_file, wanted
+
+    tracks = [
+        ReleaseTrack(f"t{n}", f"r{n}", 1, n, title, "Radiohead", "a", 200_000)
+        for n, title in enumerate(["Airbag", "Paranoid Android", "Let Down"], start=1)
+    ]
+    release = Release(
+        "rel", "OK Computer", "Radiohead", "a", "1997", None, "GB", "g", 1, None, tracks
+    )  # type: ignore[arg-type]
+    files = [
+        # Numbered wrongly, but the title and length say it's Let Down.
+        AlbumFile(1, "a.flac", 1, {"title": "Let Down (Remastered)", "track": 2}, 199_000),
+        AlbumFile(2, "b.flac", 2, {"title": "Paranoid Android", "track": 2}, 383_000),
+        AlbumFile(3, "c.flac", 3, {"title": "Hidden track"}, 30_000),  # no good match
+    ]
+    assert match(files, release) == {1: "t3", 2: "t2", 3: None}
+
+    values = wanted(release, tracks[1])
+    fields = {"title", "tracknumber", "discnumber", "date", "musicbrainz_albumid"}
+    # "2" already is track 2; a full date isn't cut to the year; one disc: no disc number.
+    assert plan_file(
+        {"title": "Paranoid Android", "tracknumber": "2", "date": "1997-05-21"}, values, fields
+    ) == {"musicbrainz_albumid": "rel"}
+    assert plan_file({"tracknumber": "3/3", "musicbrainz_albumid": "REL"}, values, fields) == {
+        "title": "Paranoid Android", "tracknumber": "2/3", "date": "1997",
+    }  # fmt: skip
+
+
+@pytest.mark.db
+async def test_applying_a_musicbrainz_release(
+    app: FastAPI, plex: FakePlex, music: Path, mb: FakeMusicBrainz
+) -> None:
+    from plekstender.worker import apply_tag_changes, scan_music_files
+
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    # Search: by title and artist; a release link finds that release.
+    found = (
+        await owner.get(
+            f"{base}/musicbrainz/search", params={"album": "OK Computer", "artist": "Radiohead"}
+        )
+    ).json()
+    assert mb.searches == ['release:"OK Computer" AND artist:"Radiohead"']
+    assert found[0] | {"id": RELEASE_ID} == found[0]
+    assert (found[0]["formats"], found[0]["label"], found[0]["track_count"]) == (
+        "CD",
+        "Parlophone",
+        12,
+    )
+    linked = (
+        await owner.get(
+            f"{base}/musicbrainz/search",
+            params={"album": f"https://musicbrainz.org/release/{RELEASE_ID}"},
+        )
+    ).json()
+    assert [r["id"] for r in linked] == [RELEASE_ID] and len(mb.searches) == 1
+
+    # The cover, kept after the first request; none for unknown releases.
+    for _ in range(2):
+        resp = await owner.get(f"{base}/musicbrainz/cover/{RELEASE_ID}")
+        assert resp.status_code == 200 and resp.content == b"\xff\xd8jpeg"
+    assert mb.cover_requests == 1
+    assert (await owner.get(f"{base}/musicbrainz/cover/{GROUP_ID}")).status_code == 404
+
+    # Preview: matched by number and title; only what differs.
+    body = {"release_id": RELEASE_ID}
+    preview = (
+        await owner.post(f"{base}/albums/200/musicbrainz/preview", json=body, headers=CSRF)
+    ).json()
+    assert len(preview["tracks"]) == 12
+    by_path = {f["path"]: f for f in preview["files"]}
+    assert by_path["300.flac"]["track_id"].endswith("02")
+    assert by_path["301.flac"]["track_id"].endswith("06")
+    karma = {c["field"]: c["new_value"] for c in by_path["301.flac"]["changes"]}
+    assert karma["title"] == "Karma Police"
+    assert karma["musicbrainz_albumid"] == RELEASE_ID
+    assert karma["releasecountry"] == "GB" and karma["originaldate"] == "1997-05-21"
+    assert "tracknumber" not in karma and "date" not in karma and "discnumber" not in karma
+    assert preview["changes"] == 17
+
+    # Pick and choose: leave Karma Police alone; a track can't be used twice.
+    t2 = by_path["300.flac"]["track_id"]
+    ids = {f["path"]: f["file_id"] for f in preview["files"]}
+    only = {**body, "mapping": {ids["300.flac"]: t2, ids["301.flac"]: None}}
+    picked = (
+        await owner.post(f"{base}/albums/200/musicbrainz/preview", json=only, headers=CSRF)
+    ).json()
+    assert picked["changes"] == 8
+    twice = {**body, "mapping": {ids["300.flac"]: t2, ids["301.flac"]: t2}}
+    resp = await owner.post(f"{base}/albums/200/musicbrainz/preview", json=twice, headers=CSRF)
+    assert resp.status_code == 422
+
+    # Writing needs tag editing on; then the release's tags are in the files.
+    assert (
+        await owner.post(f"{base}/albums/200/musicbrainz", json=body, headers=CSRF)
+    ).status_code == 403
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    resp = await owner.post(f"{base}/albums/200/musicbrainz", json=body, headers=CSRF)
+    assert resp.status_code == 201, resp.text
+    change_set = resp.json()
+    assert change_set["description"] == "MusicBrainz release OK Computer (1997, GB, CD) to 2 files"
+    await apply_tag_changes.func(set_id=change_set["id"])
+    karma_file = FLAC(music / "301.flac")
+    assert karma_file["title"] == ["Karma Police"]
+    assert karma_file["musicbrainz_albumid"] == [RELEASE_ID]
+    assert karma_file["musicbrainz_releasetrackid"] == [t2[:-2] + "06"]
+    again = (
+        await owner.post(f"{base}/albums/200/musicbrainz/preview", json=body, headers=CSRF)
+    ).json()
+    assert again["changes"] == 0  # the re-read files now hold every MusicBrainz tag

@@ -1,8 +1,9 @@
 """Scanning a server's music folder (worker only): which files there are, their tags, and
 which Plex track each one is.
 
-Files are re-read only when their size or modification time changed, so a rescan of a big
-library is quick. Symlinks aren't followed (nothing outside the mapped folder is read).
+Files are re-read only when their size or modification time changed (or the tag reader
+learned new fields), so a rescan of a big library is quick. Symlinks aren't followed
+(nothing outside the mapped folder is read).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.db.models import FileScan, MediaFile, PlexServer, Track
-from plekstender.tags.read import AUDIO_EXTENSIONS, TagReadError, read_file
+from plekstender.tags.read import AUDIO_EXTENSIONS, READER, TagReadError, read_file
 
 log = logging.getLogger(__name__)
 
@@ -123,10 +124,10 @@ async def run_scan(db: AsyncSession, scan_id: int) -> None:
 async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path) -> dict[str, int]:
     files = await asyncio.to_thread(walk, root)
     known = {
-        path: (size, mtime)
-        for path, size, mtime in (
+        path: (size, mtime, reader)
+        for path, size, mtime, reader in (
             await db.execute(
-                select(MediaFile.path, MediaFile.size, MediaFile.mtime).where(
+                select(MediaFile.path, MediaFile.size, MediaFile.mtime, MediaFile.reader).where(
                     MediaFile.server_id == server.id
                 )
             )
@@ -147,7 +148,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
     scan.progress = {"done": 0, "total": len(files)}
     await db.commit()
 
-    changed = [f for f in files if known.get(f.path) != (f.size, f.mtime)]
+    changed = [f for f in files if known.get(f.path) != (f.size, f.mtime, READER)]
     stats["unchanged"] = len(files) - len(changed)
     for start in range(0, len(changed), BATCH):
         batch = changed[start : start + BATCH]
@@ -163,6 +164,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
                 "duration_ms": info["duration_ms"],
                 "tags": info["tags"],
                 "has_cover": info["has_cover"],
+                "reader": READER,
                 "error": info["error"],
                 "rating_key": tracks.get(plex_path(server, f.path)),
                 "scanned_at": now,

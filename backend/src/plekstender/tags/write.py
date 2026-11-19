@@ -14,6 +14,8 @@ from typing import Any
 
 import mutagen
 
+from plekstender.tags import keys as _keys  # noqa: F401 - registers MP4 keys
+
 # Fields that can be edited (mutagen's "easy" keys: the same for ID3, MP4 and Vorbis).
 EDITABLE: tuple[str, ...] = (
     "title",
@@ -25,6 +27,14 @@ EDITABLE: tuple[str, ...] = (
     "tracknumber",
     "discnumber",
     "composer",
+    "originaldate",
+    "releasecountry",
+    "musicbrainz_trackid",
+    "musicbrainz_releasetrackid",
+    "musicbrainz_albumid",
+    "musicbrainz_artistid",
+    "musicbrainz_albumartistid",
+    "musicbrainz_releasegroupid",
 )
 LIST_FIELDS = {"genre"}
 MAX_VALUE = 500

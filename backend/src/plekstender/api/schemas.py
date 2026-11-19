@@ -1046,5 +1046,73 @@ class PlexSyncPreviewOut(BaseModel):
     samples: list[PlexSyncSample] = Field(description="The first 100 changes.")
 
 
+MbField = Literal[
+    "title", "artist", "album", "albumartist", "tracknumber", "discnumber", "date",
+    "originaldate", "releasecountry", "musicbrainz_trackid", "musicbrainz_releasetrackid",
+    "musicbrainz_albumid", "musicbrainz_artistid", "musicbrainz_albumartistid",
+    "musicbrainz_releasegroupid",
+]  # fmt: skip
+
+
+class MbReleaseSummary(BaseModel):
+    id: str
+    score: int = Field(description="MusicBrainz's search score (0-100).")
+    title: str
+    artist: str
+    date: str | None
+    country: str | None
+    formats: str = Field(description="The media: CD, two CDs, Digital Media...")
+    track_count: int
+    label: str | None
+    catalog_number: str | None
+    type: str | None = Field(description='"Album", "Album + Live"...')
+    status: str | None
+    disambiguation: str | None
+    barcode: str | None
+
+
+class MbTrackOut(BaseModel):
+    id: str
+    disc: int
+    position: int
+    title: str
+    artist: str
+    length_ms: int | None
+
+
+class MbApplyIn(BaseModel):
+    release_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    mapping: dict[int, str | None] | None = Field(
+        default=None,
+        description="File id -> release track id (None: leave the file alone). "
+        "Left out: matched automatically.",
+    )
+    fields: list[MbField] = Field(default_factory=lambda: list(get_args(MbField)), min_length=1)
+
+
+class MbFieldChange(BaseModel):
+    field: str
+    old_value: TagValue
+    new_value: TagValue
+
+
+class MbFileOut(BaseModel):
+    file_id: int
+    path: str
+    disc: int | None
+    track: int | None
+    title: str | None
+    duration_ms: int | None
+    track_id: str | None = Field(description="The release track it's matched to.")
+    changes: list[MbFieldChange]
+
+
+class MbPreviewOut(BaseModel):
+    release: MbReleaseSummary
+    tracks: list[MbTrackOut]
+    files: list[MbFileOut]
+    changes: int
+
+
 class TagSettingsIn(BaseModel):
     tag_editing: bool

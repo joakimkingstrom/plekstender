@@ -10,6 +10,8 @@ from mutagen.flac import FLAC
 from mutagen.id3 import ID3
 from mutagen.mp4 import MP4
 
+from plekstender.tags import keys as _keys  # noqa: F401 - registers MP4 keys
+
 AUDIO_EXTENSIONS = {
     ".flac", ".mp3", ".m4a", ".mp4", ".aac", ".alac", ".ogg", ".oga", ".opus",
     ".wav", ".aif", ".aiff", ".wv", ".ape", ".wma", ".dsf",
@@ -20,8 +22,11 @@ TEXT_FIELDS = (
     "title", "artist", "album", "albumartist", "date", "originaldate", "composer",
     "tracknumber", "discnumber", "musicbrainz_trackid", "musicbrainz_albumid",
     "musicbrainz_artistid", "musicbrainz_albumartistid", "musicbrainz_releasegroupid",
+    "musicbrainz_releasetrackid", "releasecountry",
 )  # fmt: skip
 LIST_FIELDS = ("genre",)
+# Bumped when more fields are read: the next scan re-reads every file once.
+READER = 2
 MAX_VALUE = 500
 
 

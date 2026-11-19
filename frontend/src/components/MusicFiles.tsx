@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useState } from 'react'
 import { useAlbumFiles, useFilesSummary, useSetTagEditing, useStartScan, type TrackFile } from '../api/files'
+import { MusicBrainzLookup } from './MusicBrainzLookup'
 import { PlexSync } from './PlexSync'
 import { TagEditor, TagHistory } from './TagEditor'
 import { formatCount, formatDuration, formatRelative } from '../format'
@@ -111,13 +112,26 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
   const files = useAlbumFiles(serverId, albumKey, true)
   const summary = useFilesSummary(serverId)
   const [editing, setEditing] = useState(false)
+  const [lookup, setLookup] = useState(false)
   if (files.isPending) return null
   if (files.isError) return null // not the owner (403), or nothing to show
   const { tracks, scanned } = files.data
   const different = tracks.filter((t) => t.differences.length > 0).length
-  const canEdit = Boolean(summary.data?.tag_editing) && tracks.some((t) => t.file_id && !t.error)
+  const withFiles = tracks.filter((t) => t.file_id && !t.error)
+  const canEdit = Boolean(summary.data?.tag_editing) && withFiles.length > 0
   return (
     <div className="space-y-4">
+    {lookup && (
+      <MusicBrainzLookup
+        serverId={serverId}
+        albumKey={albumKey}
+        album={String(tracks[0]?.plex.album ?? '')}
+        artist={String(tracks[0]?.plex.albumartist ?? '')}
+        fileCount={withFiles.length}
+        canWrite={Boolean(summary.data?.tag_editing)}
+        onClose={() => setLookup(false)}
+      />
+    )}
     <Card
       title="Tags in the files"
       action={
@@ -126,6 +140,11 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
             <span className="text-xs text-muted">
               {different ? `${different} of ${tracks.length} songs differ from Plex` : 'Same as Plex'}
             </span>
+            {withFiles.length > 0 && !editing && (
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setLookup(true)}>
+                MusicBrainz…
+              </Button>
+            )}
             {canEdit && !editing && (
               <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setEditing(true)}>
                 Edit tags

@@ -3,17 +3,26 @@ routes start scans and show what they found, next to Plex's metadata."""
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, insert, select
 
-from plekstender.api.deps import DbDep, UserDep
+from plekstender import musicbrainz
+from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.routes.artwork import owner_server
 from plekstender.api.schemas import (
     AlbumFilesOut,
     FileScanOut,
     FilesSummaryOut,
+    MbApplyIn,
+    MbFieldChange,
+    MbFileOut,
+    MbPreviewOut,
+    MbReleaseSummary,
+    MbTrackOut,
     PlexSyncIn,
     PlexSyncPreviewOut,
     PlexSyncSample,
@@ -38,6 +47,7 @@ from plekstender.db.models import (
     User,
     UserServer,
 )
+from plekstender.tags.mbapply import AlbumFile, match, plan_file, wanted
 from plekstender.tags.plexsync import Planned
 from plekstender.tags.plexsync import plan as plan_sync
 from plekstender.tags.write import clean
@@ -556,3 +566,185 @@ async def plex_sync(server_id: int, body: PlexSyncIn, db: DbDep, user: UserDep) 
     await enqueue_tag_changes(change_set)
     [out] = await _sets_out(db, [change_set])
     return out
+
+
+# --- MusicBrainz releases --------------------------------------------------------------------
+
+
+def _mb_error(exc: musicbrainz.MusicBrainzError) -> HTTPException:
+    return HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+
+
+@router.get("/musicbrainz/search", response_model=list[MbReleaseSummary])
+async def musicbrainz_search(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    http: HttpDep,
+    album: Annotated[str, Query(min_length=1, max_length=300)],
+    artist: Annotated[str | None, Query(max_length=300)] = None,
+) -> list[MbReleaseSummary]:
+    """Releases on MusicBrainz by album title (and artist); a release link finds that one."""
+    await owner_server(db, user, server_id)
+    try:
+        found = await musicbrainz.search(http, album, artist)
+    except musicbrainz.MusicBrainzError as exc:
+        raise _mb_error(exc) from exc
+    return [MbReleaseSummary.model_validate(c, from_attributes=True) for c in found]
+
+
+@router.get("/musicbrainz/cover/{release_id}")
+async def musicbrainz_cover(
+    server_id: int, release_id: str, db: DbDep, user: UserDep, http: HttpDep, settings: SettingsDep
+) -> Response:
+    """A release's front cover from the Cover Art Archive (kept under /data)."""
+    await owner_server(db, user, server_id)
+    if not musicbrainz.MBID.fullmatch(release_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No cover")
+    folder = settings.data_dir / "musicbrainz" / "covers"
+    path, missing = folder / f"{release_id}.jpg", folder / f"{release_id}.none"
+    headers = {"Cache-Control": "private, max-age=604800"}
+    if await asyncio.to_thread(path.exists):
+        return Response(
+            await asyncio.to_thread(path.read_bytes), media_type="image/jpeg", headers=headers
+        )
+    if await asyncio.to_thread(
+        lambda: missing.exists() and time.time() - missing.stat().st_mtime < 86_400
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No cover")
+    image = await musicbrainz.cover(http, release_id)
+    await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
+    if image is None:
+        await asyncio.to_thread(missing.touch)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No cover")
+    await asyncio.to_thread(path.write_bytes, image)
+    return Response(image, media_type="image/jpeg", headers=headers)
+
+
+async def _album_files(db: DbDep, server_id: int, album_key: int) -> list[AlbumFile]:
+    rows = await db.scalars(
+        select(MediaFile)
+        .join(
+            Track,
+            (Track.server_id == MediaFile.server_id) & (Track.rating_key == MediaFile.rating_key),
+        )
+        .where(
+            MediaFile.server_id == server_id,
+            Track.album_rating_key == album_key,
+            MediaFile.error.is_(None),
+        )
+        .order_by(MediaFile.path)
+    )
+    return [AlbumFile(m.id, m.path, m.rating_key, m.tags or {}, m.duration_ms) for m in rows]
+
+
+async def _mb_plan(
+    db: DbDep, http: HttpDep, server_id: int, album_key: int, body: MbApplyIn
+) -> tuple[musicbrainz.Release, list[AlbumFile], dict[int, str | None], list[Planned]]:
+    files = await _album_files(db, server_id, album_key)
+    if not files:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "No scanned files for this album (scan the folder first)."
+        )
+    try:
+        release = await musicbrainz.release(http, body.release_id)
+    except musicbrainz.MusicBrainzError as exc:
+        raise _mb_error(exc) from exc
+    tracks = {t.id: t for t in release.tracks}
+    if body.mapping is None:
+        mapping = match(files, release)
+    else:
+        mapping = {f.id: body.mapping.get(f.id) for f in files}
+        picked = [t for t in mapping.values() if t is not None]
+        if any(t not in tracks for t in picked):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown track")
+        if len(picked) != len(set(picked)):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "A track can only be matched to one file."
+            )
+    fields = set(body.fields)
+    planned = []
+    for f in files:
+        track_id = mapping.get(f.id)
+        if track_id is None:
+            continue
+        for field, new in plan_file(
+            f.tags, wanted(release, tracks[track_id]), set[str](fields)
+        ).items():
+            planned.append(
+                Planned(
+                    f.id, f.path, f.rating_key or 0, field, clean(field, f.tags.get(field)), new
+                )
+            )
+    return release, files, mapping, planned
+
+
+@router.post("/albums/{album_key}/musicbrainz/preview", response_model=MbPreviewOut)
+async def musicbrainz_preview(
+    server_id: int, album_key: int, body: MbApplyIn, db: DbDep, user: UserDep, http: HttpDep
+) -> MbPreviewOut:
+    """A release's tracks, which file is which (matched automatically unless given), and the
+    tags that would change. Nothing is written."""
+    us = await owner_server(db, user, server_id)
+    release, files, mapping, planned = await _mb_plan(db, http, us.server_id, album_key, body)
+    per_file: dict[int, list[MbFieldChange]] = {}
+    for p in planned:
+        per_file.setdefault(p.media_file_id, []).append(
+            MbFieldChange(field=p.field, old_value=p.old_value, new_value=p.new_value)
+        )
+    return MbPreviewOut(
+        release=MbReleaseSummary.model_validate(release.summary, from_attributes=True),
+        tracks=[MbTrackOut.model_validate(t, from_attributes=True) for t in release.tracks],
+        files=[
+            MbFileOut(
+                file_id=f.id,
+                path=f.path,
+                disc=f.tags.get("disc"),
+                track=f.tags.get("track"),
+                title=f.tags.get("title"),
+                duration_ms=f.duration_ms,
+                track_id=mapping.get(f.id),
+                changes=per_file.get(f.id, []),
+            )
+            for f in files
+        ],
+        changes=len(planned),
+    )
+
+
+@router.post(
+    "/albums/{album_key}/musicbrainz",
+    response_model=TagChangeSetOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def musicbrainz_apply(
+    server_id: int, album_key: int, body: MbApplyIn, db: DbDep, user: UserDep, http: HttpDep
+) -> TagChangeSetOut:
+    """Write a release's tags to the album's files, as one edit (undo it from the history)."""
+    us, server = await _editable(db, user, server_id)
+    release, _files, _mapping, planned = await _mb_plan(db, http, us.server_id, album_key, body)
+    if not planned:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The files already match this release.")
+    count = len({p.media_file_id for p in planned})
+    about = ", ".join(
+        x for x in (release.date[:4] if release.date else None, release.country,
+                    release.summary.formats) if x
+    )  # fmt: skip
+    description = f"MusicBrainz release {release.title}" + (f" ({about})" if about else "")
+    description = f"{description[:170]} to {count} {'file' if count == 1 else 'files'}"
+    changes = [
+        TagChange(
+            media_file_id=p.media_file_id,
+            path=p.path,
+            rating_key=p.rating_key or None,
+            field=p.field,
+            old_value=p.old_value,
+            new_value=p.new_value,
+        )
+        for p in planned
+    ]
+    return await _queue(
+        db,
+        TagChangeSet(server_id=server.id, user_id=user.id, kind="edit", description=description),
+        changes,
+    )

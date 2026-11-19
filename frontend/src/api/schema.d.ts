@@ -1159,6 +1159,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/musicbrainz/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Musicbrainz Search
+         * @description Releases on MusicBrainz by album title (and artist); a release link finds that one.
+         */
+        get: operations["musicbrainz_search_api_servers__server_id__files_musicbrainz_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/musicbrainz/cover/{release_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Musicbrainz Cover
+         * @description A release's front cover from the Cover Art Archive (kept under /data).
+         */
+        get: operations["musicbrainz_cover_api_servers__server_id__files_musicbrainz_cover__release_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/{album_key}/musicbrainz/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Musicbrainz Preview
+         * @description A release's tracks, which file is which (matched automatically unless given), and the
+         *     tags that would change. Nothing is written.
+         */
+        post: operations["musicbrainz_preview_api_servers__server_id__files_albums__album_key__musicbrainz_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/{album_key}/musicbrainz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Musicbrainz Apply
+         * @description Write a release's tags to the album's files, as one edit (undo it from the history).
+         */
+        post: operations["musicbrainz_apply_api_servers__server_id__files_albums__album_key__musicbrainz_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -2928,6 +3009,116 @@ export interface components {
             by_source: {
                 [key: string]: number;
             };
+        };
+        /** MbApplyIn */
+        MbApplyIn: {
+            /** Release Id */
+            release_id: string;
+            /**
+             * Mapping
+             * @description File id -> release track id (None: leave the file alone). Left out: matched automatically.
+             */
+            mapping?: {
+                [key: string]: string | null;
+            } | null;
+            /** Fields */
+            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
+        };
+        /** MbFieldChange */
+        MbFieldChange: {
+            /** Field */
+            field: string;
+            /** Old Value */
+            old_value: string | string[] | null;
+            /** New Value */
+            new_value: string | string[] | null;
+        };
+        /** MbFileOut */
+        MbFileOut: {
+            /** File Id */
+            file_id: number;
+            /** Path */
+            path: string;
+            /** Disc */
+            disc: number | null;
+            /** Track */
+            track: number | null;
+            /** Title */
+            title: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /**
+             * Track Id
+             * @description The release track it's matched to.
+             */
+            track_id: string | null;
+            /** Changes */
+            changes: components["schemas"]["MbFieldChange"][];
+        };
+        /** MbPreviewOut */
+        MbPreviewOut: {
+            release: components["schemas"]["MbReleaseSummary"];
+            /** Tracks */
+            tracks: components["schemas"]["MbTrackOut"][];
+            /** Files */
+            files: components["schemas"]["MbFileOut"][];
+            /** Changes */
+            changes: number;
+        };
+        /** MbReleaseSummary */
+        MbReleaseSummary: {
+            /** Id */
+            id: string;
+            /**
+             * Score
+             * @description MusicBrainz's search score (0-100).
+             */
+            score: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string;
+            /** Date */
+            date: string | null;
+            /** Country */
+            country: string | null;
+            /**
+             * Formats
+             * @description The media: CD, two CDs, Digital Media...
+             */
+            formats: string;
+            /** Track Count */
+            track_count: number;
+            /** Label */
+            label: string | null;
+            /** Catalog Number */
+            catalog_number: string | null;
+            /**
+             * Type
+             * @description "Album", "Album + Live"...
+             */
+            type: string | null;
+            /** Status */
+            status: string | null;
+            /** Disambiguation */
+            disambiguation: string | null;
+            /** Barcode */
+            barcode: string | null;
+        };
+        /** MbTrackOut */
+        MbTrackOut: {
+            /** Id */
+            id: string;
+            /** Disc */
+            disc: number;
+            /** Position */
+            position: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string;
+            /** Length Ms */
+            length_ms: number | null;
         };
         /** PinCheckOut */
         PinCheckOut: {
@@ -6296,6 +6487,144 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PlexSyncIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    musicbrainz_search_api_servers__server_id__files_musicbrainz_search_get: {
+        parameters: {
+            query: {
+                album: string;
+                artist?: string | null;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MbReleaseSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    musicbrainz_cover_api_servers__server_id__files_musicbrainz_cover__release_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                release_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    musicbrainz_preview_api_servers__server_id__files_albums__album_key__musicbrainz_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MbApplyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MbPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    musicbrainz_apply_api_servers__server_id__files_albums__album_key__musicbrainz_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MbApplyIn"];
             };
         };
         responses: {

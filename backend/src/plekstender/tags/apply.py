@@ -23,7 +23,7 @@ from plekstender.db.models import (
     UserServer,
 )
 from plekstender.plex.tv import PlexError
-from plekstender.tags.read import TagReadError, read_file
+from plekstender.tags.read import READER, TagReadError, read_file
 from plekstender.tags.write import Planned, TagWriteError, apply, snapshot
 
 log = logging.getLogger(__name__)
@@ -162,6 +162,7 @@ async def _reread(media: MediaFile, path: Path) -> None:
         return
     media.tags = info["tags"]
     media.has_cover = info["has_cover"]
+    media.reader = READER
     media.size, media.mtime = st.st_size, st.st_mtime
     media.error = None
     media.scanned_at = dt.datetime.now(dt.UTC)
