@@ -13,7 +13,7 @@ import {
   type MbRelease,
 } from '../api/files'
 import { formatCount, formatDuration } from '../format'
-import { fieldLabel, showValue } from '../tags'
+import { fieldLabel, showOld, showValue } from '../tags'
 import { Dialog } from './Dialog'
 import { Badge, Button, Notice, Spinner } from './ui'
 
@@ -421,7 +421,7 @@ function FileMatches({
                     .map((c) => (
                       <li key={c.field} className="flex flex-wrap gap-x-2">
                         <span className="w-28 shrink-0 text-muted">{fieldLabel(c.field)}</span>
-                        <span className="text-danger line-through decoration-1">{showValue(c.old_value)}</span>
+                        <span className="text-danger line-through decoration-1">{showOld(c)}</span>
                         <span aria-hidden>→</span>
                         <span className="font-medium text-ok">{showValue(c.new_value)}</span>
                       </li>

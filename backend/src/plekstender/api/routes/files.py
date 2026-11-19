@@ -50,6 +50,7 @@ from plekstender.db.models import (
 from plekstender.tags.mbapply import AlbumFile, match, plan_file, wanted
 from plekstender.tags.plexsync import Planned
 from plekstender.tags.plexsync import plan as plan_sync
+from plekstender.tags.read import unread_fields
 from plekstender.tags.write import clean
 from plekstender.worker import enqueue_file_scan, enqueue_tag_changes
 
@@ -531,7 +532,13 @@ async def plex_sync_preview(
         changes=len(planned),
         by_field=by_field,
         samples=[
-            PlexSyncSample(path=p.path, field=p.field, old_value=p.old_value, new_value=p.new_value)
+            PlexSyncSample(
+                path=p.path,
+                field=p.field,
+                old_unknown=p.old_unknown,
+                old_value=p.old_value,
+                new_value=p.new_value,
+            )
             for p in planned[:100]
         ],
     )
@@ -644,7 +651,15 @@ async def _album_files(db: DbDep, server_id: int, album_key: int) -> list[AlbumF
         .order_by(MediaFile.path)
     )
     return [
-        AlbumFile(m.id, m.path, m.rating_key, m.tags or {}, m.duration_ms, _recordings(m))
+        AlbumFile(
+            m.id,
+            m.path,
+            m.rating_key,
+            m.tags or {},
+            m.duration_ms,
+            _recordings(m),
+            unread_fields(m.reader),
+        )
         for m in rows
     ]
 
@@ -694,7 +709,13 @@ async def _mb_plan(
         ).items():
             planned.append(
                 Planned(
-                    f.id, f.path, f.rating_key or 0, field, clean(field, f.tags.get(field)), new
+                    f.id,
+                    f.path,
+                    f.rating_key or 0,
+                    field,
+                    clean(field, f.tags.get(field)),
+                    new,
+                    field in f.unknown,
                 )
             )
     return release, files, mapping, planned
@@ -711,7 +732,12 @@ async def musicbrainz_preview(
     per_file: dict[int, list[MbFieldChange]] = {}
     for p in planned:
         per_file.setdefault(p.media_file_id, []).append(
-            MbFieldChange(field=p.field, old_value=p.old_value, new_value=p.new_value)
+            MbFieldChange(
+                field=p.field,
+                old_unknown=p.old_unknown,
+                old_value=p.old_value,
+                new_value=p.new_value,
+            )
         )
     return MbPreviewOut(
         release=MbReleaseSummary.model_validate(release.summary, from_attributes=True),

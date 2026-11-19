@@ -35,6 +35,7 @@ class AlbumFile:
     tags: dict[str, Any]
     duration_ms: int | None
     recordings: frozenset[str] = frozenset()  # identified by sound (MusicBrainz recordings)
+    unknown: frozenset[str] = frozenset()  # fields its scan couldn't read yet (old reader)
 
 
 def _norm(text: Any) -> str:

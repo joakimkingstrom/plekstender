@@ -346,6 +346,7 @@ async def test_writing_plex_metadata_in_bulk(app: FastAPI, plex: FakePlex, music
     assert preview["samples"][0] == {
         "path": "301.flac",
         "field": "title",
+        "old_unknown": False,
         "old_value": "Karma Police (Live)",
         "new_value": "Karma Police",
     }
@@ -654,7 +655,13 @@ async def test_writing_your_ratings_to_files(app: FastAPI, plex: FakePlex, music
     body = {"scope": "library", "fields": ["rating"]}
     preview = (await owner.post(f"{base}/plex-sync/preview", json=body, headers=CSRF)).json()
     assert preview["samples"] == [
-        {"path": "300.flac", "field": "rating", "old_value": None, "new_value": "100"}
+        {
+            "path": "300.flac",
+            "field": "rating",
+            "old_unknown": False,
+            "old_value": None,
+            "new_value": "100",
+        }
     ]
     resp = await owner.post(f"{base}/plex-sync", json=body, headers=CSRF)
     await apply_tag_changes.func(set_id=resp.json()["id"])
@@ -834,3 +841,82 @@ async def test_identifying_files_by_sound(
     suggested = (await owner.get(f"{base}/albums/200/musicbrainz/suggested")).json()
     assert [(r["id"], r["score"], r["formats"]) for r in suggested] == [(RELEASE_ID, 50, "CD")]
     assert (await owner.get(f"{base}/summary")).json()["last"]["id"] == scan["id"]  # scans only
+
+
+@pytest.mark.db
+async def test_tags_an_older_scan_couldnt_read(
+    app: FastAPI, plex: FakePlex, music: Path, mb: FakeMusicBrainz
+) -> None:
+    """Files scanned before Plekstender read release country and release track IDs: the
+    preview says so, writing replaces whatever they hold, and undo puts it back."""
+    from sqlalchemy import update
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import MediaFile
+    from plekstender.worker import apply_tag_changes, scan_music_files
+
+    for name in ("300.flac", "301.flac"):  # tagged from another release before
+        tag_flac(music / name, releasecountry="XW", musicbrainz_releasetrackid="old-track")
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+    async with get_sessionmaker()() as db:  # as an older reader saw them
+        for media in (await db.scalars(select_files())).all():
+            tags = {
+                k: v
+                for k, v in media.tags.items()
+                if k not in ("releasecountry", "musicbrainz_releasetrackid")
+            }
+            await db.execute(
+                update(MediaFile).where(MediaFile.id == media.id).values(tags=tags, reader=1)
+            )
+        await db.commit()
+
+    body = {"release_id": RELEASE_ID, "fields": ["releasecountry", "musicbrainz_releasetrackid"]}
+    preview = (
+        await owner.post(f"{base}/albums/200/musicbrainz/preview", json=body, headers=CSRF)
+    ).json()
+    changes = [c for f in preview["files"] for c in f["changes"]]
+    assert len(changes) == 4 and all(c["old_unknown"] and c["old_value"] is None for c in changes)
+
+    resp = await owner.post(f"{base}/albums/200/musicbrainz", json=body, headers=CSRF)
+    await apply_tag_changes.func(set_id=resp.json()["id"])
+    [done] = (await owner.get(f"{base}/changes")).json()
+    assert (done["status"], done["counts"]) == ("applied", {"applied": 4})
+    assert {c["old_value"] for c in done["changes"]} == {"XW", "old-track"}  # what was there
+    assert FLAC(music / "301.flac")["releasecountry"] == ["GB"]
+
+    undo = await owner.post(f"{base}/undo", json={"set_id": done["id"]}, headers=CSRF)
+    await apply_tag_changes.func(set_id=undo.json()["id"])
+    assert FLAC(music / "301.flac")["releasecountry"] == ["XW"]
+    assert FLAC(music / "301.flac")["musicbrainz_releasetrackid"] == ["old-track"]
+
+
+def select_files() -> Any:
+    from sqlalchemy import select
+
+    from plekstender.db.models import MediaFile
+
+    return select(MediaFile)
+
+
+def test_a_changed_file_is_left_alone_with_a_clear_reason(tmp_path: Path) -> None:
+    from plekstender.tags.write import Planned as Change
+    from plekstender.tags.write import apply
+
+    path = tmp_path / "a.flac"
+    make_audio(path)
+    tag_flac(path, releasecountry="XW")
+    [outcome] = apply(path, [Change(1, "releasecountry", None, "GB")])
+    assert outcome.status == "conflict"
+    assert (
+        outcome.error
+        == "Left as it was: the file had 'XW', not no value (changed since it was scanned)."
+    )

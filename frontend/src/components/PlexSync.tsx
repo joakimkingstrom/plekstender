@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { errorMessage } from '../api/client'
 import { usePlexSync, usePlexSyncPreview, type PlexSyncRequest } from '../api/files'
 import { formatCount } from '../format'
-import { FIELD_LABELS, fieldLabel, showFieldValue, type TagField } from '../tags'
+import { FIELD_LABELS, fieldLabel, showFieldValue, showOld, type TagField } from '../tags'
 import { Button, Notice } from './ui'
 
 type SyncField = NonNullable<PlexSyncRequest['fields']>[number]
@@ -92,7 +92,7 @@ export function PlexSync({
                       </td>
                       <td className="px-2 py-1 text-muted">{fieldLabel(c.field)}</td>
                       <td className="px-2 py-1">
-                        <span className="text-danger line-through decoration-1">{showFieldValue(c.field, c.old_value)}</span> →{' '}
+                        <span className="text-danger line-through decoration-1">{showOld(c)}</span> →{' '}
                         <span className="text-ok">{showFieldValue(c.field, c.new_value)}</span>
                       </td>
                     </tr>

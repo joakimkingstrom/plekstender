@@ -5,11 +5,13 @@ import { formatCount, formatRelative } from '../format'
 import {
   ALBUM_FIELDS,
   FIELD_LABELS,
+  MB_PAGES,
   fieldLabel,
   SONG_FIELDS,
   asText,
   plannedChanges,
   showFieldValue,
+  songName,
   showValue,
   type Draft,
   type EditableFile,
@@ -235,9 +237,71 @@ const STATUS: Record<TagChangeSet['status'], { label: string; tone: 'muted' | 'a
 
 const undoable = (c: TagChange) => c.status === 'applied' && !c.undone
 
+/** A value as the history shows it: MusicBrainz IDs shortened, linked to their page. */
+function HistoryValue({ field, value, old }: { field: string; value: TagChange['new_value']; old?: boolean }) {
+  const page = MB_PAGES[field]
+  const text = showFieldValue(field, value)
+  if (page && typeof value === 'string' && value.length > 12) {
+    const short = `${value.slice(0, 8)}…`
+    return old ? (
+      <span title={value} className="font-mono">
+        {short}
+      </span>
+    ) : (
+      <a
+        href={`https://musicbrainz.org/${page}/${value}`}
+        target="_blank"
+        rel="noreferrer"
+        title={value}
+        className="font-mono underline decoration-dotted underline-offset-2 hover:text-accent"
+      >
+        {short}
+      </a>
+    )
+  }
+  return <span className="break-words">{text}</span>
+}
+
+function ChangeRow({ change: c, picked, onToggle }: { change: TagChange; picked: boolean; onToggle: () => void }) {
+  const written = c.status === 'applied'
+  const name = `${fieldLabel(c.field)} of ${songName(c.path)}`
+  return (
+    <li className="grid grid-cols-[1.25rem_minmax(6rem,10rem)_1fr] items-baseline gap-x-2 py-0.5">
+      {undoable(c) ? (
+        <input type="checkbox" aria-label={`Pick ${name}`} checked={picked} onChange={onToggle} className="translate-y-0.5" />
+      ) : (
+        <span />
+      )}
+      <span className="text-muted">{fieldLabel(c.field)}</span>
+      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+        <span className={written && !c.undone ? 'text-muted line-through decoration-1' : 'text-muted'}>
+          {c.old_value === null ? <span className="italic">none</span> : <HistoryValue field={c.field} value={c.old_value} old />}
+        </span>
+        <span aria-hidden className="text-muted">
+          →
+        </span>
+        <span className={written ? 'font-medium' : 'text-muted'}>
+          {c.new_value === null ? <span className="italic">removed</span> : <HistoryValue field={c.field} value={c.new_value} />}
+        </span>
+        {c.undone && <Badge>undone</Badge>}
+        {c.status === 'conflict' && (
+          <span className="text-xs text-warn" title={c.error ?? undefined}>
+            left as it was
+          </span>
+        )}
+        {c.status === 'failed' && <span className="text-xs text-danger">not written: {c.error}</span>}
+        {c.status === 'pending' && <span className="text-xs text-muted">waiting</span>}
+      </span>
+      {c.status === 'conflict' && c.error && (
+        <span className="col-start-3 text-xs text-muted">{c.error.replace(/^Left as it was: /, '')}</span>
+      )}
+    </li>
+  )
+}
+
 /**
- * The history of edits to an album's or an artist's files, newest first. Each edit can be
- * undone as a whole, or change by change (pick them).
+ * The history of edits to an album's or an artist's files (or all files), newest first. Each
+ * edit lists its changes file by file; it can be undone as a whole, or change by change.
  */
 export function TagHistory({ serverId, album, artist }: { serverId: number; album?: number; artist?: number }) {
   const history = useTagHistory(serverId, album !== undefined ? { album } : { artist })
@@ -275,7 +339,10 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
             const status = STATUS[set.status]
             const counts = set.counts ?? {}
             const done = set.total - (counts.pending ?? 0)
-            const skipped = (counts.conflict ?? 0) + (counts.failed ?? 0)
+            const left = counts.conflict ?? 0
+            const failed = counts.failed ?? 0
+            const byFile = new Map<string, TagChange[]>()
+            for (const c of set.changes) byFile.set(c.path, [...(byFile.get(c.path) ?? []), c])
             return (
               <li key={set.id} className="rounded-xl border border-border">
                 <details>
@@ -285,47 +352,42 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                       {set.user ?? 'someone'} · {formatRelative(set.created_at)}
                     </span>
                     <span className="ml-auto flex items-center gap-2">
-                      {set.total > 1 && (
-                        <span className="text-xs text-muted tabular-nums">
-                          {set.status === 'running' || set.status === 'queued'
-                            ? `${formatCount(done)} / ${formatCount(set.total)}`
-                            : `${formatCount(counts.applied ?? 0)} written${skipped ? `, ${formatCount(skipped)} skipped` : ''}`}
-                        </span>
-                      )}
+                      <span className="text-xs text-muted tabular-nums">
+                        {set.status === 'running' || set.status === 'queued'
+                          ? `${formatCount(done)} / ${formatCount(set.total)}`
+                          : [
+                              `${formatCount(counts.applied ?? 0)} written`,
+                              left ? `${formatCount(left)} left as they were` : null,
+                              failed ? `${formatCount(failed)} failed` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                      </span>
                       {(set.status === 'queued' || set.status === 'running') && <Spinner small />}
                       <Badge tone={status.tone}>{status.label}</Badge>
                     </span>
                   </summary>
-                  <div className="space-y-2 border-t border-border px-3 py-2">
-                    <ul className="space-y-1">
-                      {set.changes.map((c) => (
-                        <li key={c.id} className="flex items-start gap-2">
-                          <input
-                            type="checkbox"
-                            className="mt-1"
-                            aria-label={`Pick ${fieldLabel(c.field)} of ${c.path}`}
-                            disabled={!undoable(c)}
-                            checked={picked.has(c.id)}
-                            onChange={() => toggle(c.id)}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-mono text-xs text-muted" title={c.path}>
-                              {c.path.split('/').at(-1)}
-                            </span>
-                            <span className="flex flex-wrap gap-x-2">
-                              <span className="text-muted">{fieldLabel(c.field)}</span>
-                              <span>{showFieldValue(c.field, c.old_value)}</span>
-                              <span aria-hidden>→</span>
-                              <span className="font-medium">{showFieldValue(c.field, c.new_value)}</span>
-                              {c.undone && <Badge>undone</Badge>}
-                              {c.status === 'conflict' && <Badge tone="accent">skipped: changed elsewhere</Badge>}
-                              {c.status === 'failed' && <Badge tone="accent">failed</Badge>}
-                            </span>
-                            {c.error && c.status !== 'applied' && <span className="block text-xs text-muted">{c.error}</span>}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                  <div className="space-y-3 border-t border-border px-3 py-3">
+                    {left > 0 && (
+                      <p className="rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
+                        {formatCount(left)} {left === 1 ? 'change was' : 'changes were'} left as{' '}
+                        {left === 1 ? 'it was' : 'they were'}: the file held something other than what Plekstender
+                        expected, so it wasn't overwritten. Scan the music folder and make the edit again to update
+                        them.
+                      </p>
+                    )}
+                    {[...byFile.entries()].map(([path, changes]) => (
+                      <section key={path}>
+                        <h4 className="truncate font-medium" title={path}>
+                          {songName(path)}
+                        </h4>
+                        <ul className="mt-0.5">
+                          {changes.map((c) => (
+                            <ChangeRow key={c.id} change={c} picked={picked.has(c.id)} onToggle={() => toggle(c.id)} />
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
                     {set.total > set.changes.length && (
                       <p className="text-xs text-muted">
                         The first {set.changes.length} of {formatCount(set.total)} changes are listed.

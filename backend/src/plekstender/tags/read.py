@@ -27,6 +27,19 @@ TEXT_FIELDS = (
 LIST_FIELDS = ("genre",)
 # Bumped when more fields are read: the next scan re-reads every file once.
 READER = 3
+# The fields each reader version added: a file read by an older reader may have them without
+# Plekstender knowing (until it's read again).
+ADDED = {
+    2: frozenset({"musicbrainz_releasetrackid", "releasecountry"}),
+    3: frozenset({"rating"}),
+}
+
+
+def unread_fields(reader: int) -> frozenset[str]:
+    """Fields a file read by this reader version may hold without Plekstender knowing."""
+    return frozenset().union(*(fields for version, fields in ADDED.items() if version > reader))
+
+
 MAX_VALUE = 500
 
 

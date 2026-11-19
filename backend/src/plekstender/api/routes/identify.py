@@ -31,6 +31,7 @@ from plekstender.db.instance import get_acoustid_api_key
 from plekstender.db.models import FileScan, MediaFile, TagChange, TagChangeSet, Track
 from plekstender.tags.identify import file_key, find, suggest, values
 from plekstender.tags.mbapply import plan_file
+from plekstender.tags.read import unread_fields
 from plekstender.tags.write import clean
 from plekstender.worker import enqueue_identify
 
@@ -254,7 +255,10 @@ async def identify_preview(
                 path=media.path,
                 changes=[
                     MbFieldChange(
-                        field=f, old_value=clean(f, (media.tags or {}).get(f)), new_value=v
+                        field=f,
+                        old_unknown=f in unread_fields(media.reader),
+                        old_value=clean(f, (media.tags or {}).get(f)),
+                        new_value=v,
                     )
                     for f, v in changes.items()
                 ],

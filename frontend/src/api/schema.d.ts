@@ -3283,6 +3283,12 @@ export interface components {
         MbFieldChange: {
             /** Field */
             field: string;
+            /**
+             * Old Unknown
+             * @description The file was scanned before this field was read.
+             * @default false
+             */
+            old_unknown: boolean;
             /** Old Value */
             old_value: string | string[] | null;
             /** New Value */
@@ -3677,6 +3683,12 @@ export interface components {
             path: string;
             /** Field */
             field: string;
+            /**
+             * Old Unknown
+             * @description The file was scanned before this field was read.
+             * @default false
+             */
+            old_unknown: boolean;
             /** Old Value */
             old_value: string | string[] | null;
             /** New Value */

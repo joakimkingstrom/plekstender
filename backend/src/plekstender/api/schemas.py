@@ -1046,6 +1046,9 @@ class PlexSyncIn(BaseModel):
 class PlexSyncSample(BaseModel):
     path: str
     field: str
+    old_unknown: bool = Field(
+        default=False, description="The file was scanned before this field was read."
+    )
     old_value: TagValue
     new_value: TagValue
 
@@ -1103,6 +1106,9 @@ class MbApplyIn(BaseModel):
 
 class MbFieldChange(BaseModel):
     field: str
+    old_unknown: bool = Field(
+        default=False, description="The file was scanned before this field was read."
+    )
     old_value: TagValue
     new_value: TagValue
 

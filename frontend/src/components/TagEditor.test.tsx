@@ -74,10 +74,14 @@ describe('Editing tags', () => {
     // The history: undo the written change (the skipped one can't be picked).
     const item = await screen.findByText('Fixed the album artist')
     fireEvent.click(item)
-    const boxes = screen.getAllByRole('checkbox', { name: /^Pick Album artist/ })
-    expect(boxes.map((b) => (b as HTMLInputElement).disabled)).toEqual([false, true])
-    expect(screen.getByText('skipped: changed elsewhere')).toBeInTheDocument()
-    expect(screen.getByText('1 written, 1 skipped')).toBeInTheDocument()
+    // Changes grouped by file; only written ones can be picked.
+    expect(screen.getAllByRole('checkbox', { name: /^Pick Album artist/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Pick Album artist of 1',
+    ])
+    expect(screen.getByRole('heading', { name: '2' })).toBeInTheDocument()
+    expect(screen.getByText('left as it was')).toBeInTheDocument()
+    expect(screen.getByText(/1 change was left as it was: the file held something other/)).toBeInTheDocument()
+    expect(screen.getByText('1 written · 1 left as they were')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '↶ Undo this edit' }))
     await vi.waitFor(async () => {
       const post = fetch.mock.calls.find(([r]) => new URL(r.url).pathname.endsWith('/files/undo'))

@@ -101,6 +101,9 @@ class Planned:
     field: str
     expected: Value
     new: Value
+    # False: what the file holds wasn't known when the change was made (the file was scanned
+    # before Plekstender read this field). Written whatever it holds; what it held is kept.
+    known: bool = True
 
 
 @dataclass
@@ -108,6 +111,14 @@ class Outcome:
     id: int
     status: str  # applied | conflict | failed
     error: str | None = None
+    replaced: bool = False  # an unknown value was replaced: `found` is what the file held
+    found: Value = None
+
+
+def show(value: Value) -> str:
+    if value is None:
+        return "no value"
+    return f"'{', '.join(value) if isinstance(value, list) else value}'"
 
 
 def apply(path: Path, changes: list[Planned]) -> list[Outcome]:
@@ -118,14 +129,22 @@ def apply(path: Path, changes: list[Planned]) -> list[Outcome]:
         return [Outcome(c.id, "failed", str(exc)) for c in changes]
     outcomes = []
     to_write = []
+    found: dict[int, Value] = {}
     for change in changes:
         if change.field not in EDITABLE:
             outcomes.append(Outcome(change.id, "failed", f"{change.field} can't be edited."))
             continue
         now = current(audio, change.field)
-        if now != clean(change.field, change.expected):
+        if not change.known:
+            found[change.id] = now
+        elif now != clean(change.field, change.expected):
             outcomes.append(
-                Outcome(change.id, "conflict", f"The file has {now!r} now (changed elsewhere).")
+                Outcome(
+                    change.id,
+                    "conflict",
+                    f"Left as it was: the file had {show(now)}, not "
+                    f"{show(clean(change.field, change.expected))} (changed since it was scanned).",
+                )
             )
             continue
         to_write.append(change)
@@ -142,4 +161,6 @@ def apply(path: Path, changes: list[Planned]) -> list[Outcome]:
         audio.save()
     except Exception as exc:
         return outcomes + [Outcome(c.id, "failed", f"Couldn't write: {exc}") for c in to_write]
-    return outcomes + [Outcome(c.id, "applied") for c in to_write]
+    return outcomes + [
+        Outcome(c.id, "applied", replaced=c.id in found, found=found.get(c.id)) for c in to_write
+    ]

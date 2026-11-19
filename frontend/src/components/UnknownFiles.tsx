@@ -12,7 +12,7 @@ import {
   type UnknownKind,
 } from '../api/files'
 import { formatCount } from '../format'
-import { fieldLabel, showFieldValue } from '../tags'
+import { fieldLabel, showFieldValue, showOld } from '../tags'
 import { Dialog } from './Dialog'
 import { Segmented } from './Segmented'
 import { Button, Card, Notice, Spinner } from './ui'
@@ -265,7 +265,7 @@ function Review({ serverId, choices, onClose }: { serverId: number; choices: Ide
                         .map((c) => (
                           <li key={c.field} className="flex flex-wrap gap-x-2">
                             <span className="w-28 shrink-0 text-muted">{fieldLabel(c.field)}</span>
-                            <span className="text-danger line-through decoration-1">{showFieldValue(c.field, c.old_value)}</span>
+                            <span className="text-danger line-through decoration-1">{showOld(c)}</span>
                             <span aria-hidden>→</span>
                             <span className="font-medium text-ok">{showFieldValue(c.field, c.new_value)}</span>
                           </li>

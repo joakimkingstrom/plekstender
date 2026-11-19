@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from plekstender.db.models import Album, Artist, ItemTag, MediaFile, Tag, Track, UserItemState
+from plekstender.tags.read import unread_fields
 from plekstender.tags.write import clean
 
 Scope = Literal["library", "artist", "album"]
@@ -35,6 +36,7 @@ class Planned:
     field: str
     old_value: Any
     new_value: Any
+    old_unknown: bool = False  # scanned before this field was read
 
 
 def _number(value: Any) -> tuple[int | None, str | None]:
@@ -104,13 +106,14 @@ async def plan(
             MediaFile.id,
             MediaFile.path,
             MediaFile.tags,
+            MediaFile.reader,
             Track.rating_key,
             Track.title,
             Track.original_title,
             Track.number,
             Track.disc,
             track_artist.title,
-            Album.rating_key,
+            Album.rating_key.label("album_key"),
             Album.title,
             Album.year,
             album_artist.title,
@@ -150,7 +153,7 @@ async def plan(
     rows = (await db.execute(query)).all()
     genres: dict[int, list[str]] = {}
     if "genre" in fields:
-        album_keys = {row[9] for row in rows if row[9] is not None}
+        album_keys = {row.album_key for row in rows if row.album_key is not None}
         conditions = [ItemTag.server_id == server_id, Tag.kind == "genre"]
         if len(album_keys) < 30_000:  # otherwise all of them, filtered below
             conditions.append(ItemTag.rating_key.in_(album_keys))
@@ -165,7 +168,7 @@ async def plan(
                 genres.setdefault(album_key, []).append(name)
     out: list[Planned] = []
     for (
-        file_id, path, tags, rating_key, title, original_title, number, disc,
+        file_id, path, tags, reader, rating_key, title, original_title, number, disc,
         artist_name, album_key, album_title, year, album_artist_name, rating,
     ) in rows:  # fmt: skip
         plex = {
@@ -179,10 +182,8 @@ async def plan(
             "genre": genres.get(album_key, []),
             "rating": rating,
         }
+        unknown = unread_fields(reader)
         for field, new in plan_file(tags or {}, plex, fields).items():
-            out.append(
-                Planned(
-                    file_id, path, rating_key, field, clean(field, (tags or {}).get(field)), new
-                )
-            )
+            old = clean(field, (tags or {}).get(field))
+            out.append(Planned(file_id, path, rating_key, field, old, new, field in unknown))
     return out

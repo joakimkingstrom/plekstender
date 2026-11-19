@@ -51,6 +51,28 @@ export function showFieldValue(field: string, value: TagValue | undefined): stri
   return showValue(value)
 }
 
+/** A change's old value: "not read yet" when the file was scanned before Plekstender read
+ * that tag (writing then replaces whatever is there, and keeps it for undo). */
+export function showOld(change: { field: string; old_value?: TagValue; old_unknown?: boolean }): string {
+  return change.old_unknown ? 'not read yet' : showFieldValue(change.field, change.old_value)
+}
+
+/** MusicBrainz ID fields and the kind of page each ID is on musicbrainz.org. */
+export const MB_PAGES: Record<string, string> = {
+  musicbrainz_trackid: 'recording',
+  musicbrainz_releasetrackid: 'track',
+  musicbrainz_albumid: 'release',
+  musicbrainz_artistid: 'artist',
+  musicbrainz_albumartistid: 'artist',
+  musicbrainz_releasegroupid: 'release-group',
+}
+
+/** A file's name without its folder and extension: "01 - Claws". */
+export function songName(path: string): string {
+  const name = path.split('/').at(-1) ?? path
+  return name.replace(/\.[^.]+$/, '')
+}
+
 /** A typed-in value as it's stored: trimmed, genres split on commas, empty = no tag. */
 export function parseValue(field: TagField, text: string): TagValue {
   if (field === 'genre') {

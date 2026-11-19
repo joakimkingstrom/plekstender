@@ -23,7 +23,7 @@ from plekstender.db.models import (
     UserServer,
 )
 from plekstender.plex.tv import PlexError
-from plekstender.tags.read import READER, TagReadError, read_file
+from plekstender.tags.read import READER, TagReadError, read_file, unread_fields
 from plekstender.tags.write import Planned, TagWriteError, apply, snapshot
 
 log = logging.getLogger(__name__)
@@ -143,11 +143,17 @@ async def _apply_file(
             )
     except TagWriteError as exc:
         log.warning("no snapshot of %s: %s", media.path, exc)
-    planned = [Planned(c.id, c.field, c.old_value, c.new_value) for c in file_changes]
+    unknown = unread_fields(media.reader)
+    planned = [
+        Planned(c.id, c.field, c.old_value, c.new_value, known=c.field not in unknown)
+        for c in file_changes
+    ]
     outcomes = {o.id: o for o in await asyncio.to_thread(apply, path, planned)}
     for change in file_changes:
         outcome = outcomes[change.id]
         change.status, change.error = outcome.status, outcome.error
+        if outcome.replaced:
+            change.old_value = outcome.found  # what undo puts back
     if any(o.status == "applied" for o in outcomes.values()):
         await _reread(media, path)
         touched.add((media.rating_key, str(PurePosixPath(media.path).parent)))
