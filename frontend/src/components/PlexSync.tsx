@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { errorMessage } from '../api/client'
 import { usePlexSync, usePlexSyncPreview, type PlexSyncRequest } from '../api/files'
 import { formatCount } from '../format'
-import { FIELD_LABELS, fieldLabel, showValue, type TagField } from '../tags'
+import { FIELD_LABELS, fieldLabel, showFieldValue, type TagField } from '../tags'
 import { Button, Notice } from './ui'
 
 type SyncField = NonNullable<PlexSyncRequest['fields']>[number]
-const FIELDS: SyncField[] = ['title', 'artist', 'album', 'albumartist', 'tracknumber', 'discnumber', 'date', 'genre']
+const FIELDS: SyncField[] = ['title', 'artist', 'album', 'albumartist', 'tracknumber', 'discnumber', 'date', 'genre', 'rating']
+// Your ratings only when asked for.
+const DEFAULT_FIELDS = FIELDS.filter((f) => f !== 'rating')
 
 /**
  * Writing Plex's metadata to the files (a whole library or an artist): choose the fields,
@@ -25,7 +27,7 @@ export function PlexSync({
   canWrite: boolean
   onWritten?: () => void
 }) {
-  const [fields, setFields] = useState<Set<SyncField>>(new Set(FIELDS))
+  const [fields, setFields] = useState<Set<SyncField>>(new Set(DEFAULT_FIELDS))
   const preview = usePlexSyncPreview(serverId)
   const write = usePlexSync(serverId)
   const request: PlexSyncRequest = { scope, key: scopeKey ?? null, fields: FIELDS.filter((f) => fields.has(f)) }
@@ -44,12 +46,22 @@ export function PlexSync({
     <div className="space-y-3 text-sm">
       <fieldset className="flex flex-wrap gap-x-4 gap-y-1.5">
         <legend className="mb-1.5 font-medium">Tags to take from Plex</legend>
-        {FIELDS.map((f) => (
+        {DEFAULT_FIELDS.map((f) => (
           <label key={f} className="flex items-center gap-1.5">
             <input type="checkbox" checked={fields.has(f)} onChange={() => toggle(f)} />
             {FIELD_LABELS[f as TagField]}
           </label>
         ))}
+        <label className="flex basis-full items-start gap-1.5 pt-1">
+          <input type="checkbox" className="mt-0.5" checked={fields.has('rating')} onChange={() => toggle('rating')} />
+          <span>
+            Your ratings
+            <span className="block text-xs text-muted">
+              The songs you've rated, as POPM in MP3s and RATING (0–100) in FLAC, Ogg and M4A files, which most
+              players read.
+            </span>
+          </span>
+        </label>
       </fieldset>
       <Button variant="secondary" disabled={fields.size === 0} busy={preview.isPending} onClick={() => preview.mutate(request)}>
         Check what would change
@@ -80,8 +92,8 @@ export function PlexSync({
                       </td>
                       <td className="px-2 py-1 text-muted">{fieldLabel(c.field)}</td>
                       <td className="px-2 py-1">
-                        <span className="text-danger line-through decoration-1">{showValue(c.old_value)}</span> →{' '}
-                        <span className="text-ok">{showValue(c.new_value)}</span>
+                        <span className="text-danger line-through decoration-1">{showFieldValue(c.field, c.old_value)}</span> →{' '}
+                        <span className="text-ok">{showFieldValue(c.field, c.new_value)}</span>
                       </td>
                     </tr>
                   ))}

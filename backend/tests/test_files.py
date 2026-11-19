@@ -583,3 +583,81 @@ async def test_applying_a_musicbrainz_release(
         await owner.post(f"{base}/albums/200/musicbrainz/preview", json=body, headers=CSRF)
     ).json()
     assert again["changes"] == 0  # the re-read files now hold every MusicBrainz tag
+
+
+# --- Ratings in the files --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("fmt", ["mp3", "flac", "m4a"])
+def test_ratings_in_each_format(tmp_path: Path, fmt: str) -> None:
+    from mutagen.id3 import ID3, POPM
+
+    from plekstender.tags.write import Planned as Change
+    from plekstender.tags.write import apply
+
+    path = tmp_path / f"song.{fmt}"
+    make_audio(path, fmt)
+    if fmt == "mp3":  # another player's rating and play count are kept (and updated)
+        id3 = ID3()
+        id3.add(POPM(email="foo@example.com", rating=196, count=7))
+        id3.save(path)
+        assert read_file(path)["tags"]["rating"] == "80"
+    assert [
+        o.status
+        for o in apply(path, [Change(1, "rating", read_file(path)["tags"].get("rating"), "90")])
+    ] == ["applied"]
+    assert read_file(path)["tags"]["rating"] == "90"
+    if fmt == "mp3":
+        [frame] = ID3(path).getall("POPM")
+        assert (frame.rating, frame.count) == (242, 7)
+    elif fmt == "flac":
+        assert FLAC(path)["rating"] == ["90"]
+    assert [o.status for o in apply(path, [Change(2, "rating", "90", None)])] == ["applied"]
+    assert "rating" not in read_file(path)["tags"]
+
+
+def test_popm_bytes_from_other_players() -> None:
+    from plekstender.tags.keys import popm_to_rating
+
+    assert [popm_to_rating(b) for b in (0, 1, 13, 64, 100, 128, 196, 255)] == [
+        None,
+        2,
+        1,
+        4,
+        6,
+        6,
+        8,
+        10,
+    ]
+
+
+@pytest.mark.db
+async def test_writing_your_ratings_to_files(app: FastAPI, plex: FakePlex, music: Path) -> None:
+    from plekstender.worker import apply_tag_changes, scan_music_files
+
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    # Not unless asked for; then only the songs you've rated (Paranoid Android, 5 stars).
+    default = (
+        await owner.post(f"{base}/plex-sync/preview", json={"scope": "library"}, headers=CSRF)
+    ).json()
+    assert "rating" not in default["by_field"]
+    body = {"scope": "library", "fields": ["rating"]}
+    preview = (await owner.post(f"{base}/plex-sync/preview", json=body, headers=CSRF)).json()
+    assert preview["samples"] == [
+        {"path": "300.flac", "field": "rating", "old_value": None, "new_value": "100"}
+    ]
+    resp = await owner.post(f"{base}/plex-sync", json=body, headers=CSRF)
+    await apply_tag_changes.func(set_id=resp.json()["id"])
+    assert FLAC(music / "300.flac")["rating"] == ["100"]
+    again = (await owner.post(f"{base}/plex-sync/preview", json=body, headers=CSRF)).json()
+    assert again["changes"] == 0

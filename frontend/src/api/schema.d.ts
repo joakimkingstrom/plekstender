@@ -3389,8 +3389,11 @@ export interface components {
              * @description The artist or album.
              */
             key?: number | null;
-            /** Fields */
-            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "genre")[];
+            /**
+             * Fields
+             * @description Your ratings are only written when asked for ("rating").
+             */
+            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "genre" | "rating")[];
             /** Description */
             description?: string | null;
         };

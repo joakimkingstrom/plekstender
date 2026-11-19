@@ -9,6 +9,7 @@ import {
   SONG_FIELDS,
   asText,
   plannedChanges,
+  showFieldValue,
   showValue,
   type Draft,
   type EditableFile,
@@ -313,9 +314,9 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                             </span>
                             <span className="flex flex-wrap gap-x-2">
                               <span className="text-muted">{fieldLabel(c.field)}</span>
-                              <span>{showValue(c.old_value)}</span>
+                              <span>{showFieldValue(c.field, c.old_value)}</span>
                               <span aria-hidden>→</span>
-                              <span className="font-medium">{showValue(c.new_value)}</span>
+                              <span className="font-medium">{showFieldValue(c.field, c.new_value)}</span>
                               {c.undone && <Badge>undone</Badge>}
                               {c.status === 'conflict' && <Badge tone="accent">skipped: changed elsewhere</Badge>}
                               {c.status === 'failed' && <Badge tone="accent">failed</Badge>}

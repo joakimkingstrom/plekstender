@@ -35,6 +35,7 @@ EDITABLE: tuple[str, ...] = (
     "musicbrainz_artistid",
     "musicbrainz_albumartistid",
     "musicbrainz_releasegroupid",
+    "rating",  # 0-100 (see keys.py)
 )
 LIST_FIELDS = {"genre"}
 MAX_VALUE = 500

@@ -1019,6 +1019,7 @@ class TagUndoIn(BaseModel):
 
 SyncField = Literal[
     "title", "artist", "album", "albumartist", "tracknumber", "discnumber", "date", "genre",
+    "rating",
 ]  # fmt: skip
 
 
@@ -1026,8 +1027,9 @@ class PlexSyncIn(BaseModel):
     scope: Literal["library", "artist", "album"]
     key: int | None = Field(default=None, description="The artist or album.")
     fields: list[SyncField] = Field(
-        default_factory=lambda: list(get_args(SyncField)),
+        default_factory=lambda: [f for f in get_args(SyncField) if f != "rating"],
         min_length=1,
+        description='Your ratings are only written when asked for ("rating").',
     )
     description: str | None = Field(default=None, max_length=200)
 

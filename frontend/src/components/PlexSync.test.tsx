@@ -44,6 +44,7 @@ describe('Writing Plex metadata to files', () => {
       const body = await post![0].clone().json()
       expect(body).toMatchObject({ scope: 'artist', key: 5 })
       expect(body.fields).not.toContain('genre')
+      expect(body.fields).not.toContain('rating') // only when asked for
     })
     expect(await screen.findByText(/Writing in the background/)).toBeInTheDocument()
   })

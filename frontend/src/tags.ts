@@ -26,6 +26,7 @@ const MORE_LABELS: Record<string, string> = {
   musicbrainz_artistid: 'MusicBrainz artist ID',
   musicbrainz_albumartistid: 'MusicBrainz album artist ID',
   musicbrainz_releasegroupid: 'MusicBrainz release group ID',
+  rating: 'Rating',
 }
 
 export function fieldLabel(field: string): string {
@@ -39,6 +40,15 @@ export const SONG_FIELDS: TagField[] = ['tracknumber', 'title', 'artist']
 export function showValue(value: TagValue | undefined): string {
   if (value === null || value === undefined || value === '') return '(none)'
   return Array.isArray(value) ? value.join(', ') : value
+}
+
+/** A value as shown for its field: ratings (0-100 in files) as stars, "4½ ★". */
+export function showFieldValue(field: string, value: TagValue | undefined): string {
+  if (field === 'rating' && typeof value === 'string' && /^\d+$/.test(value)) {
+    const halves = Math.round(Number(value) / 10)
+    return `${Math.floor(halves / 2) || ''}${halves % 2 ? '½' : ''} ★`
+  }
+  return showValue(value)
 }
 
 /** A typed-in value as it's stored: trimmed, genres split on commas, empty = no tag. */

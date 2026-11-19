@@ -3,6 +3,9 @@
 Only files matched to a Plex track (and readable) are considered. A field is only changed
 where Plex has a value and the file's differs in a way that matters: "2/12" already is track
 2, "1997-05-21" already is 1997, and genres in another order are the same genres.
+
+Ratings (only when asked for) are the requesting person's own, as 0-100; songs they haven't
+rated are left alone.
 """
 
 from __future__ import annotations
@@ -14,12 +17,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from plekstender.db.models import Album, Artist, ItemTag, MediaFile, Tag, Track
+from plekstender.db.models import Album, Artist, ItemTag, MediaFile, Tag, Track, UserItemState
 from plekstender.tags.write import clean
 
 Scope = Literal["library", "artist", "album"]
 SYNC_FIELDS = (
     "title", "artist", "album", "albumartist", "tracknumber", "discnumber", "date", "genre",
+    "rating",
 )  # fmt: skip
 
 
@@ -64,6 +68,13 @@ def plan_file(tags: dict[str, Any], plex: dict[str, Any], fields: set[str]) -> d
             if not year or (old and str(old).startswith(str(year))):
                 continue
             new = str(year)
+        elif field == "rating":
+            rating = plex.get("rating")
+            if not rating:
+                continue
+            new = str(min(100, max(10, round(rating * 10))))
+            if old == new:
+                continue
         elif field == "genre":
             genres = plex.get("genre") or []
             if not genres or sorted(old or []) == sorted(genres):
@@ -78,7 +89,12 @@ def plan_file(tags: dict[str, Any], plex: dict[str, Any], fields: set[str]) -> d
 
 
 async def plan(
-    db: AsyncSession, server_id: int, scope: Scope, key: int | None, fields: set[str]
+    db: AsyncSession,
+    server_id: int,
+    scope: Scope,
+    key: int | None,
+    fields: set[str],
+    user_id: int | None = None,
 ) -> list[Planned]:
     """Every change that would make the files' tags match Plex."""
     track_artist = aliased(Artist)
@@ -98,6 +114,7 @@ async def plan(
             Album.title,
             Album.year,
             album_artist.title,
+            UserItemState.user_rating,
         )
         .join(
             Track,
@@ -116,6 +133,12 @@ async def plan(
             album_artist,
             (album_artist.server_id == Album.server_id)
             & (album_artist.rating_key == Album.artist_rating_key),
+        )
+        .outerjoin(
+            UserItemState,
+            (UserItemState.user_id == (user_id if "rating" in fields else -1))
+            & (UserItemState.server_id == Track.server_id)
+            & (UserItemState.rating_key == Track.rating_key),
         )
         .where(MediaFile.server_id == server_id, MediaFile.error.is_(None))
         .order_by(MediaFile.path)
@@ -143,7 +166,7 @@ async def plan(
     out: list[Planned] = []
     for (
         file_id, path, tags, rating_key, title, original_title, number, disc,
-        artist_name, album_key, album_title, year, album_artist_name,
+        artist_name, album_key, album_title, year, album_artist_name, rating,
     ) in rows:  # fmt: skip
         plex = {
             "title": title,
@@ -154,6 +177,7 @@ async def plan(
             "disc": disc,
             "year": year,
             "genre": genres.get(album_key, []),
+            "rating": rating,
         }
         for field, new in plan_file(tags or {}, plex, fields).items():
             out.append(

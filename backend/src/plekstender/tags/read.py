@@ -22,11 +22,11 @@ TEXT_FIELDS = (
     "title", "artist", "album", "albumartist", "date", "originaldate", "composer",
     "tracknumber", "discnumber", "musicbrainz_trackid", "musicbrainz_albumid",
     "musicbrainz_artistid", "musicbrainz_albumartistid", "musicbrainz_releasegroupid",
-    "musicbrainz_releasetrackid", "releasecountry",
+    "musicbrainz_releasetrackid", "releasecountry", "rating",
 )  # fmt: skip
 LIST_FIELDS = ("genre",)
 # Bumped when more fields are read: the next scan re-reads every file once.
-READER = 2
+READER = 3
 MAX_VALUE = 500
 
 

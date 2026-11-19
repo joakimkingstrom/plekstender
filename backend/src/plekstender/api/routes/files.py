@@ -505,7 +505,7 @@ async def tag_history(
 async def _plan(db: DbDep, us: UserServer, body: PlexSyncIn) -> list[Planned]:
     if body.scope != "library" and body.key is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Which artist or album?")
-    return await plan_sync(db, us.server_id, body.scope, body.key, set(body.fields))
+    return await plan_sync(db, us.server_id, body.scope, body.key, set(body.fields), us.user_id)
 
 
 @router.post("/plex-sync/preview", response_model=PlexSyncPreviewOut)
