@@ -8,27 +8,14 @@ import type { ListenFilter } from '../api/listens'
 import { ListensDialog } from '../components/listens'
 import { ColumnChart, Heatmap, type ColumnPoint } from '../components/charts'
 import { Artwork } from '../components/library'
+import { RangePicker } from '../components/RangePicker'
 import { Card, Notice, Spinner } from '../components/ui'
 import { formatChange, formatCount, formatListeningTime } from '../format'
-
-const FIXED_RANGES: [string, string][] = [
-  ['7d', '7 days'],
-  ['30d', '30 days'],
-  ['365d', '12 months'],
-]
 
 const PREVIOUS: Record<string, string> = {
   '7d': 'previous 7 days',
   '30d': 'previous 30 days',
   '365d': 'previous 12 months',
-}
-
-function rangeOptions(firstListen: string | null | undefined): [string, string][] {
-  const thisYear = new Date().getFullYear()
-  const firstYear = firstListen ? new Date(firstListen).getFullYear() : thisYear
-  const years: [string, string][] = []
-  for (let y = thisYear; y >= firstYear; y--) years.push([`y${y}`, String(y)])
-  return [['all', 'All time'], ...FIXED_RANGES, ...years]
 }
 
 function listens(n: number) {
@@ -91,7 +78,7 @@ function RankChange({ rank, previous, compared }: { rank: number; previous: numb
   )
 }
 
-function TopList({
+export function TopList({
   title,
   items,
   kind,
@@ -194,23 +181,7 @@ export function StatsPage() {
 
   return (
     <div className={`space-y-4 ${overview.isPlaceholderData ? 'opacity-70' : ''}`}>
-      <div className="no-scrollbar -mx-4 overflow-x-auto px-4">
-        <div className="flex w-max gap-1.5" role="group" aria-label="Period">
-          {rangeOptions(o.first_listen_at).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={key === range}
-              onClick={() => setParams({ range: key, by }, { replace: true })}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium ${
-                key === range ? 'bg-accent text-on-accent' : 'bg-surface-2 text-muted hover:text-text'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <RangePicker range={range} firstListen={o.first_listen_at} onChange={(key) => setParams({ range: key, by }, { replace: true })} />
 
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Listens" value={formatCount(o.totals.listens)} note={change(o.totals.listens, o.previous?.listens)} />

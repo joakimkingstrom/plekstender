@@ -448,7 +448,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
       the songs in place (same key), or recreate it if it was deleted in Plex
 - [x] Scheduled refresh (daily / weekly / monthly; checked every 10 minutes)
 
-### Phase 7 — Feedback round 2 (from `.todo.md`, 19 Nov 2026)
+### Phase 7 — Feedback round 2 (from `.todo.md`, 19 Nov 2026) ✓
 
 **General**
 - [x] Send all listens to ListenBrainz, not just new Plex plays. (Checked in ListenBrainz's
@@ -458,7 +458,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
   *A "Send my whole history" action on Settings → Listening: every listen (all sources, duplicates left out) in `import` batches of up to 1,000 as a resumable job, with progress. Check first: whether ListenBrainz ignores listens it already has (same time and song). If it doesn't, compare against the user's listens on ListenBrainz for each time range before sending, so history copied there by ListenBrainz's own Last.fm importer isn't doubled.*
 
 **History**
-- [ ] A map of where you listen: listens and top artists / songs per country, with three zoom levels (world, continent, country).
+- [x] A map of where you listen: listens and top artists / songs per country, with three zoom levels (world, continent, country). (History → Map. Server location comes from its public address on plex.tv; no manual override yet.)
   *Only plays seen live by the session watcher have a location (imported scrobbles don't), so the map starts from when the watcher was added. Store the country and continent codes per listen (from the same DB-IP lookup) next to the "City, Country" text. Draw an SVG choropleth from Natural Earth's public-domain country shapes (TopoJSON, ~100 KB) with d3-geo; clicking a continent zooms in, then a country; a side panel lists that area's listens and top artists / songs. LAN plays count towards the server's own location (set once in Settings, or taken from the server's public IP).*
 
 **Artwork**

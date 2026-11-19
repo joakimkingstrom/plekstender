@@ -47,3 +47,30 @@ export function useSkips(serverId: number | null, range: string, kind: SkipKind)
     placeholderData: keepPreviousData,
   })
 }
+
+/** An area of the listens map: the whole world, a continent or a country. */
+export type MapArea =
+  | { level: 'world' }
+  | { level: 'continent'; continent: string }
+  | { level: 'country'; continent: string | null; country: string }
+
+export function usePlaces(range: string) {
+  const tz = localTimeZone()
+  return useQuery({
+    queryKey: ['listens', 'stats', 'places', range, tz],
+    queryFn: () => unwrap(api.GET('/api/stats/places', { params: { query: { range, tz } } })),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function usePlaceDetail(range: string, area: MapArea) {
+  const tz = localTimeZone()
+  const continent = area.level === 'continent' ? area.continent : undefined
+  const country = area.level === 'country' ? area.country : undefined
+  return useQuery({
+    queryKey: ['listens', 'stats', 'places', range, tz, continent ?? null, country ?? null],
+    queryFn: () =>
+      unwrap(api.GET('/api/stats/places/detail', { params: { query: { range, tz, continent, country } } })),
+    placeholderData: keepPreviousData,
+  })
+}

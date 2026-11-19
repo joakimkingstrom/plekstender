@@ -41,6 +41,9 @@ export function HistoryLayout() {
         <NavLink to="/history/listens" className={tab}>
           Listens
         </NavLink>
+        <NavLink to="/history/map" className={tab}>
+          Map
+        </NavLink>
       </nav>
       <Outlet />
     </>

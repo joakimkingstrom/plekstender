@@ -551,6 +551,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stats/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Places Overview
+         * @description Listens per country (only plays seen live by the session watcher have a place).
+         */
+        get: operations["places_overview_api_stats_places_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/places/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Place Detail
+         * @description Listens, top artists and songs (and, for a country, its cities) for an area: the
+         *     whole world, a continent or a country.
+         */
+        get: operations["place_detail_api_stats_places_detail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/rate/queue": {
         parameters: {
             query?: never;
@@ -1643,6 +1684,13 @@ export interface components {
             /** Note */
             note: string | null;
         };
+        /** CityListensOut */
+        CityListensOut: {
+            /** Name */
+            name: string;
+            /** Listens */
+            listens: number;
+        };
         /** ConnectServerIn */
         ConnectServerIn: {
             /** Machine Identifier */
@@ -1653,6 +1701,23 @@ export interface components {
             server: components["schemas"]["ServerOut"];
             /** Probes */
             probes: components["schemas"]["ProbeOut"][];
+        };
+        /** CountryListensOut */
+        CountryListensOut: {
+            /**
+             * Country Code
+             * @description ISO 3166-1 alpha-2
+             */
+            country_code: string;
+            /**
+             * Continent Code
+             * @description AF AN AS EU NA OC SA
+             */
+            continent_code: string | null;
+            /** Listens */
+            listens: number;
+            /** Listening Ms */
+            listening_ms: number;
         };
         /** Definition */
         Definition: {
@@ -2085,6 +2150,39 @@ export interface components {
         PinStartOut: {
             /** Auth Url */
             auth_url: string;
+        };
+        /** PlaceDetailOut */
+        PlaceDetailOut: {
+            /** Listens */
+            listens: number;
+            /** Listening Ms */
+            listening_ms: number;
+            /** Top Artists */
+            top_artists: components["schemas"]["TopItemOut"][];
+            /** Top Tracks */
+            top_tracks: components["schemas"]["TopItemOut"][];
+            /**
+             * Cities
+             * @description For a country: its towns and cities.
+             */
+            cities: components["schemas"]["CityListensOut"][];
+        };
+        /** PlacesOut */
+        PlacesOut: {
+            /** Countries */
+            countries: components["schemas"]["CountryListensOut"][];
+            /**
+             * Located
+             * @description Listens in the period with a known place.
+             */
+            located: number;
+            /**
+             * Total
+             * @description All listens in the period.
+             */
+            total: number;
+            /** Attribution */
+            attribution: string;
         };
         /** PlaylistDetail */
         PlaylistDetail: {
@@ -3972,6 +4070,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkipsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    places_overview_api_stats_places_get: {
+        parameters: {
+            query?: {
+                /** @description 7d, 30d, 365d, y2024, all */
+                range?: string;
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlacesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    place_detail_api_stats_places_detail_get: {
+        parameters: {
+            query?: {
+                /** @description 7d, 30d, 365d, y2024, all */
+                range?: string;
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+                continent?: string | null;
+                country?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceDetailOut"];
                 };
             };
             /** @description Validation Error */

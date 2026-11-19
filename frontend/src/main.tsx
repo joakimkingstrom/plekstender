@@ -16,6 +16,7 @@ import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
+import { MapPage } from './pages/MapPage'
 import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
@@ -50,6 +51,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <StatsPage /> },
           { path: 'listens', element: <ListensPage /> },
+          { path: 'map', element: <MapPage /> },
         ],
       },
       {
