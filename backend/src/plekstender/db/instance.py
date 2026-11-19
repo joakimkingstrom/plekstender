@@ -288,7 +288,7 @@ async def save_jambase_quota(
 
 JAMBASE_UNKNOWN_KEY = "jambase_unknown_ids"
 # MusicBrainz IDs JamBase didn't know are searched by name, and tried again after this long.
-JAMBASE_UNKNOWN_DAYS = 30
+JAMBASE_UNKNOWN_DAYS = 90
 
 
 async def get_jambase_unknown_ids(db: AsyncSession, now: dt.datetime | None = None) -> set[str]:
