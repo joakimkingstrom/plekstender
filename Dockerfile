@@ -24,6 +24,9 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --no-ins
 COPY backend/README.md backend/alembic.ini ./
 COPY backend/src ./src
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
+# ffmpeg for song previews comes with the imageio-ffmpeg wheel: fail the build if it can't run.
+RUN /app/.venv/bin/python -c "import imageio_ffmpeg, subprocess; \
+subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True, capture_output=True)"
 
 COPY --from=web /web/dist /app/static
 

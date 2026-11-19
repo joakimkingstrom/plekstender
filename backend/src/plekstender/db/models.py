@@ -584,3 +584,31 @@ class Playlist(Base):
     next_run_at: Mapped[dt.datetime | None]
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class TrackIntro(Base):
+    """How a track starts, measured when its preview clip is first made."""
+
+    __tablename__ = "track_intros"
+    __table_args__ = (PrimaryKeyConstraint("server_id", "rating_key"),)
+
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    rating_key: Mapped[int] = mapped_column(BigInteger)
+    # Silence before the music starts (ms, below -40 dB).
+    leading_silence_ms: Mapped[int]
+    analysed_at: Mapped[dt.datetime]
+
+
+class GameStats(Base):
+    """A user's "Guess the intro" record per mode (track | album | artist)."""
+
+    __tablename__ = "game_stats"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "mode"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    mode: Mapped[str] = mapped_column(String(8))
+    rounds: Mapped[int] = mapped_column(default=0)
+    correct: Mapped[int] = mapped_column(default=0)
+    points: Mapped[int] = mapped_column(default=0)
+    best_streak: Mapped[int] = mapped_column(default=0)
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

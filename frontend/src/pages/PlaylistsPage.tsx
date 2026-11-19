@@ -25,6 +25,7 @@ import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
 import { StarRating } from '../components/StarRating'
 import { Tooltip } from '../components/Tooltip'
+import { PlayButton } from '../components/PlayButton'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { formatCount, formatDuration, formatListeningTime, formatRelative } from '../format'
@@ -829,6 +830,7 @@ function Preview({ serverId, definition }: { serverId: number; definition: Defin
                   </span>
                 </span>
                 <span className="text-xs tabular-nums text-muted">{formatDuration(s.duration_ms)}</span>
+                <PlayButton serverId={serverId} ratingKey={s.rating_key} title={s.title} size="size-7" />
               </li>
             ))}
           </ol>

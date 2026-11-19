@@ -17,10 +17,12 @@ from plekstender.api.routes import (
     artwork,
     auth,
     export,
+    game,
     health,
     library,
     listens,
     playlists,
+    previews,
     ratings,
     servers,
     stats,
@@ -69,12 +71,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         stats,
         ratings,
         playlists,
+        previews,
+        game,
         artwork,
         export,
         admin,
     ):
         app.include_router(module.router)
     app.include_router(artwork.fonts_router)
+    app.include_router(game.stats_router)
 
     if settings.static_dir:
         _mount_spa(app, settings.static_dir)

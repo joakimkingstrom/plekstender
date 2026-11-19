@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     searxng_url: str | None = None
     # Writable directory for downloaded fonts, uploads and exports.
     data_dir: Path = Path("data")
+    # ffmpeg for song previews; by default the one bundled with the imageio-ffmpeg package.
+    ffmpeg_path: str | None = None
 
     @field_validator("app_url")
     @classmethod

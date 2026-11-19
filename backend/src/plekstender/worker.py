@@ -40,6 +40,7 @@ from plekstender.history.places import fill_places, refresh_public_addresses
 from plekstender.history.plex_capture import capture_plays
 from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
 from plekstender.playlists.service import build as build_playlist_in_plex
+from plekstender.previews import trim_cache as trim_preview_cache
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
@@ -504,6 +505,7 @@ async def cleanup_sessions(timestamp: int) -> None:
         )
         await db.commit()
     remove_old_uploads(get_settings(), dt.timedelta(days=1))
+    trim_preview_cache(get_settings())
     remove_old_files(get_settings(), dt.timedelta(days=7))  # artwork exports and imports
     if stale_import_count := int(getattr(stale_imports, "rowcount", 0) or 0):
         log.warning("marked %d interrupted listen imports as failed", stale_import_count)

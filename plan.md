@@ -489,22 +489,22 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Docs and published images (GHCR: amd64 + arm64 after CI passes on main; compose can use them via PLEKSTENDER_IMAGE)
 - [ ] Screenshots for the README (from a real library)
 
-### Phase 9 — Previews and "Guess the intro" (from `.todo.md`, 19 Nov 2026)
+### Phase 9 — Previews and "Guess the intro" (from `.todo.md`, 19 Nov 2026) ✓
 
 **Previews** (also the base for the game)
-- [ ] `GET /api/servers/{id}/tracks/{key}/preview`: a 40-second AAC clip (m4a) cut by ffmpeg straight from the Plex file (`/library/parts/…`, the user's own token, never a Plex transcode session, so no "now playing" entry and no play counted). ffmpeg comes from the `imageio-ffmpeg` wheel (static binary, amd64 + arm64), overridable with `FFMPEG_PATH`.
-- [ ] The same pass measures the intro with `silencedetect`: leading silence and quiet start are stored per track (`track_intros`), so clips can start where the music does.
-- [ ] Clips are cached under `DATA_DIR/previews` (a few hundred MB at most, oldest removed first) and served with byte ranges (iOS Safari needs them).
-- [ ] Play buttons: playlist builder preview list, Rate cards and the Lists layout.
+- [x] `GET /api/servers/{id}/tracks/{key}/preview`: a 40-second AAC clip (m4a) cut by ffmpeg straight from the Plex file (`/library/parts/…`, the user's own token, never a Plex transcode session, so no "now playing" entry and no play counted). ffmpeg comes from the `imageio-ffmpeg` wheel (static binary, amd64 + arm64), overridable with `FFMPEG_PATH`.
+- [x] The same pass measures the intro with `silencedetect`: leading silence and quiet start are stored per track (`track_intros`), so clips can start where the music does.
+- [x] Clips are cached under `DATA_DIR/previews` (a few hundred MB at most, oldest removed first) and served with byte ranges (iOS Safari needs them).
+- [x] Play buttons: playlist builder preview list, Rate cards and the Lists layout.
 
 **Guess the intro** (a mode of the card view in Rate)
-- [ ] Toggle "Guess the intro" on the card view. The card's artwork, artist and title are hidden and the song starts playing: the song itself, an album's or artist's popular songs (one of the top 3 by popularity, at random).
-- [ ] 30 seconds per round. The artwork unblurs gradually over the round; then the artist is revealed (at 18 s), and finally the song's or album's title (at 26 s; not in artist mode, where the artist is the answer).
-- [ ] Guessing: a search field. Artists (and albums in album mode) are suggested from 3 letters. Songs: either pick the artist first and then search their songs, or search songs directly, shown from 5 letters (or 80% of the title for short titles).
-- [ ] Right answer or time up: everything is revealed, and the card can be rated as usual (swipe or stars). A wrong pick costs 3 seconds.
-- [ ] Score: points for the seconds left, a streak, and a best score per mode (kept per account).
-- [ ] Avoided: songs with very short titles (under 4 letters), and songs whose intro is silent or near-silent for more than 8 seconds (known after their first clip; skipped automatically in game mode).
-- [ ] The next round's clip is prepared while the current one plays.
+- [x] Toggle "Guess the intro" on the card view. The card's artwork, artist and title are hidden and the song starts playing: the song itself, an album's or artist's popular songs (one of the top 3 by popularity, at random).
+- [x] 30 seconds per round. The artwork unblurs gradually over the round; then the artist is revealed (at 18 s), and finally the song's or album's title (at 26 s; not in artist mode, where the artist is the answer).
+- [x] Guessing: a search field. Artists (and albums in album mode) are suggested from 3 letters. Songs: either pick the artist first and then search their songs, or search songs directly, shown from 5 letters (or 80% of the title for short titles).
+- [x] Right answer or time up: everything is revealed, and the card can be rated as usual (swipe or stars). A wrong pick costs 3 seconds.
+- [x] Score: points for the seconds left, a streak, and the best streak per mode (kept per account).
+- [x] Avoided: songs with very short titles (under 4 letters), and songs whose intro is silent or near-silent for more than 8 seconds (known after their first clip; skipped automatically in game mode).
+- [x] The next round's clip is prepared while the current one plays.
 
 ### Phase 10 — Music files and the tag editor (from `.todo.md`; needs the music folder)
 

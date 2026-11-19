@@ -149,6 +149,9 @@ class FakeLibrary:
         self.bulk_clear_supported = True
         # /library/metadata/{key}/nearest (sonic analysis); missing keys give 404.
         self.nearest: dict[int, list[int]] = {}
+        # Track files (/library/parts/{key}/1/file.flac) by track key; missing ones give 404.
+        self.part_files: dict[int, bytes] = {}
+        self.part_requests = 0
 
         for item in (
             _artist(100, "Radiohead", Guid=[{"id": "mbid://a74b1b7f"}]),
@@ -439,6 +442,14 @@ class FakeLibrary:
         found = [self.items[k] for k in self.nearest[key]]
         return httpx.Response(200, json={"MediaContainer": {"Metadata": found}})
 
+    def part_request(self, request: httpx.Request) -> httpx.Response:
+        if request.headers.get("X-Plex-Token") not in SERVER_TOKENS:
+            return httpx.Response(401)
+        self.part_requests += 1
+        key = int(request.url.path.split("/")[3])
+        data = self.part_files.get(key)
+        return httpx.Response(404) if data is None else httpx.Response(200, content=data)
+
     def photo(self, request: httpx.Request) -> httpx.Response:
         if request.headers.get("X-Plex-Token") not in SERVER_TOKENS:
             return httpx.Response(401)
@@ -478,6 +489,9 @@ class FakePlex:
             side_effect=self.library.poster_request
         )
         router.get(f"{SERVER_URI}/status/sessions").mock(side_effect=self.library.sessions_list)
+        router.get(url__regex=rf"{re.escape(SERVER_URI)}/library/parts/\d+/").mock(
+            side_effect=self.library.part_request
+        )
         router.post(f"{SERVER_URI}/playlists").mock(side_effect=self.library.playlists_create)
         router.route(url__regex=rf"{re.escape(SERVER_URI)}/playlists/\d+").mock(
             side_effect=self.library.playlist_request

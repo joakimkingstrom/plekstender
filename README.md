@@ -7,10 +7,11 @@ Plekstender isn't affiliated with or endorsed by Plex.
 ## What it does
 
 - **Library:** browse artists, albums and songs from your Plex servers, with your own ratings and plays. Releases are grouped into albums, EPs, singles, compilations and live albums.
-- **Rate:** swipe cards on a phone (right for 2½–5 stars, left for ½–2, down to skip) or rate 15 songs at a time on a computer. Choose songs you've played, unrated ones or everything, by genre, shuffled or most played first. Ratings are saved to Plex with your own account, with undo.
+- **Rate:** swipe cards on a phone (right for 2½–5 stars, left for ½–2, down to skip) or rate 15 songs at a time on a computer. Choose songs you've played, unrated ones or everything, by genre, shuffled or most played first. Ratings are saved to Plex with your own account, with undo. Or play **Guess the intro**: a song plays with the card hidden, and you have 30 seconds to name the song, album or artist before rating it.
 - **History:** every Plex play, plus your Last.fm and ListenBrainz history, with each play counted once. Top artists, albums and songs per period, listening activity, streaks, most skipped songs, and a map of where you listen (world, continent and country).
 - **Scrobbling:** sends new Plex plays to ListenBrainz, and can send your whole history there (leaving out what ListenBrainz already has).
 - **Artwork:** replace artist photos with logos from fanart.tv, Plex, an image search, an upload or a text logo in a Google font; fit, zoom and recolour them; optionally save `artist.jpg` into each artist's folder; share logo packs between servers.
+- **Previews:** 40-second clips of any song (cut from the file by ffmpeg, starting where the music does), in Rate and the playlist builder.
 - **Playlists:** start from artists, songs or a genre, add similar and sonically similar artists, keep only what you rate highly or each artist's best-known songs, and save the result to Plex. Playlists can refresh themselves daily, weekly or monthly, and download as M3U8.
 - **Exports:** your library with ratings and plays (CSV / JSON), and your listening history in ListenBrainz's format.
 

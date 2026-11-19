@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +17,8 @@ from plekstender.plex.tv import Connection, PlexAuthError, PlexError, Resource, 
 log = logging.getLogger(__name__)
 
 PROBE_TIMEOUT = httpx.Timeout(5.0, connect=3.0)
+# /library/parts/{id}/{changed-at}/file.ext (as Plex lists a track's media part).
+PART_KEY = re.compile(r"^/library/parts/\d+/[^?#]*$")
 API_TIMEOUT = httpx.Timeout(20.0, connect=5.0)
 
 
@@ -224,6 +227,23 @@ class PlexServerClient:
         if not content_type.startswith("image/"):
             raise PlexError("photo transcoder returned a non-image response")
         return resp.content, content_type
+
+    # --- media files -----------------------------------------------------------------
+
+    def stream_part(self, part_key: str) -> Any:
+        """The file behind a track's media part, as a streaming response (an async context
+        manager). Reading a file directly is not a Plex playback: no session, no play."""
+        if not PART_KEY.match(part_key) or ".." in part_key:
+            raise PlexError("not a media part path")
+        headers = plex_headers(self._settings, self._token)
+        headers["Accept"] = "*/*"
+        return self._http.stream(
+            "GET",
+            f"{self._base}{part_key}",
+            headers=headers,
+            timeout=httpx.Timeout(60.0, connect=10.0),
+            follow_redirects=False,
+        )
 
     # --- playlists (always under the token owner's account) ---------------------------
 

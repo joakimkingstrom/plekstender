@@ -16,6 +16,11 @@ import {
 } from '../api/ratings'
 import { Artwork, Stars } from '../components/library'
 import { Mark } from '../components/Layout'
+import { PlayButton } from '../components/PlayButton'
+import { GuessBox, RoundClock } from '../components/IntroGame'
+import { useIntroRound } from '../game'
+import { useGameStats } from '../api/game'
+import { stopAudio, unlockAudio } from '../audio'
 import { StarRating } from '../components/StarRating'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDuration } from '../format'
@@ -23,7 +28,7 @@ import { starsText, swipeResult } from '../swipe'
 import { useLibraryServer } from '../components/useLibraryServer'
 
 type Layout = 'swipe' | 'desktop'
-type Settings = { kind: RateKind; pool: RatePool; order: RateOrder; layout: Layout; tag: number | null }
+type Settings = { kind: RateKind; pool: RatePool; order: RateOrder; layout: Layout; tag: number | null; game: boolean }
 
 const STORAGE_KEY = 'plekstender.rate'
 const KINDS: [RateKind, string][] = [
@@ -48,7 +53,7 @@ const ORDERS: [RateOrder, string][] = [
 
 function loadSettings(): Settings {
   const wide = typeof window !== 'undefined' && window.matchMedia?.('(min-width: 768px)').matches
-  const defaults: Settings = { kind: 'track', pool: 'listened', order: 'weighted', layout: wide ? 'desktop' : 'swipe', tag: null }
+  const defaults: Settings = { kind: 'track', pool: 'listened', order: 'weighted', layout: wide ? 'desktop' : 'swipe', tag: null, game: false }
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }
   } catch {
@@ -209,6 +214,23 @@ function Rater({ serverId }: { serverId: number }) {
           <div className="md:hidden">
             <Segmented label="Layout" value={settings.layout} options={LAYOUTS} onChange={(layout) => update({ layout })} />
           </div>
+          {settings.layout === 'swipe' && (
+            <Tooltip content="A song plays with the card hidden: guess it within 30 seconds, then rate it.">
+              <button
+                type="button"
+                aria-pressed={settings.game}
+                onClick={() => {
+                  unlockAudio() // a tap: lets the game play sound on iPhones
+                  update({ game: !settings.game })
+                }}
+                className={`rounded-lg border px-3 py-[7px] text-sm font-medium ${
+                  settings.game ? 'border-accent bg-accent/15 text-accent' : 'border-border bg-surface-2 text-muted hover:text-text'
+                }`}
+              >
+                ♪ Guess the intro
+              </button>
+            </Tooltip>
+          )}
         </div>
         <div className="flex items-center gap-2 md:ml-auto">
           <Tooltip content="Undo your last rating (repeat to go further back)">
@@ -282,6 +304,8 @@ function details(item: RateItem): string {
 // --- swipe cards ---------------------------------------------------------------------
 
 const HINT_KEY = 'plekstender.rate.swiped'
+/** Unplayable cards skipped in a row before the game stops to say so. */
+const MAX_UNPLAYABLE = 8
 
 function readFlag(key: string): string | null {
   try {
@@ -299,9 +323,35 @@ function writeFlag(key: string) {
   }
 }
 
-function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & { onSwiped: (item: RateItem) => void }) {
+function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: ViewProps & { onSwiped: (item: RateItem) => void }) {
   const item = queue.items[0]
   const next = queue.items[1]
+  const game = settings.game
+  // Cards the game can't play (silent intro, very short title, no file) are skipped, but
+  // not forever: after a run of them, say so instead.
+  const [unplayable, setUnplayable] = useState(0)
+  const skippedInARow = useRef(0)
+  const round = useIntroRound({
+    active: game,
+    serverId,
+    mode: settings.kind,
+    ratingKey: item.rating_key,
+    nextKey: next?.rating_key ?? null,
+    onUnplayable: () => {
+      skippedInARow.current += 1
+      setUnplayable(skippedInARow.current)
+      if (skippedInARow.current < MAX_UNPLAYABLE) queue.advance()
+    },
+  })
+  const keepGoing = () => {
+    skippedInARow.current = 0
+    setUnplayable(0)
+    queue.advance()
+  }
+  const stats = useGameStats()
+  const best = stats.data?.find((s) => s.mode === settings.kind)?.best_streak ?? 0
+  // While guessing, the card can't be swiped (rating comes after the answer).
+  const guessing = game && round.playing
   const cardRef = useRef<HTMLDivElement>(null)
   const start = useRef<{ x: number; y: number } | null>(null)
   const lastRating = useRef<number | null>(null)
@@ -311,6 +361,15 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
   const [leaving, setLeaving] = useState<'left' | 'right' | 'down' | null>(null)
   const [hint, setHint] = useState(() => readFlag(HINT_KEY) === null)
   const result = swipeResult(drag.dx, drag.dy, width)
+
+  const next_ = () => {
+    if (game) stopAudio()
+    if (round.phase === 'won' || round.phase === 'lost') {
+      skippedInARow.current = 0
+      setUnplayable(0)
+    }
+    queue.advance()
+  }
 
   const finish = (action: 'rate' | 'skip', rating?: number) => {
     if (hint) {
@@ -323,14 +382,14 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
         rate(item.rating_key, rating)
         onSwiped(item)
       }
-      queue.advance()
+      next_()
       setLeaving(null)
       setDrag({ dx: 0, dy: 0 })
     }, 180)
   }
 
   const onPointerDown = (e: PointerEvent) => {
-    if (leaving) return
+    if (leaving || guessing) return
     start.current = { x: e.clientX, y: e.clientY }
     lastRating.current = null
     setWidth(cardRef.current?.clientWidth ?? 360)
@@ -370,7 +429,28 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
   return (
     // As wide as fits the screen's height too, so the card and the stars need no scrolling.
     <div className="mx-auto space-y-3" style={{ maxWidth: 'min(24rem, max(15rem, calc(100dvh - 21rem)))' }}>
-      {hint && (
+      {game && (
+        <div className="flex items-center justify-between gap-2 text-xs text-muted" aria-live="polite">
+          <span>
+            Score <span className="font-semibold text-text tabular-nums">{round.session.score}</span> · Streak{' '}
+            <span className="font-semibold text-text tabular-nums">{round.session.streak}</span>
+          </span>
+          <span>Best streak {best}</span>
+        </div>
+      )}
+      {game && unplayable >= MAX_UNPLAYABLE && (
+        <Notice tone="warn">
+          The last {MAX_UNPLAYABLE} cards couldn't be played (silent intros, very short titles or no file in Plex). Try
+          another selection, or{' '}
+          <button type="button" className="underline" onClick={keepGoing}>
+            keep going
+          </button>
+          .
+        </Notice>
+      )}
+      {round.error && game && <Notice tone="error">{round.error}</Notice>}
+      {guessing && <RoundClock elapsed={round.elapsed} loading={round.phase === 'loading'} />}
+      {hint && !game && (
         <p className="text-center text-xs text-muted">
           Swipe right for 2½–5 stars, left for 2–½, down to skip. The further you swipe, the higher or lower.
         </p>
@@ -394,21 +474,39 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
             transition: dragging ? 'none' : 'transform 180ms ease-out',
           }}
         >
-          <Artwork
-            serverId={serverId}
-            path={item.thumb}
-            title={item.title}
-            size={600}
-            round={item.kind === 'artist'}
-            className="pointer-events-none w-full"
-          />
+          <div className={`overflow-hidden ${item.kind === 'artist' ? 'rounded-full' : 'rounded-lg'}`}>
+            <Artwork
+              serverId={serverId}
+              path={item.thumb}
+              title={game && !round.reveal.title ? '?' : item.title}
+              size={600}
+              round={item.kind === 'artist'}
+              className="pointer-events-none w-full"
+              style={game ? { filter: `blur(${round.reveal.blur}px)`, transform: 'scale(1.08)', transition: 'filter 150ms linear' } : undefined}
+            />
+          </div>
+          {game && (round.phase === 'won' || round.phase === 'lost') && (
+            <div
+              className={`mt-3 rounded-lg px-3 py-2 text-center text-sm font-semibold ${
+                round.phase === 'won' ? 'bg-ok/15 text-ok' : 'bg-surface-2 text-muted'
+              }`}
+              role="status"
+            >
+              {round.phase === 'won' ? `Correct! +${round.points}` : "Time's up"}
+            </div>
+          )}
           <div className="mt-4 space-y-1">
-            <h2 className="text-xl font-bold leading-tight">{item.title}</h2>
-            <p className="text-sm text-muted">{details(item)}</p>
+            <h2 className="text-xl font-bold leading-tight">{!game || round.reveal.title ? item.title : '? ? ?'}</h2>
+            <p className="text-sm text-muted">{!game || round.reveal.artist ? details(item) || '\u00a0' : '\u00a0'}</p>
             <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted">
               {value !== null && value !== undefined && <Badge tone="accent">Rated {starsText(value)} ★</Badge>}
-              <span>{formatCount(item.plays)} plays</span>
-              {item.popularity !== null && <span>Popularity {formatCompact(item.popularity)}</span>}
+              {!guessing && <span>{formatCount(item.plays)} plays</span>}
+              {!guessing && item.popularity !== null && <span>Popularity {formatCompact(item.popularity)}</span>}
+              {!game && item.kind === 'track' && (
+                <span className="ml-auto">
+                  <PlayButton serverId={serverId} ratingKey={item.rating_key} title={item.title} size="size-8" />
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -428,23 +526,34 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <StarRating
-          label={`Rate ${item.title}`}
-          value={value}
-          size="size-7"
-          onChange={(rating) => {
-            rate(item.rating_key, rating)
-            if (rating !== null) {
-              onSwiped(item)
-              queue.advance()
-            }
-          }}
+      {guessing ? (
+        <GuessBox
+          key={item.rating_key}
+          serverId={serverId}
+          mode={settings.kind}
+          targetTitle={item.title}
+          onGuess={round.guess}
+          onGiveUp={round.giveUp}
         />
-        <Button variant="ghost" onClick={() => queue.advance()}>
-          Skip
-        </Button>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <StarRating
+            label={`Rate ${item.title}`}
+            value={value}
+            size="size-7"
+            onChange={(rating) => {
+              rate(item.rating_key, rating)
+              if (rating !== null) {
+                onSwiped(item)
+                next_()
+              }
+            }}
+          />
+          <Button variant="ghost" onClick={next_}>
+            {game ? 'Next' : 'Skip'}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
@@ -536,10 +645,11 @@ function SongsGrid({ serverId, queue, overrides, rate }: ViewProps) {
                 <p className="truncate text-sm font-medium">{item.title}</p>
                 <p className="truncate text-xs text-muted">{details(item)}</p>
               </div>
-              <Tooltip content="Plays (Plex or your listening history, whichever is higher)" className="hidden w-16 justify-end sm:inline-flex">
-                <span className="text-xs text-muted tabular-nums">{formatCount(item.plays)} ▶</span>
+              <Tooltip content="Plays (Plex or your listening history, whichever is higher)" className="hidden w-20 justify-end sm:inline-flex">
+                <span className="text-xs text-muted tabular-nums">{formatCount(item.plays)} plays</span>
               </Tooltip>
               <span className="hidden w-10 text-right text-xs text-muted tabular-nums md:block">{formatDuration(item.duration_ms)}</span>
+              <PlayButton serverId={serverId} ratingKey={item.rating_key} title={item.title} size="size-7" />
               <StarRating label={`Rate ${item.title}`} value={value} onChange={(rating) => rate(item.rating_key, rating)} />
               <button
                 type="button"

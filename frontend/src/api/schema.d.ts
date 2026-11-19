@@ -810,6 +810,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/tracks/{rating_key}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Info
+         * @description Prepare a song's preview clip (the first time takes a few seconds) and say where to
+         *     play it from: where the music starts, after any silence.
+         */
+        get: operations["preview_info_api_servers__server_id__tracks__rating_key__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/tracks/{rating_key}/preview.m4a": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview File
+         * @description The clip itself (AAC, 40 s), with byte ranges for the audio player.
+         */
+        get: operations["preview_file_api_servers__server_id__tracks__rating_key__preview_m4a_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/game/round": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Game Round
+         * @description The song to play for a card: the song itself, or one of an album's or artist's most
+         *     popular songs. Songs with very short titles or a silent intro aren't played.
+         */
+        get: operations["game_round_api_servers__server_id__game_round_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/game/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Game Search
+         * @description Guess suggestions from the library: artists, albums or songs whose name contains
+         *     `q`. With `artist`, that artist's songs (their most popular ones when `q` is empty).
+         */
+        get: operations["game_search_api_servers__server_id__game_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/game/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Game Check
+         * @description Whether a guess is right: the same song on any release, the same album (or a release
+         *     of it with the same title), or the same artist.
+         */
+        post: operations["game_check_api_servers__server_id__game_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -1362,6 +1466,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/game/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Game Stats */
+        get: operations["game_stats_api_game_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/game/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Game Result
+         * @description Record a finished round: totals and the best streak per mode.
+         */
+        post: operations["game_result_api_game_results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1845,6 +1986,87 @@ export interface components {
              * @enum {string}
              */
             group: "Sans serif" | "Serif" | "Display" | "Handwriting" | "Monospace";
+        };
+        /** GameCheckIn */
+        GameCheckIn: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "track" | "album" | "artist";
+            /**
+             * Target
+             * @description The item being guessed (song, album or artist).
+             */
+            target: number;
+            /** Guess */
+            guess: number;
+        };
+        /** GameCheckOut */
+        GameCheckOut: {
+            /** Correct */
+            correct: boolean;
+        };
+        /** GameResultIn */
+        GameResultIn: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "track" | "album" | "artist";
+            /** Correct */
+            correct: boolean;
+            /** Points */
+            points: number;
+            /** Streak */
+            streak: number;
+        };
+        /** GameRoundOut */
+        GameRoundOut: {
+            /** Playable */
+            playable: boolean;
+            /**
+             * Reason
+             * @description Why not: short-title, quiet-intro, no-file.
+             */
+            reason: string | null;
+            /** @description The song to play for this round. */
+            preview: components["schemas"]["PreviewOut"] | null;
+        };
+        /** GameSearchItem */
+        GameSearchItem: {
+            /** Rating Key */
+            rating_key: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "track" | "album" | "artist";
+            /** Title */
+            title: string;
+            /**
+             * Subtitle
+             * @description The artist, for albums and songs.
+             */
+            subtitle: string | null;
+            /** Thumb */
+            thumb: string | null;
+        };
+        /** GameStatsOut */
+        GameStatsOut: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "track" | "album" | "artist";
+            /** Rounds */
+            rounds: number;
+            /** Correct */
+            correct: number;
+            /** Points */
+            points: number;
+            /** Best Streak */
+            best_streak: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2447,6 +2669,26 @@ export interface components {
              * @enum {string}
              */
             phone_start: "rate" | "home";
+        };
+        /** PreviewOut */
+        PreviewOut: {
+            /** Rating Key */
+            rating_key: number;
+            /**
+             * Url
+             * @description The clip (AAC in MP4, 40 seconds).
+             */
+            url: string;
+            /**
+             * Start Ms
+             * @description Where the music starts in the clip (after silence).
+             */
+            start_ms: number;
+            /**
+             * Quiet Intro
+             * @description Silent or near-silent for 8 seconds or more.
+             */
+            quiet_intro: boolean;
         };
         /** ProbeOut */
         ProbeOut: {
@@ -4660,6 +4902,175 @@ export interface operations {
             };
         };
     };
+    preview_info_api_servers__server_id__tracks__rating_key__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_file_api_servers__server_id__tracks__rating_key__preview_m4a_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/mp4": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    game_round_api_servers__server_id__game_round_get: {
+        parameters: {
+            query: {
+                mode: "track" | "album" | "artist";
+                rating_key: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameRoundOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    game_search_api_servers__server_id__game_search_get: {
+        parameters: {
+            query: {
+                kind: "track" | "album" | "artist";
+                q?: string;
+                /** @description Songs by this artist only. */
+                artist?: number | null;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameSearchItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    game_check_api_servers__server_id__game_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GameCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_artists_api_servers__server_id__artwork_artists_get: {
         parameters: {
             query?: {
@@ -5752,6 +6163,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FontGroup"][];
+                };
+            };
+        };
+    };
+    game_stats_api_game_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameStatsOut"][];
+                };
+            };
+        };
+    };
+    game_result_api_game_results_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GameResultIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

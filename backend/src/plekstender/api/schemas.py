@@ -759,3 +759,55 @@ class PlaceDetailOut(BaseModel):
     top_artists: list[TopItemOut]
     top_tracks: list[TopItemOut]
     cities: list[CityListensOut] = Field(description="For a country: its towns and cities.")
+
+
+# --- previews and the intro game ---------------------------------------------------------
+
+
+class PreviewOut(BaseModel):
+    rating_key: int
+    url: str = Field(description="The clip (AAC in MP4, 40 seconds).")
+    start_ms: int = Field(description="Where the music starts in the clip (after silence).")
+    quiet_intro: bool = Field(description="Silent or near-silent for 8 seconds or more.")
+
+
+GameMode = Literal["track", "album", "artist"]
+
+
+class GameRoundOut(BaseModel):
+    playable: bool
+    reason: str | None = Field(description="Why not: short-title, quiet-intro, no-file.")
+    preview: PreviewOut | None = Field(description="The song to play for this round.")
+
+
+class GameSearchItem(BaseModel):
+    rating_key: int
+    kind: GameMode
+    title: str
+    subtitle: str | None = Field(description="The artist, for albums and songs.")
+    thumb: str | None
+
+
+class GameCheckIn(BaseModel):
+    mode: GameMode
+    target: int = Field(description="The item being guessed (song, album or artist).")
+    guess: int
+
+
+class GameCheckOut(BaseModel):
+    correct: bool
+
+
+class GameResultIn(BaseModel):
+    mode: GameMode
+    correct: bool
+    points: int = Field(ge=0, le=30)
+    streak: int = Field(ge=0, le=100_000)
+
+
+class GameStatsOut(BaseModel):
+    mode: GameMode
+    rounds: int
+    correct: int
+    points: int
+    best_streak: int
