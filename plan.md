@@ -415,7 +415,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
   *A drill-down panel (site-native popup) showing the listens for that period plus the item; for the overview charts the same panel filtered by day, week or month, or by weekday and hour for the heatmap.*
 - [ ] Period buttons: hide the horizontal scrollbar, and put "All time" first.
 - [ ] Listens tab: show the client and IP / location for each listen.
-  *Check first: Plex history only has a `deviceID` (the client name comes from `/devices`), not an IP address. The IP and LAN/WAN come from live sessions (`Player.address`, `Session.location`), i.e. the session watcher above, so only plays captured live would have them. Imported scrobbles have neither. A location beyond LAN/WAN needs a local GeoIP database (e.g. GeoLite2, which needs a free licence key) rather than an outside lookup, to keep IP addresses private. Decide whether that's worth it.*
+  *Check first: Plex history only has a `deviceID` (the client name comes from `/devices`), not an IP address. The IP and LAN/WAN come from live sessions (`Player.address`, `Session.location`), i.e. the session watcher above, so only plays captured live would have them. Imported scrobbles have neither. Decided (19 Nov): add a location using a local IP database, so IP addresses never leave the server: DB-IP's free "IP to City Lite" (`.mmdb`, CC BY 4.0, no account or key; credit "IP geolocation by DB-IP" where locations are shown), downloaded monthly by the worker into `DATA_DIR/geoip` and read with `maxminddb`. LAN addresses show as "Local network".*
 
 **Rate**
 - [ ] Skip a song in the Lists view.
@@ -430,7 +430,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
   *Reuse StarRating and the ratings API (same undo log).*
 - [ ] Hide the horizontal scrollbar of the genre chips under the artist search.
 - [ ] Artist page: group releases by type (albums, compilations, singles and EPs, live, …) instead of one list.
-  *Check first: which album fields Plex fills in for release types (e.g. `subtype`, `Format` / `Subformat` tags, or "Compilation"). Add a spike to `plex_probe.py`, store the type in the mirror, and fall back to "Albums" when Plex doesn't say.*
+  *Spike (19 Nov): album details have a `Format` tag array (artists also have `Location`). `plex_probe.py --formats` counts the `Format` / `Subformat` values across albums to see which release types Plex uses. Store them as tags (kinds `format` / `subformat`) during the detail sync, and fall back to "Albums" when Plex doesn't say.*
 
 **Artwork**
 - [ ] Change an artist's status by clicking its status dot in the list (cycles To do → Custom → Done).

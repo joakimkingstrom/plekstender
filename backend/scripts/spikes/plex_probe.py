@@ -7,6 +7,8 @@ Read-only by default. Answers:
   3. Which "hubs" Plex offers on an artist page (popular tracks etc.).
   4. Whether the sonically-similar endpoints work (needs Plex Pass + sonic analysis).
   5. (--stream-test, opt-in) Whether downloading part of a track file counts as a play.
+  7. (--formats) Which release types (album Format / Subformat tags) Plex uses, e.g.
+     Album, EP, Single, Compilation, Live, and how many albums have none.
   6. (--history) What Plex's play history exposes for music: fields, filters, how far
      back it goes and which accounts appear. Run it with the server owner's token, and,
      if you have one, again with a shared user's token to see what they can read.
@@ -16,6 +18,7 @@ Usage (from backend/):
   PLEX_URL=http://192.168.1.10:32400 PLEX_TOKEN=xxxx uv run python scripts/spikes/plex_probe.py
   ... plex_probe.py --section 3 --json report.json --stream-test
   ... plex_probe.py --history --json history-report.json
+  ... plex_probe.py --formats --json formats-report.json
 
 The token is read from the environment and never printed.
 """
@@ -102,6 +105,11 @@ def main() -> int:
         action="store_true",
         help="only probe play history, accounts and sessions (for listening history)",
     )
+    parser.add_argument(
+        "--formats",
+        action="store_true",
+        help="only count album release types (Format / Subformat tags)",
+    )
     args = parser.parse_args()
 
     url, token = os.environ.get("PLEX_URL"), os.environ.get("PLEX_TOKEN")
@@ -127,6 +135,9 @@ def main() -> int:
 
     if args.history:
         report["history"] = history_probe(plex, [s["key"] for s in sections])
+        return write_report(report, args.json)
+    if args.formats:
+        report["formats"] = formats_probe(plex, section, args.sample * 10)
         return write_report(report, args.json)
 
     # 1. popularity fields per type, sorted by popularity where possible
@@ -209,6 +220,43 @@ def write_report(report: dict[str, Any], path: str | None) -> int:
             json.dump(report, fh, indent=2, default=str)
         print(f"\nReport written to {path}")
     return 0
+
+
+def formats_probe(plex: Plex, section: str, sample: int) -> dict[str, Any]:
+    """Count Format / Subformat values over a sample of albums (no titles printed)."""
+    from collections import Counter
+
+    listing = section_items(plex, section, "album", sample)
+    keys = [a["ratingKey"] for a in listing.get("Metadata", [])]
+    formats: Counter[str] = Counter()
+    subformats: Counter[str] = Counter()
+    other_fields: Counter[str] = Counter()
+    without = 0
+    for i in range(0, len(keys), 50):
+        batch = plex.get(f"/library/metadata/{','.join(keys[i : i + 50])}")
+        for album in batch.get("Metadata", []):
+            tags = [t.get("tag") for t in album.get("Format") or []]
+            subs = [t.get("tag") for t in album.get("Subformat") or []]
+            formats.update(t for t in tags if t)
+            subformats.update(t for t in subs if t)
+            if not tags:
+                without += 1
+            for field in ("subtype", "format", "subformat", "type"):
+                if field in album:
+                    other_fields[f"{field}={album[field]}"] += 1
+    out = {
+        "albums_checked": len(keys),
+        "albums_total": listing.get("totalSize"),
+        "without_format": without,
+        "Format": dict(formats.most_common()),
+        "Subformat": dict(subformats.most_common()),
+        "other_fields": dict(other_fields.most_common(10)),
+    }
+    print(f"Release types over {len(keys)} albums (of {listing.get('totalSize')}):")
+    for name in ("Format", "Subformat", "other_fields"):
+        print(f"    {name}: {out[name]}")
+    print(f"    albums without a Format tag: {without}")
+    return out
 
 
 HISTORY = "/status/sessions/history/all"
