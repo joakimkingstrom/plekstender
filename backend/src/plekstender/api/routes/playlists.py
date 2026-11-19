@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import random
-from typing import Annotated, Any
+import re
+from typing import Annotated, Any, Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
@@ -29,6 +31,7 @@ from plekstender.playlists import builder
 from plekstender.playlists.definition import Definition
 from plekstender.playlists.service import (
     PlaylistError,
+    m3u,
     remove_from_plex,
     select_songs,
     summarise,
@@ -61,7 +64,10 @@ def _scope(us: UserServer) -> dict[str, Any]:
 
 
 def _out(p: Playlist) -> PlaylistOut:
-    return PlaylistOut.model_validate(p, from_attributes=True)
+    return PlaylistOut(
+        **{name: getattr(p, name) for name in PlaylistOut.model_fields if name != "exportable"},
+        exportable=bool(p.song_keys),
+    )
 
 
 async def _get(db: DbDep, us: UserServer, playlist_id: int) -> Playlist:
@@ -268,6 +274,33 @@ async def rebuild_playlist(
     if playlist.status in ACTIVE:
         return _out(playlist)
     return await _save_and_build(db, playlist)
+
+
+@router.get(
+    "/{playlist_id}/export.m3u",
+    response_class=PlainTextResponse,
+    responses={200: {"content": {"audio/x-mpegurl": {}}}},
+)
+async def export_m3u(
+    server_id: int,
+    playlist_id: int,
+    db: DbDep,
+    user: UserDep,
+    paths: Annotated[Literal["plex", "relative"], Query()] = "plex",
+) -> PlainTextResponse:
+    """The songs of the last build as an M3U file, for other players. Paths are as Plex
+    sees them, or relative to the music library's root folder."""
+    us = await get_user_server(db, user, server_id)
+    playlist = await _get(db, us, playlist_id)
+    if not playlist.song_keys:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Build the playlist first.")
+    body = await m3u(db, us, playlist, relative=paths == "relative")
+    name = re.sub(r"[^A-Za-z0-9 ._-]+", "", playlist.name).strip() or "playlist"
+    return PlainTextResponse(
+        body,
+        media_type="audio/x-mpegurl",
+        headers={"Content-Disposition": f'attachment; filename="{name}.m3u"'},
+    )
 
 
 @router.delete("/{playlist_id}", status_code=status.HTTP_204_NO_CONTENT)

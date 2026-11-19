@@ -723,6 +723,7 @@ class PlaylistOut(BaseModel):
     last_built_at: dt.datetime | None
     next_run_at: dt.datetime | None
     created_at: dt.datetime
+    exportable: bool = Field(description="Built at least once, so it can be exported as M3U.")
 
 
 class PlaylistDetail(PlaylistOut):

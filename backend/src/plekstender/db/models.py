@@ -578,6 +578,8 @@ class Playlist(Base):
     status: Mapped[str] = mapped_column(String(16), default="new")  # new|queued|running|ok|error
     error: Mapped[str | None] = mapped_column(Text)
     last_result: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    # The songs (rating keys, in order) of the last build: what's in Plex, for M3U exports.
+    song_keys: Mapped[list[int]] = mapped_column(JSONB, default=list, server_default="[]")
     last_built_at: Mapped[dt.datetime | None]
     next_run_at: Mapped[dt.datetime | None]
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

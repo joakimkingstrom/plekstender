@@ -24,6 +24,7 @@ import { Artwork } from '../components/library'
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
 import { StarRating } from '../components/StarRating'
+import { Tooltip } from '../components/Tooltip'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { formatCount, formatDuration, formatListeningTime, formatRelative } from '../format'
@@ -144,6 +145,28 @@ function PlaylistList({ serverId }: { serverId: number }) {
                       {scheduleText(p.schedule)}
                       {p.last_built_at && ` · last built ${formatRelative(p.last_built_at)}`}
                     </p>
+                    {p.exportable && (
+                      <p className="text-xs text-muted">
+                        Download as M3U:{' '}
+                        <a
+                          href={`/api/servers/${serverId}/playlists/${p.id}/export.m3u`}
+                          download
+                          className="text-accent underline"
+                        >
+                          Plex's file paths
+                        </a>
+                        {' · '}
+                        <Tooltip content="Paths relative to your music folder: save the file in that folder.">
+                          <a
+                            href={`/api/servers/${serverId}/playlists/${p.id}/export.m3u?paths=relative`}
+                            download
+                            className="text-accent underline"
+                          >
+                            relative paths
+                          </a>
+                        </Tooltip>
+                      </p>
+                    )}
                     <div className="mt-auto flex flex-wrap gap-2">
                       <Link
                         to={`/playlists/${p.id}`}

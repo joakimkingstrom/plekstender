@@ -141,6 +141,9 @@ async def test_playlists_in_plex(app: FastAPI, plex: FakePlex) -> None:
     assert resp.status_code == 201, resp.text
     created = resp.json()
     assert created["status"] == "queued"
+    unbuilt = await owner.get(f"{base}/{created['id']}/export.m3u")
+    assert unbuilt.status_code == 409
+    assert created["exportable"] is False
 
     [built] = await run_queued_builds()
     assert built.status == "ok", built.error
@@ -155,6 +158,26 @@ async def test_playlists_in_plex(app: FastAPI, plex: FakePlex) -> None:
     assert built.last_result["count"] == 3
     assert built.next_run_at is not None and built.last_built_at is not None
     assert built.next_run_at - built.last_built_at == dt.timedelta(days=1)
+
+    # The last build as M3U, with Plex's paths or relative to the library's root folder.
+    resp = await owner.get(f"{base}/{created['id']}/export.m3u")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("audio/x-mpegurl")
+    assert 'filename="Radiohead essentials.m3u"' in resp.headers["content-disposition"]
+    assert resp.text.splitlines() == [
+        "#EXTM3U",
+        "#PLAYLIST:Radiohead essentials",
+        "#EXTINF:240,Radiohead - Karma Police",
+        "/m/301.flac",
+        "#EXTINF:240,Radiohead - Paranoid Android",
+        "/m/300.flac",
+        "#EXTINF:240,Radiohead - Lucky",
+        "/m/303.flac",
+    ]
+    relative = await owner.get(f"{base}/{created['id']}/export.m3u", params={"paths": "relative"})
+    assert relative.text.splitlines()[3] == "301.flac"
+    listed = (await owner.get(base)).json()
+    assert listed[0]["exportable"] is True
 
     detail = (await owner.get(f"{base}/{created['id']}")).json()
     assert [a["title"] for a in detail["seed_artists"]] == ["Radiohead"]

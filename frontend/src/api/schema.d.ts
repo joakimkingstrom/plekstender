@@ -789,6 +789,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/playlists/{playlist_id}/export.m3u": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export M3U
+         * @description The songs of the last build as an M3U file, for other players. Paths are as Plex
+         *     sees them, or relative to the music library's root folder.
+         */
+        get: operations["export_m3u_api_servers__server_id__playlists__playlist_id__export_m3u_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -2227,6 +2248,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Exportable
+             * @description Built at least once, so it can be exported as M3U.
+             */
+            exportable: boolean;
             /** Seed Artists */
             seed_artists: components["schemas"]["SeedArtist"][];
             /** Seed Tracks */
@@ -2293,6 +2319,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Exportable
+             * @description Built at least once, so it can be exported as M3U.
+             */
+            exportable: boolean;
         };
         /** PlaylistPreviewOut */
         PlaylistPreviewOut: {
@@ -4581,6 +4612,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlaylistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_m3u_api_servers__server_id__playlists__playlist_id__export_m3u_get: {
+        parameters: {
+            query?: {
+                paths?: "plex" | "relative";
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                playlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "audio/x-mpegurl": unknown;
                 };
             };
             /** @description Validation Error */

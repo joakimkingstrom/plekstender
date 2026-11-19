@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import os
 import random
 from collections import Counter
 from typing import Any
 
 import httpx
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.config import Settings
-from plekstender.db.models import Playlist, PlexServer, UserServer
+from plekstender.db.models import Artist, Playlist, PlexServer, Track, UserServer
 from plekstender.playlists.builder import Song, matching_songs, pick
 from plekstender.playlists.definition import Definition
 from plekstender.plex.server import PlexServerClient
@@ -140,6 +142,7 @@ async def build(
         playlist.status = "ok"
         playlist.error = None
         playlist.last_result = {**summarise(songs), "matched": matched}
+        playlist.song_keys = [s.rating_key for s in songs]
     except PlaylistError as exc:
         playlist.status = "error"
         playlist.error = str(exc)
@@ -173,3 +176,74 @@ async def remove_from_plex(
             raise PlaylistError("Plex couldn't delete the playlist; try again later.") from exc
     except (PlaylistError, httpx.HTTPError) as exc:
         raise PlaylistError("Plex couldn't delete the playlist; try again later.") from exc
+
+
+# --- M3U ------------------------------------------------------------------------------------
+
+
+def _library_root(first: str | None, last: str | None) -> str:
+    """The folder all of a library's files are in: the common directory of the
+    alphabetically first and last paths is common to every path between them."""
+    if not first or not last:
+        return ""
+    # Character by character on purpose: trimmed back to the last separator below, which
+    # also works for Plex servers on Windows (backslashes).
+    common = os.path.commonprefix([first, last])  # noqa: RUF071
+    cut = max(common.rfind("/"), common.rfind("\\"))
+    return common[: cut + 1] if cut >= 0 else ""
+
+
+async def m3u(db: AsyncSession, us: UserServer, playlist: Playlist, relative: bool) -> str:
+    """The last build as an extended M3U: file paths as Plex sees them, or relative to
+    the music library's root folder (for a file saved there)."""
+    keys = list(playlist.song_keys)
+    rows = (
+        await db.execute(
+            select(
+                Track.rating_key,
+                Track.title,
+                Track.duration_ms,
+                Track.file_path,
+                func.coalesce(Track.original_title, Artist.title),
+            )
+            .outerjoin(
+                Artist,
+                (Artist.server_id == Track.server_id)
+                & (Artist.rating_key == Track.artist_rating_key),
+            )
+            .where(Track.server_id == us.server_id, Track.rating_key.in_(keys))
+        )
+    ).all()
+    by_key = {r[0]: r for r in rows}
+    root = ""
+    if relative:
+        server = await db.get(PlexServer, us.server_id)
+        if server is not None and server.plex_path_prefix:
+            root = server.plex_path_prefix.rstrip("/") + "/"
+        else:
+            first, last = (
+                await db.execute(
+                    select(func.min(Track.file_path), func.max(Track.file_path)).where(
+                        Track.server_id == us.server_id,
+                        Track.section_key.in_(us.music_section_keys),
+                    )
+                )
+            ).one()
+            root = _library_root(first, last)
+    lines = ["#EXTM3U", f"#PLAYLIST:{_clean(playlist.name)}"]
+    for key in keys:
+        row = by_key.get(key)
+        if row is None:
+            continue
+        _, title, duration_ms, path, artist = row
+        if not path:
+            continue
+        seconds = round((duration_ms or 0) / 1000) or -1
+        lines.append(f"#EXTINF:{seconds},{_clean(artist or '')} - {_clean(title)}")
+        lines.append(path[len(root) :] if root and path.startswith(root) else path)
+    return "\n".join(lines) + "\n"
+
+
+def _clean(text: str) -> str:
+    """One line of M3U text (no line breaks)."""
+    return " ".join(text.split())
