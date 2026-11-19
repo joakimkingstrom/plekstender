@@ -1240,6 +1240,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/albums/{album_key}/nfo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Album Nfo
+         * @description The album.nfo in the album's folder (or the folder above its disc folders).
+         */
+        get: operations["album_nfo_api_servers__server_id__files_albums__album_key__nfo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/artists/{artist_key}/nfo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Artist Nfo
+         * @description The artist.nfo in the folder above the artist's albums (the closest one to most of
+         *     their files).
+         */
+        get: operations["artist_nfo_api_servers__server_id__files_artists__artist_key__nfo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/unknown": {
         parameters: {
             query?: never;
@@ -3437,6 +3478,35 @@ export interface components {
             artist: string;
             /** Length Ms */
             length_ms: number | null;
+        };
+        /** NfoOut */
+        NfoOut: {
+            /** Path */
+            path: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "artist" | "album";
+            /**
+             * Data
+             * @description album: title, artist, year, release_date, label, type, review, musicbrainz_albumid, musicbrainz_releasegroupid, genres, styles, moods, themes. artist: name, sort_name, type, gender, disambiguation, born, died, years_active, biography, musicbrainz_artistid, genres, styles, moods, themes.
+             */
+            data: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+            /**
+             * File Release Ids
+             * @description Album: the MusicBrainz release IDs in its files.
+             */
+            file_release_ids?: string[];
+            /**
+             * Plex Mbid
+             * @description Artist: Plex's MusicBrainz ID.
+             */
+            plex_mbid?: string | null;
         };
         /** PinCheckOut */
         PinCheckOut: {
@@ -7056,6 +7126,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    album_nfo_api_servers__server_id__files_albums__album_key__nfo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NfoOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artist_nfo_api_servers__server_id__files_artists__artist_key__nfo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                artist_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NfoOut"] | null;
                 };
             };
             /** @description Validation Error */

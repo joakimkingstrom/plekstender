@@ -679,6 +679,24 @@ class MediaFile(Base):
     scanned_at: Mapped[dt.datetime]
 
 
+class NfoFile(Base):
+    """A Kodi-style artist.nfo or album.nfo in the music folder, with the fields read from it
+    (worker scans). `path` is relative to the mapped folder; its folder says what it's about."""
+
+    __tablename__ = "nfo_files"
+    __table_args__ = (UniqueConstraint("server_id", "path"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    path: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(8))  # artist | album
+    size: Mapped[int] = mapped_column(BigInteger)
+    mtime: Mapped[float]
+    data: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    scanned_at: Mapped[dt.datetime]
+
+
 class FileScan(Base):
     """A worker job over a server's music folder: a scan, or identifying files by sound."""
 

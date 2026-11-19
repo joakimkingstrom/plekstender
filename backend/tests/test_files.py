@@ -121,6 +121,7 @@ async def test_scan_and_compare(app: FastAPI, plex: FakePlex, music: Path) -> No
         "read": 4,
         "unchanged": 0,
         "removed": 0,
+        "nfo": 0,
         "errors": 1,
         "matched": 2,
     }
@@ -1107,3 +1108,119 @@ async def test_renaming_files_and_moving_them_back(
     assert latest["counts"] == {"applied": 2, "conflict": 1}
     assert (album / "06 - Karma Police (Live).flac").read_bytes() == b"someone else's"
     assert (music / "301.flac").exists()
+
+
+# --- .nfo files ----------------------------------------------------------------------------------
+
+ALBUM_NFO = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<album>
+    <title>OK Computer</title>
+    <musicbrainzalbumid>{RELEASE_ID}</musicbrainzalbumid>
+    <musicbrainzreleasegroupid>https://musicbrainz.org/release-group/{GROUP_ID}</musicbrainzreleasegroupid>
+    <artistdesc>Radiohead</artistdesc>
+    <genre>Rock / Alternative</genre>
+    <style>Art Rock</style>
+    <mood>Paranoid</mood>
+    <mood>Bleak</mood>
+    <review>A landmark.</review>
+    <label>Parlophone</label>
+    <releasedate>1997-05-21</releasedate>
+    <albumArtistCredits><artist>Radiohead</artist><musicBrainzArtistID>{RADIOHEAD_ID}</musicBrainzArtistID></albumArtistCredits>
+</album>
+"""
+ARTIST_NFO = f"""<?xml version="1.0" encoding="UTF-8"?>
+<artist>
+    <name>Radiohead</name>
+    <musicBrainzArtistID>{RADIOHEAD_ID}</musicBrainzArtistID>
+    <genre>Alternative Rock</genre>
+    <formed>1985</formed>
+    <biography>Radiohead are an English rock band formed in Abingdon.</biography>
+</artist>
+"""
+
+
+def test_reading_nfo_files(tmp_path: Path) -> None:
+    from plekstender.tags.nfo import NfoError, parse
+
+    (tmp_path / "album.nfo").write_text(ALBUM_NFO)
+    kind, album = parse(tmp_path / "album.nfo")
+    assert kind == "album"
+    assert album["musicbrainz_albumid"] == RELEASE_ID
+    assert album["musicbrainz_releasegroupid"] == GROUP_ID  # from a link
+    assert album["musicbrainz_albumartistids"] == [RADIOHEAD_ID]
+    assert album["genres"] == ["Rock", "Alternative"] and album["moods"] == ["Paranoid", "Bleak"]
+    assert (album["label"], album["release_date"], album["review"]) == (
+        "Parlophone",
+        "1997-05-21",
+        "A landmark.",
+    )
+
+    (tmp_path / "artist.nfo").write_text(ARTIST_NFO)
+    kind, artist = parse(tmp_path / "artist.nfo")
+    assert (kind, artist["name"], artist["born"]) == ("artist", "Radiohead", "1985")
+    assert artist["musicbrainz_artistid"] == RADIOHEAD_ID
+
+    (tmp_path / "scene.nfo").write_text("Ripped by ███ in 1999\n  greetz")
+    with pytest.raises(NfoError, match="not XML"):
+        parse(tmp_path / "scene.nfo")
+    (tmp_path / "bomb.nfo").write_text(
+        '<?xml version="1.0"?><!DOCTYPE a [<!ENTITY a "aaaa">]><album>&a;</album>'
+    )
+    with pytest.raises(NfoError, match="entities"):
+        parse(tmp_path / "bomb.nfo")
+
+
+@pytest.mark.db
+async def test_nfo_files_on_album_and_artist_pages(
+    app: FastAPI, plex: FakePlex, music: Path
+) -> None:
+    from sqlalchemy import update
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import Track
+    from plekstender.worker import scan_music_files
+
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    # The usual layout: Artist/Album/files, artist.nfo and album.nfo in their folders.
+    album = music / "Radiohead" / "OK Computer"
+    album.mkdir(parents=True)
+    for key in (300, 301):
+        (music / f"{key}.flac").rename(album / f"{key}.flac")
+    async with get_sessionmaker()() as db:
+        for key in (300, 301):
+            await db.execute(
+                update(Track)
+                .where(Track.rating_key == key)
+                .values(file_path=f"/m/Radiohead/OK Computer/{key}.flac")
+            )
+        await db.commit()
+    (album / "album.nfo").write_text(ALBUM_NFO)
+    (music / "Radiohead" / "artist.nfo").write_text(ARTIST_NFO)
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+    assert (await owner.get(f"{base}/summary")).json()["last"]["stats"]["nfo"] == 2
+
+    nfo = (await owner.get(f"{base}/albums/200/nfo")).json()
+    assert (nfo["path"], nfo["kind"], nfo["error"]) == (
+        "Radiohead/OK Computer/album.nfo",
+        "album",
+        None,
+    )
+    assert nfo["data"]["musicbrainz_albumid"] == RELEASE_ID
+    assert nfo["file_release_ids"] == []  # the files don't say which release yet
+    artist = (await owner.get(f"{base}/artists/100/nfo")).json()
+    assert (artist["path"], artist["data"]["born"]) == ("Radiohead/artist.nfo", "1985")
+    assert artist["plex_mbid"]  # Plex's, to compare with the .nfo's
+    assert (await owner.get(f"{base}/albums/201/nfo")).json() is None  # no files, no .nfo
+
+    # Gone from the folder: forgotten at the next scan.
+    (album / "album.nfo").unlink()
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+    assert (await owner.get(f"{base}/albums/200/nfo")).json() is None

@@ -50,6 +50,7 @@ export function MusicBrainzLookup({
   fileCount,
   canWrite,
   onClose,
+  releaseId,
 }: {
   serverId: number
   albumKey: number
@@ -58,9 +59,11 @@ export function MusicBrainzLookup({
   fileCount: number
   canWrite: boolean
   onClose: () => void
+  /** Start with this release (e.g. from album.nfo) rather than a search by name. */
+  releaseId?: string
 }) {
   const [release, setRelease] = useState<MbRelease | null>(null)
-  const [search, setSearch] = useState({ album, artist })
+  const [search, setSearch] = useState(releaseId ? { album: releaseId, artist: '' } : { album, artist })
   return (
     <Dialog
       title="Find the release on MusicBrainz"

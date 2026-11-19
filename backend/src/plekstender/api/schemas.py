@@ -1244,5 +1244,21 @@ class RenamePlanOut(BaseModel):
     applied_set_id: int | None = Field(description="The edit that made these moves, once made.")
 
 
+class NfoOut(BaseModel):
+    path: str
+    kind: Literal["artist", "album"]
+    data: dict[str, Any] = Field(
+        description="album: title, artist, year, release_date, label, type, review, "
+        "musicbrainz_albumid, musicbrainz_releasegroupid, genres, styles, moods, themes. "
+        "artist: name, sort_name, type, gender, disambiguation, born, died, years_active, "
+        "biography, musicbrainz_artistid, genres, styles, moods, themes."
+    )
+    error: str | None
+    file_release_ids: list[str] = Field(
+        default_factory=list, description="Album: the MusicBrainz release IDs in its files."
+    )
+    plex_mbid: str | None = Field(default=None, description="Artist: Plex's MusicBrainz ID.")
+
+
 class TagSettingsIn(BaseModel):
     tag_editing: bool

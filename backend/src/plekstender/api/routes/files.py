@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import asyncio
 import time
+from pathlib import PurePosixPath
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, or_, select
 
 from plekstender import musicbrainz
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
@@ -23,6 +24,7 @@ from plekstender.api.schemas import (
     MbPreviewOut,
     MbReleaseSummary,
     MbTrackOut,
+    NfoOut,
     PlexSyncIn,
     PlexSyncPreviewOut,
     PlexSyncSample,
@@ -39,6 +41,7 @@ from plekstender.db.models import (
     FileScan,
     ItemTag,
     MediaFile,
+    NfoFile,
     PlexServer,
     Tag,
     TagChange,
@@ -795,4 +798,94 @@ async def musicbrainz_apply(
         db,
         TagChangeSet(server_id=server.id, user_id=user.id, kind="edit", description=description),
         changes,
+    )
+
+
+# --- .nfo files ---------------------------------------------------------------------------------
+
+
+def _folders(paths: list[str]) -> set[str]:
+    return {str(PurePosixPath(p).parent) for p in paths}
+
+
+async def _nfo(db: DbDep, server_id: int, kind: str, folders: list[str]) -> NfoFile | None:
+    """The .nfo of this kind in the first of these folders that has one."""
+    if not folders:
+        return None
+    name = f"{kind}.nfo"
+    wanted = [str(PurePosixPath(f) / name).lower() for f in folders]
+    found = {
+        n.path.lower(): n
+        for n in await db.scalars(
+            select(NfoFile).where(
+                NfoFile.server_id == server_id,
+                NfoFile.kind == kind,
+                func.lower(NfoFile.path).in_(wanted),
+            )
+        )
+    }
+    return next((found[w] for w in wanted if w in found), None)
+
+
+@router.get("/albums/{album_key}/nfo", response_model=NfoOut | None)
+async def album_nfo(server_id: int, album_key: int, db: DbDep, user: UserDep) -> NfoOut | None:
+    """The album.nfo in the album's folder (or the folder above its disc folders)."""
+    us = await owner_server(db, user, server_id)
+    files = await _album_files(db, us.server_id, album_key)
+    folders = sorted(_folders([f.path for f in files]))
+    parents = sorted({str(PurePosixPath(f).parent) for f in folders} - {"."} - set(folders))
+    nfo = await _nfo(db, us.server_id, "album", folders + parents)
+    if nfo is None:
+        return None
+    releases = sorted(
+        {
+            str(f.tags["musicbrainz_albumid"]).lower()
+            for f in files
+            if f.tags.get("musicbrainz_albumid")
+        }
+    )
+    return NfoOut(
+        path=nfo.path, kind="album", data=nfo.data, error=nfo.error, file_release_ids=releases
+    )
+
+
+@router.get("/artists/{artist_key}/nfo", response_model=NfoOut | None)
+async def artist_nfo(server_id: int, artist_key: int, db: DbDep, user: UserDep) -> NfoOut | None:
+    """The artist.nfo in the folder above the artist's albums (the closest one to most of
+    their files)."""
+    us = await owner_server(db, user, server_id)
+    artist = await db.get(Artist, (us.server_id, artist_key))
+    if artist is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Artist not found")
+    paths = list(
+        await db.scalars(
+            select(MediaFile.path)
+            .join(
+                Track,
+                (Track.server_id == MediaFile.server_id)
+                & (Track.rating_key == MediaFile.rating_key),
+            )
+            .outerjoin(
+                Album,
+                (Album.server_id == Track.server_id) & (Album.rating_key == Track.album_rating_key),
+            )
+            .where(
+                MediaFile.server_id == us.server_id,
+                or_(Track.artist_rating_key == artist_key, Album.artist_rating_key == artist_key),
+            )
+            .limit(2000)
+        )
+    )
+    counts: dict[str, int] = {}
+    for path in paths:
+        for parent in PurePosixPath(path).parents:
+            if str(parent) != ".":
+                counts[str(parent)] = counts.get(str(parent), 0) + 1
+    # Most files first, then the deepest (the artist's own folder, not a genre folder).
+    folders = sorted(counts, key=lambda f: (-counts[f], -len(PurePosixPath(f).parts)))
+    nfo = await _nfo(db, us.server_id, "artist", folders)
+    if nfo is None:
+        return None
+    return NfoOut(
+        path=nfo.path, kind="artist", data=nfo.data, error=nfo.error, plex_mbid=artist.mbid
     )

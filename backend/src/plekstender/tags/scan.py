@@ -20,7 +20,9 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from plekstender.db.models import FileScan, MediaFile, PlexServer, Track
+from plekstender.db.models import FileScan, MediaFile, NfoFile, PlexServer, Track
+from plekstender.tags.nfo import NfoError, kind_of
+from plekstender.tags.nfo import parse as parse_nfo
 from plekstender.tags.read import AUDIO_EXTENSIONS, READER, TagReadError, read_file
 
 log = logging.getLogger(__name__)
@@ -41,11 +43,20 @@ class Found:
 
 def walk(root: Path) -> list[Found]:
     """Every audio file under `root` (symlinks not followed)."""
-    found = []
+    return walk_all(root)[0]
+
+
+def walk_all(root: Path) -> tuple[list[Found], list[Found]]:
+    """Every audio file and every artist.nfo / album.nfo under `root` (no symlinks)."""
+    audio: list[Found] = []
+    nfos: list[Found] = []
     for folder, dirs, files in os.walk(root, followlinks=False):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
         for name in sorted(files):
-            if name.startswith(".") or Path(name).suffix.lower() not in AUDIO_EXTENSIONS:
+            is_nfo = kind_of(name) is not None
+            if name.startswith(".") or not (
+                is_nfo or Path(name).suffix.lower() in AUDIO_EXTENSIONS
+            ):
                 continue
             full = Path(folder) / name
             try:
@@ -54,8 +65,72 @@ def walk(root: Path) -> list[Found]:
                 continue
             if not full.is_file() or full.is_symlink():
                 continue
-            found.append(Found(full.relative_to(root).as_posix(), st.st_size, st.st_mtime))
-    return found
+            item = Found(full.relative_to(root).as_posix(), st.st_size, st.st_mtime)
+            (nfos if is_nfo else audio).append(item)
+    return audio, nfos
+
+
+def _read_nfos(root: Path, items: list[Found]) -> list[dict[str, Any]]:
+    out = []
+    for item in items:
+        try:
+            kind, data = parse_nfo(root / item.path)
+            out.append({"kind": kind, "data": data, "error": None})
+        except NfoError as exc:
+            out.append(
+                {"kind": kind_of(PurePosixPath(item.path).name), "data": {}, "error": str(exc)}
+            )
+    return out
+
+
+async def _scan_nfos(db: AsyncSession, server: PlexServer, root: Path, nfos: list[Found]) -> int:
+    """Read new and changed .nfo files; forget the ones that are gone."""
+    known = {
+        path: (size, mtime)
+        for path, size, mtime in (
+            await db.execute(
+                select(NfoFile.path, NfoFile.size, NfoFile.mtime).where(
+                    NfoFile.server_id == server.id
+                )
+            )
+        ).all()
+    }
+    changed = [f for f in nfos if known.get(f.path) != (f.size, f.mtime)]
+    for start in range(0, len(changed), BATCH):
+        batch = changed[start : start + BATCH]
+        read = await asyncio.to_thread(_read_nfos, root, batch)
+        now = dt.datetime.now(dt.UTC)
+        rows = [
+            {
+                "server_id": server.id,
+                "path": f.path,
+                "kind": info["kind"],
+                "size": f.size,
+                "mtime": f.mtime,
+                "data": info["data"],
+                "error": info["error"],
+                "scanned_at": now,
+            }
+            for f, info in zip(batch, read, strict=True)
+        ]
+        stmt = insert(NfoFile).values(rows)
+        await db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[NfoFile.server_id, NfoFile.path],
+                set_={c: stmt.excluded[c] for c in rows[0] if c not in ("server_id", "path")},
+            )
+        )
+        await db.commit()
+    present = {f.path for f in nfos}
+    gone = [path for path in known if path not in present]
+    for start in range(0, len(gone), 1000):
+        await db.execute(
+            delete(NfoFile).where(
+                NfoFile.server_id == server.id, NfoFile.path.in_(gone[start : start + 1000])
+            )
+        )
+    await db.commit()
+    return len(nfos)
 
 
 def _read(root: Path, item: Found) -> dict[str, Any]:
@@ -122,7 +197,7 @@ async def run_scan(db: AsyncSession, scan_id: int) -> None:
 
 
 async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path) -> dict[str, int]:
-    files = await asyncio.to_thread(walk, root)
+    files, nfos = await asyncio.to_thread(walk_all, root)
     known = {
         path: (size, mtime, reader)
         for path, size, mtime, reader in (
@@ -194,6 +269,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
             )
         )
     stats["removed"] = len(gone)
+    stats["nfo"] = await _scan_nfos(db, server, root, nfos)
     unmatched = await db.scalars(
         select(MediaFile).where(MediaFile.server_id == server.id, MediaFile.rating_key.is_(None))
     )

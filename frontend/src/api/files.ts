@@ -343,3 +343,33 @@ export function useApplyRenames(serverId: number) {
     ),
   )
 }
+
+// --- .nfo files ---------------------------------------------------------------------------------
+
+export type Nfo = Schemas['NfoOut']
+
+/** The album.nfo in an album's folder, if there is one. */
+export function useAlbumNfo(serverId: number, albumKey: number) {
+  return useQuery({
+    queryKey: [...filesKeys.album(serverId, albumKey), 'nfo'],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/albums/{album_key}/nfo', {
+          params: { path: { server_id: serverId, album_key: albumKey } },
+        }),
+      ),
+  })
+}
+
+/** The artist.nfo above an artist's albums, if there is one. */
+export function useArtistNfo(serverId: number, artistKey: number) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'artist-nfo', artistKey],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/artists/{artist_key}/nfo', {
+          params: { path: { server_id: serverId, artist_key: artistKey } },
+        }),
+      ),
+  })
+}

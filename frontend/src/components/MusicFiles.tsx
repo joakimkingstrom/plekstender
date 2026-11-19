@@ -3,6 +3,7 @@ import { errorMessage } from '../api/client'
 import { useState } from 'react'
 import { useAlbumFiles, useFilesSummary, useSetTagEditing, useStartScan, type TrackFile } from '../api/files'
 import { MusicBrainzLookup } from './MusicBrainzLookup'
+import { AlbumNfo } from './NfoCards'
 import { PlexSync } from './PlexSync'
 import { RenameFiles } from './RenameFiles'
 import { TagEditor, TagHistory } from './TagEditor'
@@ -113,7 +114,8 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
   const files = useAlbumFiles(serverId, albumKey, true)
   const summary = useFilesSummary(serverId)
   const [editing, setEditing] = useState(false)
-  const [lookup, setLookup] = useState(false)
+  // The MusicBrainz dialog: closed, open (a search), or open on a release (from album.nfo).
+  const [lookup, setLookup] = useState<false | { releaseId?: string }>(false)
   const [renaming, setRenaming] = useState(false)
   if (files.isPending) return null
   if (files.isError) return null // not the owner (403), or nothing to show
@@ -141,6 +143,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
         fileCount={withFiles.length}
         canWrite={Boolean(summary.data?.tag_editing)}
         onClose={() => setLookup(false)}
+        releaseId={lookup.releaseId}
       />
     )}
     <Card
@@ -153,7 +156,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
             </span>
             {withFiles.length > 0 && !editing && (
               <>
-                <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setLookup(true)}>
+                <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setLookup({})}>
                   MusicBrainz…
                 </Button>
                 <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setRenaming(true)}>
@@ -249,6 +252,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
         </div>
       )}
     </Card>
+    <AlbumNfo serverId={serverId} albumKey={albumKey} onApplyRelease={(releaseId) => setLookup({ releaseId })} />
     <TagHistory serverId={serverId} album={albumKey} />
     </div>
   )
