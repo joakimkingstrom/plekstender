@@ -24,6 +24,7 @@ from plekstender.db import get_sessionmaker
 from plekstender.db.instance import get_library_settings, record_worker_heartbeat
 from plekstender.db.models import (
     ArtworkJob,
+    FileScan,
     ListenBrainzLink,
     ListenImport,
     Playlist,
@@ -46,6 +47,7 @@ from plekstender.previews import trim_cache as trim_preview_cache
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
+from plekstender.tags.scan import run_scan as run_file_scan
 
 log = logging.getLogger(__name__)
 
@@ -492,6 +494,21 @@ async def enqueue_folder_check(server_id: int) -> None:
         pass
 
 
+@app.task(queue="files")
+async def scan_music_files(scan_id: int) -> None:
+    async with get_sessionmaker()() as db:
+        await run_file_scan(db, scan_id)
+
+
+async def enqueue_file_scan(scan: FileScan) -> None:
+    try:
+        await scan_music_files.configure(
+            lock=f"folders-{scan.server_id}", queueing_lock=f"file-scan-{scan.id}"
+        ).defer_async(scan_id=scan.id)
+    except AlreadyEnqueued:
+        pass
+
+
 # --- housekeeping --------------------------------------------------------------------
 
 
@@ -524,6 +541,14 @@ async def cleanup_sessions(timestamp: int) -> None:
                 ListenImport.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
             )
             .values(status="failed", error="Interrupted (the worker stopped). Resume to continue.")
+        )
+        await db.execute(
+            update(FileScan)
+            .where(
+                FileScan.status == "running",
+                FileScan.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
+            )
+            .values(status="failed", error="Interrupted (the worker stopped). Scan again.")
         )
         await db.execute(
             update(Playlist)

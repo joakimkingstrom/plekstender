@@ -640,3 +640,52 @@ class GameRound(Base):
     points: Mapped[int]
     streak: Mapped[int]
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class MediaFile(Base):
+    """A music file in the mounted music folder, with its tags (read by the worker).
+
+    `path` is relative to the server's mapped folder (local_path_prefix). Files are re-read
+    only when their size or modification time changes.
+    """
+
+    __tablename__ = "media_files"
+    __table_args__ = (
+        UniqueConstraint("server_id", "path"),
+        Index("ix_media_files_track", "server_id", "rating_key"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    path: Mapped[str] = mapped_column(Text)
+    size: Mapped[int] = mapped_column(BigInteger)
+    mtime: Mapped[float]
+    format: Mapped[str | None] = mapped_column(String(16))
+    duration_ms: Mapped[int | None]
+    # Normalised tags: {"title": "...", "artist": "...", "genre": ["..."], ...}.
+    tags: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    has_cover: Mapped[bool] = mapped_column(default=False)
+    # The Plex track this file is (matched by its path), if any.
+    rating_key: Mapped[int | None] = mapped_column(BigInteger)
+    error: Mapped[str | None] = mapped_column(Text)
+    scanned_at: Mapped[dt.datetime]
+
+
+class FileScan(Base):
+    """A scan of a server's music folder (worker job)."""
+
+    __tablename__ = "file_scans"
+    __table_args__ = (Index("ix_file_scans_server", "server_id", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(
+        String(16), default="queued"
+    )  # queued|running|succeeded|failed
+    progress: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    stats: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    started_at: Mapped[dt.datetime | None]
+    finished_at: Mapped[dt.datetime | None]
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

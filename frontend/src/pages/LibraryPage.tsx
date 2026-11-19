@@ -17,6 +17,7 @@ import { ColumnChart } from '../components/charts'
 import { Artwork } from '../components/library'
 import { RateStars } from '../components/RateStars'
 import { useLibraryServer } from '../components/useLibraryServer'
+import { AlbumFiles } from '../components/MusicFiles'
 import { Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
 
@@ -441,7 +442,16 @@ export function AlbumPage() {
   const { blocker, active } = useLibraryServer()
   const key = Number(useParams().key)
   if (blocker) return blocker
-  return <AlbumView serverId={active!.id} albumKey={key} />
+  return (
+    <>
+      <AlbumView serverId={active!.id} albumKey={key} />
+      {active!.is_owner && (
+        <div className="mt-4">
+          <AlbumFiles serverId={active!.id} albumKey={key} />
+        </div>
+      )}
+    </>
+  )
 }
 
 function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number }) {

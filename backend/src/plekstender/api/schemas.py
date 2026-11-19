@@ -898,3 +898,44 @@ class LeaderboardRow(BaseModel):
     )
     last_rounds: int | None = Field(description="Rounds in the latest game.")
     last_played_at: dt.datetime | None
+
+
+# --- music files (tag editor) --------------------------------------------------------------
+
+
+class FileScanOut(BaseModel):
+    id: int
+    status: Literal["queued", "running", "succeeded", "failed"]
+    progress: dict[str, Any]
+    stats: dict[str, Any]
+    error: str | None
+    created_at: dt.datetime
+    finished_at: dt.datetime | None
+
+
+class FilesSummaryOut(BaseModel):
+    mapped: bool = Field(description="The music folder is mapped (Settings → Music files).")
+    files: int
+    matched: int = Field(description="Files that are a Plex track.")
+    errors: int = Field(description="Files whose tags couldn't be read.")
+    active: FileScanOut | None
+    last: FileScanOut | None
+
+
+class TrackFileOut(BaseModel):
+    rating_key: int
+    disc: int | None
+    number: int | None
+    plex: dict[str, Any] = Field(description="Plex's values, in the same fields as `tags`.")
+    file: str | None = Field(description="The file, relative to the music folder.")
+    format: str | None
+    duration_ms: int | None
+    has_cover: bool
+    tags: dict[str, Any]
+    error: str | None
+    differences: list[str] = Field(description="Fields where the file and Plex disagree.")
+
+
+class AlbumFilesOut(BaseModel):
+    scanned: bool = Field(description="The music folder has been scanned.")
+    tracks: list[TrackFileOut]

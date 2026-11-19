@@ -10,6 +10,7 @@ import { useEditFonts, useFanartKey, useFonts, useSetFanartKey, type FontGroupNa
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
 import { FolderSettings } from '../components/FolderSettings'
+import { ScanCard } from '../components/MusicFiles'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
@@ -43,7 +44,12 @@ export function SettingsLayout() {
         <NavLink to="/settings/game" className={tab}>
           Guess the intro
         </NavLink>
-        {(me?.is_admin || active?.is_owner) && (
+        {active?.is_owner && (
+          <NavLink to="/settings/files" className={tab}>
+            Music files
+          </NavLink>
+        )}
+        {me?.is_admin && (
           <NavLink to="/settings/artwork" className={tab}>
             Artwork
           </NavLink>
@@ -509,21 +515,34 @@ export function AppearancePage() {
   )
 }
 
-/** Text logo fonts (admins) and saving images to artist folders (server owners). */
+/** Artwork settings (admins): the text logo fonts. */
 export function ArtworkSettingsPage() {
   const me = useMe()
-  const { active, servers } = useActiveServer()
-  if (me.isPending || servers.isPending) return <Spinner />
-  const isAdmin = Boolean(me.data?.is_admin)
-  if (!isAdmin && !active?.is_owner) return <Navigate to="/settings" replace />
+  if (me.isPending) return <Spinner />
+  if (!me.data?.is_admin) return <Navigate to="/settings" replace />
   return (
     <div className="space-y-4">
-      {active?.is_owner && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <FolderSettings serverId={active.id} />
-        </div>
-      )}
-      {isAdmin && <FontsCard />}
+      <p className="text-sm text-muted">
+        Saving artist images into artist folders is under{' '}
+        <NavLink to="/settings/files" className="text-accent underline">
+          Music files
+        </NavLink>
+        .
+      </p>
+      <FontsCard />
+    </div>
+  )
+}
+
+/** The music folder and tag scans (server owners). */
+export function FilesSettingsPage() {
+  const { active, servers } = useActiveServer()
+  if (servers.isPending) return <Spinner />
+  if (!active?.is_owner) return <Navigate to="/settings" replace />
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-2">
+      <FolderSettings serverId={active.id} />
+      <ScanCard serverId={active.id} />
     </div>
   )
 }

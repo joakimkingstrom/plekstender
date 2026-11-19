@@ -980,6 +980,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Files Summary */
+        get: operations["files_summary_api_servers__server_id__files_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Scan
+         * @description Scan the music folder (in the worker): new and changed files' tags are read.
+         */
+        post: operations["start_scan_api_servers__server_id__files_scans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/{album_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Album Files
+         * @description An album's songs: Plex's metadata next to the tags in their files.
+         */
+        get: operations["album_files_api_servers__server_id__files_albums__album_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -1163,7 +1220,8 @@ export interface paths {
         get: operations["get_folder_api_servers__server_id__artwork_folder_get"];
         /**
          * Put Folder
-         * @description Turn saving artist.jpg into artist folders on or off, with the path mapping.
+         * @description The music folder mapping (Plex's path -> the worker's), and whether artist.jpg is
+         *     saved into artist folders.
          */
         put: operations["put_folder_api_servers__server_id__artwork_folder_put"];
         post?: never;
@@ -1732,6 +1790,16 @@ export interface components {
             tracks: components["schemas"]["TrackOut"][];
             your_listens: components["schemas"]["ItemListensOut"];
         };
+        /** AlbumFilesOut */
+        AlbumFilesOut: {
+            /**
+             * Scanned
+             * @description The music folder has been scanned.
+             */
+            scanned: boolean;
+            /** Tracks */
+            tracks: components["schemas"]["TrackFileOut"][];
+        };
         /** AlbumSummary */
         AlbumSummary: {
             /** Rating Key */
@@ -2045,6 +2113,55 @@ export interface components {
             configured: boolean;
             /** Source */
             source: ("settings" | "environment") | null;
+        };
+        /** FileScanOut */
+        FileScanOut: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /** Progress */
+            progress: {
+                [key: string]: unknown;
+            };
+            /** Stats */
+            stats: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+        };
+        /** FilesSummaryOut */
+        FilesSummaryOut: {
+            /**
+             * Mapped
+             * @description The music folder is mapped (Settings → Music files).
+             */
+            mapped: boolean;
+            /** Files */
+            files: number;
+            /**
+             * Matched
+             * @description Files that are a Plex track.
+             */
+            matched: number;
+            /**
+             * Errors
+             * @description Files whose tags couldn't be read.
+             */
+            errors: number;
+            active: components["schemas"]["FileScanOut"] | null;
+            last: components["schemas"]["FileScanOut"] | null;
         };
         /** FolderExample */
         FolderExample: {
@@ -3448,6 +3565,44 @@ export interface components {
             rating_key: number | null;
             /** Thumb */
             thumb: string | null;
+        };
+        /** TrackFileOut */
+        TrackFileOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Disc */
+            disc: number | null;
+            /** Number */
+            number: number | null;
+            /**
+             * Plex
+             * @description Plex's values, in the same fields as `tags`.
+             */
+            plex: {
+                [key: string]: unknown;
+            };
+            /**
+             * File
+             * @description The file, relative to the music folder.
+             */
+            file: string | null;
+            /** Format */
+            format: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Has Cover */
+            has_cover: boolean;
+            /** Tags */
+            tags: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+            /**
+             * Differences
+             * @description Fields where the file and Plex disagree.
+             */
+            differences: string[];
         };
         /** TrackOut */
         TrackOut: {
@@ -5478,6 +5633,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GamePlaylistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    files_summary_api_servers__server_id__files_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilesSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_scan_api_servers__server_id__files_scans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    album_files_api_servers__server_id__files_albums__album_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumFilesOut"];
                 };
             };
             /** @description Validation Error */

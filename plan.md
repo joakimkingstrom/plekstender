@@ -539,7 +539,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 *History and undo.* Per file, album and artist: a timeline of change sets and their changes. Undo a whole change set, or cherry-pick changes: undo creates a new change set that writes the old values back. If a file changed since (the value on disk isn't the one recorded), that change is flagged instead of overwritten. An artist's history lists every change set that touched their files, with pick-and-choose undo.
 
 *Stages.*
-- [ ] 10a. Scan and view: read tags with `mutagen` (FLAC/Vorbis, MP3 ID3v2.3/2.4, MP4/M4A, Opus/Ogg, WAV/AIFF), match files to Plex tracks, show tags per album with differences to Plex highlighted. Read-only.
+- [x] 10a. Scan and view: read tags with `mutagen` (FLAC/Vorbis, MP3 ID3v2.3/2.4, MP4/M4A, Opus/Ogg, WAV/AIFF), match files to Plex tracks, show tags per album with differences to Plex highlighted. Read-only. (Settings → Music files: the folder mapping, artist.jpg, scans; album pages: "Tags in the files" for server owners. Rescans read only changed files; symlinks aren't followed.)
 - [ ] 10b. Manual editing (per file or across an album) with history and undo.
 - [ ] 10c. Write Plex's metadata to the files: titles, artists, album, year, genres and (optionally) your ratings as POPM / RATING, previewed as a diff.
 - [ ] 10d. MusicBrainz: search releases (artist, album, track count, durations), pick one like in Picard, map tracks, preview, apply. Store MusicBrainz IDs in the tags.

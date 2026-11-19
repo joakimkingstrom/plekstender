@@ -77,9 +77,7 @@ THUMB_SIZES = (160, 320, 600)
 async def owner_server(db: AsyncSession, user: User, server_id: int) -> UserServer:
     us = await get_user_server(db, user, server_id)
     if not us.is_owner:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Only the server's owner can change artist images."
-        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the server's owner can do this.")
     return us
 
 
@@ -493,28 +491,37 @@ async def get_folder(server_id: int, db: DbDep, user: UserDep) -> FolderSettings
 async def put_folder(
     server_id: int, body: FolderSettingsIn, db: DbDep, user: UserDep
 ) -> FolderSettingsOut:
-    """Turn saving artist.jpg into artist folders on or off, with the path mapping."""
+    """The music folder mapping (Plex's path -> the worker's), and whether artist.jpg is
+    saved into artist folders."""
     us = await owner_server(db, user, server_id)
     server = await db.get(PlexServer, us.server_id)
     assert server is not None
     plex_prefix = (body.plex_prefix or "").strip().rstrip("/") or None
     local_prefix = (body.local_prefix or "").strip().rstrip("/") or None
-    if body.enabled:
-        if not plex_prefix or not local_prefix:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                "Enter both the Plex path and the local path.",
-            )
-        if not plex_prefix.startswith("/") or not local_prefix.startswith("/"):
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Use absolute paths.")
+    if body.enabled and (not plex_prefix or not local_prefix):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Enter both the Plex path and the local path.",
+        )
+    if bool(plex_prefix) != bool(local_prefix):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter both paths (or neither).")
+    if (
+        plex_prefix
+        and local_prefix
+        and not (plex_prefix.startswith("/") and local_prefix.startswith("/"))
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Use absolute paths.")
     server.folder_save = body.enabled
     server.plex_path_prefix = plex_prefix
     server.local_path_prefix = local_prefix
-    if body.enabled:
+    mapped = bool(plex_prefix and local_prefix)
+    if mapped:
         # The worker (which has the music folder) checks the mapping.
         server.folder_check = {"requested_at": dt.datetime.now(dt.UTC).isoformat()}
+    else:
+        server.folder_check = {}
     await db.commit()
-    if body.enabled:
+    if mapped:
         await enqueue_folder_check(server.id)
     return await folder_settings(db, user, us)
 
