@@ -1037,6 +1037,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Files Settings
+         * @description Allow (or stop) editing tags: it writes to the music files.
+         */
+        put: operations["files_settings_api_servers__server_id__files_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/edits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Edit Tags
+         * @description Change tags in music files. The changes are recorded first, then the worker writes
+         *     them; a file that changed since it was scanned isn't overwritten (a conflict).
+         */
+        post: operations["edit_tags_api_servers__server_id__files_edits_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Tags
+         * @description Put back the values from before the given changes (any of them: a whole edit, or
+         *     picked ones). An undo is an edit too: it's recorded, and can itself be undone.
+         */
+        post: operations["undo_tags_api_servers__server_id__files_undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tag History
+         * @description Edits (newest first) that touched an album's or an artist's files, or any.
+         */
+        get: operations["tag_history_api_servers__server_id__files_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -2217,6 +2299,12 @@ export interface components {
              * @description The music folder is mapped (Settings → Music files).
              */
             mapped: boolean;
+            /**
+             * Tag Editing
+             * @description Tags may be edited (owner's choice).
+             * @default false
+             */
+            tag_editing: boolean;
             /** Files */
             files: number;
             /**
@@ -3572,6 +3660,89 @@ export interface components {
             /** Full Days */
             full_days: number;
         };
+        /** TagChangeOut */
+        TagChangeOut: {
+            /** Id */
+            id: number;
+            /** File Id */
+            file_id: number | null;
+            /** Path */
+            path: string;
+            /** Rating Key */
+            rating_key: number | null;
+            /** Field */
+            field: string;
+            /** Old Value */
+            old_value: string | string[] | null;
+            /** New Value */
+            new_value: string | string[] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "applied" | "conflict" | "failed";
+            /** Error */
+            error: string | null;
+            /** Undoes Id */
+            undoes_id: number | null;
+            /**
+             * Undone
+             * @description An applied undo put this change back.
+             */
+            undone: boolean;
+        };
+        /** TagChangeSetOut */
+        TagChangeSetOut: {
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "edit" | "undo";
+            /** Description */
+            description: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "applied" | "partial" | "failed";
+            /** Error */
+            error: string | null;
+            /** User */
+            user: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Applied At */
+            applied_at: string | null;
+            /** Changes */
+            changes: components["schemas"]["TagChangeOut"][];
+        };
+        /** TagEditChange */
+        TagEditChange: {
+            /** File Id */
+            file_id: number;
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "title" | "artist" | "album" | "albumartist" | "date" | "genre" | "tracknumber" | "discnumber" | "composer";
+            /**
+             * Value
+             * @description New value; a list for genre; null removes the tag.
+             */
+            value: string | string[] | null;
+        };
+        /** TagEditIn */
+        TagEditIn: {
+            /** Description */
+            description?: string | null;
+            /** Changes */
+            changes: components["schemas"]["TagEditChange"][];
+        };
         /** TagOut */
         TagOut: {
             /** Id */
@@ -3582,6 +3753,16 @@ export interface components {
             name: string;
             /** Count */
             count?: number | null;
+        };
+        /** TagSettingsIn */
+        TagSettingsIn: {
+            /** Tag Editing */
+            tag_editing: boolean;
+        };
+        /** TagUndoIn */
+        TagUndoIn: {
+            /** Change Ids */
+            change_ids: number[];
         };
         /** TextLogo */
         TextLogo: {
@@ -3639,6 +3820,11 @@ export interface components {
         TrackFileOut: {
             /** Rating Key */
             rating_key: number;
+            /**
+             * File Id
+             * @description The music file, for edits.
+             */
+            file_id?: number | null;
             /** Disc */
             disc: number | null;
             /** Number */
@@ -5796,6 +5982,146 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumFilesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    files_settings_api_servers__server_id__files_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilesSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_tags_api_servers__server_id__files_edits_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagEditIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_tags_api_servers__server_id__files_undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagUndoIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tag_history_api_servers__server_id__files_changes_get: {
+        parameters: {
+            query?: {
+                album?: number | null;
+                artist?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"][];
                 };
             };
             /** @description Validation Error */

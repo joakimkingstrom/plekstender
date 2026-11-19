@@ -1,6 +1,8 @@
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
-import { useAlbumFiles, useFilesSummary, useStartScan, type TrackFile } from '../api/files'
+import { useState } from 'react'
+import { useAlbumFiles, useFilesSummary, useSetTagEditing, useStartScan, type TrackFile } from '../api/files'
+import { TagEditor, TagHistory } from './TagEditor'
 import { formatCount, formatDuration, formatRelative } from '../format'
 import { Tooltip } from './Tooltip'
 import { Button, Card, Notice, Spinner } from './ui'
@@ -9,6 +11,7 @@ import { Button, Card, Notice, Spinner } from './ui'
 export function ScanCard({ serverId }: { serverId: number }) {
   const summary = useFilesSummary(serverId)
   const start = useStartScan(serverId)
+  const setEditing = useSetTagEditing(serverId)
   if (summary.isPending) return <Spinner />
   if (summary.isError) return <Notice tone="error">{errorMessage(summary.error)}</Notice>
   const s = summary.data
@@ -58,6 +61,25 @@ export function ScanCard({ serverId }: { serverId: number }) {
           </>
         )}
         {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}
+        {s.mapped && (
+          <div className="space-y-1 border-t border-border pt-3">
+            <label className="flex items-center gap-2 font-medium">
+              <input
+                type="checkbox"
+                checked={s.tag_editing}
+                disabled={setEditing.isPending}
+                onChange={(e) => setEditing.mutate(e.target.checked)}
+              />
+              Allow editing tags
+            </label>
+            <p className="text-xs text-muted">
+              Album pages get an Edit tags button. Changes are written to your music files by the worker, after you've
+              reviewed them; every change is recorded and can be undone, and a file changed elsewhere is never
+              overwritten.
+            </p>
+            {setEditing.isError && <Notice tone="error">{errorMessage(setEditing.error)}</Notice>}
+          </div>
+        )}
       </div>
     </Card>
   )
@@ -86,22 +108,35 @@ function fileValue(file: TrackFile, field: string): unknown {
 /** An album's songs with the tags in their files, where they differ from Plex highlighted. */
 export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey: number }) {
   const files = useAlbumFiles(serverId, albumKey, true)
+  const summary = useFilesSummary(serverId)
+  const [editing, setEditing] = useState(false)
   if (files.isPending) return null
   if (files.isError) return null // not the owner (403), or nothing to show
   const { tracks, scanned } = files.data
   const different = tracks.filter((t) => t.differences.length > 0).length
+  const canEdit = Boolean(summary.data?.tag_editing) && tracks.some((t) => t.file_id && !t.error)
   return (
+    <div className="space-y-4">
     <Card
       title="Tags in the files"
       action={
         scanned ? (
-          <span className="text-xs text-muted">
-            {different ? `${different} of ${tracks.length} songs differ from Plex` : 'Same as Plex'}
+          <span className="flex items-center gap-3">
+            <span className="text-xs text-muted">
+              {different ? `${different} of ${tracks.length} songs differ from Plex` : 'Same as Plex'}
+            </span>
+            {canEdit && !editing && (
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setEditing(true)}>
+                Edit tags
+              </Button>
+            )}
           </span>
         ) : undefined
       }
     >
-      {!scanned ? (
+      {editing ? (
+        <TagEditor serverId={serverId} tracks={tracks} onClose={() => setEditing(false)} />
+      ) : !scanned ? (
         <p className="text-sm text-muted">
           Scan your music folder (
           <Link to="/settings/files" className="text-accent underline">
@@ -162,9 +197,23 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-muted">Highlighted: different from Plex (hover for Plex's value).</p>
+          <p className="mt-2 text-xs text-muted">
+            Highlighted: different from Plex (hover for Plex's value).
+            {!summary.data?.tag_editing && (
+              <>
+                {' '}
+                To edit tags, allow it in{' '}
+                <Link to="/settings/files" className="underline">
+                  Settings → Music files
+                </Link>
+                .
+              </>
+            )}
+          </p>
         </div>
       )}
     </Card>
+    <TagHistory serverId={serverId} album={albumKey} />
+    </div>
   )
 }

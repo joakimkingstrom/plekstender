@@ -18,6 +18,7 @@ import { Artwork } from '../components/library'
 import { RateStars } from '../components/RateStars'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { AlbumFiles } from '../components/MusicFiles'
+import { TagHistory } from '../components/TagEditor'
 import { Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
 
@@ -369,7 +370,17 @@ export function ArtistPage() {
   const { blocker, active } = useLibraryServer()
   const key = Number(useParams().key)
   if (blocker) return blocker
-  return <ArtistView serverId={active!.id} artistKey={key} />
+  return (
+    <>
+      <ArtistView serverId={active!.id} artistKey={key} />
+      {/* Edits to this artist's files, with undo (server owners). */}
+      {active!.is_owner && (
+        <div className="mt-4">
+          <TagHistory serverId={active!.id} artist={key} />
+        </div>
+      )}
+    </>
+  )
 }
 
 function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: number }) {

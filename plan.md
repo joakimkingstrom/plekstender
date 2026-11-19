@@ -553,7 +553,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 
 *Stages.*
 - [x] 10a. Scan and view: read tags with `mutagen` (FLAC/Vorbis, MP3 ID3v2.3/2.4, MP4/M4A, Opus/Ogg, WAV/AIFF), match files to Plex tracks, show tags per album with differences to Plex highlighted. Read-only. (Settings → Music files: the folder mapping, artist.jpg, scans; album pages: "Tags in the files" for server owners. Rescans read only changed files; symlinks aren't followed.)
-- [ ] 10b. Manual editing (per file or across an album) with history and undo.
+- [x] 10b. Manual editing (per file or across an album) with history and undo. (Settings → Music files: "Allow editing tags", off by default. Album pages: Edit tags (album-wide fields, per-song track/title/artist, Fill in from Plex), a review of every change before it's written, and the tag history with undo per edit or per change; artist pages show their files' history.)
 - [ ] 10c. Write Plex's metadata to the files: titles, artists, album, year, genres and (optionally) your ratings as POPM / RATING, previewed as a diff.
 - [ ] 10d. MusicBrainz: search releases (artist, album, track count, durations), pick one like in Picard, map tracks, preview, apply. Store MusicBrainz IDs in the tags.
 - [ ] 10e. Identify unknown files by fingerprint: Chromaprint (`fpcalc`) + AcoustID (an AcoustID application key, set by the admin), then MusicBrainz.

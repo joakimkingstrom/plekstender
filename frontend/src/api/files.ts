@@ -48,3 +48,71 @@ export function useAlbumFiles(serverId: number, albumKey: number, enabled: boole
       ),
   })
 }
+
+export type TagChangeSet = Schemas['TagChangeSetOut']
+export type TagChange = Schemas['TagChangeOut']
+export type TagEdit = Schemas['TagEditChange']
+
+export function useSetTagEditing(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (on: boolean) =>
+      unwrap(
+        api.PUT('/api/servers/{server_id}/files/settings', {
+          params: { path: { server_id: serverId } },
+          body: { tag_editing: on },
+        }),
+      ),
+    onSuccess: (data) => qc.setQueryData(filesKeys.summary(serverId), data),
+  })
+}
+
+const busy = (sets: TagChangeSet[] | undefined) => sets?.some((s) => s.status === 'queued' || s.status === 'running')
+
+/** Edits that touched an album's or an artist's files, newest first (polled while the
+ * worker is writing; the files' tags are refreshed when it's done). */
+export function useTagHistory(serverId: number, filter: { album?: number; artist?: number }) {
+  const qc = useQueryClient()
+  const key = [...filesKeys.all(serverId), 'history', filter] as const
+  return useQuery({
+    queryKey: key,
+    queryFn: async () => {
+      const data = await unwrap(
+        api.GET('/api/servers/{server_id}/files/changes', {
+          params: { path: { server_id: serverId }, query: filter },
+        }),
+      )
+      if (busy(qc.getQueryData<TagChangeSet[]>(key)) && !busy(data)) {
+        // The worker finished: the files' tags changed.
+        void qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'album'] })
+      }
+      return data
+    },
+    refetchInterval: (query) => (busy(query.state.data) ? 1500 : false),
+  })
+}
+
+function useQueueTags<T>(serverId: number, request: (body: T) => Promise<TagChangeSet>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: request,
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'history'] }),
+  })
+}
+
+export function useEditTags(serverId: number) {
+  return useQueueTags(serverId, (body: { description: string | null; changes: TagEdit[] }) =>
+    unwrap(api.POST('/api/servers/{server_id}/files/edits', { params: { path: { server_id: serverId } }, body })),
+  )
+}
+
+export function useUndoTags(serverId: number) {
+  return useQueueTags(serverId, (changeIds: number[]) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/undo', {
+        params: { path: { server_id: serverId } },
+        body: { change_ids: changeIds },
+      }),
+    ),
+  )
+}
