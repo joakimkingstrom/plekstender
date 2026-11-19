@@ -26,7 +26,13 @@ BATCH = 20
 # The Developer plan sees six months ahead (a few days' margin on "six months").
 DAYS_AHEAD = 175
 # "The identifier `musicbrainz:…` is invalid."
-_IDENTIFIER = re.compile(r"`?\b((?:musicbrainz|jambase|spotify|ticketmaster):[A-Za-z0-9-]+)`?")
+# How JamBase names an ID it doesn't know: "No artist found for source `musicbrainz` artist
+# id `<mbid>`" (one error per ID, as it answers in practice) or "The identifier
+# `jambase:87121` is invalid." (as documented).
+_UNKNOWN_ID = (
+    re.compile(r"source `([a-z0-9-]+)` artist id `([^`\s]+)`"),
+    re.compile(r"`([a-z0-9-]+):([^`\s]+)`"),
+)
 
 
 class JamBaseError(Exception):
@@ -46,12 +52,35 @@ class JamBaseRequestError(JamBaseError):
 
 
 class JamBaseIdError(JamBaseRequestError):
-    """An artist ID JamBase doesn't know (400 identifier_invalid): the whole request fails.
-    `identifier` is the one it named (e.g. "musicbrainz:<mbid>"), when it said."""
+    """Artist IDs JamBase doesn't know (400 identifier_invalid): the whole request fails.
+    `identifiers` are the ones it named ("musicbrainz:<mbid>"), lower-cased."""
 
-    def __init__(self, message: str, identifier: str | None) -> None:
+    def __init__(self, message: str, identifiers: list[str]) -> None:
         super().__init__(message)
-        self.identifier = identifier
+        self.identifiers = identifiers
+
+
+def _unknown_ids(resp: httpx.Response) -> tuple[bool, list[str]]:
+    """Whether the answer is about unknown IDs, and the IDs it names."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return False, []
+    errors = body.get("errors") if isinstance(body, dict) else None
+    about_ids, found = False, []
+    for error in errors if isinstance(errors, list) else []:
+        if not isinstance(error, dict):
+            continue
+        code = error.get("code") or error.get("errorCode")
+        message = str(error.get("message") or error.get("errorMessage") or "")
+        if code != "identifier_invalid":
+            continue
+        about_ids = True
+        for pattern in _UNKNOWN_ID:
+            if m := pattern.search(message):
+                found.append(f"{m[1]}:{m[2]}".lower())
+                break
+    return about_ids, found
 
 
 @dataclass
@@ -140,11 +169,12 @@ async def _get(
             raise JamBaseQuotaError(f"JamBase's monthly quota is used up: {message}")
         raise JamBaseError("JamBase is busy (too many requests); try again later.")
     if resp.status_code >= 400:
-        message, code = _problem_code(resp)
-        named = _IDENTIFIER.search(message)
-        if resp.status_code == 400 and (code == "identifier_invalid" or named):
-            raise JamBaseIdError(f"JamBase: {message}", named[1] if named else None)
+        message = _problem(resp)
         if resp.status_code == 400:
+            about_ids, identifiers = _unknown_ids(resp)
+            if about_ids:
+                more = f" (and {len(identifiers) - 1} more)" if len(identifiers) > 1 else ""
+                raise JamBaseIdError(f"JamBase: {message}{more}", identifiers)
             raise JamBaseRequestError(f"JamBase refused the request: {message}")
         raise JamBaseError(f"JamBase answered {resp.status_code}: {message}")
     try:

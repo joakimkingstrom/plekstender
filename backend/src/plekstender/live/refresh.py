@@ -222,13 +222,13 @@ async def refresh_user(
             except jambase.JamBaseRequestError as exc:
                 if not batch[0].mbid:
                     raise
-                named = (
-                    (exc.identifier or "").removeprefix("musicbrainz:").lower()
-                    if isinstance(exc, jambase.JamBaseIdError)
-                    else ""
-                )
-                culprit = next((a for a in batch if a.mbid == named), None)
-                if culprit is None:
+                named = {
+                    i.removeprefix("musicbrainz:")
+                    for i in getattr(exc, "identifiers", [])
+                    if i.startswith("musicbrainz:")
+                }
+                culprits = [a for a in batch if a.mbid in named]
+                if not culprits:
                     # Refused without naming an ID: search everyone by name this time.
                     log.warning("JamBase refused the artist IDs (%s); searching by name", exc)
                     by_name.extend(batch)
@@ -241,9 +241,10 @@ async def refresh_user(
                     log.warning("JamBase refused artist IDs (%s); searching by name", exc)
                     by_name.extend(batch)
                     continue
-                newly_unknown.add(named)
-                by_name.append(culprit)
-                rest = [a for a in batch if a is not culprit]
+                # JamBase names every unknown ID: leave them all out and try again once.
+                newly_unknown.update(a.mbid for a in culprits if a.mbid)
+                by_name.extend(culprits)
+                rest = [a for a in batch if a not in culprits]
                 if rest:
                     queue.insert(0, (rest, retries + 1))
         for batch in batches([replace(a, mbid=None) for a in by_name]):

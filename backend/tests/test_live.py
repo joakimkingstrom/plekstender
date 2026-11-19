@@ -167,18 +167,20 @@ class FakeJamBase:
         if params.get("artistId") and self.refuse_ids:
             return httpx.Response(400, json={"success": False, "errors": [{"field": "artistId"}]})
         if ids := params.get("artistId"):
-            # Like JamBase: one ID it doesn't know fails the whole request.
-            for identifier in ids.split("|"):
-                if identifier != f"musicbrainz:{RADIOHEAD_MBID}":
-                    return httpx.Response(400, json={
-                        "success": False,
-                        "errors": [{
-                            "errorCode": "identifier_invalid",
-                            "errorMessage": f"The identifier `{identifier}` is invalid.",
-                        }],
-                    })  # fmt: skip
+            # As JamBase answers: every ID it doesn't know named, and the request fails.
+            unknown = [i for i in ids.split("|") if i != f"musicbrainz:{RADIOHEAD_MBID}"]
+            if unknown:
+                errors = [
+                    {
+                        "code": "identifier_invalid",
+                        "message": "No artist found for source `musicbrainz` artist id "
+                        f"`{i.removeprefix('musicbrainz:')}`",
+                    }
+                    for i in unknown
+                ]
+                return httpx.Response(400, json={"success": False, "errors": errors})
             found = [CONCERT, FESTIVAL]
-        elif params.get("artistName") == "Portishead":
+        elif "Portishead" in (params.get("artistName") or "").split("|"):
             found = [FESTIVAL, TRIBUTE]
         return httpx.Response(200, json={
             "success": True,
@@ -359,21 +361,28 @@ async def test_live_unknown_artist_ids(app: FastAPI, plex: FakePlex) -> None:
     jb = FakeJamBase(plex)
     owner, user_id = await owner_listening(app, plex)
     unknown = "0103c1cc-4a09-4a5d-a344-56ad99a77193"
+    also_unknown = "ffe02aed-ef7e-4736-a186-c2f1dd55ce8d"
     async with get_sessionmaker()() as db:
         await db.execute(update(Artist).where(Artist.rating_key == 101).values(mbid=unknown))
+        await db.execute(update(Artist).where(Artist.rating_key == 102).values(mbid=also_unknown))
+        await db.execute(
+            text(
+                "UPDATE user_item_state SET view_count = 5 WHERE user_id = :u AND rating_key = 102"
+            ),
+            {"u": user_id},
+        )
         await db.commit()
     await owner.put("/api/admin/jambase", json={"api_key": KEY}, headers=CSRF)
     await owner.put("/api/live/settings", json={**STOCKHOLM, "top_percent": 100}, headers=CSRF)
 
     first = await refresh(user_id)
     assert first.complete, first.error
-    # Both IDs (refused), Radiohead's again, then Portishead by name.
-    assert [
-        (r.url.params.get("artistId"), r.url.params.get("artistName")) for r in jb.requests
-    ] == [
-        (f"musicbrainz:{RADIOHEAD_MBID}|musicbrainz:{unknown}", None),
+    # All three IDs (two unknown, both named at once), Radiohead's again, the others by name.
+    sent = [(r.url.params.get("artistId"), r.url.params.get("artistName")) for r in jb.requests]
+    assert sent == [
+        (f"musicbrainz:{RADIOHEAD_MBID}|musicbrainz:{unknown}|musicbrainz:{also_unknown}", None),
         (f"musicbrainz:{RADIOHEAD_MBID}", None),
-        (None, "Portishead"),
+        (None, "Portishead|Secret Band"),
     ]
     names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
     assert names == ["Radiohead at Avicii Arena", "Way Out West 2027"]
@@ -382,7 +391,7 @@ async def test_live_unknown_artist_ids(app: FastAPI, plex: FakePlex) -> None:
     jb.requests.clear()
     second = await refresh(user_id)
     assert second.complete and second.requests == 2
-    assert [r.url.params.get("artistName") for r in jb.requests] == [None, "Portishead"]
+    assert [r.url.params.get("artistName") for r in jb.requests] == [None, "Portishead|Secret Band"]
 
 
 def test_error_messages() -> None:
@@ -419,3 +428,25 @@ async def test_live_ids_refused(app: FastAPI, plex: FakePlex) -> None:
     ]
     names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
     assert names == ["Way Out West 2027"]  # the fake only knows Portishead by name
+
+
+def test_unknown_id_answers() -> None:
+    """JamBase's real answer (one error per ID) and the documented one."""
+    found = "No artist found for source `musicbrainz` artist id `{}`"
+    real = httpx.Response(400, json={"success": False, "errors": [
+        {"code": "identifier_invalid", "message": found.format(
+            "ffe02aed-ef7e-4736-a186-c2f1dd55ce8d")},
+        {"code": "identifier_invalid", "message": found.format(
+            "8F92558C-2baa-4758-8c38-615519e9deda")},
+    ]})  # fmt: skip
+    assert jambase._unknown_ids(real) == (True, [
+        "musicbrainz:ffe02aed-ef7e-4736-a186-c2f1dd55ce8d",
+        "musicbrainz:8f92558c-2baa-4758-8c38-615519e9deda",
+    ])  # fmt: skip
+    invalid = "The identifier `jambase:87121` is invalid."
+    documented = httpx.Response(400, json={"errors": [
+        {"errorCode": "identifier_invalid", "errorMessage": invalid},
+    ]})  # fmt: skip
+    assert jambase._unknown_ids(documented) == (True, ["jambase:87121"])
+    other = httpx.Response(400, json={"errors": [{"code": "parameter_invalid", "message": "x"}]})
+    assert jambase._unknown_ids(other) == (False, [])
