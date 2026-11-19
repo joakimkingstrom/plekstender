@@ -19,6 +19,7 @@ const history = [
   {
     id: 7, kind: 'edit', description: 'Fixed the album artist', status: 'applied', error: null, user: 'joakim',
     created_at: new Date().toISOString(), applied_at: new Date().toISOString(),
+    total: 2, counts: { applied: 1, conflict: 1 }, undoable: 1,
     changes: [
       { id: 70, file_id: 11, path: 'Radiohead/OK Computer/1.flac', rating_key: 300, field: 'albumartist', old_value: 'radiohead', new_value: 'Radiohead', status: 'applied', error: null, undoes_id: null, undone: false },
       { id: 71, file_id: 12, path: 'Radiohead/OK Computer/2.flac', rating_key: 301, field: 'albumartist', old_value: 'radiohead', new_value: 'Radiohead', status: 'conflict', error: 'changed elsewhere', undoes_id: null, undone: false },
@@ -76,10 +77,11 @@ describe('Editing tags', () => {
     const boxes = screen.getAllByRole('checkbox', { name: /^Pick Album artist/ })
     expect(boxes.map((b) => (b as HTMLInputElement).disabled)).toEqual([false, true])
     expect(screen.getByText('skipped: changed elsewhere')).toBeInTheDocument()
+    expect(screen.getByText('1 written, 1 skipped')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '↶ Undo this edit' }))
     await vi.waitFor(async () => {
       const post = fetch.mock.calls.find(([r]) => new URL(r.url).pathname.endsWith('/files/undo'))
-      expect(await post![0].clone().json()).toEqual({ change_ids: [70] })
+      expect(await post![0].clone().json()).toEqual({ set_id: 7 })
     })
   })
 })

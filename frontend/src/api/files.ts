@@ -106,13 +106,31 @@ export function useEditTags(serverId: number) {
   )
 }
 
+/** Undo picked changes, or a whole edit (`{ setId }`, any size). */
 export function useUndoTags(serverId: number) {
-  return useQueueTags(serverId, (changeIds: number[]) =>
+  return useQueueTags(serverId, (what: number[] | { setId: number }) =>
     unwrap(
       api.POST('/api/servers/{server_id}/files/undo', {
         params: { path: { server_id: serverId } },
-        body: { change_ids: changeIds },
+        body: Array.isArray(what) ? { change_ids: what } : { set_id: what.setId },
       }),
     ),
+  )
+}
+
+export type PlexSyncRequest = Schemas['PlexSyncIn']
+export type PlexSyncPreview = Schemas['PlexSyncPreviewOut']
+
+/** What writing Plex's metadata to the files would change (nothing is written). */
+export function usePlexSyncPreview(serverId: number) {
+  return useMutation({
+    mutationFn: (body: PlexSyncRequest) =>
+      unwrap(api.POST('/api/servers/{server_id}/files/plex-sync/preview', { params: { path: { server_id: serverId } }, body })),
+  })
+}
+
+export function usePlexSync(serverId: number) {
+  return useQueueTags(serverId, (body: PlexSyncRequest) =>
+    unwrap(api.POST('/api/servers/{server_id}/files/plex-sync', { params: { path: { server_id: serverId } }, body })),
   )
 }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field
 
@@ -1004,11 +1004,46 @@ class TagChangeSetOut(BaseModel):
     user: str | None
     created_at: dt.datetime
     applied_at: dt.datetime | None
-    changes: list[TagChangeOut]
+    total: int = Field(default=0, description="All its changes.")
+    counts: dict[str, int] = Field(
+        default_factory=dict, description="Changes per status (pending, applied, ...)."
+    )
+    undoable: int = Field(default=0, description="Written changes not undone yet.")
+    changes: list[TagChangeOut] = Field(description="The first 200 (big edits are listed in part).")
 
 
 class TagUndoIn(BaseModel):
-    change_ids: list[int] = Field(min_length=1, max_length=5000)
+    change_ids: list[int] = Field(default_factory=list, max_length=5000)
+    set_id: int | None = Field(default=None, description="Undo all of an edit (any size).")
+
+
+SyncField = Literal[
+    "title", "artist", "album", "albumartist", "tracknumber", "discnumber", "date", "genre",
+]  # fmt: skip
+
+
+class PlexSyncIn(BaseModel):
+    scope: Literal["library", "artist", "album"]
+    key: int | None = Field(default=None, description="The artist or album.")
+    fields: list[SyncField] = Field(
+        default_factory=lambda: list(get_args(SyncField)),
+        min_length=1,
+    )
+    description: str | None = Field(default=None, max_length=200)
+
+
+class PlexSyncSample(BaseModel):
+    path: str
+    field: str
+    old_value: TagValue
+    new_value: TagValue
+
+
+class PlexSyncPreviewOut(BaseModel):
+    files: int = Field(description="Files that would change.")
+    changes: int
+    by_field: dict[str, int]
+    samples: list[PlexSyncSample] = Field(description="The first 100 changes.")
 
 
 class TagSettingsIn(BaseModel):

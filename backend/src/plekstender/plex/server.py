@@ -228,9 +228,13 @@ class PlexServerClient:
             raise PlexError("photo transcoder returned a non-image response")
         return resp.content, content_type
 
-    async def refresh_folder(self, section_key: str, path: str) -> None:
-        """Ask Plex to rescan one folder of a library (after its files' tags changed)."""
-        await self._request(f"/library/sections/{section_key}/refresh", params={"path": path})
+    async def refresh_folder(self, section_key: str, path: str | None) -> None:
+        """Ask Plex to rescan one folder of a library (after its files' tags changed), or
+        the whole library section without a path."""
+        await self._request(
+            f"/library/sections/{section_key}/refresh",
+            params={"path": path} if path else None,
+        )
 
     # --- media files -----------------------------------------------------------------
 

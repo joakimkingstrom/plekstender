@@ -1119,6 +1119,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/plex-sync/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plex Sync Preview
+         * @description What writing Plex's metadata to the files would change (nothing is written).
+         */
+        post: operations["plex_sync_preview_api_servers__server_id__files_plex_sync_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/plex-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plex Sync
+         * @description Write Plex's metadata to the files: recorded as one edit (undo it as a whole).
+         */
+        post: operations["plex_sync_api_servers__server_id__files_plex_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -3146,6 +3186,53 @@ export interface components {
             /** Listens */
             listens: number;
         };
+        /** PlexSyncIn */
+        PlexSyncIn: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "library" | "artist" | "album";
+            /**
+             * Key
+             * @description The artist or album.
+             */
+            key?: number | null;
+            /** Fields */
+            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "genre")[];
+            /** Description */
+            description?: string | null;
+        };
+        /** PlexSyncPreviewOut */
+        PlexSyncPreviewOut: {
+            /**
+             * Files
+             * @description Files that would change.
+             */
+            files: number;
+            /** Changes */
+            changes: number;
+            /** By Field */
+            by_field: {
+                [key: string]: number;
+            };
+            /**
+             * Samples
+             * @description The first 100 changes.
+             */
+            samples: components["schemas"]["PlexSyncSample"][];
+        };
+        /** PlexSyncSample */
+        PlexSyncSample: {
+            /** Path */
+            path: string;
+            /** Field */
+            field: string;
+            /** Old Value */
+            old_value: string | string[] | null;
+            /** New Value */
+            new_value: string | string[] | null;
+        };
         /** PopularityPreviewItem */
         PopularityPreviewItem: {
             /** Rating Key */
@@ -3718,7 +3805,29 @@ export interface components {
             created_at: string;
             /** Applied At */
             applied_at: string | null;
-            /** Changes */
+            /**
+             * Total
+             * @description All its changes.
+             * @default 0
+             */
+            total: number;
+            /**
+             * Counts
+             * @description Changes per status (pending, applied, ...).
+             */
+            counts?: {
+                [key: string]: number;
+            };
+            /**
+             * Undoable
+             * @description Written changes not undone yet.
+             * @default 0
+             */
+            undoable: number;
+            /**
+             * Changes
+             * @description The first 200 (big edits are listed in part).
+             */
             changes: components["schemas"]["TagChangeOut"][];
         };
         /** TagEditChange */
@@ -3762,7 +3871,12 @@ export interface components {
         /** TagUndoIn */
         TagUndoIn: {
             /** Change Ids */
-            change_ids: number[];
+            change_ids?: number[];
+            /**
+             * Set Id
+             * @description Undo all of an edit (any size).
+             */
+            set_id?: number | null;
         };
         /** TextLogo */
         TextLogo: {
@@ -6122,6 +6236,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagChangeSetOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plex_sync_preview_api_servers__server_id__files_plex_sync_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlexSyncIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlexSyncPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plex_sync_api_servers__server_id__files_plex_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlexSyncIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
                 };
             };
             /** @description Validation Error */

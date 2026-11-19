@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 
 from plekstender.api.deps import DbDep, UserDep
 from plekstender.api.routes.artwork import owner_server
@@ -14,6 +14,9 @@ from plekstender.api.schemas import (
     AlbumFilesOut,
     FileScanOut,
     FilesSummaryOut,
+    PlexSyncIn,
+    PlexSyncPreviewOut,
+    PlexSyncSample,
     TagChangeOut,
     TagChangeSetOut,
     TagEditIn,
@@ -35,6 +38,8 @@ from plekstender.db.models import (
     User,
     UserServer,
 )
+from plekstender.tags.plexsync import Planned
+from plekstender.tags.plexsync import plan as plan_sync
 from plekstender.tags.write import clean
 from plekstender.worker import enqueue_file_scan, enqueue_tag_changes
 
@@ -240,21 +245,62 @@ def _stored(media: MediaFile, field: str) -> Any:
     return clean(field, (media.tags or {}).get(field))
 
 
+LISTED = 200
+
+
 async def _sets_out(db: DbDep, sets: list[TagChangeSet]) -> list[TagChangeSetOut]:
     if not sets:
         return []
     ids = [s.id for s in sets]
+    numbered = (
+        select(
+            TagChange.id,
+            func.row_number()
+            .over(partition_by=TagChange.change_set_id, order_by=TagChange.id)
+            .label("n"),
+        )
+        .where(TagChange.change_set_id.in_(ids))
+        .subquery()
+    )
     changes = list(
         await db.scalars(
-            select(TagChange).where(TagChange.change_set_id.in_(ids)).order_by(TagChange.id)
+            select(TagChange)
+            .join(numbered, numbered.c.id == TagChange.id)
+            .where(numbered.c.n <= LISTED)
+            .order_by(TagChange.id)
         )
     )
-    undone = set(
-        await db.scalars(
-            select(TagChange.undoes_id).where(
-                TagChange.undoes_id.in_([c.id for c in changes]), TagChange.status == "applied"
-            )
+    counts: dict[int, dict[str, int]] = {}
+    for set_id, status_, n in (
+        await db.execute(
+            select(TagChange.change_set_id, TagChange.status, func.count())
+            .where(TagChange.change_set_id.in_(ids))
+            .group_by(TagChange.change_set_id, TagChange.status)
         )
+    ).all():
+        counts.setdefault(set_id, {})[status_] = n
+    undone_rows = await db.execute(
+        select(TagChange.undoes_id, TagChange.change_set_id)
+        .join(TagChangeSet, TagChangeSet.id == TagChange.change_set_id)
+        .where(TagChange.status == "applied", TagChange.undoes_id.is_not(None))
+        .where(
+            TagChange.undoes_id.in_(select(TagChange.id).where(TagChange.change_set_id.in_(ids)))
+        )
+    )
+    undone = {row[0] for row in undone_rows.all()}
+    undone_per_set = (
+        {
+            set_id: n
+            for set_id, n in (
+                await db.execute(
+                    select(TagChange.change_set_id, func.count())
+                    .where(TagChange.change_set_id.in_(ids), TagChange.id.in_(undone))
+                    .group_by(TagChange.change_set_id)
+                )
+            ).all()
+        }
+        if undone
+        else {}
     )
     users = {
         u.id: u.username
@@ -279,20 +325,26 @@ async def _sets_out(db: DbDep, sets: list[TagChangeSet]) -> list[TagChangeSetOut
                 undone=c.id in undone,
             )
         )
-    return [
-        TagChangeSetOut(
-            id=s.id,
-            kind=s.kind,
-            description=s.description,
-            status=s.status,
-            error=s.error,
-            user=users.get(s.user_id) if s.user_id else None,
-            created_at=s.created_at,
-            applied_at=s.applied_at,
-            changes=by_set.get(s.id, []),
+    out = []
+    for s in sets:
+        set_counts = counts.get(s.id, {})
+        out.append(
+            TagChangeSetOut(
+                id=s.id,
+                kind=s.kind,
+                description=s.description,
+                status=s.status,
+                error=s.error,
+                user=users.get(s.user_id) if s.user_id else None,
+                created_at=s.created_at,
+                applied_at=s.applied_at,
+                total=sum(set_counts.values()),
+                counts=set_counts,
+                undoable=set_counts.get("applied", 0) - undone_per_set.get(s.id, 0),
+                changes=by_set.get(s.id, []),
+            )
         )
-        for s in sets
-    ]
+    return out
 
 
 async def _queue(db: DbDep, change_set: TagChangeSet, changes: list[TagChange]) -> TagChangeSetOut:
@@ -362,22 +414,25 @@ async def undo_tags(server_id: int, body: TagUndoIn, db: DbDep, user: UserDep) -
     """Put back the values from before the given changes (any of them: a whole edit, or
     picked ones). An undo is an edit too: it's recorded, and can itself be undone."""
     us, server = await _editable(db, user, server_id)
+    if body.set_id is None and not body.change_ids:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Say what to undo.")
+    which = (
+        TagChange.change_set_id == body.set_id
+        if body.set_id is not None
+        else TagChange.id.in_(body.change_ids)
+    )
     originals = list(
         await db.scalars(
             select(TagChange)
             .join(TagChangeSet, TagChangeSet.id == TagChange.change_set_id)
-            .where(
-                TagChangeSet.server_id == us.server_id,
-                TagChange.id.in_(body.change_ids),
-                TagChange.status == "applied",
-            )
+            .where(TagChangeSet.server_id == us.server_id, which, TagChange.status == "applied")
             .order_by(TagChange.id.desc())
         )
     )
     already = set(
         await db.scalars(
             select(TagChange.undoes_id).where(
-                TagChange.undoes_id.in_([c.id for c in originals]),
+                TagChange.undoes_id.in_(select(TagChange.id).where(which)),
                 TagChange.status.in_(("pending", "applied")),
             )
         )
@@ -432,3 +487,72 @@ async def tag_history(
         )
     )
     return await _sets_out(db, sets)
+
+
+# --- Plex's metadata into the files (in bulk) ------------------------------------------------
+
+
+async def _plan(db: DbDep, us: UserServer, body: PlexSyncIn) -> list[Planned]:
+    if body.scope != "library" and body.key is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Which artist or album?")
+    return await plan_sync(db, us.server_id, body.scope, body.key, set(body.fields))
+
+
+@router.post("/plex-sync/preview", response_model=PlexSyncPreviewOut)
+async def plex_sync_preview(
+    server_id: int, body: PlexSyncIn, db: DbDep, user: UserDep
+) -> PlexSyncPreviewOut:
+    """What writing Plex's metadata to the files would change (nothing is written)."""
+    us = await owner_server(db, user, server_id)
+    planned = await _plan(db, us, body)
+    by_field: dict[str, int] = {}
+    for p in planned:
+        by_field[p.field] = by_field.get(p.field, 0) + 1
+    return PlexSyncPreviewOut(
+        files=len({p.media_file_id for p in planned}),
+        changes=len(planned),
+        by_field=by_field,
+        samples=[
+            PlexSyncSample(path=p.path, field=p.field, old_value=p.old_value, new_value=p.new_value)
+            for p in planned[:100]
+        ],
+    )
+
+
+@router.post("/plex-sync", response_model=TagChangeSetOut, status_code=status.HTTP_201_CREATED)
+async def plex_sync(server_id: int, body: PlexSyncIn, db: DbDep, user: UserDep) -> TagChangeSetOut:
+    """Write Plex's metadata to the files: recorded as one edit (undo it as a whole)."""
+    us, server = await _editable(db, user, server_id)
+    planned = await _plan(db, us, body)
+    if not planned:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The files already match Plex.")
+    files = len({p.media_file_id for p in planned})
+    where = {"library": "the library", "artist": "an artist", "album": "an album"}[body.scope]
+    change_set = TagChangeSet(
+        server_id=server.id,
+        user_id=user.id,
+        kind="edit",
+        description=(body.description or "").strip()
+        or f"Plex's metadata to {files} {'file' if files == 1 else 'files'} ({where})",
+    )
+    db.add(change_set)
+    await db.flush()
+    rows = [
+        {
+            "change_set_id": change_set.id,
+            "media_file_id": p.media_file_id,
+            "path": p.path,
+            "rating_key": p.rating_key,
+            "field": p.field,
+            "old_value": p.old_value,
+            "new_value": p.new_value,
+            "status": "pending",
+        }
+        for p in planned
+    ]
+    for start in range(0, len(rows), 2000):
+        await db.execute(insert(TagChange).values(rows[start : start + 2000]))
+    await db.commit()
+    await enqueue_tag_changes(change_set)
+    [out] = await _sets_out(db, [change_set])
+    return out

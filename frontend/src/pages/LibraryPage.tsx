@@ -17,7 +17,7 @@ import { ColumnChart } from '../components/charts'
 import { Artwork } from '../components/library'
 import { RateStars } from '../components/RateStars'
 import { useLibraryServer } from '../components/useLibraryServer'
-import { AlbumFiles } from '../components/MusicFiles'
+import { AlbumFiles, ArtistFiles } from '../components/MusicFiles'
 import { TagHistory } from '../components/TagEditor'
 import { Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
@@ -375,7 +375,8 @@ export function ArtistPage() {
       <ArtistView serverId={active!.id} artistKey={key} />
       {/* Edits to this artist's files, with undo (server owners). */}
       {active!.is_owner && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-4">
+          <ArtistFiles serverId={active!.id} artistKey={key} />
           <TagHistory serverId={active!.id} artist={key} />
         </div>
       )}

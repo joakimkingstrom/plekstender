@@ -267,3 +267,108 @@ async def test_editing_tags_with_history_and_undo(
         headers=CSRF,
     )
     assert nothing.status_code == 400  # the same value (spaces don't count)
+
+
+def test_planning_plex_metadata_into_files() -> None:
+    from plekstender.tags.plexsync import plan_file
+
+    plex = {
+        "title": "Karma Police",
+        "artist": "Radiohead",
+        "album": "OK Computer",
+        "albumartist": "Radiohead",
+        "track": 6,
+        "disc": 1,
+        "year": 1997,
+        "genre": ["Alternative", "Rock"],
+    }
+    every = {
+        "title",
+        "artist",
+        "album",
+        "albumartist",
+        "tracknumber",
+        "discnumber",
+        "date",
+        "genre",
+    }
+    same = {
+        "title": "Karma Police",
+        "artist": "Radiohead",
+        "album": "OK Computer",
+        "albumartist": "Radiohead",
+        "tracknumber": "6/12",
+        "date": "1997-05-21",
+        "genre": ["Rock", "Alternative"],
+    }
+    assert plan_file(same, plex, every) == {}  # "6/12" is 6; 1997-05-21 is 1997; any order
+    differs = {
+        **same,
+        "title": "Karma Police (Live)",
+        "tracknumber": "5/12",
+        "date": "2009",
+        "discnumber": "2",
+        "genre": ["Rock"],
+    }
+    assert plan_file(differs, plex, every) == {
+        "title": "Karma Police",
+        "tracknumber": "6/12",  # keeps the file's total
+        "date": "1997",
+        "discnumber": "1",
+        "genre": ["Alternative", "Rock"],
+    }
+    assert plan_file(differs, plex, {"title"}) == {"title": "Karma Police"}  # only chosen fields
+    assert (
+        plan_file({}, {**plex, "genre": [], "year": None}, {"genre", "date"}) == {}
+    )  # nothing in Plex
+
+
+@pytest.mark.db
+async def test_writing_plex_metadata_in_bulk(app: FastAPI, plex: FakePlex, music: Path) -> None:
+    from plekstender.worker import apply_tag_changes, scan_music_files
+
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    # Paranoid Android already matches Plex; Karma Police's file says "(Live)".
+    preview = (
+        await owner.post(f"{base}/plex-sync/preview", json={"scope": "library"}, headers=CSRF)
+    ).json()
+    assert (preview["files"], preview["changes"], preview["by_field"]) == (1, 1, {"title": 1})
+    assert preview["samples"][0] == {
+        "path": "301.flac",
+        "field": "title",
+        "old_value": "Karma Police (Live)",
+        "new_value": "Karma Police",
+    }
+    nothing = await owner.post(
+        f"{base}/plex-sync", json={"scope": "artist", "key": 101}, headers=CSRF
+    )
+    assert nothing.status_code == 400  # Portishead's files: none in the folder
+
+    resp = await owner.post(f"{base}/plex-sync", json={"scope": "library"}, headers=CSRF)
+    assert resp.status_code == 201, resp.text
+    change_set = resp.json()
+    assert change_set["description"] == "Plex's metadata to 1 file (the library)"
+    assert change_set["counts"] == {"pending": 1} and change_set["total"] == 1
+    await apply_tag_changes.func(set_id=change_set["id"])
+    assert FLAC(music / "301.flac")["title"] == ["Karma Police"]
+    [done] = (await owner.get(f"{base}/changes")).json()
+    assert (done["status"], done["counts"], done["undoable"]) == ("applied", {"applied": 1}, 1)
+
+    # Undo the whole edit, by its id (big edits have too many changes to list).
+    resp = await owner.post(f"{base}/undo", json={"set_id": change_set["id"]}, headers=CSRF)
+    assert resp.status_code == 201, resp.text
+    await apply_tag_changes.func(set_id=resp.json()["id"])
+    assert FLAC(music / "301.flac")["title"] == ["Karma Police (Live)"]
+    history = (await owner.get(f"{base}/changes")).json()
+    assert history[1]["undoable"] == 0
+    assert (await owner.post(f"{base}/undo", json={}, headers=CSRF)).status_code == 422

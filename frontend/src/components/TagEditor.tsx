@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { errorMessage } from '../api/client'
 import { useEditTags, useTagHistory, useUndoTags, type TagChange, type TagChangeSet, type TrackFile } from '../api/files'
-import { formatRelative } from '../format'
+import { formatCount, formatRelative } from '../format'
 import {
   ALBUM_FIELDS,
   FIELD_LABELS,
@@ -271,7 +271,9 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
         <ul className="space-y-2">
           {history.data.map((set) => {
             const status = STATUS[set.status]
-            const canUndo = set.changes.filter(undoable)
+            const counts = set.counts ?? {}
+            const done = set.total - (counts.pending ?? 0)
+            const skipped = (counts.conflict ?? 0) + (counts.failed ?? 0)
             return (
               <li key={set.id} className="rounded-xl border border-border">
                 <details>
@@ -281,6 +283,13 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                       {set.user ?? 'someone'} · {formatRelative(set.created_at)}
                     </span>
                     <span className="ml-auto flex items-center gap-2">
+                      {set.total > 1 && (
+                        <span className="text-xs text-muted tabular-nums">
+                          {set.status === 'running' || set.status === 'queued'
+                            ? `${formatCount(done)} / ${formatCount(set.total)}`
+                            : `${formatCount(counts.applied ?? 0)} written${skipped ? `, ${formatCount(skipped)} skipped` : ''}`}
+                        </span>
+                      )}
                       {(set.status === 'queued' || set.status === 'running') && <Spinner small />}
                       <Badge tone={status.tone}>{status.label}</Badge>
                     </span>
@@ -315,14 +324,19 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                         </li>
                       ))}
                     </ul>
-                    {canUndo.length > 0 && (
+                    {set.total > set.changes.length && (
+                      <p className="text-xs text-muted">
+                        The first {set.changes.length} of {formatCount(set.total)} changes are listed.
+                      </p>
+                    )}
+                    {set.undoable > 0 && (
                       <Button
                         variant="ghost"
                         className="px-2 py-1 text-xs"
                         busy={undo.isPending}
-                        onClick={() => undo.mutate(canUndo.map((c) => c.id))}
+                        onClick={() => undo.mutate({ setId: set.id })}
                       >
-                        ↶ Undo this edit
+                        ↶ Undo this edit{set.undoable > 1 ? ` (${formatCount(set.undoable)} changes)` : ''}
                       </Button>
                     )}
                   </div>

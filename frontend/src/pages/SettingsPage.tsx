@@ -10,6 +10,8 @@ import { fontPreviewUrl, useEditFonts, useFanartKey, useFontCatalogue, useFonts,
 import { Segmented } from '../components/Segmented'
 import { FolderSettings } from '../components/FolderSettings'
 import { ScanCard } from '../components/MusicFiles'
+import { PlexSync } from '../components/PlexSync'
+import { useFilesSummary } from '../api/files'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
@@ -669,6 +671,20 @@ export function ArtworkSettingsPage() {
   )
 }
 
+function PlexSyncCard({ serverId }: { serverId: number }) {
+  const summary = useFilesSummary(serverId)
+  if (!summary.data?.mapped || !summary.data.files) return null
+  return (
+    <Card title="Plex's metadata into the files">
+      <p className="mb-3 text-sm text-muted">
+        Make your files' tags match Plex across the whole library (for one artist: on their page). Only tags that
+        differ are changed, and the whole run can be undone.
+      </p>
+      <PlexSync serverId={serverId} scope="library" canWrite={summary.data.tag_editing} />
+    </Card>
+  )
+}
+
 /** The music folder and tag scans (server owners). */
 export function FilesSettingsPage() {
   const { active, servers } = useActiveServer()
@@ -677,7 +693,10 @@ export function FilesSettingsPage() {
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <FolderSettings serverId={active.id} />
-      <ScanCard serverId={active.id} />
+      <div className="space-y-4">
+        <ScanCard serverId={active.id} />
+        <PlexSyncCard serverId={active.id} />
+      </div>
     </div>
   )
 }

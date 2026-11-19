@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useState } from 'react'
 import { useAlbumFiles, useFilesSummary, useSetTagEditing, useStartScan, type TrackFile } from '../api/files'
+import { PlexSync } from './PlexSync'
 import { TagEditor, TagHistory } from './TagEditor'
 import { formatCount, formatDuration, formatRelative } from '../format'
 import { Tooltip } from './Tooltip'
@@ -215,5 +216,30 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
     </Card>
     <TagHistory serverId={serverId} album={albumKey} />
     </div>
+  )
+}
+
+/** An artist's files: make their tags match Plex (server owners, once scanned). */
+export function ArtistFiles({ serverId, artistKey }: { serverId: number; artistKey: number }) {
+  const summary = useFilesSummary(serverId)
+  const [open, setOpen] = useState(false)
+  if (!summary.data?.mapped || !summary.data.files) return null
+  return (
+    <Card
+      title="Tags in the files"
+      action={
+        !open ? (
+          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setOpen(true)}>
+            Take tags from Plex…
+          </Button>
+        ) : undefined
+      }
+    >
+      {open ? (
+        <PlexSync serverId={serverId} scope="artist" scopeKey={artistKey} canWrite={summary.data.tag_editing} />
+      ) : (
+        <p className="text-sm text-muted">Make this artist's files' tags match Plex, or edit them album by album.</p>
+      )}
+    </Card>
   )
 }
