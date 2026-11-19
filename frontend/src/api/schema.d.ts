@@ -1994,7 +1994,8 @@ export interface paths {
         /**
          * Shows
          * @description Upcoming shows, soonest first, each once however many sources found it; `artist`
-         *     narrows to one of the user's artists, `starred` to starred shows.
+         *     narrows to one of the user's artists, `venue` to one venue, `starred` to starred shows.
+         *     The artist and venue lists (for the filters) count the shows the other filters allow.
          */
         get: operations["shows_api_live_shows_get"];
         put?: never;
@@ -4251,6 +4252,15 @@ export interface components {
             /** Page Url */
             page_url: string | null;
             /**
+             * Price Min
+             * @description Cheapest ticket (0: free).
+             */
+            price_min?: number | null;
+            /** Price Max */
+            price_max?: number | null;
+            /** Currency */
+            currency?: string | null;
+            /**
              * Artists
              * @description The user's artists on the bill.
              */
@@ -4270,6 +4280,11 @@ export interface components {
              * @description Artists with shows, for the filter.
              */
             artists: components["schemas"]["LiveArtistCount"][];
+            /**
+             * Venues
+             * @description Venues with shows, for the filter.
+             */
+            venues: components["schemas"]["LiveVenueCount"][];
         };
         /** LiveStarIn */
         LiveStarIn: {
@@ -4298,6 +4313,15 @@ export interface components {
              * @description A ticket link (else the show's page).
              */
             is_ticket: boolean;
+        };
+        /** LiveVenueCount */
+        LiveVenueCount: {
+            /** Name */
+            name: string;
+            /** City */
+            city: string | null;
+            /** Shows */
+            shows: number;
         };
         /** MbApplyIn */
         MbApplyIn: {
@@ -9484,6 +9508,7 @@ export interface operations {
         parameters: {
             query?: {
                 artist?: string | null;
+                venue?: string | null;
                 from?: string | null;
                 to?: string | null;
                 starred?: boolean;

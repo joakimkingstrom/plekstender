@@ -744,6 +744,9 @@ async def _store(
                 "ticket_url": event.ticket_url,
                 "seller": event.seller,
                 "page_url": event.page_url,
+                "price_min": event.price_min,
+                "price_max": event.price_max,
+                "currency": event.currency,
                 "performers": [
                     {"name": p.name, "headliner": p.headliner} for p in event.performers
                 ],

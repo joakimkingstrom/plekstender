@@ -10,3 +10,21 @@ export function describePeriod(months: number | null | undefined): string {
   if (months % 12 === 0) return months === 12 ? 'the past year' : `the past ${months / 12} years`
   return months === 1 ? 'the past month' : `the past ${months} months`
 }
+
+/** A ticket price or range: "Free", "£12", "£35–£75" (in the viewer's number format). */
+export function formatPrice(min: number | null | undefined, max: number | null | undefined, currency: string | null | undefined): string | null {
+  if (min == null) return null
+  const high = max ?? min
+  if (min === 0 && high === 0) return 'Free'
+  const whole = Number.isInteger(min) && Number.isInteger(high)
+  const format = (value: number) => {
+    try {
+      return currency
+        ? new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: whole ? 0 : 2, minimumFractionDigits: whole ? 0 : 2 }).format(value)
+        : new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return high > min ? `${format(min)}–${format(high)}` : format(min)
+}

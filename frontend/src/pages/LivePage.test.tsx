@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { followCount } from '../live'
+import { followCount, formatPrice } from '../live'
 import { LivePage } from './LivePage'
 
 const base = {
@@ -53,6 +53,9 @@ const concert = {
   region: null,
   country: 'SE',
   distance_km: 4.1,
+  price_min: 650,
+  price_max: 1295,
+  currency: 'SEK',
   ticket_url: 'https://www.ticketmaster.se/event/radiohead',
   seller: 'Ticketmaster',
   page_url: 'https://www.jambase.com/show/radiohead',
@@ -127,7 +130,12 @@ beforeEach(() => {
       case '/api/live/shows': {
         const artist = url.searchParams.get('artist')
         const shows = [concert, festival].filter((s) => !artist || s.artists.some((a) => a.name === artist))
-        return json({ shows, artists: [{ name: 'Radiohead', shows: 1 }, { name: 'Portishead', shows: 1 }] })
+        const venue = url.searchParams.get('venue')
+        return json({
+          shows: shows.filter((s) => !venue || s.venue === venue),
+          artists: [{ name: 'Radiohead', shows: 1 }, { name: 'Portishead', shows: 1 }],
+          venues: [{ name: 'Avicii Arena', city: 'Stockholm', shows: 2 }],
+        })
       }
       default:
         return json({ detail: 'Not found' }, 404)
@@ -158,6 +166,13 @@ function requestsTo(path: string) {
 }
 
 describe('LivePage', () => {
+  it('formats ticket prices', () => {
+    expect(formatPrice(0, 0, 'GBP')).toBe('Free')
+    expect(formatPrice(null, null, 'GBP')).toBeNull()
+    expect(formatPrice(12, 12, 'GBP')).toBe(new Intl.NumberFormat(undefined, { style: 'currency', currency: 'GBP', maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(12))
+    expect(formatPrice(8.5, 12, 'GBP')).toMatch(/8\.50.+12\.00/)
+  })
+
   it('counts the artists to follow like the server', () => {
     expect([0, 1, 9, 25, 5000].map((n) => followCount(n, 10))).toEqual([0, 1, 1, 3, 500])
   })
@@ -199,6 +214,7 @@ describe('LivePage', () => {
     expect(within(row).getByText('with Support Act')).toBeInTheDocument()
     expect(within(row).getByText(/Avicii Arena · Stockholm · .* · 19:30/)).toBeInTheDocument()
     expect(within(row).getByText('4 km away')).toBeInTheDocument()
+    expect(within(row).getByText(formatPrice(650, 1295, 'SEK')!.replace(/\s/g, ' '))).toBeInTheDocument()
     const tickets = within(row).getByRole('link', { name: 'Tickets' })
     expect(tickets).toHaveAttribute('href', 'https://www.ticketmaster.se/event/radiohead')
     expect(tickets).toHaveAttribute('rel', 'nofollow noopener noreferrer')
@@ -230,6 +246,9 @@ describe('LivePage', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Portishead (1)' }))
     await vi.waitFor(() => expect(screen.queryByRole('link', { name: 'Radiohead' })).not.toBeInTheDocument())
     expect(requestsTo('/api/live/shows').at(-1)!.url).toContain('artist=Portishead')
+    fireEvent.click(screen.getByRole('button', { name: /^Venue/ }))
+    fireEvent.click(screen.getByRole('option', { name: 'Avicii Arena, Stockholm (2)' }))
+    await vi.waitFor(() => expect(requestsTo('/api/live/shows').at(-1)!.url).toContain('venue=Avicii%20Arena'))
     expect(screen.getByRole('link', { name: 'Find Portishead on Songkick' })).toHaveAttribute(
       'href',
       'https://www.songkick.com/search?type=artists&query=Portishead',

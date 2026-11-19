@@ -1407,6 +1407,9 @@ class LiveShowOut(BaseModel):
     ticket_url: str | None
     seller: str | None
     page_url: str | None
+    price_min: float | None = Field(default=None, description="Cheapest ticket (0: free).")
+    price_max: float | None = None
+    currency: str | None = None
     artists: list[LiveArtistOut] = Field(description="The user's artists on the bill.")
     performers: list[LiveArtistOut] = Field(description="Everyone on the bill.")
 
@@ -1416,9 +1419,16 @@ class LiveArtistCount(BaseModel):
     shows: int
 
 
+class LiveVenueCount(BaseModel):
+    name: str
+    city: str | None
+    shows: int
+
+
 class LiveShowsOut(BaseModel):
     shows: list[LiveShowOut]
     artists: list[LiveArtistCount] = Field(description="Artists with shows, for the filter.")
+    venues: list[LiveVenueCount] = Field(description="Venues with shows, for the filter.")
 
 
 class JamBaseKeyIn(BaseModel):

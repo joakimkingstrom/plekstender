@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from plekstender.live.events import Event, Performer
+from plekstender.live.events import Event, Performer, prices
 from plekstender.live.jambase import USER_AGENT
 
 TIMEOUT = 30.0
@@ -233,6 +233,21 @@ def parse(raw: dict[str, Any], start: dt.date, end: dt.date, radius_km: int) -> 
                 None,
             )
             time = None if performance.get("time_unknown") or not m[2] else f"{m[2]}:{m[3]}"
+            tickets = [t for t in performance.get("tickets") or [] if isinstance(t, dict)]
+            # "A ticket with no min_price and a description of 'free' is also free."
+            low, high, currency = prices(
+                [
+                    (
+                        0
+                        if t.get("min_price") is None
+                        and "free" in str(t.get("description") or "").lower()
+                        else t.get("min_price"),
+                        t.get("max_price"),
+                        t.get("currency"),
+                    )
+                    for t in tickets
+                ]
+            )
             found[key] = Event(
                 id=f"{event_id}:{key[0][:24]}:{day.isoformat()}"[:64],
                 name=name[:300],
@@ -252,5 +267,8 @@ def parse(raw: dict[str, Any], start: dt.date, end: dt.date, radius_km: int) -> 
                 page_url=raw.get("website") if isinstance(raw.get("website"), str) else None,
                 performers=[Performer(name, headliner=True)],
                 distance_km=round(km, 1) if km is not None else None,
+                price_min=low,
+                price_max=high,
+                currency=currency,
             )
     return list(found.values())

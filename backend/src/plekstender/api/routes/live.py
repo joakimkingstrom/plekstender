@@ -33,6 +33,7 @@ from plekstender.api.schemas import (
     LiveStarIn,
     LiveTicketIn,
     LiveTicketOut,
+    LiveVenueCount,
     PlaceOut,
 )
 from plekstender.config import Settings
@@ -233,12 +234,14 @@ async def shows(
     db: DbDep,
     user: UserDep,
     artist: Annotated[str | None, Query(max_length=200)] = None,
+    venue: Annotated[str | None, Query(max_length=300)] = None,
     date_from: Annotated[dt.date | None, Query(alias="from")] = None,
     date_to: Annotated[dt.date | None, Query(alias="to")] = None,
     starred: bool = False,
 ) -> LiveShowsOut:
     """Upcoming shows, soonest first, each once however many sources found it; `artist`
-    narrows to one of the user's artists, `starred` to starred shows."""
+    narrows to one of the user's artists, `venue` to one venue, `starred` to starred shows.
+    The artist and venue lists (for the filters) count the shows the other filters allow."""
     today = dt.datetime.now(dt.UTC).date() - dt.timedelta(days=1)  # time zones: keep tonight
     start = max(date_from or today, today)
     query = (
@@ -255,17 +258,22 @@ async def shows(
     groups = [_show(group) for group in merge(list(await db.scalars(query)))]
     if starred:
         groups = [g for g in groups if g.starred]
-    counts: Counter[str] = Counter()
-    for show in groups:
-        for a in show.artists:
-            counts[a.name] += 1
-    if artist:
-        groups = [g for g in groups if any(a.name == artist for a in g.artists)]
+    by_artist = (
+        [g for g in groups if any(a.name == artist for a in g.artists)] if artist else groups
+    )
+    by_venue = [g for g in groups if g.venue == venue] if venue else groups
+    artist_counts: Counter[str] = Counter(a.name for g in by_venue for a in g.artists)
+    venue_counts: Counter[str] = Counter(g.venue for g in by_artist if g.venue)
+    city_of = {g.venue: g.city for g in groups if g.venue}
     return LiveShowsOut(
-        shows=groups,
+        shows=[g for g in by_artist if not venue or g.venue == venue],
         artists=[
             LiveArtistCount(name=n, shows=c)
-            for n, c in sorted(counts.items(), key=lambda x: (-x[1], x[0].lower()))
+            for n, c in sorted(artist_counts.items(), key=lambda x: (-x[1], x[0].lower()))
+        ],
+        venues=[
+            LiveVenueCount(name=n, city=city_of.get(n), shows=c)
+            for n, c in sorted(venue_counts.items(), key=lambda x: (-x[1], x[0].lower()))
         ],
     )
 
@@ -295,6 +303,7 @@ def _show(group: list[LiveShow]) -> LiveShowOut:
                 ),
             )
     performers = max((r.performers for r in group), key=len)
+    priced = next((r for r in group if r.price_min is not None), None)
     located = next((r for r in group if r.latitude is not None), row)
     return LiveShowOut(
         id=row.id,
@@ -318,6 +327,9 @@ def _show(group: list[LiveShow]) -> LiveShowOut:
         ticket_url=row.ticket_url,
         seller=row.seller,
         page_url=row.page_url,
+        price_min=priced.price_min if priced else None,
+        price_max=priced.price_max if priced else None,
+        currency=priced.currency if priced else None,
         artists=sorted(artists.values(), key=lambda a: not a.headliner),
         performers=[LiveArtistOut.model_validate(p) for p in performers],
     )

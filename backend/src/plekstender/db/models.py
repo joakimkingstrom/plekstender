@@ -866,6 +866,10 @@ class LiveShow(Base):
     ticket_url: Mapped[str | None] = mapped_column(Text)
     seller: Mapped[str | None] = mapped_column(Text)
     page_url: Mapped[str | None] = mapped_column(Text)
+    # Ticket prices, when the source has them (0 is free).
+    price_min: Mapped[float | None] = mapped_column(Float)
+    price_max: Mapped[float | None] = mapped_column(Float)
+    currency: Mapped[str | None] = mapped_column(String(3))
     # Everyone on the bill: [{"name", "headliner"}]; the user's artists among them:
     # [{"name", "headliner", "server_id", "rating_key"}].
     performers: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)

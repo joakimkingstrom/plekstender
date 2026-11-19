@@ -26,7 +26,7 @@ import { Slider } from '../components/controls'
 import { Select } from '../components/Select'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatRelative } from '../format'
-import { describePeriod, followCount } from '../live'
+import { describePeriod, followCount, formatPrice } from '../live'
 import { countryName } from '../places'
 import dataThistleLogo from '../assets/datathistle.svg'
 
@@ -359,6 +359,7 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
 
 function Shows({ settings }: { settings: LiveSettings }) {
   const [artist, setArtist] = useState('')
+  const [venue, setVenue] = useState('')
   const [range, setRange] = useState<Range>('all')
   const [to, setTo] = useState<string | undefined>(undefined)
   const chooseRange = (key: Range) => {
@@ -380,9 +381,10 @@ function Shows({ settings }: { settings: LiveSettings }) {
     const stop = setTimeout(() => setWatching(false), 60_000)
     return () => clearTimeout(stop)
   }, [])
-  const shows = useLiveShows({ artist, to, starred: range === 'starred' }, busy || (dtPending && watching))
+  const shows = useLiveShows({ artist, venue, to, starred: range === 'starred' }, busy || (dtPending && watching))
   const { active } = useActiveServer()
   const artistId = useId()
+  const venueId = useId()
 
   const months = useMemo(() => {
     const groups: [string, LiveShow[]][] = []
@@ -398,9 +400,10 @@ function Shows({ settings }: { settings: LiveSettings }) {
   if (shows.isPending) return <Spinner />
   if (shows.isError) return <Notice tone="error">{errorMessage(shows.error)}</Notice>
   const artists = shows.data.artists
+  const venues = shows.data.venues
   return (
     <div className="min-w-0 space-y-4">
-      {(artists.length > 0 || artist) && (
+      {(artists.length > 0 || artist || venue) && (
         <div className="flex flex-wrap items-center gap-2">
           <span id={artistId} className="sr-only">
             Artist
@@ -414,6 +417,19 @@ function Shows({ settings }: { settings: LiveSettings }) {
               ...artists.map((a) => ({ value: a.name, label: `${a.name} (${a.shows})` })),
             ]}
             onChange={setArtist}
+          />
+          <span id={venueId} className="sr-only">
+            Venue
+          </span>
+          <Select
+            labelledBy={venueId}
+            value={venue}
+            options={[
+              { value: '', label: 'All venues' },
+              ...(venue && !venues.some((v) => v.name === venue) ? [{ value: venue, label: venue }] : []),
+              ...venues.map((v) => ({ value: v.name, label: `${v.name}${v.city ? `, ${v.city}` : ''} (${v.shows})` })),
+            ]}
+            onChange={setVenue}
           />
           {artist && (
             <a
@@ -451,7 +467,7 @@ function Shows({ settings }: { settings: LiveSettings }) {
             <p className="text-sm text-muted">
               {range === 'starred'
                 ? 'No starred shows yet: star a show to keep it and put it in your calendar.'
-                : artist || range !== 'all'
+                : artist || venue || range !== 'all'
                 ? 'No shows match these filters.'
                 : `No upcoming shows within ${settings.radius_km} km by your top ${settings.followed_artists} artists. A larger distance or more artists may find some.`}
             </p>
@@ -508,6 +524,7 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
   const yours = new Set(show.artists.map((a) => a.name))
   const others = show.performers.filter((p) => !yours.has(p.name))
   const where = [show.venue, show.city, show.country ? countryName(show.country) : null].filter(Boolean).join(' · ')
+  const price = formatPrice(show.price_min, show.price_max, show.currency)
   const status = STATUS_LABEL[show.status]
   const [first, ...more] = show.tickets
   // Other sources' links for the same show (one each).
@@ -559,6 +576,7 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
         </p>
         <p className="flex flex-wrap gap-x-3 text-xs text-muted">
           {show.distance_km != null && <span>{Math.round(show.distance_km)} km away</span>}
+          {price && <span className="font-medium text-text">{price}</span>}
           {extra.map((t) => (
             <a key={t.url} href={t.url} target="_blank" rel="nofollow noopener noreferrer" className="underline hover:text-accent">
               {t.source === 'calendar' ? 'In your calendar link' : `Also on ${SOURCE_NAMES[t.source] ?? t.source}`}

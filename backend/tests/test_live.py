@@ -483,6 +483,7 @@ def tm_event(event_id: str, day: str, attractions: list[str], venue: str, **extr
             }],
             "attractions": [{"name": n} for n in attractions],
         },
+        **({"priceRanges": extra["prices"]} if "prices" in extra else {}),
     }  # fmt: skip
 
 
@@ -498,7 +499,13 @@ class FakeTicketmaster:
         self.requests: list[httpx.Request] = []
         self.events = [
             # The same show JamBase has (Radiohead at Avicii Arena on 4 March).
-            tm_event("A1", "2027-03-04", ["Radiohead", "Support Act"], "Avicii Arena Stockholm"),
+            tm_event(
+                "A1",
+                "2027-03-04",
+                ["Radiohead", "Support Act"],
+                "Avicii Arena Stockholm",
+                prices=[{"type": "standard", "currency": "SEK", "min": 650.0, "max": 1295.0}],
+            ),
             # Only here: Portishead, and someone the user doesn't follow.
             tm_event("B2", "2027-02-01", ["Portishead"], "Annexet", status="postponed"),
             tm_event("C3", "2027-02-02", ["Somebody Else"], "Debaser"),
@@ -588,6 +595,18 @@ async def test_ticketmaster_merging_stars_and_calendar(app: FastAPI, plex: FakeP
     assert [t["seller"] for t in merged["tickets"]] == ["Ticketmaster", "Ticketmaster"]
     assert merged["tickets"][1]["url"] == "https://www.ticketmaster.co.uk/event/A1"
     assert shows[0]["status"] == "postponed" and shows[0]["start_time"] == "19:00"
+    # Ticketmaster's prices (JamBase's free plan has none).
+    assert (merged["price_min"], merged["price_max"], merged["currency"]) == (650.0, 1295.0, "SEK")
+    assert shows[0]["price_min"] is None
+
+    # The venue filter, and the venues to choose from.
+    everything = (await owner.get("/api/live/shows")).json()
+    assert {v["name"]: v["shows"] for v in everything["venues"]} == {
+        "Annexet": 1, "Avicii Arena": 1, "Slottsskogen": 1,
+    }  # fmt: skip
+    at_annexet = (await owner.get("/api/live/shows", params={"venue": "Annexet"})).json()
+    assert [s["name"] for s in at_annexet["shows"]] == ["Portishead live"]
+    assert at_annexet["artists"] == [{"name": "Portishead", "shows": 1}]
 
     # Star the merged show (both rows), then lose it from both sources: it stays.
     star = await owner.put(
@@ -1030,3 +1049,45 @@ async def test_data_thistle(app: FastAPI, plex: FakePlex) -> None:
     assert not await renew_datathistle_tokens()
     assert "refused" in (await owner.get("/api/admin/datathistle")).json()["error"]
     assert (await refresh(user_id, datathistle="only")).complete
+
+
+def test_ticket_prices() -> None:
+    from plekstender.live import datathistle, ticketmaster
+    from plekstender.live.events import prices
+
+    assert prices([(10, 25, "GBP"), (5, None, "gbp"), (99, 120, "EUR")]) == (5.0, 25.0, "GBP")
+    assert prices([(None, None, None)]) == (None, None, None)
+    assert prices([(0, None, "GBP")]) == (0.0, 0.0, "GBP")  # free
+    tm = ticketmaster.parse_event(
+        {
+            **tm_event("Z", "2027-01-01", ["X"], "Y"),
+            "priceRanges": [{"min": 20, "max": 45.5, "currency": "GBP"}],
+        }
+    )
+    assert tm and (tm.price_min, tm.price_max, tm.currency) == (20.0, 45.5, "GBP")
+    jb = jambase.parse_event(
+        {
+            **CONCERT,
+            "offers": [
+                {
+                    "url": "https://t",
+                    "priceSpecification": {"minPrice": 45, "maxPrice": 95, "priceCurrency": "USD"},
+                }
+            ],
+        }
+    )
+    assert jb and (jb.price_min, jb.price_max, jb.currency) == (45.0, 95.0, "USD")
+    listing = {
+        "event_id": "e",
+        "name": "Folk Night",
+        "schedules": [{"place": {"name": "Hall"}, "performances": [
+            {"ts": "2027-01-02T20:00:00", "tickets": [{"type": "Standard", "description": "Free"}]},
+            {"ts": "2027-01-03T20:00:00", "tickets": [
+                {"type": "Standard", "currency": "GBP", "min_price": 12, "max_price": 12},
+                {"type": "Concession", "currency": "GBP", "min_price": 8.5},
+            ]},
+        ]}],
+    }  # fmt: skip
+    free, paid = datathistle.parse(listing, dt.date(2027, 1, 1), dt.date(2027, 1, 31), 50)
+    assert (free.price_min, free.price_max) == (0.0, 0.0)
+    assert (paid.price_min, paid.price_max, paid.currency) == (8.5, 12.0, "GBP")

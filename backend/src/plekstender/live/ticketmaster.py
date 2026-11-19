@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from plekstender.live.events import Event, Performer
+from plekstender.live.events import Event, Performer, prices
 from plekstender.live.jambase import USER_AGENT
 
 TIMEOUT = 30.0
@@ -195,6 +195,13 @@ def parse_event(raw: Any) -> Event | None:
         performers.append(
             Performer(str(attraction["name"]), headliner=i == 0, mbid=str(mbid) if mbid else None)
         )
+    low, high, currency = prices(
+        [
+            (r.get("min"), r.get("max"), r.get("currency"))
+            for r in raw.get("priceRanges") or []
+            if isinstance(r, dict)
+        ]
+    )
     return Event(
         id=f"ticketmaster:{raw['id']}"[:64],
         name=str(raw.get("name") or ", ".join(p.name for p in performers[:3]) or "Show"),
@@ -213,4 +220,7 @@ def parse_event(raw: Any) -> Event | None:
         seller="Ticketmaster",
         page_url=None,
         performers=performers,
+        price_min=low,
+        price_max=high,
+        currency=currency,
     )

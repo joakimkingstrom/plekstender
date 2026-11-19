@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 
 from plekstender import __version__
-from plekstender.live.events import Event, Performer
+from plekstender.live.events import Event, Performer, prices
 
 USER_AGENT = f"Plekstender/{__version__} (self-hosted music library tool)"
 TIMEOUT = 30.0
@@ -272,6 +272,20 @@ def parse_event(raw: Any) -> Event | None:
     region, _ = _place(address.get("addressRegion"))
     _, country = _place(address.get("addressCountry"))
     ticket, seller = _ticket(raw.get("offers"))
+    specs = [
+        _dict(o.get("priceSpecification")) for o in raw.get("offers") or [] if isinstance(o, dict)
+    ]  # not on the free Developer plan, but read if there
+    low, high, currency = prices(
+        [
+            (
+                s.get("minPrice", s.get("price")),
+                s.get("maxPrice", s.get("price")),
+                s.get("priceCurrency"),
+            )
+            for s in specs
+            if s
+        ]
+    )
     performers = [
         Performer(str(p["name"]), bool(p.get("x-isHeadliner")))
         for p in raw.get("performer") or []
@@ -295,4 +309,7 @@ def parse_event(raw: Any) -> Event | None:
         seller=seller,
         page_url=raw.get("url") if isinstance(raw.get("url"), str) else None,
         performers=performers,
+        price_min=low,
+        price_max=high,
+        currency=currency,
     )
