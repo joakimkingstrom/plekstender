@@ -1,4 +1,5 @@
 import { useDeferredValue, useState } from 'react'
+import { Stepper } from '../components/controls'
 import { Tooltip } from '../components/Tooltip'
 import { Navigate, NavLink, Outlet } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
@@ -62,23 +63,11 @@ function NumberField({
 }) {
   const invalid = !Number.isInteger(value) || value < limits.min || value > limits.max
   return (
-    <label className="block">
+    <div className="block">
       <span className="block text-sm font-medium">{label}</span>
       <span className="mb-2 block text-xs text-muted">{help}</span>
       <span className="flex items-center gap-2">
-        <input
-          type="number"
-          inputMode="numeric"
-          min={limits.min}
-          max={limits.max}
-          step={1}
-          value={Number.isNaN(value) ? '' : value}
-          onChange={(e) => onChange(e.target.valueAsNumber)}
-          aria-invalid={invalid}
-          className={`w-24 rounded-lg border bg-surface-2 px-3 py-2 text-sm tabular-nums ${
-            invalid ? 'border-danger' : 'border-border'
-          }`}
-        />
+        <Stepper label={label} value={value} min={limits.min} max={limits.max} onChange={onChange} invalid={invalid} />
         <span className="text-sm text-muted">{suffix}</span>
       </span>
       {invalid && (
@@ -86,7 +75,7 @@ function NumberField({
           Between {limits.min} and {limits.max}.
         </span>
       )}
-    </label>
+    </div>
   )
 }
 

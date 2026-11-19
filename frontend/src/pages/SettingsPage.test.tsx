@@ -37,10 +37,13 @@ function renderPage() {
 describe('LibrarySettingsPage', () => {
   it('shows the current values and only allows saving valid changes', async () => {
     renderPage()
-    const artist = await screen.findByLabelText(/Artist popularity/)
+    const artist = await screen.findByRole('spinbutton', { name: 'Artist popularity' })
     expect(artist).toHaveValue(10)
     const save = screen.getByRole('button', { name: 'Save' })
     expect(save).toBeDisabled() // nothing changed yet
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Artist popularity' }))
+    expect(artist).toHaveValue(11)
+    expect(save).toBeEnabled()
 
     fireEvent.change(artist, { target: { value: '5' } })
     expect(save).toBeEnabled()

@@ -398,7 +398,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
   *A small Tooltip component (shown on hover and keyboard focus, positioned to stay on screen); replace every `title=` in the UI.*
 - [x] Site-native dropdowns instead of the browser's `<select>`.
   *A Select / listbox component with full keyboard support (arrows, type-ahead, Esc) and grouped options (fonts); replace every `<select>`.*
-- [ ] Everything else that still looks like a browser default: checkboxes, range sliders, file pickers, colour pickers, number inputs, scrollbars.
+- [x] Everything else that still looks like a browser default: checkboxes, range sliders, file pickers, colour pickers, number inputs, scrollbars.
   *Styled replacements sharing the same tokens; file pickers become a button with drag-and-drop.*
 - [ ] Choose the accent colour (the yellow/orange) yourself.
   *Per user, saved to the account so it follows them across devices: a few presets plus a custom colour. The darker and lighter variants and the chart colour are derived from it, and the chart colour is adjusted until it keeps at least 3:1 contrast in both themes.*

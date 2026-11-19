@@ -1,4 +1,5 @@
-import { useDeferredValue, useId, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useDeferredValue, useId, useState, type ReactNode } from 'react'
+import { ColorPicker, FilePicker, Slider } from '../components/controls'
 import { Select } from '../components/Select'
 import { Tooltip } from '../components/Tooltip'
 import { Link } from 'react-router'
@@ -387,16 +388,13 @@ function CandidateGrid({
 
 function UploadTab({ serverId, onUploaded }: { serverId: number; onUploaded: (id: string) => void }) {
   const upload = useUploadImage(serverId)
-  const onFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) upload.mutate(file, { onSuccess: (data) => onUploaded(data.upload_id) })
-  }
   return (
     <div className="space-y-3">
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium">Image file</span>
-        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onFile} className="text-sm" />
-      </label>
+      <FilePicker
+        label="Choose an image"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        onFile={(file) => upload.mutate(file, { onSuccess: (data) => onUploaded(data.upload_id) })}
+      />
       <p className="text-xs text-muted">PNG with transparency works best for logos. Up to 15 MB.</p>
       {upload.isPending && <Spinner small />}
       {upload.isError && <Notice tone="error">{errorMessage(upload.error)}</Notice>}
@@ -461,10 +459,10 @@ function TextTab({ artist, onChange }: { artist: Artist; onChange: (text: Schema
           ]}
         />
       </div>
-      <label>
+      <div>
         <span className="mb-1 block text-sm font-medium">Colour</span>
-        <input type="color" value={spec.color ?? '#ffffff'} onChange={(e) => update({ color: e.target.value })} className="h-9 w-16 rounded border border-border bg-surface-2" />
-      </label>
+        <ColorPicker label="Text colour" value={spec.color ?? '#ffffff'} onChange={(color) => update({ color })} />
+      </div>
       <div className="sm:col-span-2">
         <button type="button" className="text-sm text-accent" onClick={() => update({})}>
           Preview this text
@@ -475,47 +473,10 @@ function TextTab({ artist, onChange }: { artist: Artist; onChange: (text: Schema
   )
 }
 
-function Slider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  disabled,
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  disabled?: boolean
-  onChange: (value: number) => void
-}) {
-  return (
-    <label className={`block ${disabled ? 'opacity-50' : ''}`}>
-      <span className="flex justify-between text-sm">
-        <span>{label}</span>
-        <span className="text-muted tabular-nums">{value.toFixed(1)}</span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-[var(--color-accent)]"
-      />
-    </label>
-  )
-}
-
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center gap-2 text-sm">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[var(--color-accent)]" />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
   )
@@ -551,15 +512,15 @@ function Adjustments({
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
           {transform.tint && (
-            <label className="flex items-center gap-2">
-              Tint colour
-              <input type="color" value={transform.tint} onChange={(e) => onChange({ tint: e.target.value })} className="h-8 w-12 rounded border border-border" />
-            </label>
+            <span className="flex items-center gap-2">
+              Tint
+              <ColorPicker label="Tint colour" value={transform.tint} onChange={(tint) => onChange({ tint })} />
+            </span>
           )}
-          <label className="flex items-center gap-2">
+          <span className="flex items-center gap-2">
             Background
-            <input type="color" value={transform.background ?? '#000000'} onChange={(e) => onChange({ background: e.target.value })} className="h-8 w-12 rounded border border-border" />
-          </label>
+            <ColorPicker label="Background colour" value={transform.background ?? '#000000'} onChange={(background) => onChange({ background })} />
+          </span>
         </div>
       </div>
     </Card>
@@ -705,13 +666,10 @@ function LogoPacks({ serverId }: { serverId: number }) {
   const active = (j?: Schemas['ArtworkJobOut']) => j && (j.status === 'queued' || j.status === 'running')
   const preview = upload.data
 
-  const onFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const onFile = (file: File) =>
     upload.mutate(file, {
       onSuccess: (data) => setChosen(new Set(data.entries.filter((x) => x.match).map((x) => x.index))),
     })
-  }
 
   return (
     <details className="rounded-2xl border border-border bg-surface p-3 text-sm">
@@ -740,10 +698,7 @@ function LogoPacks({ serverId }: { serverId: number }) {
         </div>
 
         <div className="space-y-2 border-t border-border pt-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium">Import a pack (.zip)</span>
-            <input type="file" accept=".zip,application/zip" onChange={onFile} className="text-xs" />
-          </label>
+          <FilePicker label="Import a pack (.zip)" accept=".zip,application/zip" onFile={onFile} />
           {upload.isPending && <Spinner small />}
           {upload.isError && <Notice tone="error">{errorMessage(upload.error)}</Notice>}
           {active(latestImport) && <JobProgress job={latestImport!} label="Importing" />}
