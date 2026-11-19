@@ -137,3 +137,18 @@ async def test_unauthenticated_and_health(app: FastAPI) -> None:
     assert body["worker"]["healthy"] is False  # no worker in tests
     assert health.headers["cache-control"] == "no-store"
     assert health.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.db
+async def test_preferences_follow_the_account(app: FastAPI, plex: FakePlex) -> None:
+    owner, _ = await sign_in(app, plex, "owner-token")
+    me = (await owner.get("/api/auth/me")).json()
+    assert me["preferences"] == {"accent": None}
+    saved = await owner.put("/api/auth/me/preferences", json={"accent": "#3e63dd"}, headers=CSRF)
+    assert saved.status_code == 200
+    assert saved.json()["preferences"] == {"accent": "#3e63dd"}
+    # Another browser: a new session for the same account sees it.
+    again, _ = await sign_in(app, plex, "owner-token")
+    assert (await again.get("/api/auth/me")).json()["preferences"]["accent"] == "#3e63dd"
+    bad = await owner.put("/api/auth/me/preferences", json={"accent": "blue"}, headers=CSRF)
+    assert bad.status_code == 422

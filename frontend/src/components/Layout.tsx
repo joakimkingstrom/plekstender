@@ -1,6 +1,7 @@
-import { useId } from 'react'
+import { useEffect, useId } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useLogout, useMe } from '../api/hooks'
+import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
 import { Avatar } from './ui'
 
@@ -69,6 +70,9 @@ export function Layout() {
   const navigate = useNavigate()
   const logout = useLogout()
   const [theme, setTheme] = useTheme()
+  const accent = me?.preferences?.accent ?? null
+  // The user's accent colour, worked out for the current theme.
+  useEffect(() => applyAccent(accent, theme), [accent, theme])
 
   if (isPending) {
     return <PageLoader />

@@ -62,6 +62,8 @@ class User(TimestampMixin, Base):
     plex_token_enc: Mapped[str] = mapped_column(Text)
     is_admin: Mapped[bool] = mapped_column(default=False)
     last_login_at: Mapped[dt.datetime | None]
+    # Per-user settings (see api.schemas.Preferences), e.g. the accent colour.
+    preferences: Mapped[dict[str, Any]] = mapped_column(default=dict, server_default="{}")
 
     sessions: Mapped[list[Session]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True

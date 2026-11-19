@@ -10,12 +10,23 @@ from pydantic import BaseModel, Field
 from plekstender.config import AccessMode
 
 
+class Preferences(BaseModel):
+    """Per-user settings, stored on the account so they follow the user across devices."""
+
+    accent: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9a-f]{6}$",
+        description="Accent colour; None = the brand amber.",
+    )
+
+
 class UserOut(BaseModel):
     id: int
     username: str
     email: str | None
     thumb_url: str | None
     is_admin: bool
+    preferences: Preferences = Field(default_factory=Preferences)
 
 
 class PinStartOut(BaseModel):

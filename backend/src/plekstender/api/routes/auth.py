@@ -18,7 +18,7 @@ from plekstender.api.deps import (
     UserDep,
 )
 from plekstender.api.ratelimit import rate_limit
-from plekstender.api.schemas import PinCheckOut, PinStartOut, UserOut
+from plekstender.api.schemas import PinCheckOut, PinStartOut, Preferences, UserOut
 from plekstender.auth.access import AccessDecision, decide_access, decide_bootstrap
 from plekstender.auth.sessions import (
     PIN_COOKIE,
@@ -48,7 +48,22 @@ def user_out(user: User) -> UserOut:
         email=user.email,
         thumb_url=user.thumb_url,
         is_admin=user.is_admin,
+        preferences=load_preferences(user),
     )
+
+
+def load_preferences(user: User) -> Preferences:
+    """The stored preferences, dropping any that are no longer valid."""
+    stored = user.preferences or {}
+    valid = {}
+    for name in Preferences.model_fields:
+        if name in stored:
+            try:
+                Preferences.model_validate({name: stored[name]})
+            except ValueError:
+                continue
+            valid[name] = stored[name]
+    return Preferences.model_validate(valid)
 
 
 @router.post("/plex/pin", response_model=PinStartOut, dependencies=[rate_limit("pin", 10, 60)])
@@ -170,4 +185,12 @@ async def logout(request: Request, response: Response, db: DbDep, settings: Sett
 
 @router.get("/me", response_model=UserOut)
 async def me(user: UserDep) -> UserOut:
+    return user_out(user)
+
+
+@router.put("/me/preferences", response_model=UserOut)
+async def put_preferences(body: Preferences, db: DbDep, user: UserDep) -> UserOut:
+    """Replace the signed-in user's preferences."""
+    user.preferences = body.model_dump()
+    await db.commit()
     return user_out(user)

@@ -89,6 +89,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/me/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Preferences
+         * @description Replace the signed-in user's preferences.
+         */
+        put: operations["put_preferences_api_auth_me_preferences_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers": {
         parameters: {
             query?: never;
@@ -1816,6 +1836,17 @@ export interface components {
             /** Current Rank */
             current_rank: number;
         };
+        /**
+         * Preferences
+         * @description Per-user settings, stored on the account so they follow the user across devices.
+         */
+        Preferences: {
+            /**
+             * Accent
+             * @description Accent colour; None = the brand amber.
+             */
+            accent?: string | null;
+        };
         /** ProbeOut */
         ProbeOut: {
             /** Uri Host */
@@ -2296,6 +2327,7 @@ export interface components {
             thumb_url: string | null;
             /** Is Admin */
             is_admin: boolean;
+            preferences?: components["schemas"]["Preferences"];
         };
         /** ValidationError */
         ValidationError: {
@@ -2427,6 +2459,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+        };
+    };
+    put_preferences_api_auth_me_preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Preferences"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

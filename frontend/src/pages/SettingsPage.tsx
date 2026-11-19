@@ -1,9 +1,10 @@
 import { useDeferredValue, useState } from 'react'
-import { Stepper } from '../components/controls'
+import { ColorPicker, Stepper } from '../components/controls'
+import { BRAND, PRESETS } from '../accent'
 import { Tooltip } from '../components/Tooltip'
 import { Navigate, NavLink, Outlet } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
-import { useLibrarySettings, useMe, usePopularityPreview, useUpdateLibrarySettings } from '../api/hooks'
+import { useLibrarySettings, useMe, usePopularityPreview, useSetPreferences, useUpdateLibrarySettings } from '../api/hooks'
 import { useActiveServer } from '../api/library'
 import { useFanartKey, useSetFanartKey } from '../api/artwork'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
@@ -25,6 +26,9 @@ export function SettingsLayout() {
         </NavLink>
         <NavLink to="/settings/listening" className={tab}>
           Listening
+        </NavLink>
+        <NavLink to="/settings/appearance" className={tab}>
+          Appearance
         </NavLink>
         {me?.is_admin && (
           <NavLink to="/settings/library" className={tab}>
@@ -312,5 +316,53 @@ function RankingPreview({ artistTopN, changed }: { artistTopN: number; changed: 
         </ol>
       )}
     </Card>
+  )
+}
+
+export function AppearancePage() {
+  const me = useMe()
+  const save = useSetPreferences()
+  if (me.isPending) return <Spinner />
+  const current = me.data?.preferences?.accent ?? BRAND
+  const set = (hex: string) => save.mutate({ ...me.data?.preferences, accent: hex === BRAND ? null : hex })
+  const isPreset = PRESETS.some(([, hex]) => hex === current)
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card title="Accent colour">
+        <p className="mb-4 text-sm text-muted">
+          Used for buttons, links, stars and charts. It's saved to your account, so it follows you to other devices.
+          Very light or dark colours are adjusted a little so they stay readable in both themes.
+        </p>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Accent colour">
+          {PRESETS.map(([name, hex]) => (
+            <button
+              key={hex}
+              type="button"
+              role="radio"
+              aria-checked={hex === current}
+              aria-label={name}
+              onClick={() => set(hex)}
+              className={`flex flex-col items-center gap-1 rounded-lg p-1.5 text-xs ${hex === current ? 'bg-surface-2' : 'hover:bg-surface-2'}`}
+            >
+              <span
+                className={`size-8 rounded-full ${hex === current ? 'ring-2 ring-text ring-offset-2 ring-offset-surface' : ''}`}
+                style={{ background: hex }}
+              />
+              {name}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center gap-3 text-sm">
+          <span>{isPreset ? 'Or pick your own' : 'Your colour'}</span>
+          <ColorPicker label="Custom accent colour" value={current} onChange={set} />
+        </div>
+        {save.isError && <div className="mt-3"><Notice tone="error">{errorMessage(save.error)}</Notice></div>}
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border pt-4">
+          <Button variant="primary">Example button</Button>
+          <span className="text-sm text-accent underline">A link</span>
+          <span className="text-accent" aria-hidden>★★★★☆</span>
+        </div>
+      </Card>
+    </div>
   )
 }

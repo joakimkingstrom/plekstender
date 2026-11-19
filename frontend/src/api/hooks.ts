@@ -200,3 +200,20 @@ export function usePopularityPreview(serverId: number | null, artistTopN: number
     placeholderData: (previous) => previous,
   })
 }
+
+export function useSetPreferences() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['Preferences']) => unwrap(api.PUT('/api/auth/me/preferences', { body })),
+    onMutate: (body) => {
+      // Show the change straight away; the server's answer replaces it.
+      const previous = qc.getQueryData<Schemas['UserOut'] | null>(keys.me)
+      if (previous) qc.setQueryData(keys.me, { ...previous, preferences: body })
+      return { previous }
+    },
+    onError: (_e, _body, context) => {
+      if (context?.previous) qc.setQueryData(keys.me, context.previous)
+    },
+    onSuccess: (data) => qc.setQueryData(keys.me, data),
+  })
+}

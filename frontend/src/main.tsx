@@ -17,7 +17,7 @@ import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
 import { RatePage } from './pages/RatePage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
-import { LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
+import { AppearancePage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
 
 const queryClient = new QueryClient({
@@ -67,6 +67,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <ServersPage /> },
           { path: 'listening', element: <ListeningSettingsPage /> },
+          { path: 'appearance', element: <AppearancePage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
         ],
       },
