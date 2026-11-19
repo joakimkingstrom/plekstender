@@ -82,7 +82,7 @@ export function Dialog({
             ×
           </button>
         </header>
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
+        <div className="overflow-y-auto px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">{children}</div>
       </div>
     </div>,
     document.body,

@@ -305,7 +305,11 @@ function Rater({ serverId }: { serverId: number }) {
           </Card>
         )
       ) : settings.layout === 'swipe' ? (
-        <SwipeView {...props} onSwiped={(item) => swiped.current.push(item)} />
+        <SwipeView
+          {...props}
+          onSwiped={(item) => swiped.current.push(item)}
+          setAutoplay={(autoplay) => update({ autoplay })}
+        />
       ) : settings.kind === 'track' ? (
         <SongsGrid {...props} />
       ) : settings.kind === 'album' ? (
@@ -361,7 +365,15 @@ function writeFlag(key: string) {
   }
 }
 
-function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: ViewProps & { onSwiped: (item: RateItem) => void }) {
+function SwipeView({
+  serverId,
+  queue,
+  overrides,
+  rate,
+  onSwiped,
+  settings,
+  setAutoplay,
+}: ViewProps & { onSwiped: (item: RateItem) => void; setAutoplay: (on: boolean) => void }) {
   const item = queue.items[0]
   const next = queue.items[1]
   const game = settings.game
@@ -564,7 +576,20 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
               {!guessing && item.popularity !== null && <span>Popularity {formatCompact(item.popularity)}</span>}
               {!game && (
                 <span className="ml-auto">
-                  <PlayButton serverId={serverId} ratingKey={item.rating_key} title={item.title} size="size-8" kind={settings.kind} />
+                  {/* Play keeps playing: every next card's song too, until stopped. */}
+                  <PlayButton
+                    serverId={serverId}
+                    ratingKey={item.rating_key}
+                    title={item.title}
+                    size="size-8"
+                    kind={settings.kind}
+                    onPlay={() =>
+                      // Already on (this card's clip ended): play it again; otherwise switch on,
+                      // which plays this card and the ones after it.
+                      settings.autoplay ? void playSample(serverId, settings.kind, item.rating_key) : setAutoplay(true)
+                    }
+                    onStop={() => setAutoplay(false)}
+                  />
                 </span>
               )}
             </div>

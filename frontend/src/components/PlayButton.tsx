@@ -10,12 +10,17 @@ export function PlayButton({
   title,
   size = 'size-8',
   kind,
+  onPlay,
+  onStop,
 }: {
   serverId: number
   ratingKey: number
   title: string
   size?: string
   kind?: GameMode
+  /** Instead of playing this one preview (e.g. "keep playing" on the Rate cards). */
+  onPlay?: () => void
+  onStop?: () => void
 }) {
   const audio = useAudio()
   const key = kind ? sampleKey(serverId, kind, ratingKey) : `track:${serverId}:${ratingKey}`
@@ -33,10 +38,12 @@ export function PlayButton({
           e.stopPropagation()
           if (playing || loading) {
             stopAudio()
+            onStop?.()
             return
           }
           unlockAudio()
-          void (kind ? playSample(serverId, kind, ratingKey) : playTrack(serverId, ratingKey))
+          if (onPlay) onPlay()
+          else void (kind ? playSample(serverId, kind, ratingKey) : playTrack(serverId, ratingKey))
         }}
         className={`flex ${size} shrink-0 items-center justify-center rounded-full ${
           playing ? 'bg-accent text-on-accent' : 'bg-surface-2 text-text hover:bg-border'

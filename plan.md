@@ -514,6 +514,10 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] After a round: add the artist's top 5 songs to the game playlist in Plex (made when missing; songs already in it skipped).
 - [x] Settings → Guess the intro (per account): guesses per round (default 3), round length, right-artist feedback, the playlist, and well-known / mixed / deep cuts (the cards' order, and which songs play for albums and artists).
 
+**Phones and previews (19 Nov 2026)**
+- [x] The first time the app is opened on a phone (outside the installed app), a popup suggests adding it to the home screen, with the steps for iOS (Safari) or Android (Chrome, with its own Install button when offered).
+- [x] Rate cards: a card's play button keeps playing (every next card's song too) until stop is tapped; the same switch as "Play songs".
+
 **Your ratings**
 - [x] History → Ratings: everything you've rated (here or in Plex), the most recently rated first, by day; filter by songs, albums and artists; change a rating in place.
 

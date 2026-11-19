@@ -195,3 +195,33 @@ describe('Play songs (while rating)', () => {
     expect(screen.getByRole('button', { name: '▶ Play songs' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
+
+describe('Playing songs from a card', () => {
+  it('keeps playing the next cards until stopped', async () => {
+    localStorage.setItem('plekstender.rate', JSON.stringify({ layout: 'swipe', kind: 'track' }))
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <RatePage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    const samples = () =>
+      fetchMock.mock.calls
+        .map(([r]) => new URL(r.url))
+        .filter((u) => u.pathname === '/api/servers/1/rate/sample')
+        .map((u) => u.searchParams.get('rating_key'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Play a preview of Airbag' }))
+    expect(await screen.findByRole('button', { name: 'Stop Airbag' })).toBeInTheDocument()
+    // The next card plays too, without another tap.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    })
+    expect(await screen.findByRole('button', { name: 'Stop Paranoid Android' })).toBeInTheDocument()
+    expect(samples()).toEqual(expect.arrayContaining(['1', '2']))
+    // Stop: it stays stopped.
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Paranoid Android' }))
+    expect(await screen.findByRole('button', { name: 'Play a preview of Paranoid Android' })).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('plekstender.rate')!).autoplay).toBe(false)
+  })
+})

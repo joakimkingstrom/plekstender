@@ -2,6 +2,7 @@ import { useEffect, useId } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useLogout, useMe } from '../api/hooks'
 import { useOnline } from '../online'
+import { InstallPrompt } from './InstallPrompt'
 import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
 import { Avatar, Button } from './ui'
@@ -162,6 +163,7 @@ export function Layout() {
         </div>
       </header>
 
+      <InstallPrompt />
       {!online && (
         <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-xs text-warn">
           You're offline. What's on screen may be out of date, and changes can't be saved until you're back online.
