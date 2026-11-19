@@ -607,7 +607,10 @@ A "wrapped"-style story for any period you choose (a year, a month, a custom ran
 A **Live** tab: upcoming shows near you by the artists you listen to most.
 - [ ] Your location (a city, or "use my location"), a distance, and a dial for how many artists to follow: your top X% by listening (default: top 10%, at most ~150 artists), so it never looks up thousands.
 - [ ] Shows looked up in the background (a daily refresh, cached), listed by date with venue, distance and ticket link; filter by artist and date.
-- [ ] Sources (to settle; see the open question below): Ticketmaster's Discovery API as the main one, Bandsintown optionally.
+- [ ] Ticketmaster's Discovery API as the main source (free key, set by the admin).
+- [ ] Calendar links (iCal): paste your Songkick calendar link (the shows of the artists you track there), or any other service's; read daily and merged with Ticketmaster's shows (the same show once).
+- [ ] "Find on DICE" (and Songkick) links per artist and show: DICE has no public API (only a partner API for promoters), so its listings are linked to, not read.
+- [ ] Bandsintown optionally, if they approve an app ID.
 
 ## Later
 
@@ -618,7 +621,7 @@ Plekstender's own history makes this optional: the ratings queues and stats alre
 - Either way, skip plays Plex already has (matched listens with `source = plex` are the overlap).
 
 ## Open questions
-- Live shows (Phase 16): which sources? Ticketmaster's Discovery API (free key set by the admin, 5,000 requests a day, searches by artist and place, covers Live Nation / Ticketmaster countries in Europe, North America and Oceania) looks like the best main source. Bandsintown has wider small-venue coverage but its API needs an app ID they approve. Songkick no longer gives out API keys; setlist.fm only has past shows (could show what an artist played recently). To confirm when building.
+- Live shows (Phase 16): Ticketmaster's Discovery API (free key set by the admin, 5,000 requests a day, searches by artist and place) as the main source; Songkick through your own calendar link (iCal; confirm the link's form when building); DICE linked to only (no public API; scraping it is against its protections and likely its terms). Not used: Integuru's unofficial Songkick API (scrapes songkick.com with your login cookies, only your tracked-artists calendar, no licence, paid hosting). Bandsintown needs an approved app ID; setlist.fm only has past shows (could show what an artist played recently).
 - Tag editor fields (Phase 12): the `.todo.md` note is cut off; which extra fields?
 - Does the derived popularity (top 3 tracks per album, top 10 songs per artist) rank artists sensibly on the real library? Tune it on Settings → Library using the preview.
 - Plex history timestamps: is `viewedAt` really the end of the track, and does the account mapping hold for shared users? (`plex_probe.py --history`)
