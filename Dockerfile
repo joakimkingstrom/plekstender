@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # --- frontend build ---------------------------------------------------------------
-FROM node:24-alpine AS web
+# Static files, the same for every CPU: built natively even for multi-arch images.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund

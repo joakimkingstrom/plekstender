@@ -2,11 +2,12 @@ name: plekstender
 
 # Shared settings for the services that run the Plekstender image.
 x-plekstender: &plekstender
-  # Built from this checkout on `docker compose up` (there's no published image yet),
-  # so Compose never tries to pull it from a registry.
-  image: plekstender:local
+  # Built from this checkout on `docker compose up` by default. To use the published
+  # image instead, set PLEKSTENDER_IMAGE=ghcr.io/joakimkingstrom/plekstender:latest and
+  # PLEKSTENDER_PULL_POLICY=always in .env.
+  image: ${PLEKSTENDER_IMAGE:-plekstender:local}
   build: .
-  pull_policy: build
+  pull_policy: ${PLEKSTENDER_PULL_POLICY:-build}
   restart: unless-stopped
   env_file: .env
   environment:

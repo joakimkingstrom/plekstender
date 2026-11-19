@@ -1,10 +1,20 @@
 # Plekstender
 
-A self-hosted helper app for Plex & Plexamp music libraries: rate songs, albums and artists quickly, replace artist photos with logos, and build playlists that are smarter than "artist title contains…" filters.
-
-> **Status:** early development. Sign-in, server connection, library sync and browsing, and Last.fm history import work; see [plan.md](plan.md) for the roadmap and [app-features.md](app-features.md) for the feature list.
+A self-hosted helper app for Plex & Plexamp music libraries: rate songs, albums and artists quickly, keep a listening history with stats, replace artist photos with logos, and build playlists that are smarter than "artist title contains…" filters. Several people can use one instance, each with their own Plex account.
 
 Plekstender isn't affiliated with or endorsed by Plex.
+
+## What it does
+
+- **Library:** browse artists, albums and songs from your Plex servers, with your own ratings and plays. Releases are grouped into albums, EPs, singles, compilations and live albums.
+- **Rate:** swipe cards on a phone (right for 2½–5 stars, left for ½–2, down to skip) or rate 15 songs at a time on a computer. Choose songs you've played, unrated ones or everything, by genre, shuffled or most played first. Ratings are saved to Plex with your own account, with undo.
+- **History:** every Plex play, plus your Last.fm and ListenBrainz history, with each play counted once. Top artists, albums and songs per period, listening activity, streaks, most skipped songs, and a map of where you listen (world, continent and country).
+- **Scrobbling:** sends new Plex plays to ListenBrainz, and can send your whole history there (leaving out what ListenBrainz already has).
+- **Artwork:** replace artist photos with logos from fanart.tv, Plex, an image search, an upload or a text logo in a Google font; fit, zoom and recolour them; optionally save `artist.jpg` into each artist's folder; share logo packs between servers.
+- **Playlists:** start from artists, songs or a genre, add similar and sonically similar artists, keep only what you rate highly or each artist's best-known songs, and save the result to Plex. Playlists can refresh themselves daily, weekly or monthly, and download as M3U8.
+- **Exports:** your library with ratings and plays (CSV / JSON), and your listening history in ListenBrainz's format.
+
+See [plan.md](plan.md) for the roadmap and [app-features.md](app-features.md) for the original feature list.
 
 ## Running with Docker
 
@@ -29,9 +39,31 @@ Services:
 
 Already running Traefik? Copy `compose.override.example.yaml` to `compose.override.yaml` and adjust.
 
+### Using the published image
+
+Images for amd64 and arm64 are published to `ghcr.io/joakimkingstrom/plekstender` after each successful CI run on `main` (`latest`, `sha-<commit>`, and version tags). To run one instead of building locally, add this to `.env`:
+
+```bash
+PLEKSTENDER_IMAGE=ghcr.io/joakimkingstrom/plekstender:latest
+PLEKSTENDER_PULL_POLICY=always
+```
+
+New GitHub packages are private: make the package public on GitHub, or `docker login ghcr.io` on the host first.
+
+### On a phone
+
+Open your Plekstender address in Safari and choose **Share → Add to Home Screen** (Chrome: **⋮ → Add to Home screen**). Opened from its icon, it runs full screen like an app and starts on the Rate page (Settings → Appearance changes that). The app's shell is kept for offline use; ratings and data need a connection.
+
+### Optional settings
+
+- **fanart.tv:** artist logos need a free API key (Settings → Connections, or `FANART_API_KEY`).
+- **Last.fm import:** needs an API key (Settings → Connections, or `LASTFM_API_KEY`). From 1 December 2026, Last.fm only allows this with a Last.fm Pro subscriber's key.
+- **Image search:** start with `--profile search` to run SearXNG next to Plekstender, or point `SEARXNG_URL` at your own.
+- **Artist folders:** to save `artist.jpg` next to your music, mount the music folder into the containers read-write (see `compose.override.example.yaml`) and turn it on in Settings → Artwork.
+
 ### Who can sign in
 
-On the Admin page, choose one of:
+On Settings → Admin, choose one of:
 
 - **Approved servers** (default): people with access to a Plex server you've approved, such as friends you share your server with.
 - **Allowlist**: only the Plex usernames or emails you list.
@@ -69,6 +101,12 @@ cd frontend && npm run lint && npm run typecheck && npm test
 
 After changing API routes or schemas, regenerate the frontend types with `npm run gen:api`.
 New database migrations: `cd backend && uv run alembic revision --autogenerate -m "…"`.
+
+## Credits
+
+- IP geolocation by [DB-IP](https://db-ip.com) (IP to City Lite, CC BY 4.0), downloaded monthly to the server; lookups never leave it.
+- Country shapes from [Natural Earth](https://www.naturalearthdata.com) (public domain); rebuild with `frontend/scripts/world-map.mjs`.
+- Artist logos from [fanart.tv](https://fanart.tv), artist IDs from [MusicBrainz](https://musicbrainz.org), fonts from [Google Fonts](https://fonts.google.com). Images keep their own terms; logo packs record where each one came from.
 
 ## License
 

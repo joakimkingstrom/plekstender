@@ -486,7 +486,8 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] The lightbox blurs what's behind it.
 - [x] PWA install, offline shell (service worker keeps the app shell; an offline banner, and a "can't be reached" screen instead of signing you out)
 - [x] M3U8 playlist exports (each playlist's last build: Plex's file paths or relative to the music folder)
-- [ ] Docs, screenshots, published images (GHCR)
+- [x] Docs and published images (GHCR: amd64 + arm64 after CI passes on main; compose can use them via PLEKSTENDER_IMAGE)
+- [ ] Screenshots for the README (from a real library)
 
 ## Later
 
