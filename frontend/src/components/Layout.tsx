@@ -124,9 +124,12 @@ export function Layout() {
       isActive ? 'bg-surface-2 text-text' : 'text-muted hover:text-text'
     }`
 
+  // On a phone, Rate takes the whole screen (no header or tab bar); it has its own close button.
+  const focus = location.pathname === '/rate'
+  const phoneHidden = focus ? 'max-md:hidden' : ''
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-10 border-b border-border bg-bg/90 pt-[env(safe-area-inset-top)] backdrop-blur">
+      <header className={`sticky top-0 z-10 border-b border-border bg-bg/90 pt-[env(safe-area-inset-top)] backdrop-blur ${phoneHidden}`}>
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <NavLink to="/" aria-label="Plekstender home" onClick={(e) => spinPick(e.currentTarget)}>
             <Wordmark />
@@ -164,13 +167,17 @@ export function Layout() {
           You're offline. What's on screen may be out of date, and changes can't be saved until you're back online.
         </div>
       )}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24 md:pb-6">
+      <main
+        className={`mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:pb-6 ${
+          focus ? 'max-md:pb-[calc(env(safe-area-inset-bottom)+1rem)] max-md:pt-[calc(env(safe-area-inset-top)+0.5rem)]' : 'pb-24'
+        }`}
+      >
         <Outlet />
       </main>
 
       {/* Mobile bottom navigation */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-7 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        className={`fixed inset-x-0 bottom-0 z-10 grid grid-cols-7 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden ${phoneHidden}`}
         aria-label="Main"
       >
         {NAV.map((item) => (

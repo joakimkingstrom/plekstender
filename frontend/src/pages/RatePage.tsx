@@ -15,6 +15,7 @@ import {
   type RatePool,
 } from '../api/ratings'
 import { Artwork, Stars } from '../components/library'
+import { Mark } from '../components/Layout'
 import { StarRating } from '../components/StarRating'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDuration } from '../format'
@@ -64,7 +65,21 @@ export function RatePage() {
   const { active, blocker } = useLibraryServer()
   return (
     <>
-      {/* On a phone, the cards get the space: no page title. */}
+      {/* On a phone Rate fills the screen (the app's header and tab bar are hidden): a slim
+          title bar with a close button back to the rest of the app. */}
+      <div className="mb-3 flex items-center justify-between md:hidden">
+        <span className="flex items-center gap-2 font-display text-lg font-bold">
+          <Mark className="size-5" />
+          Rate
+        </span>
+        <Link
+          to="/"
+          aria-label="Close Rate"
+          className="flex size-9 items-center justify-center rounded-full bg-surface-2 text-lg text-muted hover:text-text"
+        >
+          ✕
+        </Link>
+      </div>
       <div className="hidden md:block">
         <PageTitle subtitle="Ratings are saved to Plex with your own account.">Rate</PageTitle>
       </div>
@@ -354,7 +369,7 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
 
   return (
     // As wide as fits the screen's height too, so the card and the stars need no scrolling.
-    <div className="mx-auto space-y-3" style={{ maxWidth: 'min(24rem, max(15rem, calc(100dvh - 25rem)))' }}>
+    <div className="mx-auto space-y-3" style={{ maxWidth: 'min(24rem, max(15rem, calc(100dvh - 21rem)))' }}>
       {hint && (
         <p className="text-center text-xs text-muted">
           Swipe right for 2½–5 stars, left for 2–½, down to skip. The further you swipe, the higher or lower.
