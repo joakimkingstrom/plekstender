@@ -119,46 +119,54 @@ export function GuessBox({
           ))}
         </ul>
       )}
-      <div className="flex items-center gap-2">
+      {/* Full width on its own row (comfortable to tap); the artist picked and "Give up"
+          sit underneath. */}
+      <input
+        type="search"
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        aria-label="Your guess"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        enterKeyHint="search"
+        className={`w-full rounded-lg border bg-surface-2 px-3 py-2.5 text-sm ${feedback?.tone === 'bad' ? 'border-danger' : 'border-border'}`}
+      />
+      <p role="status" className={`text-xs ${feedback ? (feedback.tone === 'good' ? 'text-ok' : 'text-danger') : 'text-muted'}`}>
+        {feedback?.text ??
+          (mode === 'track' && !artist && text.length >= 3 && text.length < songsFrom
+            ? "Pick the artist, or type more of the song's title."
+            : '\u00a0')}
+      </p>
+      <div className="flex items-center gap-2 text-xs">
         {artist && (
           <button
             type="button"
             onClick={() => setArtist(null)}
             aria-label={`Clear ${artist.title}`}
-            className="flex shrink-0 items-center gap-1 rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent"
+            className="flex min-w-0 items-center gap-1 truncate rounded-full bg-accent/15 px-2.5 py-1 font-medium text-accent"
           >
             {artist.title} ✕
           </button>
         )}
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value)
-            setOpen(true)
-          }}
-          onFocus={() => setOpen(true)}
-          placeholder={placeholder}
-          aria-label="Your guess"
-          autoComplete="off"
-          className={`min-w-0 flex-1 rounded-lg border bg-surface-2 px-3 py-2 text-sm ${feedback?.tone === 'bad' ? 'border-danger' : 'border-border'}`}
-        />
-        <button type="button" onClick={onGiveUp} className="shrink-0 rounded-lg px-2 py-2 text-xs font-medium text-muted hover:text-text">
-          Give up
-        </button>
-      </div>
-      <div className="flex items-start justify-between gap-3 text-xs">
-        <p role="status" className={feedback ? (feedback.tone === 'good' ? 'text-ok' : 'text-danger') : 'text-muted'}>
-          {feedback?.text ??
-            (mode === 'track' && !artist && text.length >= 3 && text.length < songsFrom
-              ? "Pick the artist, or type more of the song's title."
-              : ' ')}
-        </p>
         {guessesLeft !== null && (
-          <span className="shrink-0 text-muted tabular-nums">
+          <span className="text-muted tabular-nums">
             {guessesLeft} {guessesLeft === 1 ? 'guess' : 'guesses'} left
           </span>
         )}
+        <button
+          type="button"
+          onClick={onGiveUp}
+          className="ml-auto shrink-0 rounded-lg px-3 py-1.5 font-medium text-muted hover:bg-surface-2 hover:text-text"
+        >
+          Give up
+        </button>
       </div>
     </div>
   )

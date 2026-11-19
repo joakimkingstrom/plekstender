@@ -9,7 +9,6 @@ import { ApiError } from './api/client'
 import { Layout } from './components/Layout'
 import './index.css'
 import { registerServiceWorker } from './online'
-import { AdminPage } from './pages/AdminPage'
 import { ArtworkPage } from './pages/ArtworkPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { ExportPage } from './pages/ExportPage'
@@ -84,10 +83,10 @@ const router = createBrowserRouter([
           { path: 'files', element: <FilesSettingsPage /> },
           { path: 'game', element: <GameSettingsPage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
-          { path: 'admin', element: <AdminPage /> },
+          { path: 'admin', element: <Navigate to="/settings" replace /> },
         ],
       },
-      { path: 'admin', element: <Navigate to="/settings/admin" replace /> },
+      { path: 'admin', element: <Navigate to="/settings" replace /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import {
   useAdminAccess,
@@ -164,18 +163,23 @@ function UsersCard({ selfId }: { selfId: number }) {
   )
 }
 
-export function AdminPage() {
+/** Admin settings for this Plekstender (shown under Settings → Servers, for admins). */
+export function AdminSettings() {
   const { data: me, isPending } = useMe()
-  if (isPending) return <Spinner />
-  if (!me?.is_admin) return <Navigate to="/settings" replace />
+  if (isPending || !me?.is_admin) return null
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted">Settings for this Plekstender instance, for admins only.</p>
+    <section className="space-y-4" aria-labelledby="admin-heading">
+      <div>
+        <h2 id="admin-heading" className="text-lg font-semibold">
+          This Plekstender
+        </h2>
+        <p className="text-sm text-muted">Who can sign in, which servers they can use, and users. For admins only.</p>
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <AccessCard />
         <ServersCard />
         <UsersCard selfId={me.id} />
       </div>
-    </div>
+    </section>
   )
 }

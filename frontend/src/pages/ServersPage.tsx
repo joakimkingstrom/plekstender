@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { AdminSettings } from './AdminPage'
 import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import {
@@ -191,6 +192,11 @@ export function ServersPage({ firstRun = false }: { firstRun?: boolean }) {
           <AvailableServers />
         </Card>
       </div>
+      {!firstRun && (
+        <div className="mt-8">
+          <AdminSettings />
+        </div>
+      )}
     </>
   )
 }

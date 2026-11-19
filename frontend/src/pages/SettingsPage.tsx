@@ -27,7 +27,7 @@ export function SettingsLayout() {
       <PageTitle>Settings</PageTitle>
       <nav className="no-scrollbar mb-6 flex gap-6 overflow-x-auto whitespace-nowrap border-b border-border" aria-label="Settings">
         <NavLink to="/settings" end className={tab}>
-          Servers
+          {me?.is_admin ? 'Servers & admin' : 'Servers'}
         </NavLink>
         <NavLink to="/settings/listening" className={tab}>
           Listening
@@ -59,9 +59,7 @@ export function SettingsLayout() {
             <NavLink to="/settings/library" className={tab}>
               Library
             </NavLink>
-            <NavLink to="/settings/admin" className={tab}>
-              Admin
-            </NavLink>
+
           </>
         )}
       </nav>
@@ -522,14 +520,14 @@ export function ArtworkSettingsPage() {
   if (!me.data?.is_admin) return <Navigate to="/settings" replace />
   return (
     <div className="space-y-4">
+      <FontsCard />
       <p className="text-sm text-muted">
-        Saving artist images into artist folders is under{' '}
+        Saving artist images into artist folders (artist.jpg) is under{' '}
         <NavLink to="/settings/files" className="text-accent underline">
           Music files
         </NavLink>
         .
       </p>
-      <FontsCard />
     </div>
   )
 }

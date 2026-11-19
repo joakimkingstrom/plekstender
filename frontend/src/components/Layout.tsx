@@ -56,12 +56,17 @@ export function Wordmark({ size = 'text-lg' }: { size?: string }) {
   )
 }
 
-/** One full turn of the pick (on clicking the logo), unless the user prefers less motion. */
+// The brand's spinning pick (branding/plekstender-loader-spin.svg, also the
+// loader-spin-*.gif): a 3D turn around the vertical axis through the tip, sampled as a
+// horizontal scale, one turn in 1.6 s with a short pause face-on.
+const SPIN_SCALE = [1.000, 1.000, 1.000, 0.999, 0.997, 0.993, 0.985, 0.971, 0.949, 0.917, 0.872, 0.810, 0.728, 0.625, 0.499, 0.349, 0.178, -0.030, -0.209, -0.408, -0.597, -0.761, -0.890, -0.972, -1.000, -0.972, -0.890, -0.761, -0.597, -0.408, -0.209, -0.030, 0.178, 0.349, 0.499, 0.625, 0.728, 0.810, 0.872, 0.917, 0.949, 0.971, 0.985, 0.993, 0.997, 0.999, 1.000, 1.000, 1.000]
+
+/** The pick spins once (on clicking the logo), unless the user prefers less motion. */
 function spinPick(link: HTMLElement) {
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
   link.querySelector('svg')?.animate?.(
-    [{ transform: 'rotate(0turn)' }, { transform: 'rotate(1turn)' }],
-    { duration: 700, easing: 'cubic-bezier(0.3, 0, 0.2, 1)' },
+    SPIN_SCALE.map((x) => ({ transform: `scaleX(${x})` })),
+    { duration: 1600, easing: 'linear' },
   )
 }
 

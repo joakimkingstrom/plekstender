@@ -518,6 +518,12 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] The first time the app is opened on a phone (outside the installed app), a popup suggests adding it to the home screen, with the steps for iOS (Safari) or Android (Chrome, with its own Install button when offered).
 - [x] Rate cards: a card's play button keeps playing (every next card's song too) until stop is tapped; the same switch as "Play songs".
 
+**Feedback round 4 (19 Nov 2026)**
+- [x] Settings: the Servers and Admin tabs are one ("Servers & admin" for admins).
+- [x] Settings → Artwork: the fonts first.
+- [x] Clicking the logo plays the brand's spinning pick (the loader-spin animation, drawn on the logo: transparent and theme-aware, unlike the GIF's white background).
+- [x] iOS no longer zooms in when a text field is tapped (16px text in fields on touch screens); the guess field is full width, with "Give up" below it.
+
 **Scores**
 - [x] History → Scores: everyone's Guess the intro scores on the instance (all modes or one), the most points first, with best streaks, the latest game (rounds without a 30-minute break) and how many they guessed. Finished rounds are kept from now on.
 
