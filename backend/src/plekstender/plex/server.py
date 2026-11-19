@@ -225,6 +225,73 @@ class PlexServerClient:
             raise PlexError("photo transcoder returned a non-image response")
         return resp.content, content_type
 
+    # --- playlists (always under the token owner's account) ---------------------------
+
+    def library_uri(self, machine_id: str, rating_keys: list[int]) -> str:
+        keys = ",".join(str(k) for k in rating_keys)
+        return f"server://{machine_id}/com.plexapp.plugins.library/library/metadata/{keys}"
+
+    async def create_playlist(self, title: str, machine_id: str, rating_keys: list[int]) -> int:
+        """A new (regular, not smart) audio playlist holding `rating_keys`. Returns its key."""
+        resp = await self._request(
+            "/playlists",
+            method="POST",
+            params={
+                "type": "audio",
+                "title": title,
+                "smart": 0,
+                "uri": self.library_uri(machine_id, rating_keys),
+            },
+        )
+        try:
+            items = resp.json().get("MediaContainer", {}).get("Metadata", [])
+            return int(items[0]["ratingKey"])
+        except (ValueError, LookupError, TypeError) as exc:
+            raise PlexError("Plex didn't return the new playlist") from exc
+
+    async def add_to_playlist(self, key: int, machine_id: str, rating_keys: list[int]) -> None:
+        await self._request(
+            f"/playlists/{key}/items",
+            method="PUT",
+            params={"uri": self.library_uri(machine_id, rating_keys)},
+        )
+
+    async def playlist_item_ids(self, key: int) -> list[int]:
+        """The playlistItemIDs of a playlist's entries (404 when it's been deleted)."""
+        data = await self._get(f"/playlists/{key}/items")
+        items = data.get("MediaContainer", {}).get("Metadata", [])
+        return [int(i["playlistItemID"]) for i in items if "playlistItemID" in i]
+
+    async def clear_playlist(self, key: int) -> None:
+        """Empty a playlist, keeping it (and its key, cover and place in people's apps)."""
+        try:
+            await self._request(f"/playlists/{key}/items", method="DELETE")
+        except PlexAuthError:
+            raise
+        except PlexError as exc:
+            if exc.status == 404:
+                raise
+            # Older servers: one entry at a time.
+            for item_id in await self.playlist_item_ids(key):
+                await self._request(f"/playlists/{key}/items/{item_id}", method="DELETE")
+
+    async def rename_playlist(self, key: int, title: str, summary: str | None) -> None:
+        await self._request(
+            f"/playlists/{key}", method="PUT", params={"title": title, "summary": summary or ""}
+        )
+
+    async def delete_playlist(self, key: int) -> None:
+        await self._request(f"/playlists/{key}", method="DELETE")
+
+    async def nearest(self, rating_key: int, limit: int = 30) -> list[dict[str, Any]]:
+        """Sonically similar items (needs Plex Pass sonic analysis; otherwise empty or 404)."""
+        data = await self._get(
+            f"/library/metadata/{rating_key}/nearest",
+            params={"limit": limit, "maxDistance": 0.25},
+        )
+        items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Metadata", [])
+        return items
+
 
 class ProbeResult(BaseModel):
     uri: str

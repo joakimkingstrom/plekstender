@@ -142,6 +142,12 @@ class FakeLibrary:
         # /status/sessions: what's playing (each entry needs "User": {"id": ...}).
         self.now_playing: list[dict[str, Any]] = []
         self.rate_fails = False
+        # Playlists by key: {"token", "title", "summary", "items": [rating keys]}.
+        self.playlists: dict[int, dict[str, Any]] = {}
+        self.next_playlist = 9000
+        self.bulk_clear_supported = True
+        # /library/metadata/{key}/nearest (sonic analysis); missing keys give 404.
+        self.nearest: dict[int, list[int]] = {}
 
         for item in (
             _artist(100, "Radiohead", Guid=[{"id": "mbid://a74b1b7f"}]),
@@ -360,6 +366,78 @@ class FakeLibrary:
             },
         )
 
+    # --- playlists ----------------------------------------------------------------------
+
+    def _uri_keys(self, uri: str) -> list[int]:
+        match = re.fullmatch(
+            r"server://home-machine/com\.plexapp\.plugins\.library/library/metadata/([\d,]+)",
+            uri,
+        )
+        assert match, uri
+        return [int(k) for k in match.group(1).split(",")]
+
+    def playlists_create(self, request: httpx.Request) -> httpx.Response:
+        token = request.headers.get("X-Plex-Token", "")
+        if token not in SERVER_TOKENS:
+            return httpx.Response(401)
+        params = request.url.params
+        assert (params["type"], params["smart"]) == ("audio", "0")
+        self.next_playlist += 1
+        key = self.next_playlist
+        self.playlists[key] = {
+            "token": token,
+            "title": params["title"],
+            "summary": "",
+            "items": self._uri_keys(params["uri"]),
+        }
+        return httpx.Response(200, json={"MediaContainer": {"Metadata": [{"ratingKey": str(key)}]}})
+
+    def playlist_request(self, request: httpx.Request) -> httpx.Response:
+        token = request.headers.get("X-Plex-Token", "")
+        if token not in SERVER_TOKENS:
+            return httpx.Response(401)
+        parts = request.url.path.split("/")[2:]  # [key] | [key, "items"] | [key, "items", id]
+        playlist = self.playlists.get(int(parts[0]))
+        if playlist is None or playlist["token"] != token:
+            return httpx.Response(404)
+        key = int(parts[0])
+        if len(parts) == 1:
+            if request.method == "DELETE":
+                del self.playlists[key]
+            else:
+                playlist["title"] = request.url.params["title"]
+                playlist["summary"] = request.url.params.get("summary", "")
+            return httpx.Response(200)
+        if len(parts) == 3:
+            assert request.method == "DELETE"
+            index = int(parts[2]) - 1
+            playlist["items"][index] = None
+            return httpx.Response(200)
+        if request.method == "GET":
+            items = [
+                {"ratingKey": str(k), "playlistItemID": i + 1}
+                for i, k in enumerate(playlist["items"])
+                if k is not None
+            ]
+            return httpx.Response(200, json={"MediaContainer": {"Metadata": items}})
+        if request.method == "DELETE":
+            if not self.bulk_clear_supported:
+                return httpx.Response(400)
+            playlist["items"] = []
+            return httpx.Response(200)
+        playlist["items"] = [k for k in playlist["items"] if k is not None]
+        playlist["items"] += self._uri_keys(request.url.params["uri"])
+        return httpx.Response(200)
+
+    def nearest_request(self, request: httpx.Request) -> httpx.Response:
+        if request.headers.get("X-Plex-Token") not in SERVER_TOKENS:
+            return httpx.Response(401)
+        key = int(request.url.path.split("/")[3])
+        if key not in self.nearest:
+            return httpx.Response(404)
+        found = [self.items[k] for k in self.nearest[key]]
+        return httpx.Response(200, json={"MediaContainer": {"Metadata": found}})
+
     def photo(self, request: httpx.Request) -> httpx.Response:
         if request.headers.get("X-Plex-Token") not in SERVER_TOKENS:
             return httpx.Response(401)
@@ -399,6 +477,13 @@ class FakePlex:
             side_effect=self.library.poster_request
         )
         router.get(f"{SERVER_URI}/status/sessions").mock(side_effect=self.library.sessions_list)
+        router.post(f"{SERVER_URI}/playlists").mock(side_effect=self.library.playlists_create)
+        router.route(url__regex=rf"{re.escape(SERVER_URI)}/playlists/\d+").mock(
+            side_effect=self.library.playlist_request
+        )
+        router.get(url__regex=rf"{re.escape(SERVER_URI)}/library/metadata/\d+/nearest").mock(
+            side_effect=self.library.nearest_request
+        )
         router.get(f"{SERVER_URI}/status/sessions/history/all").mock(
             side_effect=self.library.history_list
         )

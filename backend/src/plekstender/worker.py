@@ -24,6 +24,7 @@ from plekstender.db.models import (
     ArtworkJob,
     ListenBrainzLink,
     ListenImport,
+    Playlist,
     PlexServer,
     SyncRun,
     UserSectionSync,
@@ -36,6 +37,7 @@ from plekstender.history.listenbrainz import submit_pending
 from plekstender.history.listenbrainz_import import run_listenbrainz_import
 from plekstender.history.plex_capture import capture_plays
 from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
+from plekstender.playlists.service import build as build_playlist_in_plex
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
@@ -380,6 +382,55 @@ async def enqueue_artwork_job(job: ArtworkJob) -> None:
         pass
 
 
+# --- playlists ----------------------------------------------------------------------------
+
+
+@app.task(queue="playlists")
+async def build_playlist(playlist_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await build_playlist_in_plex(db, http, get_settings(), playlist_id)
+
+
+async def enqueue_playlist_build(playlist: Playlist) -> None:
+    """Queue a rebuild. One build per user's server at a time, so Plex isn't flooded."""
+    try:
+        await build_playlist.configure(
+            lock=f"playlists-us-{playlist.user_server_id}",
+            queueing_lock=f"playlist-{playlist.id}",
+        ).defer_async(playlist_id=playlist.id)
+    except AlreadyEnqueued:
+        pass
+
+
+async def schedule_due_playlists(now: dt.datetime | None = None) -> int:
+    now = now or dt.datetime.now(dt.UTC)
+    async with get_sessionmaker()() as db:
+        due = list(
+            await db.scalars(
+                select(Playlist).where(
+                    Playlist.schedule != "manual",
+                    Playlist.next_run_at <= now,
+                    Playlist.status.not_in(ACTIVE),
+                )
+            )
+        )
+        for playlist in due:
+            playlist.status = "queued"
+        await db.commit()
+    for playlist in due:
+        await enqueue_playlist_build(playlist)
+    return len(due)
+
+
+@app.periodic(cron="*/10 * * * *", periodic_id="refresh-playlists")
+@app.task(queue="maintenance", queueing_lock="refresh-playlists")
+async def refresh_playlists(timestamp: int) -> None:
+    await schedule_due_playlists()
+
+
 # --- housekeeping --------------------------------------------------------------------
 
 
@@ -412,6 +463,14 @@ async def cleanup_sessions(timestamp: int) -> None:
                 ListenImport.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
             )
             .values(status="failed", error="Interrupted (the worker stopped). Resume to continue.")
+        )
+        await db.execute(
+            update(Playlist)
+            .where(
+                Playlist.status == "running",
+                Playlist.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
+            )
+            .values(status="error", error="Interrupted (the worker stopped). Build it again.")
         )
         await db.execute(
             update(ArtworkJob)

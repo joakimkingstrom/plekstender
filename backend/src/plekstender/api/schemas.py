@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from plekstender.config import AccessMode
+from plekstender.playlists.definition import Definition
 
 
 class Preferences(BaseModel):
@@ -639,3 +640,81 @@ class SkipsOut(BaseModel):
     threshold: int = Field(description="Percent heard below which a play counts as skipped.")
     watching: bool = Field(description="Whether any plays have been seen live yet.")
     items: list[SkippedItemOut]
+
+
+# --- smart playlists ---------------------------------------------------------------------
+
+Schedule = Literal["manual", "daily", "weekly", "monthly"]
+
+
+class SeedArtist(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+
+
+class SeedTrack(BaseModel):
+    rating_key: int
+    title: str
+    artist: str | None
+    thumb: str | None
+
+
+class PlaylistSearchOut(BaseModel):
+    artists: list[SeedArtist]
+    tracks: list[SeedTrack]
+
+
+class PlaylistSuggestionsOut(BaseModel):
+    similar: list[SeedArtist] = Field(description="Plex's similar artists, in your library.")
+    sonic_artists: list[SeedArtist] = Field(description="Sonically similar (Plex Pass analysis).")
+    sonic_tracks: list[SeedTrack]
+
+
+class PlaylistSong(BaseModel):
+    rating_key: int
+    title: str
+    artist: str | None
+    artist_key: int | None
+    album: str | None
+    thumb: str | None
+    duration_ms: int | None
+    rating: float | None
+
+
+class PlaylistPreviewOut(BaseModel):
+    matched: int = Field(description="Songs matching, before the limit.")
+    count: int
+    duration_ms: int
+    artists: int
+    top_artists: list[str]
+    songs: list[PlaylistSong] = Field(description="Up to 100 of the songs, in playlist order.")
+
+
+class PlaylistIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    definition: Definition
+    display: dict[str, Any] = Field(default_factory=dict)
+    schedule: Schedule = "manual"
+
+
+class PlaylistOut(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    definition: dict[str, Any]
+    display: dict[str, Any]
+    schedule: Schedule
+    plex_playlist_key: int | None
+    status: Literal["new", "queued", "running", "ok", "error"]
+    error: str | None
+    last_result: dict[str, Any]
+    last_built_at: dt.datetime | None
+    next_run_at: dt.datetime | None
+    created_at: dt.datetime
+
+
+class PlaylistDetail(PlaylistOut):
+    seed_artists: list[SeedArtist]
+    seed_tracks: list[SeedTrack]

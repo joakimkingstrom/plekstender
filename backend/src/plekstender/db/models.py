@@ -544,3 +544,33 @@ class PlaySession(Base):
     address: Mapped[str | None] = mapped_column(String(64))
     network: Mapped[str | None] = mapped_column(String(8))
     location: Mapped[str | None] = mapped_column(Text)
+
+
+class Playlist(Base):
+    """A smart playlist: a definition (see plekstender.playlists.definition) that the worker
+    turns into a regular Plex playlist under the user's own account, and can rebuild."""
+
+    __tablename__ = "playlists"
+    __table_args__ = (
+        Index("ix_playlists_user_server", "user_server_id"),
+        Index("ix_playlists_next_run", "next_run_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_server_id: Mapped[int] = mapped_column(ForeignKey("user_servers.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text)
+    definition: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    # How the builder page shows the definition (chosen genres, names), not used to build.
+    display: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    schedule: Mapped[str] = mapped_column(
+        String(16), default="manual"
+    )  # manual|daily|weekly|monthly
+    plex_playlist_key: Mapped[int | None] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(16), default="new")  # new|queued|running|ok|error
+    error: Mapped[str | None] = mapped_column(Text)
+    last_result: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    last_built_at: Mapped[dt.datetime | None]
+    next_run_at: Mapped[dt.datetime | None]
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
