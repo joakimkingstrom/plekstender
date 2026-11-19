@@ -6,9 +6,8 @@ import { Navigate, NavLink, Outlet } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useLibrarySettings, useMe, usePopularityPreview, useSetPreferences, useUpdateLibrarySettings } from '../api/hooks'
 import { useActiveServer } from '../api/library'
-import { useEditFonts, useFanartKey, useFonts, useSetFanartKey, type FontGroupName } from '../api/artwork'
+import { fontPreviewUrl, useEditFonts, useFanartKey, useFontCatalogue, useFonts, useSetFanartKey, type FontGroupName } from '../api/artwork'
 import { Segmented } from '../components/Segmented'
-import { Select } from '../components/Select'
 import { FolderSettings } from '../components/FolderSettings'
 import { ScanCard } from '../components/MusicFiles'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
@@ -125,13 +124,37 @@ export function LibrarySettingsPage() {
 }
 
 const FONT_GROUPS: FontGroupName[] = ['Sans serif', 'Serif', 'Display', 'Handwriting', 'Monospace']
+const CATALOGUE_PAGE = 24
+
+/** A font's preview (its name, or the preview text, drawn in it). */
+function FontPreview({ family, text, className = 'h-7' }: { family: string; text: string; className?: string }) {
+  const src = fontPreviewUrl(family, text)
+  // Which preview failed (e.g. Google unreachable): the name in plain text instead.
+  const [failed, setFailed] = useState<string | null>(null)
+  if (failed === src)
+    return (
+      <span className={`flex items-center text-sm ${className}`} title="No preview">
+        {text.trim() || family}
+      </span>
+    )
+  return (
+    <img
+      src={src}
+      alt={`${text.trim() || family} in ${family}`}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(src)}
+      className={`font-preview max-w-full object-contain object-left ${className}`}
+    />
+  )
+}
 
 export function FontsCard() {
   const fonts = useFonts()
   const { add, remove, reset } = useEditFonts()
-  const [name, setName] = useState('')
-  const [group, setGroup] = useState<FontGroupName>('Display')
+  const [sample, setSample] = useState('')
   const error = add.error ?? remove.error ?? reset.error
+  const total = (fonts.data ?? []).reduce((n, g) => n + g.fonts.length, 0)
   return (
     <Card
       title="Text logo fonts"
@@ -147,79 +170,158 @@ export function FontsCard() {
         </Button>
       }
     >
-      <div className="space-y-4 text-sm">
+      <div className="space-y-5 text-sm">
         <p className="text-muted">
-          The fonts the Artwork page offers for text logos. Any family on{' '}
-          <a href="https://fonts.google.com" target="_blank" rel="noreferrer" className="text-accent underline">
-            fonts.google.com
-          </a>{' '}
-          can be added by its name; it's downloaded the first time someone uses it.
+          The fonts the Artwork page offers for text logos. Browse Google Fonts below to add more; each is downloaded the
+          first time someone uses it.
         </p>
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (name.trim()) add.mutate({ name: name.trim(), group }, { onSuccess: () => setName('') })
-          }}
-        >
-          <label className="min-w-0 flex-1 basis-48">
-            <span className="mb-1 block font-medium">Font name</span>
-            <input
-              value={name}
-              maxLength={64}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Bungee Shade"
-              className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-            />
-          </label>
-          <Select
-            label="Group"
-            value={group}
-            onChange={setGroup}
-            options={FONT_GROUPS.map((g) => ({ value: g, label: g }))}
+        <label className="block max-w-md">
+          <span className="mb-1 block font-medium">Preview with</span>
+          <input
+            value={sample}
+            maxLength={40}
+            onChange={(e) => setSample(e.target.value)}
+            placeholder="Each font's name (or type an artist)"
+            className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
           />
-          <Button type="submit" variant="primary" disabled={!name.trim()} busy={add.isPending}>
-            Check and add
-          </Button>
-        </form>
+        </label>
         {error && <Notice tone="error">{errorMessage(error)}</Notice>}
-        {fonts.isPending ? (
-          <Spinner small />
-        ) : fonts.isError ? (
-          <Notice tone="error">{errorMessage(fonts.error)}</Notice>
-        ) : (
-          <div className="gap-6 sm:columns-2 lg:columns-3">
-            {fonts.data.map((g) => (
-              <div key={g.name} className="mb-5 break-inside-avoid">
-                <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
-                  {g.name} <span className="font-normal">({g.fonts.length})</span>
-                </h3>
-                <ul className="flex flex-wrap gap-1.5">
-                  {g.fonts.map((f) => (
-                    <li
-                      key={f}
-                      className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-2 py-0.5 pl-2.5 pr-0.5 text-xs"
-                    >
-                      {f}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${f}`}
-                        disabled={remove.isPending}
-                        onClick={() => remove.mutate(f)}
-                        className="flex size-5 items-center justify-center rounded-full text-muted hover:bg-border hover:text-text"
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                  {g.fonts.length === 0 && <li className="text-xs text-muted">None</li>}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
+
+        <section aria-labelledby="offered-fonts">
+          <h3 id="offered-fonts" className="mb-2 font-semibold">
+            Offered <span className="font-normal text-muted">({total})</span>
+          </h3>
+          {fonts.isPending ? (
+            <Spinner small />
+          ) : fonts.isError ? (
+            <Notice tone="error">{errorMessage(fonts.error)}</Notice>
+          ) : (
+            <div className="gap-6 sm:columns-2 lg:columns-3">
+              {fonts.data.map((g) => (
+                <div key={g.name} className="mb-5 break-inside-avoid">
+                  <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
+                    {g.name} <span className="font-normal">({g.fonts.length})</span>
+                  </h4>
+                  <ul className="space-y-1">
+                    {g.fonts.map((f) => (
+                      <li key={f} className="group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-surface-2">
+                        <div className="min-w-0 flex-1">
+                          <FontPreview family={f} text={sample} />
+                          {sample.trim() && <span className="block text-[11px] text-muted">{f}</span>}
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${f}`}
+                          disabled={remove.isPending}
+                          onClick={() => remove.mutate(f)}
+                          className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted hover:bg-border hover:text-text"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                    {g.fonts.length === 0 && <li className="px-2 text-xs text-muted">None</li>}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <FontBrowser sample={sample} onAdd={(name) => add.mutate(name)} adding={add.isPending ? add.variables : null} />
       </div>
     </Card>
+  )
+}
+
+/** Browse Google Fonts (most used first) and add fonts; their group comes from Google. */
+function FontBrowser({ sample, onAdd, adding }: { sample: string; onAdd: (name: string) => void; adding: string | null | undefined }) {
+  const [q, setQ] = useState('')
+  const [group, setGroup] = useState<FontGroupName | null>(null)
+  const [limit, setLimit] = useState(CATALOGUE_PAGE)
+  const query = useDeferredValue(q.trim())
+  const page = useFontCatalogue(query, group, limit)
+  const chip = (active: boolean) =>
+    `rounded-full px-3 py-1 text-xs font-medium ${active ? 'bg-accent text-on-accent' : 'bg-surface-2 text-muted hover:text-text'}`
+
+  return (
+    <section aria-labelledby="add-fonts" className="space-y-3 border-t border-border pt-4">
+      <h3 id="add-fonts" className="font-semibold">
+        Add from Google Fonts
+      </h3>
+      <input
+        type="search"
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value)
+          setLimit(CATALOGUE_PAGE)
+        }}
+        placeholder="Search fonts, e.g. roboto"
+        aria-label="Search Google Fonts"
+        className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+      />
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Font group">
+        {[null, ...FONT_GROUPS].map((g) => (
+          <button
+            key={g ?? 'all'}
+            type="button"
+            aria-pressed={group === g}
+            onClick={() => {
+              setGroup(g)
+              setLimit(CATALOGUE_PAGE)
+            }}
+            className={chip(group === g)}
+          >
+            {g ?? 'All'}
+          </button>
+        ))}
+      </div>
+      {page.isPending ? (
+        <Spinner small />
+      ) : page.isError ? (
+        <Notice tone="error">{errorMessage(page.error)}</Notice>
+      ) : !page.data.available ? (
+        <Notice tone="warn">Google Fonts couldn't be reached. Try again in a while.</Notice>
+      ) : page.data.items.length === 0 ? (
+        <p className="text-muted">No Google Fonts match “{query}”.</p>
+      ) : (
+        <>
+          <ul className={`grid gap-2 sm:grid-cols-2 lg:grid-cols-3 ${page.isPlaceholderData ? 'opacity-60' : ''}`}>
+            {page.data.items.map((f) => (
+              <li key={f.name} className="flex items-center gap-3 rounded-xl border border-border p-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <FontPreview family={f.name} text={sample} className="h-8" />
+                  <p className="truncate text-xs text-muted">
+                    {f.name} · {f.group}
+                  </p>
+                </div>
+                {f.offered ? (
+                  <span className="shrink-0 text-xs text-ok">Added ✓</span>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    className="shrink-0 px-3 py-1.5 text-xs"
+                    busy={adding === f.name}
+                    onClick={() => onAdd(f.name)}
+                    aria-label={`Add ${f.name}`}
+                  >
+                    Add
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted">
+            {formatCompact(page.data.total)} fonts{query || group ? ' match' : ''}, most used first.
+          </p>
+          {page.data.items.length < page.data.total && (
+            <Button variant="ghost" busy={page.isFetching} onClick={() => setLimit((n) => n + CATALOGUE_PAGE)}>
+              Show more
+            </Button>
+          )}
+        </>
+      )}
+    </section>
   )
 }
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import re
 from pathlib import Path
@@ -81,11 +82,13 @@ def _store(path: Path, data: bytes) -> None:
     tmp.replace(path)
 
 
-async def _font_url(http: httpx.AsyncClient, font: str) -> str:
-    """The URL of the font's regular TTF, from the Google Fonts CSS API."""
+async def _font_url(http: httpx.AsyncClient, font: str, weight: int = 400) -> str:
+    """The URL of the font's TTF (regular, or `weight` for families without one), from the
+    Google Fonts CSS API."""
+    family = font if weight == 400 else f"{font}:wght@{weight}"
     try:
         # Without a browser User-Agent, Google serves TrueType (which FreeType reads).
-        css = await http.get(GOOGLE_CSS, params={"family": font}, timeout=20)
+        css = await http.get(GOOGLE_CSS, params={"family": family}, timeout=20)
     except httpx.HTTPError as exc:
         raise FontError("Google Fonts couldn't be reached; try again.") from exc
     if css.status_code == 400:
@@ -105,7 +108,7 @@ async def check_font(http: httpx.AsyncClient, font: str) -> None:
     await _font_url(http, font)
 
 
-async def font_path(http: httpx.AsyncClient, fonts_dir: Path, font: str) -> Path:
+async def font_path(http: httpx.AsyncClient, fonts_dir: Path, font: str, weight: int = 400) -> Path:
     """The font's TTF, downloaded from Google Fonts the first time it's used."""
     if not FONT_NAME.match(font):
         raise FontError(f"invalid font name {font!r}")
@@ -115,7 +118,16 @@ async def font_path(http: httpx.AsyncClient, fonts_dir: Path, font: str) -> Path
     async with _locks.setdefault(font, asyncio.Lock()):
         if await asyncio.to_thread(path.exists):
             return path
-        url = await _font_url(http, font)
+        try:
+            url = await _font_url(http, font, weight)
+        except FontError:
+            # A few families have no regular weight: the catalogue says which they have.
+            from plekstender.artwork.catalogue import find
+
+            known = await find(http, fonts_dir, font)
+            if known is None or known.weight == weight:
+                raise
+            url = await _font_url(http, font, known.weight)
         try:
             data = await http.get(url, timeout=30)
             data.raise_for_status()
@@ -156,3 +168,26 @@ def render_text(spec: TextLogo, font_file: Path) -> Image.Image:
         combined.paste(img, ((width - img.width) // 2, y), img)
         y += img.height + LINE_GAP
     return combined
+
+
+PREVIEW_SIZE = 72
+PREVIEW_MAX_WIDTH = 1400
+
+
+def render_preview(font_file: Path, text: str, colour: str) -> bytes:
+    """A line of text in the font (a transparent PNG, cropped to the text), for previews."""
+    try:
+        font = ImageFont.truetype(str(font_file), PREVIEW_SIZE)
+    except OSError as exc:
+        raise FontError("The font couldn't be read.") from exc
+    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    left, top, right, bottom = probe.textbbox((0, 0), text, font=font)
+    width, height = max(1, int(right - left)), max(1, int(bottom - top))
+    pad = 6
+    img = Image.new("RGBA", (width + 2 * pad, height + 2 * pad))
+    ImageDraw.Draw(img).text((pad - left, pad - top), text, font=font, fill=(*hex_rgb(colour), 255))
+    if img.width > PREVIEW_MAX_WIDTH:
+        img = img.crop((0, 0, PREVIEW_MAX_WIDTH, img.height))
+    out = io.BytesIO()
+    img.save(out, "PNG", optimize=True)
+    return out.getvalue()

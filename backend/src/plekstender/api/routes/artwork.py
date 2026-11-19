@@ -46,7 +46,10 @@ from plekstender.api.schemas import (
 )
 from plekstender.artwork import images, packs
 from plekstender.artwork import service as art
+from plekstender.artwork.catalogue import find
 from plekstender.artwork.images import ImageError, Transform
+from plekstender.artwork.text import FontError, render_preview
+from plekstender.artwork.text import font_path as font_file
 from plekstender.db.instance import get_fonts
 from plekstender.db.models import (
     Artist,
@@ -99,6 +102,47 @@ def artwork_error(exc: art.ArtworkError) -> HTTPException:
 async def fonts(db: DbDep, _: UserDep) -> list[FontGroup]:
     """The fonts the text logo offers (an admin setting)."""
     return [FontGroup(name=name, fonts=names) for name, names in (await get_fonts(db)).items()]
+
+
+@fonts_router.get(
+    "/fonts/preview.png",
+    response_class=RawResponse,
+    responses={200: {"content": {"image/png": {}}}},
+    dependencies=[rate_limit("font-preview", limit=600, window=60)],
+)
+async def font_preview(
+    db: DbDep,
+    _: UserDep,
+    http: HttpDep,
+    settings: SettingsDep,
+    family: Annotated[str, Query(min_length=1, max_length=64)],
+    text: Annotated[str | None, Query(max_length=40)] = None,
+    ink: Literal["light", "dark"] = "dark",
+) -> RawResponse:
+    """A line of text in a font (the family's name by default), for previews. Only fonts
+    offered here or in the Google Fonts catalogue."""
+    fonts_dir = settings.data_dir / "fonts"
+    offered = {n for names in (await get_fonts(db)).values() for n in names}
+    weight = 400
+    if family not in offered:
+        known = await find(http, fonts_dir, family)
+        if known is None or known.name != family:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown font")
+        weight = known.weight
+    try:
+        path = await font_file(http, fonts_dir, family, weight)
+        png = await asyncio.to_thread(
+            render_preview, path, (text or family).strip() or family, INK[ink]
+        )
+    except FontError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return RawResponse(
+        png, media_type="image/png", headers={"Cache-Control": "private, max-age=604800"}
+    )
+
+
+# Preview text colours: for light and dark backgrounds (the brand's ink colours).
+INK = {"dark": "#1c1d21", "light": "#f1efe9"}
 
 
 async def check_text_font(db: AsyncSession, source: art.SourceSpec) -> None:

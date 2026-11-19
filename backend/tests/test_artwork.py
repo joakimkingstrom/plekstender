@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 from typing import Any
 
 import httpx
@@ -341,7 +342,7 @@ async def test_text_logo_preview(
     monkeypatch.setattr(text.ImageFont, "truetype", lambda *_a, **_k: bundled)
 
     def google_css(request: httpx.Request) -> httpx.Response:
-        if request.url.params["family"] == "Not A Real Font":
+        if request.url.params["family"] in ("Not A Real Font", "Buda"):
             return httpx.Response(400, text="Font family not found")
         return httpx.Response(
             200,
@@ -370,26 +371,82 @@ async def test_text_logo_preview(
     fonts = (await owner.get("/api/artwork/fonts")).json()
     assert "Anton" in next(g["fonts"] for g in fonts if g["name"] == "Sans serif")
 
-    # Admins choose the fonts: added ones are checked with Google Fonts.
+    # Admins choose the fonts, from Google Fonts' catalogue: any capitals, and the group
+    # comes from the catalogue.
     def group(fonts: list[dict[str, Any]], name: str) -> list[str]:
         return next(g["fonts"] for g in fonts if g["name"] == name)
 
-    resp = await owner.post(
-        "/api/admin/fonts", json={"name": "Not A Real Font", "group": "Display"}, headers=CSRF
+    def family(
+        name: str, category: str, popularity: int, weights: tuple[str, ...] = ("400",)
+    ) -> dict[str, Any]:
+        return {
+            "family": name,
+            "category": category,
+            "popularity": popularity,
+            "subsets": ["latin"],
+            "fonts": {w: {} for w in weights},
+        }
+
+    catalogue_route = web.get("https://fonts.google.com/metadata/fonts").mock(
+        return_value=httpx.Response(
+            200,
+            text=")]}'\n"
+            + json.dumps(
+                {
+                    "familyMetadataList": [
+                        family("Roboto", "Sans Serif", 1),
+                        family("Bungee Shade", "Display", 300),
+                        family("Buda", "Display", 900, ("300",)),
+                        family("Anton", "Sans Serif", 40),
+                        {**family("Noto Sans JP", "Sans Serif", 5), "subsets": ["japanese"]},
+                    ]
+                }
+            ),
+        )
     )
+    resp = await owner.post("/api/admin/fonts", json={"name": "Not A Real Font"}, headers=CSRF)
     assert resp.status_code == 400
     assert "no font called" in resp.json()["detail"]
-    resp = await owner.post(
-        "/api/admin/fonts", json={"name": " Bungee  Shade", "group": "Display"}, headers=CSRF
-    )
+    resp = await owner.post("/api/admin/fonts", json={"name": " roboto "}, headers=CSRF)
     assert resp.status_code == 200, resp.text
+    assert "Roboto" in group(resp.json(), "Sans serif")  # its exact name, in its group
+    resp = await owner.post("/api/admin/fonts", json={"name": "bungee  SHADE"}, headers=CSRF)
     assert "Bungee Shade" in group(resp.json(), "Display")
-    again = await owner.post(
-        "/api/admin/fonts", json={"name": "bungee shade", "group": "Serif"}, headers=CSRF
-    )
+    again = await owner.post("/api/admin/fonts", json={"name": "Bungee Shade"}, headers=CSRF)
     assert again.status_code == 409
+
+    # Browsing: most used first, Latin fonts only, what's offered marked.
+    page = (await owner.get("/api/admin/fonts/catalogue")).json()
+    assert [(f["name"], f["offered"]) for f in page["items"]] == [
+        ("Roboto", True),
+        ("Anton", True),
+        ("Bungee Shade", True),
+        ("Buda", False),
+    ]
+    display = (
+        await owner.get("/api/admin/fonts/catalogue", params={"group": "Display", "q": "bu"})
+    ).json()
+    assert [f["name"] for f in display["items"]] == ["Bungee Shade", "Buda"]
+    assert catalogue_route.call_count == 1  # fetched once, then kept
+
+    # Previews: a line in the font, for offered fonts and catalogue ones.
+    preview = await owner.get(
+        "/api/artwork/fonts/preview.png", params={"family": "Anton", "ink": "light"}
+    )
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/png"
+    assert Image.open(io.BytesIO(preview.content)).mode == "RGBA"
+    buda = await owner.get(
+        "/api/artwork/fonts/preview.png", params={"family": "Buda", "text": "Radiohead"}
+    )
+    assert buda.status_code == 200
+    # Buda has no regular weight: its 300 was asked for.
+    assert any(call.request.url.params.get("family") == "Buda:wght@300" for call in web.calls)
+    unknown = await owner.get("/api/artwork/fonts/preview.png", params={"family": "Comic Sans"})
+    assert unknown.status_code == 404
+
     resp = await owner.delete("/api/admin/fonts/Anton", headers=CSRF)
-    assert group(resp.json(), "Sans serif") == ["Raleway"]
+    assert group(resp.json(), "Sans serif") == ["Raleway", "Roboto"]
     assert group((await owner.get("/api/artwork/fonts")).json(), "Display")[0] == "Allerta Stencil"
     refused = await owner.post(
         f"/api/servers/{sid}/artwork/artists/100/preview", json=body, headers=CSRF

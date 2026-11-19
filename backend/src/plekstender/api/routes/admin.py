@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
@@ -14,14 +16,18 @@ from plekstender.api.schemas import (
     AdminServerOut,
     AdminUserIn,
     AdminUserOut,
+    CatalogueFont,
+    CataloguePage,
     FanartKeyIn,
     FanartKeyOut,
     FontGroup,
+    FontGroupName,
     FontIn,
     LastFmKeyIn,
     LastFmKeyOut,
     PopularityPreviewItem,
 )
+from plekstender.artwork.catalogue import catalogue, find
 from plekstender.artwork.sources import SourceError, fanart_logos
 from plekstender.artwork.text import FontError, check_font
 from plekstender.db.instance import (
@@ -248,18 +254,63 @@ async def _font_groups(db: DbDep) -> list[FontGroup]:
     return [FontGroup(name=name, fonts=names) for name, names in (await get_fonts(db)).items()]
 
 
+@router.get("/fonts/catalogue", response_model=CataloguePage)
+async def font_catalogue(
+    db: DbDep,
+    _: AdminDep,
+    http: HttpDep,
+    settings: SettingsDep,
+    q: Annotated[str, Query(max_length=64)] = "",
+    group: FontGroupName | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 24,
+) -> CataloguePage:
+    """Browse Google Fonts (most used first), to add fonts for text logos."""
+    families = await catalogue(http, settings.data_dir / "fonts")
+    offered = {n.casefold() for names in (await get_fonts(db)).values() for n in names}
+    wanted = " ".join(q.split()).casefold()
+    matches = [
+        f
+        for f in families
+        if (not wanted or wanted in f.name.casefold()) and (group is None or f.group == group)
+    ]
+    # An exact name first, then the most used.
+    matches.sort(key=lambda f: (f.name.casefold() != wanted, f.popularity))
+    return CataloguePage(
+        items=[
+            CatalogueFont(name=f.name, group=f.group, offered=f.name.casefold() in offered)
+            for f in matches[offset : offset + limit]
+        ],
+        total=len(matches),
+        available=bool(families),
+    )
+
+
 @router.post("/fonts", response_model=list[FontGroup])
-async def add_font(body: FontIn, db: DbDep, _: AdminDep, http: HttpDep) -> list[FontGroup]:
-    """Offer another Google Fonts family for text logos (checked with Google Fonts)."""
+async def add_font(
+    body: FontIn, db: DbDep, _: AdminDep, http: HttpDep, settings: SettingsDep
+) -> list[FontGroup]:
+    """Offer another Google Fonts family for text logos. The name may use any capitals:
+    the catalogue gives the family's exact name and its group."""
     name = " ".join(body.name.split())
+    family = await find(http, settings.data_dir / "fonts", name)
+    if family is not None:
+        name, group = family.name, family.group
+    elif await catalogue(http, settings.data_dir / "fonts"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"Google Fonts has no font called {name!r}."
+        )
+    else:
+        # No catalogue (Google unreachable): ask the CSS API (exact name needed then).
+        try:
+            await check_font(http, name)
+        except FontError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        group = body.group or "Display"
     groups = await get_fonts(db)
-    if any(name.lower() == n.lower() for names in groups.values() for n in names):
+    if any(name.casefold() == n.casefold() for names in groups.values() for n in names):
         raise HTTPException(status.HTTP_409_CONFLICT, f"{name} is already in the list.")
-    try:
-        await check_font(http, name)
-    except FontError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    groups[body.group] = sorted([*groups[body.group], name])
+    groups[group] = sorted([*groups[group], name])
     await set_fonts(db, groups)
     await db.commit()
     return await _font_groups(db)

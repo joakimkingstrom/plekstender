@@ -66,7 +66,7 @@ export function useEditFonts() {
   const qc = useQueryClient()
   const onSuccess = (data: Schemas['FontGroup'][]) => qc.setQueryData(artworkKeys.fonts, data)
   const add = useMutation({
-    mutationFn: (body: { name: string; group: FontGroupName }) => unwrap(api.POST('/api/admin/fonts', { body })),
+    mutationFn: (name: string) => unwrap(api.POST('/api/admin/fonts', { body: { name } })),
     onSuccess,
   })
   const remove = useMutation({
@@ -75,6 +75,29 @@ export function useEditFonts() {
   })
   const reset = useMutation({ mutationFn: () => unwrap(api.DELETE('/api/admin/fonts')), onSuccess })
   return { add, remove, reset }
+}
+
+/** Google Fonts to choose from (admins): most used first, filtered by name and group. */
+export function useFontCatalogue(q: string, group: FontGroupName | null, limit: number) {
+  return useQuery({
+    queryKey: ['admin', 'font-catalogue', q, group, limit],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/admin/fonts/catalogue', {
+          params: { query: { q: q || undefined, group: group ?? undefined, limit } },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  })
+}
+
+/** A line of text in a font, as an image (dark ink; the .font-preview class lightens it in
+ * the dark theme). */
+export function fontPreviewUrl(family: string, text?: string) {
+  const params = new URLSearchParams({ family })
+  if (text?.trim()) params.set('text', text.trim().slice(0, 40))
+  return `/api/artwork/fonts/preview.png?${params}`
 }
 
 export function useSetArtworkStatus(serverId: number) {

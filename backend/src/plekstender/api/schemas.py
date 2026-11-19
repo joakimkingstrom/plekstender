@@ -576,9 +576,30 @@ class FontGroup(BaseModel):
     fonts: list[str]
 
 
+FontGroupName = Literal["Sans serif", "Serif", "Display", "Handwriting", "Monospace"]
+
+
 class FontIn(BaseModel):
-    name: str = Field(min_length=1, max_length=64, description="As on fonts.google.com.")
-    group: Literal["Sans serif", "Serif", "Display", "Handwriting", "Monospace"]
+    name: str = Field(
+        min_length=1, max_length=64, description="A Google Fonts family, any capitals."
+    )
+    group: FontGroupName | None = Field(
+        default=None,
+        description="Only needed when the Google Fonts catalogue can't be reached "
+        "(otherwise it comes from the catalogue).",
+    )
+
+
+class CatalogueFont(BaseModel):
+    name: str
+    group: FontGroupName
+    offered: bool = Field(description="Already in the list.")
+
+
+class CataloguePage(BaseModel):
+    items: list[CatalogueFont]
+    total: int
+    available: bool = Field(description="False when Google Fonts couldn't be reached.")
 
 
 class FanartKeyOut(BaseModel):

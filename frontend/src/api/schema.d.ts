@@ -1529,6 +1529,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/fonts/catalogue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Font Catalogue
+         * @description Browse Google Fonts (most used first), to add fonts for text logos.
+         */
+        get: operations["font_catalogue_api_admin_fonts_catalogue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/fonts": {
         parameters: {
             query?: never;
@@ -1540,7 +1560,8 @@ export interface paths {
         put?: never;
         /**
          * Add Font
-         * @description Offer another Google Fonts family for text logos (checked with Google Fonts).
+         * @description Offer another Google Fonts family for text logos. The name may use any capitals:
+         *     the catalogue gives the family's exact name and its group.
          */
         post: operations["add_font_api_admin_fonts_post"];
         /**
@@ -1582,6 +1603,27 @@ export interface paths {
          * @description The fonts the text logo offers (an admin setting).
          */
         get: operations["fonts_api_artwork_fonts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/artwork/fonts/preview.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Font Preview
+         * @description A line of text in a font (the family's name by default), for previews. Only fonts
+         *     offered here or in the Google Fonts catalogue.
+         */
+        get: operations["font_preview_api_artwork_fonts_preview_png_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2028,6 +2070,33 @@ export interface components {
             /** Note */
             note: string | null;
         };
+        /** CatalogueFont */
+        CatalogueFont: {
+            /** Name */
+            name: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "Sans serif" | "Serif" | "Display" | "Handwriting" | "Monospace";
+            /**
+             * Offered
+             * @description Already in the list.
+             */
+            offered: boolean;
+        };
+        /** CataloguePage */
+        CataloguePage: {
+            /** Items */
+            items: components["schemas"]["CatalogueFont"][];
+            /** Total */
+            total: number;
+            /**
+             * Available
+             * @description False when Google Fonts couldn't be reached.
+             */
+            available: boolean;
+        };
         /** CityListensOut */
         CityListensOut: {
             /** Name */
@@ -2220,14 +2289,14 @@ export interface components {
         FontIn: {
             /**
              * Name
-             * @description As on fonts.google.com.
+             * @description A Google Fonts family, any capitals.
              */
             name: string;
             /**
              * Group
-             * @enum {string}
+             * @description Only needed when the Google Fonts catalogue can't be reached (otherwise it comes from the catalogue).
              */
-            group: "Sans serif" | "Serif" | "Display" | "Handwriting" | "Monospace";
+            group?: ("Sans serif" | "Serif" | "Display" | "Handwriting" | "Monospace") | null;
         };
         /** GameCheckIn */
         GameCheckIn: {
@@ -6732,6 +6801,40 @@ export interface operations {
             };
         };
     };
+    font_catalogue_api_admin_fonts_catalogue_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                group?: ("Sans serif" | "Serif" | "Display" | "Handwriting" | "Monospace") | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CataloguePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     add_font_api_admin_fonts_post: {
         parameters: {
             query?: never;
@@ -6832,6 +6935,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FontGroup"][];
+                };
+            };
+        };
+    };
+    font_preview_api_artwork_fonts_preview_png_get: {
+        parameters: {
+            query: {
+                family: string;
+                text?: string | null;
+                ink?: "light" | "dark";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
