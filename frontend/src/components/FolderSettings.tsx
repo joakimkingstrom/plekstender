@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useFolderSettings, useSetFolderSettings } from '../api/artwork'
 import { errorMessage } from '../api/client'
-import { Button, Card, Notice } from './ui'
+import { Button, Card, Notice, Spinner } from './ui'
 
 /** Also save finished images as artist.jpg in each artist folder (server owners). */
 export function FolderSettings({ serverId }: { serverId: number }) {
@@ -25,8 +25,8 @@ export function FolderSettings({ serverId }: { serverId: number }) {
       <div className="space-y-3 text-sm">
         <p className="text-muted">
           Also writes <code>artist.jpg</code> into each artist's music folder, for other players. Mount your music
-          folder into Plekstender's containers read-write (see <code>compose.override.example.yaml</code>), then map
-          Plex's path to it.
+          folder read-write into the <strong>worker</strong> container (only the worker touches music files; see{' '}
+          <code>compose.override.example.yaml</code>), then map Plex's path to it.
         </p>
         <label className="block">
           <span className="mb-1 block font-medium">Music folder as Plex sees it</span>
@@ -51,7 +51,13 @@ export function FolderSettings({ serverId }: { serverId: number }) {
           )}
         </div>
         {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
-        {data.enabled && data.example && (
+        {data.enabled && data.checking && (
+          <p className="flex items-center gap-2 text-xs text-muted" role="status">
+            <Spinner small /> The worker is checking the folder…
+          </p>
+        )}
+        {data.enabled && !data.checking && data.problem && <Notice tone="error">{data.problem}</Notice>}
+        {data.enabled && !data.checking && data.example && (
           <p className={`text-xs ${data.example.problem ? 'text-danger' : 'text-muted'}`}>
             Check with {data.example.artist}:{' '}
             {data.example.problem ?? `${data.example.local_folder} ✓`}

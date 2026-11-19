@@ -1838,14 +1838,20 @@ export interface components {
             has_mbid: boolean;
             /**
              * Folder
-             * @description Apply: where artist.jpg was saved.
+             * @description Where artist.jpg was last saved.
              */
             folder?: string | null;
             /**
              * Folder Error
-             * @description Apply: why it wasn't saved.
+             * @description Why artist.jpg wasn't saved, the last time.
              */
             folder_error?: string | null;
+            /**
+             * Folder Queued
+             * @description Apply: artist.jpg is being written by the worker.
+             * @default false
+             */
+            folder_queued: boolean;
         };
         /** ArtworkArtistPage */
         ArtworkArtistPage: {
@@ -2074,6 +2080,17 @@ export interface components {
              */
             plex_root: string | null;
             example: components["schemas"]["FolderExample"] | null;
+            /**
+             * Checking
+             * @description The worker is checking the mapping.
+             * @default false
+             */
+            checking: boolean;
+            /**
+             * Problem
+             * @description From the check: what's wrong.
+             */
+            problem?: string | null;
         };
         /** FontGroup */
         FontGroup: {

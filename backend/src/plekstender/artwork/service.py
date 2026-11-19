@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.artwork import images, sources, text
 from plekstender.artwork.fetch import FetchError, fetch
-from plekstender.artwork.folders import FolderError, save_to_folder
+from plekstender.artwork.folders import FolderError, queue_image, save_to_folder
 from plekstender.artwork.images import ImageError, Transform
 from plekstender.artwork.sources import Candidate, SourceError
 from plekstender.artwork.text import TextLogo
@@ -294,15 +294,27 @@ async def apply(
     spec: SourceSpec,
     transform: Transform,
     user_id: int,
+    *,
+    in_worker: bool = True,
 ) -> Applied:
     """Render the image and make it the artist's poster in Plex (and, if set up, save it
-    as artist.jpg in the artist's folder; see `Applied.folder` / `folder_error`)."""
+    as artist.jpg in the artist's folder). Only the worker writes music folders: called
+    from the web app (`in_worker=False`), the image is queued for it (`Applied.folder_queued`)."""
     jpeg = await render(http, settings, client, artist, spec, transform)
     try:
         await client.upload_poster(artist.rating_key, jpeg)
     except PlexError as exc:
         raise ArtworkError(f"Plex didn't accept the image: {exc}") from exc
-    folder, folder_error = await _save_folder(db, artist, jpeg)
+    folder: str | None = None
+    folder_error: str | None = None
+    queued = False
+    server = await db.get(PlexServer, artist.server_id)
+    if server is not None and server.folder_save:
+        if in_worker:
+            folder, folder_error = await _save_folder(db, server, artist, jpeg)
+        else:
+            queue_image(settings.data_dir, artist.server_id, artist.rating_key, jpeg)
+            queued = True
     source, url = source_name(spec, settings)
     settings_json: dict[str, object] = {"transform": transform.model_dump()}
     if spec.text is not None:
@@ -318,6 +330,11 @@ async def apply(
         image_sha256=hashlib.sha256(jpeg).hexdigest(),
         applied_at=now,
         updated_by=user_id,
+        **(
+            {}
+            if queued or (folder is None and folder_error is None)
+            else {"folder_path": folder, "folder_error": folder_error, "folder_saved_at": now}
+        ),
     )
     await db.commit()
     row = await db.scalar(
@@ -329,7 +346,7 @@ async def apply(
         .execution_options(populate_existing=True)
     )
     assert row is not None
-    return Applied(row, folder, folder_error)
+    return Applied(row, folder, folder_error, queued)
 
 
 @dataclass
@@ -337,14 +354,12 @@ class Applied:
     artwork: ArtistArtwork
     folder: str | None = None  # where artist.jpg was written
     folder_error: str | None = None  # why it wasn't, when folder saving is on
+    folder_queued: bool = False  # handed to the worker to write
 
 
 async def _save_folder(
-    db: AsyncSession, artist: Artist, jpeg: bytes
+    db: AsyncSession, server: PlexServer, artist: Artist, jpeg: bytes
 ) -> tuple[str | None, str | None]:
-    server = await db.get(PlexServer, artist.server_id)
-    if server is None or not server.folder_save:
-        return None, None
     try:
         return str(await save_to_folder(db, server, artist, jpeg)), None
     except FolderError as exc:

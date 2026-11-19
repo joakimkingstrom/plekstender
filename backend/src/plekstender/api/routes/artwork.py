@@ -7,6 +7,7 @@ may use these endpoints.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import logging
 import os
 from pathlib import Path
@@ -43,7 +44,7 @@ from plekstender.api.schemas import (
     ImportPreviewOut,
     UploadOut,
 )
-from plekstender.artwork import folders, images, packs
+from plekstender.artwork import images, packs
 from plekstender.artwork import service as art
 from plekstender.artwork.images import ImageError, Transform
 from plekstender.db.instance import get_fonts
@@ -58,7 +59,12 @@ from plekstender.db.models import (
 )
 from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import epoch
-from plekstender.worker import ACTIVE, enqueue_artwork_job
+from plekstender.worker import (
+    ACTIVE,
+    enqueue_artwork_job,
+    enqueue_folder_check,
+    enqueue_folder_save,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/servers/{server_id}/artwork", tags=["artwork"])
@@ -168,6 +174,8 @@ async def list_artists(
                 source=w.source if w else None,
                 applied_at=w.applied_at if w else None,
                 has_mbid=bool(a.mbid or (w and w.mbid)),
+                folder=w.folder_path if w else None,
+                folder_error=w.folder_error if w else None,
             )
             for a, w in rows.all()
         ],
@@ -345,10 +353,20 @@ async def apply(
     client = server_client(us, cipher, settings, http)
     try:
         applied = await art.apply(
-            db, http, settings, client, artist, body.source, body.transform, user.id
+            db,
+            http,
+            settings,
+            client,
+            artist,
+            body.source,
+            body.transform,
+            user.id,
+            in_worker=False,  # artist.jpg is written by the worker (it has the music folder)
         )
     except art.ArtworkError as exc:
         raise artwork_error(exc) from exc
+    if applied.folder_queued:
+        await enqueue_folder_save(artist.server_id, artist.rating_key)
     row = applied.artwork
     # Pick up the new poster's path so the app shows it straight away.
     try:
@@ -368,6 +386,7 @@ async def apply(
         has_mbid=bool(artist.mbid or row.mbid),
         folder=applied.folder,
         folder_error=applied.folder_error,
+        folder_queued=applied.folder_queued,
     )
 
 
@@ -435,6 +454,7 @@ async def start_fanart_job(
 
 
 async def folder_settings(db: AsyncSession, user: User, us: UserServer) -> FolderSettingsOut:
+    """The mapping, and the worker's latest check of it (only the worker sees the music)."""
     server = await db.get(PlexServer, us.server_id)
     assert server is not None
     sample_paths = [
@@ -447,37 +467,19 @@ async def folder_settings(db: AsyncSession, user: User, us: UserServer) -> Folde
         if p
     ]
     plex_root = os.path.commonpath(sample_paths) if sample_paths else None
-    example = None
-    if server.plex_path_prefix and server.local_path_prefix:
-        # Check the mapping on the most popular artist (a likely, well-filed one).
-        state, cond, where = visible(Artist, user.id, us)
-        artist = await db.scalar(
-            select(Artist)
-            .join(state, cond)
-            .where(*where, Artist.title.not_ilike("various%"))
-            .order_by(Artist.popularity.desc().nulls_last(), Artist.rating_key)
-            .limit(1)
-        )
-        if artist is not None:
-            try:
-                local = await folders.artist_folder(db, server, artist)
-                exists = await asyncio.to_thread(folders.is_dir, local)
-                example = FolderExample(
-                    artist=artist.title,
-                    local_folder=str(local),
-                    exists=exists,
-                    problem=None if exists else "Not found in Plekstender's container.",
-                )
-            except folders.FolderError as exc:
-                example = FolderExample(
-                    artist=artist.title, local_folder=None, exists=False, problem=str(exc)
-                )
+    check = server.folder_check or {}
+    example = check.get("example")
+    checking = bool(check.get("requested_at")) and (
+        not check.get("checked_at") or check["checked_at"] < check["requested_at"]
+    )
     return FolderSettingsOut(
         enabled=server.folder_save,
         plex_prefix=server.plex_path_prefix,
         local_prefix=server.local_path_prefix,
         plex_root=plex_root or None,
-        example=example,
+        example=FolderExample(**example) if example and not checking else None,
+        checking=checking,
+        problem=None if checking else check.get("problem"),
     )
 
 
@@ -505,16 +507,15 @@ async def put_folder(
             )
         if not plex_prefix.startswith("/") or not local_prefix.startswith("/"):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Use absolute paths.")
-        if not await asyncio.to_thread(folders.is_dir, Path(local_prefix)):
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                f"{local_prefix} doesn't exist in Plekstender's container. Mount your music "
-                "folder there (see compose.override.example.yaml).",
-            )
     server.folder_save = body.enabled
     server.plex_path_prefix = plex_prefix
     server.local_path_prefix = local_prefix
+    if body.enabled:
+        # The worker (which has the music folder) checks the mapping.
+        server.folder_check = {"requested_at": dt.datetime.now(dt.UTC).isoformat()}
     await db.commit()
+    if body.enabled:
+        await enqueue_folder_check(server.id)
     return await folder_settings(db, user, us)
 
 

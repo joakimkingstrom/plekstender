@@ -528,7 +528,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 ### Phase 10 — Music files and the tag editor (from `.todo.md`; needs the music folder)
 
 **Music folder on the worker only**
-- [ ] Only the worker mounts the music folder (read-write); the web container never touches music files. "Save to artist folders" becomes a background job (the rendered image is handed over through `/data`), and the folder check runs in the worker.
+- [x] Only the worker mounts the music folder (read-write); the web container never touches music files. "Save to artist folders" becomes a background job (the rendered image is handed over through `/data`), and the folder check runs in the worker.
 
 **Tag editor** (server owners; off until an admin turns it on)
 

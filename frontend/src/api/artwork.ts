@@ -236,6 +236,8 @@ export function useFolderSettings(serverId: number) {
     queryKey: [...artworkKeys.all(serverId), 'folder'],
     queryFn: () =>
       unwrap(api.GET('/api/servers/{server_id}/artwork/folder', { params: { path: { server_id: serverId } } })),
+    // The worker checks the mapping: look again until it has.
+    refetchInterval: (query) => (query.state.data?.checking ? 1500 : false),
   })
 }
 

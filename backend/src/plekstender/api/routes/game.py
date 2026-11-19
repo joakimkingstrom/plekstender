@@ -66,7 +66,8 @@ def by_popularity(songs: list[Track], popularity: str) -> list[Track]:
     least popular half when there are 10 or fewer)."""
     start, end = POPULARITY_POOLS.get(popularity, POPULARITY_POOLS["popular"])
     if popularity == "deep" and len(songs) <= start:
-        return songs[len(songs) // 2 :] or songs
+        # The less popular half (the middle song of an odd number counts as popular).
+        return songs[(len(songs) + 1) // 2 :] or songs
     return songs[start:end] or songs[:TOP_SONGS]
 
 

@@ -500,42 +500,90 @@ async def test_saving_to_artist_folders(
     music = tmp_path / "music"
     (music / "Radiohead").mkdir(parents=True)
 
+    from plekstender.worker import check_artist_folders, save_artist_folder
+
+    server_id = await _server_id()
+
+    async def worker_writes(rating_key: int) -> dict:
+        """What the worker does after an apply; returns the artist's folder outcome."""
+        await save_artist_folder.func(server_id=server_id, rating_key=rating_key)
+        async with get_sessionmaker()() as db:
+            row = (
+                await db.execute(
+                    sql(
+                        "SELECT folder_path, folder_error FROM artist_artwork "
+                        "WHERE rating_key = :key"
+                    ),
+                    {"key": rating_key},
+                )
+            ).one()
+        return {"path": row.folder_path, "error": row.folder_error}
+
     off = (await owner.get(f"{base}/folder")).json()
     assert (off["enabled"], off["plex_root"]) == (False, "/music")
+
+    # The web app doesn't look at music folders: the worker checks the mapping.
     missing = await owner.put(
         f"{base}/folder",
         json={"enabled": True, "plex_prefix": "/music", "local_prefix": "/nope"},
         headers=CSRF,
     )
-    assert missing.status_code == 422
+    assert missing.status_code == 200
+    assert (missing.json()["checking"], missing.json()["example"]) == (True, None)
+    await check_artist_folders.func(server_id=server_id)
+    checked = (await owner.get(f"{base}/folder")).json()
+    assert checked["checking"] is False
+    assert "doesn't exist in the worker container" in checked["problem"]
+
     on = await owner.put(
         f"{base}/folder",
         json={"enabled": True, "plex_prefix": "/music/", "local_prefix": str(music)},
         headers=CSRF,
     )
     assert on.status_code == 200, on.text
-    example = on.json()["example"]
-    assert (example["artist"], example["exists"]) == ("Radiohead", True)
+    await check_artist_folders.func(server_id=server_id)
+    checked = (await owner.get(f"{base}/folder")).json()
+    assert checked["problem"] is None
+    assert (checked["example"]["artist"], checked["example"]["exists"]) == ("Radiohead", True)
 
     body = {"source": {"kind": "current"}}
     radiohead = (await owner.post(f"{base}/artists/100/apply", json=body, headers=CSRF)).json()
-    assert radiohead["folder"] == str((music / "Radiohead" / "artist.jpg").resolve())
+    assert (radiohead["folder"], radiohead["folder_queued"]) == (None, True)
+    assert not (music / "Radiohead" / "artist.jpg").exists()  # not by the web app
+    written = await worker_writes(100)
+    assert written == {"path": str((music / "Radiohead" / "artist.jpg").resolve()), "error": None}
     assert jpeg_size((music / "Radiohead" / "artist.jpg").read_bytes()) == (1000, 1000)
+    from plekstender.artwork.folders import queue_dir
+    from plekstender.config import get_settings
+
+    assert not any(queue_dir(get_settings().data_dir).glob("*.jpg"))  # handed over
 
     # Still saved to Plex when the folder can't be used, with the reason.
-    portishead = (await owner.post(f"{base}/artists/101/apply", json=body, headers=CSRF)).json()
-    assert portishead["folder"] is None and "doesn't exist" in portishead["folder_error"]
-    secret = (await owner.post(f"{base}/artists/102/apply", json=body, headers=CSRF)).json()
-    assert "doesn't match" in secret["folder_error"]
+    await owner.post(f"{base}/artists/101/apply", json=body, headers=CSRF)
+    assert "doesn't exist" in (await worker_writes(101))["error"]
+    await owner.post(f"{base}/artists/102/apply", json=body, headers=CSRF)
+    assert "doesn't match" in (await worker_writes(102))["error"]
     assert len(plex.library.uploaded) == 3
 
     # A symlink can't lead outside the mapped folder.
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     (music / "Portishead").symlink_to(outside)
-    escaped = (await owner.post(f"{base}/artists/101/apply", json=body, headers=CSRF)).json()
-    assert "outside" in escaped["folder_error"]
+    await owner.post(f"{base}/artists/101/apply", json=body, headers=CSRF)
+    assert "outside" in (await worker_writes(101))["error"]
     assert not (outside / "artist.jpg").exists()
+
+
+async def _server_id() -> int:
+    from sqlalchemy import select
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import PlexServer
+
+    async with get_sessionmaker()() as db:
+        server_id = await db.scalar(select(PlexServer.id))
+    assert server_id is not None
+    return server_id
 
 
 # --- logo packs -------------------------------------------------------------------------------

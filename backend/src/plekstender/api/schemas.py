@@ -534,8 +534,13 @@ class ArtworkArtistOut(BaseModel):
     source: str | None
     applied_at: dt.datetime | None
     has_mbid: bool
-    folder: str | None = Field(default=None, description="Apply: where artist.jpg was saved.")
-    folder_error: str | None = Field(default=None, description="Apply: why it wasn't saved.")
+    folder: str | None = Field(default=None, description="Where artist.jpg was last saved.")
+    folder_error: str | None = Field(
+        default=None, description="Why artist.jpg wasn't saved, the last time."
+    )
+    folder_queued: bool = Field(
+        default=False, description="Apply: artist.jpg is being written by the worker."
+    )
 
 
 class ArtworkArtistPage(BaseModel):
@@ -623,6 +628,8 @@ class FolderSettingsOut(BaseModel):
     local_prefix: str | None
     plex_root: str | None = Field(description="The common start of Plex's music paths (a hint).")
     example: FolderExample | None
+    checking: bool = Field(default=False, description="The worker is checking the mapping.")
+    problem: str | None = Field(default=None, description="From the check: what's wrong.")
 
 
 class ImportMatchOut(BaseModel):

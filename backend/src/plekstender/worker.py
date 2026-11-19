@@ -13,6 +13,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender import __version__
+from plekstender.artwork.folders import check_server as check_folder_mapping
+from plekstender.artwork.folders import write_queued as write_queued_folder
 from plekstender.artwork.jobs import run_job as run_artwork_job
 from plekstender.artwork.packs import remove_old_files
 from plekstender.artwork.service import remove_old_uploads
@@ -452,6 +454,42 @@ async def schedule_due_playlists(now: dt.datetime | None = None) -> int:
 @app.task(queue="maintenance", queueing_lock="refresh-playlists")
 async def refresh_playlists(timestamp: int) -> None:
     await schedule_due_playlists()
+
+
+# --- music folders (only the worker mounts them) -------------------------------------------
+
+
+@app.task(queue="artwork")
+async def save_artist_folder(server_id: int, rating_key: int) -> None:
+    async with get_sessionmaker()() as db:
+        await write_queued_folder(db, get_settings().data_dir, server_id, rating_key)
+
+
+async def enqueue_folder_save(server_id: int, rating_key: int) -> None:
+    """Write a queued image as artist.jpg (a newer image for the same artist replaces it)."""
+    try:
+        await save_artist_folder.configure(
+            lock=f"folders-{server_id}", queueing_lock=f"folder-{server_id}-{rating_key}"
+        ).defer_async(server_id=server_id, rating_key=rating_key)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.task(queue="artwork")
+async def check_artist_folders(server_id: int) -> None:
+    async with get_sessionmaker()() as db:
+        server = await db.get(PlexServer, server_id)
+        if server is not None:
+            await check_folder_mapping(db, server)
+
+
+async def enqueue_folder_check(server_id: int) -> None:
+    try:
+        await check_artist_folders.configure(
+            lock=f"folders-{server_id}", queueing_lock=f"folder-check-{server_id}"
+        ).defer_async(server_id=server_id)
+    except AlreadyEnqueued:
+        pass
 
 
 # --- housekeeping --------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import { useDeferredValue, useId, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { imageUrl } from '../api/library'
 import { Lightbox, Zoomable } from '../components/Lightbox'
 import { ColorPicker, FilePicker, Slider } from '../components/controls'
@@ -6,6 +7,7 @@ import { Select } from '../components/Select'
 import { Tooltip } from '../components/Tooltip'
 import { Link } from 'react-router'
 import {
+  artworkKeys,
   useApplyArtwork,
   useArtworkArtists,
   useArtworkJobs,
@@ -185,6 +187,7 @@ function ArtistEditor({
   isAdmin: boolean
   onBack: () => void
 }) {
+  const qc = useQueryClient()
   const [tab, setTab] = useState<Tab>('fanart')
   const [source, setSource] = useState<SourceSpec | null>(null)
   const [transform, setTransform] = useState<Transform>(DEFAULT_TRANSFORM)
@@ -205,11 +208,19 @@ function ArtistEditor({
         <button type="button" onClick={onBack} className="text-sm text-muted hover:text-text lg:hidden">
           ← Artists
         </button>
-        <h2 className="min-w-0 flex-1 truncate text-2xl font-bold">
-          <Link to={`/library/artists/${artist.rating_key}`} className="hover:underline">
-            {artist.title}
-          </Link>
-        </h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-2xl font-bold">
+            <Link to={`/library/artists/${artist.rating_key}`} className="hover:underline">
+              {artist.title}
+            </Link>
+          </h2>
+          {/* Written by the worker a moment after saving. */}
+          {artist.folder_error ? (
+            <p className="truncate text-xs text-danger">artist.jpg not saved: {artist.folder_error}</p>
+          ) : artist.folder ? (
+            <p className="truncate text-xs text-muted">artist.jpg in {artist.folder.replace(/\/artist\.jpg$/, '')}</p>
+          ) : null}
+        </div>
         <div className="inline-flex rounded-lg bg-surface-2 p-0.5" role="group" aria-label="Status">
           {STATUSES.map(([key, label]) => (
             <button
@@ -296,14 +307,20 @@ function ArtistEditor({
                   apply.mutate(
                     { key: artist.rating_key, source, transform },
                     {
-                      onSuccess: (result) =>
+                      onSuccess: (result) => {
+                        // The worker writes artist.jpg: look again for how it went.
+                        if (result.folder_queued)
+                          window.setTimeout(() => void qc.invalidateQueries({ queryKey: artworkKeys.all(serverId) }), 3000)
                         setNotice(
-                          result.folder
+                          result.folder_queued
+                            ? 'Saved to Plex. artist.jpg is being written to the artist folder.'
+                            : result.folder
                             ? `Saved to Plex and to ${result.folder}.`
                             : result.folder_error
                               ? `Saved to Plex, but not to the artist folder: ${result.folder_error}`
                               : 'Saved to Plex.',
-                        ),
+                        )
+                      },
                     },
                   )
                 }
