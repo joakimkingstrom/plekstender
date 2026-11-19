@@ -19,7 +19,7 @@ import {
   type TagField,
 } from '../tags'
 import { Dialog } from './Dialog'
-import { Badge, Button, Card, Notice, Spinner } from './ui'
+import { Badge, Button, Card, Notice, Spinner, UndoIcon } from './ui'
 
 const input = 'w-full rounded-md border border-border bg-surface-2 px-2 py-1 text-sm'
 
@@ -400,7 +400,7 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                         busy={undo.isPending}
                         onClick={() => undo.mutate({ setId: set.id })}
                       >
-                        ↶ Undo this edit{set.undoable > 1 ? ` (${formatCount(set.undoable)} changes)` : ''}
+                        <UndoIcon /> Undo this edit{set.undoable > 1 ? ` (${formatCount(set.undoable)} changes)` : ''}
                       </Button>
                     )}
                   </div>

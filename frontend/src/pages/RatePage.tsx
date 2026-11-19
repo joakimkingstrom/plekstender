@@ -22,7 +22,7 @@ import { useGameSettings, useIntroRound } from '../game'
 import { fetchSample, useAddToGamePlaylist, useGameStats } from '../api/game'
 import { playSample, stopAudio, unlockAudio } from '../audio'
 import { StarRating } from '../components/StarRating'
-import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
+import { Badge, Button, Card, Notice, PageTitle, Spinner, UndoIcon } from '../components/ui'
 import { formatCompact, formatCount, formatDuration } from '../format'
 import { starsText, swipeResult } from '../swipe'
 import { useLibraryServer } from '../components/useLibraryServer'
@@ -273,7 +273,8 @@ function Rater({ serverId }: { serverId: number }) {
         <div className="flex items-center gap-2 md:ml-auto">
           <Tooltip content="Undo your last rating (repeat to go further back)">
             <Button variant="ghost" onClick={undo} disabled={!canUndo} busy={undoMutation.isPending} aria-label="Undo">
-              ↶<span className="max-md:hidden">Undo</span>
+              <UndoIcon className="size-4" />
+              <span className="max-md:hidden">Undo</span>
             </Button>
           </Tooltip>
           <div className="hidden md:block">

@@ -122,3 +122,13 @@ export function PageTitle({ children, subtitle }: { children: ReactNode; subtitl
     </div>
   )
 }
+
+/** A curved "go back" arrow for undo buttons (the ↶ character is missing from many fonts). */
+export function UndoIcon({ className = 'size-3.5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`shrink-0 ${className}`}>
+      <path d="M5.5 3 2.5 6l3 3" />
+      <path d="M2.5 6h7a4 4 0 0 1 0 8H7" />
+    </svg>
+  )
+}

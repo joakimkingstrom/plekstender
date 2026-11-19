@@ -5,7 +5,7 @@ import { useRate, useRated, useUndoItem, type RatedItem, type RatedKind } from '
 import { Artwork } from '../components/library'
 import { Segmented } from '../components/Segmented'
 import { StarRating } from '../components/StarRating'
-import { Badge, Button, Card, Notice, Spinner } from '../components/ui'
+import { Badge, Button, Card, Notice, Spinner, UndoIcon } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { Tooltip } from '../components/Tooltip'
 import { starsText } from '../swipe'
@@ -158,7 +158,7 @@ function RatedRow({
               onClick={onUndo}
               aria-label={`Undo the rating of ${item.title}`}
             >
-              ↶ Undo
+              <UndoIcon /> Undo
             </Button>
           </Tooltip>
         )}

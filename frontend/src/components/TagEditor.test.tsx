@@ -82,7 +82,7 @@ describe('Editing tags', () => {
     expect(screen.getByText('left as it was')).toBeInTheDocument()
     expect(screen.getByText(/1 change was left as it was: the file held something other/)).toBeInTheDocument()
     expect(screen.getByText('1 written · 1 left as they were')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '↶ Undo this edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo this edit' }))
     await vi.waitFor(async () => {
       const post = fetch.mock.calls.find(([r]) => new URL(r.url).pathname.endsWith('/files/undo'))
       expect(await post![0].clone().json()).toEqual({ set_id: 7 })
