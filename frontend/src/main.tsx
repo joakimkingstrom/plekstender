@@ -8,6 +8,7 @@ import { RouterProvider } from 'react-router/dom'
 import { ApiError } from './api/client'
 import { Layout } from './components/Layout'
 import './index.css'
+import { registerServiceWorker } from './online'
 import { AdminPage } from './pages/AdminPage'
 import { ArtworkPage } from './pages/ArtworkPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
@@ -84,6 +85,8 @@ const router = createBrowserRouter([
     ],
   },
 ])
+
+registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

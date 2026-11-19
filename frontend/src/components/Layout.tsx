@@ -1,9 +1,10 @@
 import { useEffect, useId } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useLogout, useMe } from '../api/hooks'
+import { useOnline } from '../online'
 import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
-import { Avatar } from './ui'
+import { Avatar, Button } from './ui'
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -74,7 +75,8 @@ export function PageLoader() {
 
 /** Shell for signed-in pages; redirects to /login when signed out. */
 export function Layout() {
-  const { data: me, isPending } = useMe()
+  const { data: me, isPending, isError, refetch, isRefetching } = useMe()
+  const online = useOnline()
   const location = useLocation()
   const navigate = useNavigate()
   const logout = useLogout()
@@ -85,6 +87,25 @@ export function Layout() {
 
   if (isPending) {
     return <PageLoader />
+  }
+  // Couldn't ask the server (offline, or it's down): that's not the same as signed out.
+  if (isError && me === undefined) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6 text-center">
+        <Mark className="size-12 text-text" />
+        <h1 className="font-display text-xl font-bold">
+          {online ? "Plekstender can't be reached" : "You're offline"}
+        </h1>
+        <p className="max-w-sm text-sm text-muted">
+          {online
+            ? 'The server is not answering right now. Check that it is running, then try again.'
+            : 'Plekstender needs a connection to your server. It will work again as soon as you are back online.'}
+        </p>
+        <Button onClick={() => void refetch()} busy={isRefetching}>
+          Try again
+        </Button>
+      </div>
+    )
   }
   if (!me) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   // On a phone the app opens on Rate (a preference). Only the page the app was opened on
@@ -138,6 +159,11 @@ export function Layout() {
         </div>
       </header>
 
+      {!online && (
+        <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-xs text-warn">
+          You're offline. What's on screen may be out of date, and changes can't be saved until you're back online.
+        </div>
+      )}
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24 md:pb-6">
         <Outlet />
       </main>

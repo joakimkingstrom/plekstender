@@ -484,7 +484,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Phones open on Rate (Settings -> Appearance; per account), and the app can be added to the home screen to run full screen (web app manifest). On phones the Rate page drops its title, folds the filters into "Options", sizes the card to the screen and shows the swipe hint only until the first swipe.
 - [x] The rating shown while swiping stays put instead of moving with the card.
 - [x] The lightbox blurs what's behind it.
-- [ ] PWA install, offline shell
+- [x] PWA install, offline shell (service worker keeps the app shell; an offline banner, and a "can't be reached" screen instead of signing you out)
 - [x] M3U8 playlist exports (each playlist's last build: Plex's file paths or relative to the music folder)
 - [ ] Docs, screenshots, published images (GHCR)
 
