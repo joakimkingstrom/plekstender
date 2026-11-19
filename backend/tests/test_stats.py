@@ -212,3 +212,38 @@ async def test_your_listens_on_artist_and_album_pages(app: FastAPI, plex: FakePl
 
     nothing = (await owner.get(f"/api/servers/{sid}/library/albums/203")).json()["your_listens"]
     assert nothing == {"listens": 0, "first_at": None, "last_at": None, "years": [], "songs": []}
+
+
+@pytest.mark.db
+async def test_top_lists_by_listening_time(app: FastAPI, plex: FakePlex) -> None:
+    from plekstender.history.listen_counts import refresh_listen_counts
+
+    owner, sid = await owner_with_library(app, plex)
+    user_id = (await owner.get("/api/auth/me")).json()["id"]
+    await add_listens(
+        user_id,
+        [(1, "Short Songs", "Snacks", f"Snack {i}") for i in range(3)]
+        + [(1, "Radiohead", "OK Computer", "Paranoid Android")] * 1
+        + [(2, "Radiohead", "OK Computer", "Paranoid Android")],
+    )
+    # Paranoid Android is in the library (4:00); the snacks aren't (3:35 each).
+    async with get_sessionmaker()() as db:
+        await refresh_listen_counts(db, user_id)
+        await db.commit()
+
+    params = {"range": "7d", "tz": "UTC", "server_id": sid}
+    by_listens = (await owner.get("/api/stats/overview", params=params)).json()
+    assert [(a["name"], a["listens"]) for a in by_listens["top_artists"]] == [
+        ("Short Songs", 3),
+        ("Radiohead", 2),
+    ]
+    by_time = (await owner.get("/api/stats/overview", params={**params, "by": "time"})).json()
+    assert [(a["name"], a["listening_ms"]) for a in by_time["top_artists"]] == [
+        ("Short Songs", 3 * 215_000),
+        ("Radiohead", 2 * 240_000),
+    ]
+    assert by_time["top_tracks"][0] == {
+        **by_time["top_tracks"][0],
+        "name": "Paranoid Android",
+        "listening_ms": 480_000,  # length taken from the library track
+    }

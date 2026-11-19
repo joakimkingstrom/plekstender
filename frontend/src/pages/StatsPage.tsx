@@ -2,7 +2,7 @@ import { Link, useSearchParams } from 'react-router'
 import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import { useActiveServer } from '../api/library'
-import { useStatsActivity, useStatsOverview } from '../api/stats'
+import { useStatsActivity, useStatsOverview, type TopBy } from '../api/stats'
 import { ColumnChart, Heatmap, type ColumnPoint } from '../components/charts'
 import { Artwork } from '../components/library'
 import { Card, Notice, Spinner } from '../components/ui'
@@ -81,12 +81,14 @@ function TopList({
   kind,
   serverId,
   compared,
+  by,
 }: {
   title: string
   items: Schemas['TopItemOut'][]
   kind: 'artist' | 'album' | 'track'
   serverId: number | null
   compared: boolean
+  by: TopBy
 }) {
   return (
     <Card title={title}>
@@ -126,7 +128,9 @@ function TopList({
                   {item.artist && <p className="truncate text-xs text-muted">{item.artist}</p>}
                 </div>
                 <RankChange rank={i + 1} previous={item.previous_rank} compared={compared} />
-                <span className="w-12 shrink-0 text-right text-xs text-muted tabular-nums">{formatCount(item.listens)}</span>
+                <span className="w-16 shrink-0 text-right text-xs text-muted tabular-nums">
+                  {by === 'time' ? formatListeningTime(item.listening_ms) : formatCount(item.listens)}
+                </span>
               </li>
             )
           })}
@@ -139,9 +143,10 @@ function TopList({
 export function StatsPage() {
   const [params, setParams] = useSearchParams()
   const range = params.get('range') ?? '30d'
+  const by: TopBy = params.get('by') === 'time' ? 'time' : 'listens'
   const { active } = useActiveServer()
   const serverId = active?.id ?? null
-  const overview = useStatsOverview(range, serverId)
+  const overview = useStatsOverview(range, serverId, by)
   const activity = useStatsActivity(range)
 
   if (overview.isPending) return <Spinner />
@@ -179,7 +184,7 @@ export function StatsPage() {
               key={key}
               type="button"
               aria-pressed={key === range}
-              onClick={() => setParams({ range: key }, { replace: true })}
+              onClick={() => setParams({ range: key, by }, { replace: true })}
               className={`rounded-full px-3 py-1.5 text-sm font-medium ${
                 key === range ? 'bg-accent text-on-accent' : 'bg-surface-2 text-muted hover:text-text'
               }`}
@@ -223,10 +228,30 @@ export function StatsPage() {
         )}
       </Card>
 
+      <div className="flex justify-end">
+        <div className="inline-flex rounded-lg bg-surface-2 p-0.5 text-sm" role="group" aria-label="Rank top lists">
+          {(
+            [
+              ['listens', 'By listens'],
+              ['time', 'By time'],
+            ] as const
+          ).map(([key, text]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={by === key}
+              onClick={() => setParams({ range, by: key }, { replace: true })}
+              className={`rounded-md px-3 py-1 ${by === key ? 'bg-surface font-medium shadow-sm' : 'text-muted hover:text-text'}`}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <TopList title="Top artists" items={o.top_artists} kind="artist" serverId={serverId} compared={compared} />
-        <TopList title="Top albums" items={o.top_albums} kind="album" serverId={serverId} compared={compared} />
-        <TopList title="Top songs" items={o.top_tracks} kind="track" serverId={serverId} compared={compared} />
+        <TopList title="Top artists" items={o.top_artists} kind="artist" serverId={serverId} compared={compared} by={by} />
+        <TopList title="Top albums" items={o.top_albums} kind="album" serverId={serverId} compared={compared} by={by} />
+        <TopList title="Top songs" items={o.top_tracks} kind="track" serverId={serverId} compared={compared} by={by} />
       </div>
 
       <Card title="When you listen">

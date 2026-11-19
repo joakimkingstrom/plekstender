@@ -115,6 +115,7 @@ class Top:
     name: str
     artist: str | None
     listens: int
+    listening_ms: int = 0
     previous_rank: int | None = None
     rating_key: int | None = None
     thumb: str | None = None
@@ -126,6 +127,12 @@ _GROUPS: dict[str, tuple[Any, ...]] = {
     "track": (Listen.artist_key, Listen.track_key),
 }
 _NAMES = {"artist": Listen.artist_name, "album": Listen.album_name, "track": Listen.track_name}
+TopBy = Literal["listens", "time"]
+
+
+def _time() -> Any:
+    """Listening time of a group of listens (unknown lengths count as a typical song)."""
+    return func.sum(func.coalesce(Listen.duration_ms, ASSUMED_DURATION_MS))
 
 
 async def top(
@@ -135,30 +142,35 @@ async def top(
     start: dt.datetime | None,
     end: dt.datetime,
     limit: int,
+    by: TopBy = "listens",
 ) -> list[Top]:
-    """Most-played artists, albums or tracks, named by their most common spelling."""
+    """Most-played artists, albums or tracks (by listens or by time spent listening),
+    named by their most common spelling."""
     group = _GROUPS[kind]
     conditions = _in(user_id, start, end)
     if kind == "album":
         conditions.append(Listen.album_key.is_not(None))
     listens = func.count().label("listens")
+    time = _time().label("time")
+    first, second = (listens, time) if by == "listens" else (time, listens)
     rows = await db.execute(
         select(
             *group,
             func.mode().within_group(_NAMES[kind]),
             func.mode().within_group(Listen.artist_name),
             listens,
+            time,
         )
         .where(*conditions)
         .group_by(*group)
-        .order_by(listens.desc(), *group)
+        .order_by(first.desc(), second.desc(), *group)
         .limit(limit)
     )
     out = []
     for row in rows.all():
         keys = tuple(row[: len(group)])
-        name, artist, count = row[len(group) :]
-        out.append(Top(keys, name, None if kind == "artist" else artist, count))
+        name, artist, count, ms = row[len(group) :]
+        out.append(Top(keys, name, None if kind == "artist" else artist, count, int(ms or 0)))
     return out
 
 
@@ -169,13 +181,15 @@ async def previous_ranks(
     start: dt.datetime,
     end: dt.datetime,
     items: list[Top],
+    by: TopBy = "listens",
 ) -> None:
     """Fill in where each item ranked in the previous period (None: not played then)."""
     if not items:
         return
     group = _GROUPS[kind]
+    metric = func.count() if by == "listens" else _time()
     counts = (
-        select(*group, func.count().label("n"))
+        select(*group, metric.label("n"))
         .where(*_in(user_id, start, end))
         .group_by(*group)
         .subquery()

@@ -406,7 +406,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
   *A shared Lightbox (Esc / click outside to close, arrow keys where there's a set, focus kept inside); full-size images through the existing image proxy.*
 
 **History**
-- [ ] Top artists / albums / songs by time spent listening as well as by number of listens (long songs in some genres).
+- [x] Top artists / albums / songs by time spent listening as well as by number of listens (long songs in some genres).
   *Listening time = listens × track length. Last.fm and ListenBrainz listens have no length, so take it from the matched library track (or the song's median Plex length), falling back to 3:35 and marking those as estimates. A "By listens / By time" switch on each top list.*
 - [x] Make the "When you listen" heatmap fill the whole width of its card.
 - [ ] Most skipped songs / albums / artists: plays where less than a set share of the track was heard (default 80%, adjustable per user).

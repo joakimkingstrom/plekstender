@@ -10,14 +10,16 @@ export function localTimeZone(): string {
   }
 }
 
-export function useStatsOverview(range: string, serverId: number | null) {
+export type TopBy = 'listens' | 'time'
+
+export function useStatsOverview(range: string, serverId: number | null, by: TopBy = 'listens') {
   const tz = localTimeZone()
   return useQuery({
-    queryKey: ['listens', 'stats', 'overview', range, tz, serverId],
+    queryKey: ['listens', 'stats', 'overview', range, tz, serverId, by],
     queryFn: () =>
       unwrap(
         api.GET('/api/stats/overview', {
-          params: { query: { range, tz, ...(serverId !== null ? { server_id: serverId } : {}) } },
+          params: { query: { range, tz, by, ...(serverId !== null ? { server_id: serverId } : {}) } },
         }),
       ),
     placeholderData: keepPreviousData,

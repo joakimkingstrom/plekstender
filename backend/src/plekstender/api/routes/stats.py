@@ -43,6 +43,7 @@ def _top_out(item: stats.Top) -> TopItemOut:
         name=item.name,
         artist=item.artist,
         listens=item.listens,
+        listening_ms=item.listening_ms,
         previous_rank=item.previous_rank,
         rating_key=item.rating_key,
         thumb=item.thumb,
@@ -56,6 +57,9 @@ async def overview(
     range: RangeQuery = "30d",
     tz: TzQuery = "UTC",
     server_id: Annotated[int | None, Query(description="Link top items to this server.")] = None,
+    by: Annotated[
+        stats.TopBy, Query(description="Rank top lists by listens or by time.")
+    ] = "listens",
 ) -> StatsOverviewOut:
     period, zone = _period(range, tz)
     library = await get_user_server(db, user, server_id) if server_id is not None else None
@@ -68,10 +72,10 @@ async def overview(
     )
     tops: dict[Literal["artist", "album", "track"], list[stats.Top]] = {}
     for kind in ("artist", "album", "track"):
-        items = await stats.top(db, user.id, kind, period.start, period.end, TOP_LIMIT)
+        items = await stats.top(db, user.id, kind, period.start, period.end, TOP_LIMIT, by)
         if period.previous_start and period.start:
             await stats.previous_ranks(
-                db, user.id, kind, period.previous_start, period.start, items
+                db, user.id, kind, period.previous_start, period.start, items, by
             )
         if library is not None:
             await stats.link_library(db, user.id, library.server_id, kind, items)

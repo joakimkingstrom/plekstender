@@ -88,9 +88,37 @@ _ARTISTS = text(
 )
 
 
+# Listens without a length (Last.fm, ListenBrainz) take it from the matched library track.
+_DURATIONS = text(
+    """
+    WITH unknown AS (
+        SELECT DISTINCT artist_key, track_key FROM listens
+        WHERE user_id = :user_id AND duration_ms IS NULL
+    ),
+    found AS (
+        SELECT DISTINCT ON (u.artist_key, u.track_key)
+               u.artist_key, u.track_key, t.duration_ms
+        FROM unknown u
+        JOIN tracks t ON t.title_norm = u.track_key AND t.duration_ms IS NOT NULL
+        JOIN user_item_state s
+          ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
+        LEFT JOIN artists ar
+          ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
+        WHERE u.artist_key IN (t.artist_key, ar.name_key)
+        ORDER BY u.artist_key, u.track_key, t.rating_key
+    )
+    UPDATE listens l SET duration_ms = found.duration_ms
+    FROM found
+    WHERE l.user_id = :user_id AND l.duration_ms IS NULL
+      AND l.artist_key = found.artist_key AND l.track_key = found.track_key
+    """
+)
+
+
 async def refresh_listen_counts(db: AsyncSession, user_id: int) -> None:
-    """Recompute a user's listen counts on every server they've synced. Caller commits."""
+    """Recompute a user's listen counts on every server they've synced, and fill in the
+    length of listens that have none from the matching library track. Caller commits."""
     params = {"user_id": user_id}
     await db.execute(_RESET, params)
-    for statement in (_TRACKS, _ALBUMS, _ARTISTS):
+    for statement in (_DURATIONS, _TRACKS, _ALBUMS, _ARTISTS):
         await db.execute(statement, params)

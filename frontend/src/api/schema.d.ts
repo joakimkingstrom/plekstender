@@ -2215,6 +2215,11 @@ export interface components {
             /** Listens */
             listens: number;
             /**
+             * Listening Ms
+             * @description Listens without a known length count as 3:35.
+             */
+            listening_ms: number;
+            /**
              * Previous Rank
              * @description Rank in the previous period, if played.
              */
@@ -3274,6 +3279,8 @@ export interface operations {
                 tz?: string;
                 /** @description Link top items to this server. */
                 server_id?: number | null;
+                /** @description Rank top lists by listens or by time. */
+                by?: "listens" | "time";
             };
             header?: never;
             path?: never;

@@ -411,6 +411,7 @@ class TopItemOut(BaseModel):
     name: str
     artist: str | None = Field(description="For albums and tracks.")
     listens: int
+    listening_ms: int = Field(description="Listens without a known length count as 3:35.")
     previous_rank: int | None = Field(description="Rank in the previous period, if played.")
     rating_key: int | None = Field(description="Library artist / album (for tracks: album).")
     thumb: str | None

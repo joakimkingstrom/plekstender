@@ -17,11 +17,11 @@ const overview = {
   previous: { ...totals, listens: 1000 },
   new_artists: 14,
   top_artists: [
-    { name: 'Radiohead', artist: null, listens: 120, previous_rank: 3, rating_key: 100, thumb: '/library/metadata/100/thumb/1' },
-    { name: 'Unknown Band', artist: null, listens: 40, previous_rank: null, rating_key: null, thumb: null },
+    { name: 'Radiohead', artist: null, listens: 120, listening_ms: 7_200_000, previous_rank: 3, rating_key: 100, thumb: '/library/metadata/100/thumb/1' },
+    { name: 'Unknown Band', artist: null, listens: 40, listening_ms: 9_000_000, previous_rank: null, rating_key: null, thumb: null },
   ],
   top_albums: [],
-  top_tracks: [{ name: 'Airbag', artist: 'Radiohead', listens: 12, previous_rank: 1, rating_key: 200, thumb: null }],
+  top_tracks: [{ name: 'Airbag', artist: 'Radiohead', listens: 12, listening_ms: 3_000_000, previous_rank: 1, rating_key: 200, thumb: null }],
   current_streak: 9,
   longest_streak: 41,
   first_listen_at: '2019-03-01T10:00:00Z',
@@ -74,6 +74,12 @@ describe('StatsPage', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Previously #3')
     fireEvent.mouseLeave(moved)
     expect(screen.getByRole('button', { name: '2019' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'By time' }))
+    expect(await screen.findByText('2 h 0 m')).toBeInTheDocument() // Radiohead's listening time
+    await vi.waitFor(() =>
+      expect(fetch.mock.calls.some(([r]) => new URL(r.url).searchParams.get('by') === 'time')).toBe(true),
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'All time' }))
     await vi.waitFor(() =>
