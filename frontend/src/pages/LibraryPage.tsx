@@ -14,7 +14,8 @@ import {
   type ArtistSort,
 } from '../api/library'
 import { ColumnChart } from '../components/charts'
-import { Artwork, Stars } from '../components/library'
+import { Artwork } from '../components/library'
+import { RateStars } from '../components/RateStars'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
@@ -157,16 +158,10 @@ function ArtistGrid({
               <Link to={`/library/artists/${a.rating_key}`} className="group block">
                 <Artwork serverId={serverId} path={a.thumb} title={a.title} round className="w-full transition-opacity group-hover:opacity-85" />
                 <div className="mt-2 truncate text-center text-sm font-medium">{a.title}</div>
-                <div className="flex justify-center">
-                  {a.user_rating !== null ? (
-                    <Stars rating={a.user_rating} />
-                  ) : (
-                    <span className="text-xs text-muted">
-                      {a.album_count} {a.album_count === 1 ? 'album' : 'albums'}
-                    </span>
-                  )}
-                </div>
               </Link>
+              <div className="flex justify-center">
+                <RateStars serverId={serverId} ratingKey={a.rating_key} value={a.user_rating} label={`Rate ${a.title}`} size="size-3.5" />
+              </div>
             </li>
           ))}
         </ul>
@@ -179,10 +174,12 @@ function ArtistGrid({
 }
 
 function TrackList({
+  serverId,
   tracks,
   showAlbum = false,
   showListens = false,
 }: {
+  serverId: number
   tracks: Schemas['TrackOut'][]
   showAlbum?: boolean
   /** A column with the user's own listens of each song. */
@@ -211,7 +208,7 @@ function TrackList({
               <span className="text-xs text-muted tabular-nums">{t.listens ? `${formatCount(t.listens)}×` : ''}</span>
             </Tooltip>
           )}
-          <Stars rating={t.user_rating} className="w-20 justify-end" />
+          <RateStars serverId={serverId} ratingKey={t.rating_key} value={t.user_rating} label={`Rate ${t.title}`} size="size-4" />
           <span className="w-10 text-right text-xs text-muted tabular-nums">{formatDuration(t.duration_ms)}</span>
         </li>
       ))}
@@ -353,11 +350,11 @@ function Releases({ serverId, albums }: { serverId: number; albums: Schemas['Alb
                   <Link to={`/library/albums/${al.rating_key}`} className="group block">
                     <Artwork serverId={serverId} path={al.thumb} title={al.title} className="w-full group-hover:opacity-85" />
                     <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
-                    <div className="flex items-center justify-between gap-2 text-xs text-muted">
-                      <span>{al.year ?? ''}</span>
-                      {al.user_rating !== null && <Stars rating={al.user_rating} />}
-                    </div>
                   </Link>
+                  <div className="flex items-center justify-between gap-2 text-xs text-muted">
+                    <span>{al.year ?? ''}</span>
+                    <RateStars serverId={serverId} ratingKey={al.rating_key} value={al.user_rating} label={`Rate ${al.title}`} size="size-3.5" />
+                  </div>
                 </li>
               ))}
           </ul>
@@ -393,7 +390,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
         <div className="min-w-0 flex-1 space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">{a.title}</h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-            <Stars rating={a.user_rating} />
+            <RateStars serverId={serverId} ratingKey={a.rating_key} value={a.user_rating} label={`Rate the artist ${a.title}`} size="size-5" />
             <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(a.plays)} plays</span></Tooltip>
             {a.popularity !== null && <Tooltip content="Sum of the Last.fm listeners of the artist's top songs"><span>Popularity {formatCompact(a.popularity)}</span></Tooltip>}
           </div>
@@ -406,7 +403,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
         <div className="space-y-6">
           {a.top_tracks.length > 0 && (
             <Card title="Most popular songs">
-              <TrackList tracks={a.top_tracks} showAlbum showListens={a.your_listens.listens > 0} />
+              <TrackList serverId={serverId} tracks={a.top_tracks} showAlbum showListens={a.your_listens.listens > 0} />
             </Card>
           )}
           <Releases serverId={serverId} albums={a.albums} />
@@ -474,7 +471,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
             {[al.artist_title, al.year, al.studio].filter(Boolean).join(' · ')}
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-            <Stars rating={al.user_rating} />
+            <RateStars serverId={serverId} ratingKey={al.rating_key} value={al.user_rating} label={`Rate the album ${al.title}`} size="size-5" />
             {al.critic_rating !== null && <span>Critics {al.critic_rating.toFixed(1)}/10</span>}
             <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(al.plays)} plays</span></Tooltip>
           </div>
@@ -488,6 +485,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
             <div key={disc}>
               {discs.size > 1 && <h3 className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wider text-muted">Disc {disc}</h3>}
               <TrackList
+                serverId={serverId}
                 tracks={al.tracks.filter((t) => (t.disc ?? 1) === disc)}
                 showListens={al.your_listens.listens > 0}
               />

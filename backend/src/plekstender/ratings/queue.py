@@ -97,6 +97,18 @@ _ARTISTS = """
 """
 _BASE: dict[str, str] = {"track": _TRACKS, "album": _ALBUMS, "artist": _ARTISTS}
 
+# Genres (and other tags) live on artists and albums; songs inherit their album's tags,
+# then their artist's.
+_TAG_FILTER = """
+    AND EXISTS (
+        SELECT 1 FROM item_tags it
+        WHERE it.server_id = :server_id AND it.tag_id = :tag_id
+          AND it.rating_key IN (
+              items.rating_key, items.album_rating_key, items.artist_key
+          )
+    )
+"""
+
 
 @dataclass
 class QueueItem:
@@ -155,6 +167,7 @@ async def build_queue(
     order: Order,
     exclude: list[int],
     limit: int,
+    tag_id: int | None = None,
     rng: random.Random | None = None,
 ) -> list[QueueItem]:
     """The next `limit` items to rate, leaving out `exclude` (already shown this session)."""
@@ -163,6 +176,7 @@ async def build_queue(
     query = text(
         f"SELECT * FROM ({_BASE[kind]}) items "  # noqa: S608 - constant SQL fragments
         f"WHERE {_POOLS[pool]} AND NOT (rating_key = ANY(:exclude)) "
+        f"{_TAG_FILTER if tag_id is not None else ''}"
         f"ORDER BY {_ORDER_SQL[order]} LIMIT :fetch"
     )
     rows = await db.execute(
@@ -174,6 +188,7 @@ async def build_queue(
             "exclude": exclude,
             "fetch": fetch,
             "alpha": ALPHA,
+            "tag_id": tag_id,
         },
     )
     items = [

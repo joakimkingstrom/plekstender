@@ -454,6 +454,7 @@ class RateQueueIn(BaseModel):
     order: Literal["weighted", "plays", "popular"] = "weighted"
     exclude: list[int] = Field(default_factory=list, max_length=5000)
     limit: int = Field(default=20, ge=1, le=50)
+    tag_id: int | None = Field(default=None, description="Only items with this genre (tag).")
 
 
 class RateItemOut(BaseModel):

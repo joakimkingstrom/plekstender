@@ -422,11 +422,11 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] When every song on the page is rated or skipped, show the next page automatically.
 - [x] Lists view: always 15 songs per page (it sometimes shows 10, sometimes 15).
   *Cause: the row count is worked out from the window height when the page first renders, so it depends on screen size and on what had loaded by then. Fix it at 15 and fit the row height to the window instead (with a minimum, scrolling only on very small screens).*
-- [ ] Genre filter under Songs / Albums / Artists.
+- [x] Genre filter under Songs / Albums / Artists.
   *Songs inherit genres from their album, falling back to the artist (see the Phase 0 spike). The queue query gets an optional tag filter; the picker lists the genres present in the chosen pool.*
 
 **Library**
-- [ ] Rate artists, albums and songs in the library views too (artist list, artist page, album page, track lists).
+- [x] Rate artists, albums and songs in the library views too (artist list, artist page, album page, track lists).
   *Reuse StarRating and the ratings API (same undo log).*
 - [x] Hide the horizontal scrollbar of the genre chips under the artist search.
 - [x] Artist page: group releases by type (albums, compilations, singles and EPs, live, …) instead of one list.

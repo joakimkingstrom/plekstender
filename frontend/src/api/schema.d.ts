@@ -1946,6 +1946,11 @@ export interface components {
              * @default 20
              */
             limit: number;
+            /**
+             * Tag Id
+             * @description Only items with this genre (tag).
+             */
+            tag_id?: number | null;
         };
         /** RatingIn */
         RatingIn: {

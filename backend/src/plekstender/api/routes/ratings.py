@@ -31,6 +31,7 @@ async def rate_queue(
         order=body.order,
         exclude=body.exclude,
         limit=body.limit,
+        tag_id=body.tag_id,
     )
     return [RateItemOut.model_validate(item, from_attributes=True) for item in items]
 

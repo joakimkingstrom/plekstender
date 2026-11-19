@@ -3,7 +3,7 @@ import { Select } from '../components/Select'
 import { Tooltip } from '../components/Tooltip'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
-import { useAlbum, useArtist } from '../api/library'
+import { useAlbum, useArtist, useTags } from '../api/library'
 import {
   useRate,
   useRateQueue,
@@ -21,7 +21,7 @@ import { starsText, swipeResult } from '../swipe'
 import { useLibraryServer } from '../components/useLibraryServer'
 
 type Layout = 'swipe' | 'desktop'
-type Settings = { kind: RateKind; pool: RatePool; order: RateOrder; layout: Layout }
+type Settings = { kind: RateKind; pool: RatePool; order: RateOrder; layout: Layout; tag: number | null }
 
 const STORAGE_KEY = 'plekstender.rate'
 const KINDS: [RateKind, string][] = [
@@ -42,7 +42,7 @@ const ORDERS: [RateOrder, string][] = [
 
 function loadSettings(): Settings {
   const wide = typeof window !== 'undefined' && window.matchMedia?.('(min-width: 768px)').matches
-  const defaults: Settings = { kind: 'track', pool: 'listened', order: 'weighted', layout: wide ? 'desktop' : 'swipe' }
+  const defaults: Settings = { kind: 'track', pool: 'listened', order: 'weighted', layout: wide ? 'desktop' : 'swipe', tag: null }
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }
   } catch {
@@ -108,7 +108,8 @@ function Rater({ serverId }: { serverId: number }) {
   }
   // The Lists layout shows 15 songs at a time: keep two pages in hand.
   const keep = settings.layout === 'desktop' && settings.kind === 'track' ? SONGS_PER_PAGE * 2 : 6
-  const queue = useRateQueue(serverId, settings.kind, settings.pool, settings.order, keep)
+  const queue = useRateQueue(serverId, settings.kind, settings.pool, settings.order, keep, settings.tag)
+  const genres = useTags(serverId, 'genre')
   const rateMutation = useRate(serverId)
   const undoMutation = useUndoRating(serverId)
   const [overrides, setOverrides] = useState<Overrides>({})
@@ -167,6 +168,15 @@ function Rater({ serverId }: { serverId: number }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Segmented label="What to rate" value={settings.kind} options={KINDS} onChange={(kind) => update({ kind })} />
+        <Select
+          label="Genre"
+          value={settings.tag ?? 0}
+          onChange={(tag) => update({ tag: tag || null })}
+          options={[
+            { value: 0, label: 'All genres' },
+            ...(genres.data ?? []).map((g) => ({ value: g.id, label: g.name })),
+          ]}
+        />
         <Select
           label="Which ones"
           value={settings.pool}

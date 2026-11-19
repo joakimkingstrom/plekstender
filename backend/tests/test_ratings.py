@@ -259,3 +259,23 @@ async def test_library_plays_include_the_listening_history(app: FastAPI, plex: F
     assert {t["title"]: t["plays"] for t in radiohead["top_tracks"]}["Paranoid Android"] == 5
     status = (await owner.get(f"/api/servers/{sid}/sync")).json()
     assert status["counts"]["plays"] == 5 + 8  # per song: the higher of the two
+
+
+@pytest.mark.db
+async def test_queue_genre_filter(app: FastAPI, plex: FakePlex) -> None:
+    owner, sid = await owner_with_library(app, plex)
+    tags = (await owner.get(f"/api/servers/{sid}/library/tags", params={"kind": "genre"})).json()
+    trip_hop = next(t["id"] for t in tags if t["name"] == "Trip Hop")
+    rock = next(t["id"] for t in tags if t["name"] == "Rock")
+    # Glory Box inherits Trip Hop from Portishead (its album has no genre of its own).
+    songs = await queue(owner, sid, kind="track", pool="all", tag_id=trip_hop, limit=50)
+    assert songs == [304]
+    assert sorted(await queue(owner, sid, kind="album", pool="all", tag_id=rock, limit=50)) == [
+        200,
+        201,
+        203,
+    ]
+    assert sorted(await queue(owner, sid, kind="artist", pool="all", tag_id=rock, limit=50)) == [
+        100,
+        102,
+    ]

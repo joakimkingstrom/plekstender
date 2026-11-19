@@ -30,8 +30,10 @@ export function useRateQueue(
   order: RateOrder,
   /** Fetch more while fewer than this many items are in hand. */
   keep = REFILL_BELOW,
+  /** Only items with this genre. */
+  tagId: number | null = null,
 ) {
-  const key = `${serverId}|${kind}|${pool}|${order}`
+  const key = `${serverId}|${kind}|${pool}|${order}|${tagId ?? ''}`
   const [state, setState] = useState<QueueState>({ key: '', items: [], exhausted: false, error: null })
   // Bumped when a request finishes without changing the queue (e.g. settings changed while
   // it was in flight), so the effect below looks again.
@@ -49,7 +51,7 @@ export function useRateQueue(
       const page = await unwrap(
         api.POST('/api/servers/{server_id}/rate/queue', {
           params: { path: { server_id: serverId } },
-          body: { kind, pool, order, exclude: [...shown].slice(-5000), limit: PAGE },
+          body: { kind, pool, order, exclude: [...shown].slice(-5000), limit: PAGE, tag_id: tagId },
         }),
       )
       if (seen.current.key !== key) return // settings changed meanwhile
@@ -71,7 +73,7 @@ export function useRateQueue(
       inFlight.current = false
       if (!changed) setTick((t) => t + 1)
     }
-  }, [key, serverId, kind, pool, order])
+  }, [key, serverId, kind, pool, order, tagId])
 
   const current = state.key === key ? state : { key, items: [], exhausted: false, error: null }
 
