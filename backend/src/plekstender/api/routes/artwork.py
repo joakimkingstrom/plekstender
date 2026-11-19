@@ -46,7 +46,7 @@ from plekstender.api.schemas import (
 from plekstender.artwork import folders, images, packs
 from plekstender.artwork import service as art
 from plekstender.artwork.images import ImageError, Transform
-from plekstender.artwork.text import FONTS
+from plekstender.db.instance import get_fonts
 from plekstender.db.models import (
     Artist,
     ArtistArtwork,
@@ -92,8 +92,20 @@ def artwork_error(exc: art.ArtworkError) -> HTTPException:
 
 
 @fonts_router.get("/fonts", response_model=list[FontGroup])
-async def fonts(_: UserDep) -> list[FontGroup]:
-    return [FontGroup(name=name, fonts=sorted(names)) for name, names in FONTS.items()]
+async def fonts(db: DbDep, _: UserDep) -> list[FontGroup]:
+    """The fonts the text logo offers (an admin setting)."""
+    return [FontGroup(name=name, fonts=names) for name, names in (await get_fonts(db)).items()]
+
+
+async def check_text_font(db: AsyncSession, source: art.SourceSpec) -> None:
+    """A text logo may only use a font the instance offers."""
+    if source.kind != "text" or source.text is None:
+        return
+    offered = {name for names in (await get_fonts(db)).values() for name in names}
+    if source.text.font not in offered:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"The font {source.text.font!r} isn't offered here."
+        )
 
 
 @router.get("/artists", response_model=ArtworkArtistPage)
@@ -300,6 +312,7 @@ async def preview(
     """The poster as it would be applied (1000 x 1000 JPEG)."""
     us = await owner_server(db, user, server_id)
     artist = await get_artist(db, user, us, rating_key)
+    await check_text_font(db, body.source)
     try:
         jpeg = await art.render(
             http,
@@ -328,6 +341,7 @@ async def apply(
     """Make the rendered image the artist's poster in Plex."""
     us = await owner_server(db, user, server_id)
     artist = await get_artist(db, user, us, rating_key)
+    await check_text_font(db, body.source)
     client = server_client(us, cipher, settings, http)
     try:
         applied = await art.apply(

@@ -16,19 +16,24 @@ from plekstender.api.schemas import (
     AdminUserOut,
     FanartKeyIn,
     FanartKeyOut,
+    FontGroup,
+    FontIn,
     LastFmKeyIn,
     LastFmKeyOut,
     PopularityPreviewItem,
 )
 from plekstender.artwork.sources import SourceError, fanart_logos
+from plekstender.artwork.text import FontError, check_font
 from plekstender.db.instance import (
     LibrarySettings,
     get_access_settings,
     get_fanart_api_key,
+    get_fonts,
     get_lastfm_api_key,
     get_library_settings,
     set_access_settings,
     set_fanart_api_key,
+    set_fonts,
     set_lastfm_api_key,
     set_library_settings,
 )
@@ -234,3 +239,48 @@ async def put_fanart(
     await set_fanart_api_key(db, settings, body.api_key)
     await db.commit()
     return await get_fanart(db, admin, settings)
+
+
+# --- text logo fonts -----------------------------------------------------------------------
+
+
+async def _font_groups(db: DbDep) -> list[FontGroup]:
+    return [FontGroup(name=name, fonts=names) for name, names in (await get_fonts(db)).items()]
+
+
+@router.post("/fonts", response_model=list[FontGroup])
+async def add_font(body: FontIn, db: DbDep, _: AdminDep, http: HttpDep) -> list[FontGroup]:
+    """Offer another Google Fonts family for text logos (checked with Google Fonts)."""
+    name = " ".join(body.name.split())
+    groups = await get_fonts(db)
+    if any(name.lower() == n.lower() for names in groups.values() for n in names):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{name} is already in the list.")
+    try:
+        await check_font(http, name)
+    except FontError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    groups[body.group] = sorted([*groups[body.group], name])
+    await set_fonts(db, groups)
+    await db.commit()
+    return await _font_groups(db)
+
+
+@router.delete("/fonts/{name}", response_model=list[FontGroup])
+async def remove_font(name: str, db: DbDep, _: AdminDep) -> list[FontGroup]:
+    groups = await get_fonts(db)
+    remaining = {g: [n for n in names if n != name] for g, names in groups.items()}
+    if remaining == groups:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That font isn't in the list.")
+    if not any(remaining.values()):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Keep at least one font.")
+    await set_fonts(db, remaining)
+    await db.commit()
+    return await _font_groups(db)
+
+
+@router.delete("/fonts", response_model=list[FontGroup])
+async def reset_fonts(db: DbDep, _: AdminDep) -> list[FontGroup]:
+    """Go back to the default list."""
+    await set_fonts(db, None)
+    await db.commit()
+    return await _font_groups(db)

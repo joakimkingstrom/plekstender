@@ -16,7 +16,8 @@ from plekstender.artwork.images import hex_rgb
 
 log = logging.getLogger(__name__)
 
-# The curated list from plex-artist-logos, grouped as there.
+# The default list (curated in plex-artist-logos), grouped as there. Admins can change the
+# instance's list in Settings; see plekstender.db.instance.get_fonts.
 FONTS: dict[str, list[str]] = {
     "Sans serif": ["Anton", "Raleway"],
     "Serif": ["Cinzel", "Merriweather"],
@@ -33,7 +34,9 @@ FONTS: dict[str, list[str]] = {
     ],
     "Monospace": ["Press Start 2P", "Special Elite", "Bitcount Grid Double Ink"],
 }  # fmt: skip
-ALL_FONTS = {name for group in FONTS.values() for name in group}
+GROUPS = tuple(FONTS)
+# Google Fonts family names: letters, digits and spaces.
+FONT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ]{0,63}$")
 GOOGLE_CSS = "https://fonts.googleapis.com/css2"
 FONT_SIZE = 400
 LINE_GAP = 50
@@ -54,9 +57,10 @@ class TextLogo(BaseModel):
 
     @field_validator("font")
     @classmethod
-    def _known_font(cls, value: str) -> str:
-        if value not in ALL_FONTS:
-            raise ValueError(f"unknown font {value!r}")
+    def _font_name(cls, value: str) -> str:
+        # Whether the instance offers it is checked by the API (it's a setting).
+        if not FONT_NAME.match(value):
+            raise ValueError(f"invalid font name {value!r}")
         return value
 
     @field_validator("color")
@@ -77,24 +81,43 @@ def _store(path: Path, data: bytes) -> None:
     tmp.replace(path)
 
 
+async def _font_url(http: httpx.AsyncClient, font: str) -> str:
+    """The URL of the font's regular TTF, from the Google Fonts CSS API."""
+    try:
+        # Without a browser User-Agent, Google serves TrueType (which FreeType reads).
+        css = await http.get(GOOGLE_CSS, params={"family": font}, timeout=20)
+    except httpx.HTTPError as exc:
+        raise FontError("Google Fonts couldn't be reached; try again.") from exc
+    if css.status_code == 400:
+        raise FontError(f"Google Fonts has no font called {font!r}.")
+    if css.is_error:
+        raise FontError(f"Google Fonts is unavailable (HTTP {css.status_code}).")
+    urls = re.findall(r"url\((https://[^)]+)\)", css.text)
+    if not urls:
+        raise FontError(f"Google Fonts returned no file for {font!r}")
+    return str(urls[-1])
+
+
+async def check_font(http: httpx.AsyncClient, font: str) -> None:
+    """Raise FontError unless Google Fonts has this family."""
+    if not FONT_NAME.match(font):
+        raise FontError("Font names are letters, digits and spaces, as on fonts.google.com.")
+    await _font_url(http, font)
+
+
 async def font_path(http: httpx.AsyncClient, fonts_dir: Path, font: str) -> Path:
     """The font's TTF, downloaded from Google Fonts the first time it's used."""
-    if font not in ALL_FONTS:
-        raise FontError(f"unknown font {font!r}")
+    if not FONT_NAME.match(font):
+        raise FontError(f"invalid font name {font!r}")
     path = fonts_dir / _file_name(font)
     if await asyncio.to_thread(path.exists):
         return path
     async with _locks.setdefault(font, asyncio.Lock()):
         if await asyncio.to_thread(path.exists):
             return path
+        url = await _font_url(http, font)
         try:
-            # Without a browser User-Agent, Google serves TrueType (which FreeType reads).
-            css = await http.get(GOOGLE_CSS, params={"family": f"{font}:wght@400"}, timeout=20)
-            css.raise_for_status()
-            urls = re.findall(r"url\((https://[^)]+)\)", css.text)
-            if not urls:
-                raise FontError(f"Google Fonts returned no file for {font!r}")
-            data = await http.get(urls[-1], timeout=30)
+            data = await http.get(url, timeout=30)
             data.raise_for_status()
         except httpx.HTTPError as exc:
             raise FontError(f"Could not download the font {font!r}.") from exc

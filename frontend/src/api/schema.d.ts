@@ -1239,6 +1239,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/fonts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Font
+         * @description Offer another Google Fonts family for text logos (checked with Google Fonts).
+         */
+        post: operations["add_font_api_admin_fonts_post"];
+        /**
+         * Reset Fonts
+         * @description Go back to the default list.
+         */
+        delete: operations["reset_fonts_api_admin_fonts_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/fonts/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Font */
+        delete: operations["remove_font_api_admin_fonts__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/artwork/fonts": {
         parameters: {
             query?: never;
@@ -1246,7 +1287,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Fonts */
+        /**
+         * Fonts
+         * @description The fonts the text logo offers (an admin setting).
+         */
         get: operations["fonts_api_artwork_fonts_get"];
         put?: never;
         post?: never;
@@ -1702,6 +1746,19 @@ export interface components {
             name: string;
             /** Fonts */
             fonts: string[];
+        };
+        /** FontIn */
+        FontIn: {
+            /**
+             * Name
+             * @description As on fonts.google.com.
+             */
+            name: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "Sans serif" | "Serif" | "Display" | "Handwriting" | "Monospace";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -5341,6 +5398,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FanartKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_font_api_admin_fonts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FontIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FontGroup"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_fonts_api_admin_fonts_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FontGroup"][];
+                };
+            };
+        };
+    };
+    remove_font_api_admin_fonts__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FontGroup"][];
                 };
             };
             /** @description Validation Error */

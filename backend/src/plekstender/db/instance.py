@@ -167,3 +167,24 @@ async def set_fanart_api_key(db: AsyncSession, settings: Settings, api_key: str 
         else {}
     )
     await _put(db, FANART_KEY, value)
+
+
+# --- text logo fonts ------------------------------------------------------------------------
+
+FONTS_KEY = "fonts"
+
+
+async def get_fonts(db: AsyncSession) -> dict[str, list[str]]:
+    """The Google Fonts the text logo offers, by group (the default list until changed)."""
+    from plekstender.artwork.text import FONTS, GROUPS
+
+    stored = await _get(db, FONTS_KEY)
+    if not stored or not isinstance(stored.get("groups"), dict):
+        return {group: list(names) for group, names in FONTS.items()}
+    groups = stored["groups"]
+    return {g: sorted(str(n) for n in groups.get(g, [])) for g in GROUPS}
+
+
+async def set_fonts(db: AsyncSession, groups: dict[str, list[str]] | None) -> None:
+    """Save the font list (None restores the default)."""
+    await _put(db, FONTS_KEY, {} if groups is None else {"groups": groups})

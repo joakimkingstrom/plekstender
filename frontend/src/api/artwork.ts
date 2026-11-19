@@ -59,6 +59,24 @@ export function useFonts() {
   return useQuery({ queryKey: artworkKeys.fonts, queryFn: () => unwrap(api.GET('/api/artwork/fonts')), staleTime: Infinity })
 }
 
+export type FontGroupName = Schemas['FontIn']['group']
+
+/** Admin: change which Google Fonts the text logo offers. */
+export function useEditFonts() {
+  const qc = useQueryClient()
+  const onSuccess = (data: Schemas['FontGroup'][]) => qc.setQueryData(artworkKeys.fonts, data)
+  const add = useMutation({
+    mutationFn: (body: { name: string; group: FontGroupName }) => unwrap(api.POST('/api/admin/fonts', { body })),
+    onSuccess,
+  })
+  const remove = useMutation({
+    mutationFn: (name: string) => unwrap(api.DELETE('/api/admin/fonts/{name}', { params: { path: { name } } })),
+    onSuccess,
+  })
+  const reset = useMutation({ mutationFn: () => unwrap(api.DELETE('/api/admin/fonts')), onSuccess })
+  return { add, remove, reset }
+}
+
 export function useSetArtworkStatus(serverId: number) {
   const qc = useQueryClient()
   return useMutation({

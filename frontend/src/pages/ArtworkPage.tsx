@@ -425,8 +425,11 @@ function TextTab({ artist, onChange }: { artist: Artist; onChange: (text: Schema
     color: '#ffffff',
     case: 'none',
   })
+  // Admins choose the fonts: fall back to the first one if the default isn't offered.
+  const offered = (fonts.data ?? []).flatMap((g) => g.fonts)
+  const font = offered.length === 0 || offered.includes(spec.font) ? spec.font : offered[0]
   const update = (p: Partial<Schemas['TextLogo']>) => {
-    const next = { ...spec, ...p }
+    const next = { ...spec, font, ...p }
     setSpec(next)
     if (next.text.trim()) onChange(next)
   }
@@ -442,8 +445,8 @@ function TextTab({ artist, onChange }: { artist: Artist; onChange: (text: Schema
         <Select
           labelledBy={`${ids}-font`}
           className="w-full"
-          value={spec.font}
-          onChange={(font) => update({ font })}
+          value={font}
+          onChange={(f) => update({ font: f })}
           options={(fonts.data ?? []).flatMap((g) => g.fonts.map((f) => ({ value: f, label: f, group: g.name })))}
         />
       </div>

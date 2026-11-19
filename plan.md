@@ -463,7 +463,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 
 **Artwork**
 - [x] Status order To do → Done → Custom (dot, filter chips, editor).
-- [ ] Choose which fonts the text logo offers (Settings).
+- [x] Choose which fonts the text logo offers (Settings → Library: add by Google Fonts name, checked first; remove; restore defaults).
   *An admin list of Google Fonts names, starting from today's curated 44; adding a name checks it exists by asking Google Fonts for it; the font picker shows the instance's list.*
 - [x] Search results showed broken images. Cause: the signed image references weren't escaped in the thumbnail links, so a `&` in a search thumbnail's URL (e.g. Bing's) cut the reference short and its signature failed. They're escaped now, image hosts are asked for PNG / JPEG / WebP / GIF first (AVIF is read too), and a thumbnail host that refuses falls back to the full image.
 

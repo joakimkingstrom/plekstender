@@ -6,7 +6,8 @@ import { Navigate, NavLink, Outlet } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useLibrarySettings, useMe, usePopularityPreview, useSetPreferences, useUpdateLibrarySettings } from '../api/hooks'
 import { useActiveServer } from '../api/library'
-import { useFanartKey, useSetFanartKey } from '../api/artwork'
+import { useEditFonts, useFanartKey, useFonts, useSetFanartKey, type FontGroupName } from '../api/artwork'
+import { Select } from '../components/Select'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
@@ -104,7 +105,107 @@ export function LibrarySettingsPage() {
   return (
     <div className="space-y-4">
       <LibrarySettingsForm initial={settings.data} />
+      <FontsCard />
     </div>
+  )
+}
+
+const FONT_GROUPS: FontGroupName[] = ['Sans serif', 'Serif', 'Display', 'Handwriting', 'Monospace']
+
+function FontsCard() {
+  const fonts = useFonts()
+  const { add, remove, reset } = useEditFonts()
+  const [name, setName] = useState('')
+  const [group, setGroup] = useState<FontGroupName>('Display')
+  const error = add.error ?? remove.error ?? reset.error
+  return (
+    <Card
+      title="Text logo fonts"
+      action={
+        <Button
+          variant="ghost"
+          busy={reset.isPending}
+          onClick={() => {
+            if (window.confirm('Go back to the default list of 44 fonts?')) reset.mutate()
+          }}
+        >
+          Restore defaults
+        </Button>
+      }
+    >
+      <div className="space-y-4 text-sm">
+        <p className="text-muted">
+          The fonts the Artwork page offers for text logos. Any family on{' '}
+          <a href="https://fonts.google.com" target="_blank" rel="noreferrer" className="text-accent underline">
+            fonts.google.com
+          </a>{' '}
+          can be added by its name; it's downloaded the first time someone uses it.
+        </p>
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (name.trim()) add.mutate({ name: name.trim(), group }, { onSuccess: () => setName('') })
+          }}
+        >
+          <label className="min-w-0 flex-1 basis-48">
+            <span className="mb-1 block font-medium">Font name</span>
+            <input
+              value={name}
+              maxLength={64}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Bungee Shade"
+              className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+            />
+          </label>
+          <Select
+            label="Group"
+            value={group}
+            onChange={setGroup}
+            options={FONT_GROUPS.map((g) => ({ value: g, label: g }))}
+          />
+          <Button type="submit" variant="primary" disabled={!name.trim()} busy={add.isPending}>
+            Check and add
+          </Button>
+        </form>
+        {error && <Notice tone="error">{errorMessage(error)}</Notice>}
+        {fonts.isPending ? (
+          <Spinner small />
+        ) : fonts.isError ? (
+          <Notice tone="error">{errorMessage(fonts.error)}</Notice>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {fonts.data.map((g) => (
+              <div key={g.name}>
+                <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
+                  {g.name} <span className="font-normal">({g.fonts.length})</span>
+                </h3>
+                <ul className="flex flex-wrap gap-1.5">
+                  {g.fonts.map((f) => (
+                    <li
+                      key={f}
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-2 py-0.5 pl-2.5 pr-0.5 text-xs"
+                    >
+                      {f}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${f}`}
+                        disabled={remove.isPending}
+                        onClick={() => remove.mutate(f)}
+                        className="flex size-5 items-center justify-center rounded-full text-muted hover:bg-border hover:text-text"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                  {g.fonts.length === 0 && <li className="text-xs text-muted">None</li>}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
   )
 }
 

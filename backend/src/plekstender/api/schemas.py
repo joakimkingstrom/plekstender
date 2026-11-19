@@ -548,6 +548,11 @@ class FontGroup(BaseModel):
     fonts: list[str]
 
 
+class FontIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64, description="As on fonts.google.com.")
+    group: Literal["Sans serif", "Serif", "Display", "Handwriting", "Monospace"]
+
+
 class FanartKeyOut(BaseModel):
     configured: bool
     source: Literal["settings", "environment"] | None

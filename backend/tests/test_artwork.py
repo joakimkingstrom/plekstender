@@ -76,7 +76,7 @@ def test_text_logo(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     assert img.mode == "RGBA"
     assert img.height > img.width / 3  # two lines
     with pytest.raises(ValueError):
-        text.TextLogo(text="x", font="Comic Sans MS")
+        text.TextLogo(text="x", font="../../etc/passwd")
 
 
 # --- safe fetcher ---------------------------------------------------------------------------
@@ -339,12 +339,16 @@ async def test_text_logo_preview(
     monkeypatch.setattr(get_settings(), "data_dir", tmp_path)
     bundled = ImageFont.load_default(400)
     monkeypatch.setattr(text.ImageFont, "truetype", lambda *_a, **_k: bundled)
-    web.get("https://fonts.googleapis.com/css2").mock(
-        return_value=httpx.Response(
+
+    def google_css(request: httpx.Request) -> httpx.Response:
+        if request.url.params["family"] == "Not A Real Font":
+            return httpx.Response(400, text="Font family not found")
+        return httpx.Response(
             200,
             text="@font-face { src: url(https://fonts.gstatic.com/s/anton/v1/a.ttf); }",
         )
-    )
+
+    web.get("https://fonts.googleapis.com/css2").mock(side_effect=google_css)
     font_file = web.get("https://fonts.gstatic.com/s/anton/v1/a.ttf").mock(
         return_value=httpx.Response(200, content=b"ttf-bytes")
     )
@@ -365,6 +369,35 @@ async def test_text_logo_preview(
     assert (applied.json()["status"], applied.json()["source"]) == ("custom", "text")
     fonts = (await owner.get("/api/artwork/fonts")).json()
     assert "Anton" in next(g["fonts"] for g in fonts if g["name"] == "Sans serif")
+
+    # Admins choose the fonts: added ones are checked with Google Fonts.
+    def group(fonts: list[dict[str, Any]], name: str) -> list[str]:
+        return next(g["fonts"] for g in fonts if g["name"] == name)
+
+    resp = await owner.post(
+        "/api/admin/fonts", json={"name": "Not A Real Font", "group": "Display"}, headers=CSRF
+    )
+    assert resp.status_code == 400
+    assert "no font called" in resp.json()["detail"]
+    resp = await owner.post(
+        "/api/admin/fonts", json={"name": " Bungee  Shade", "group": "Display"}, headers=CSRF
+    )
+    assert resp.status_code == 200, resp.text
+    assert "Bungee Shade" in group(resp.json(), "Display")
+    again = await owner.post(
+        "/api/admin/fonts", json={"name": "bungee shade", "group": "Serif"}, headers=CSRF
+    )
+    assert again.status_code == 409
+    resp = await owner.delete("/api/admin/fonts/Anton", headers=CSRF)
+    assert group(resp.json(), "Sans serif") == ["Raleway"]
+    assert group((await owner.get("/api/artwork/fonts")).json(), "Display")[0] == "Allerta Stencil"
+    refused = await owner.post(
+        f"/api/servers/{sid}/artwork/artists/100/preview", json=body, headers=CSRF
+    )
+    assert refused.status_code == 400  # Anton isn't offered any more
+    resp = await owner.delete("/api/admin/fonts", headers=CSRF)
+    assert "Anton" in group(resp.json(), "Sans serif")
+    assert "Bungee Shade" not in group(resp.json(), "Display")
 
 
 @pytest.mark.db
