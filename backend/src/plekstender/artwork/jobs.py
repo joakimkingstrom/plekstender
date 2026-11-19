@@ -76,7 +76,7 @@ async def run_fanart(
     client = client_for(settings, http, us)
     transform = Transform.model_validate(job.params.get("transform") or {})
     keys = await job_artists(db, job, us)
-    stats = {"applied": 0, "no_mbid": 0, "no_logo": 0, "failed": 0, **job.stats}
+    stats = {"applied": 0, "no_mbid": 0, "no_logo": 0, "failed": 0, "folder_errors": 0, **job.stats}
     done = int(job.progress.get("done", 0))  # resume after a restart
     job.progress = {"done": done, "total": len(keys)}
     await db.commit()
@@ -98,8 +98,12 @@ async def run_fanart(
                     spec = art.SourceSpec(
                         kind="candidate", token=art.sign_ref(settings, logos[0].url)
                     )
-                    await art.apply(db, http, settings, client, artist, spec, transform, us.user_id)
+                    applied = await art.apply(
+                        db, http, settings, client, artist, spec, transform, us.user_id
+                    )
                     stats["applied"] += 1
+                    if applied.folder_error:
+                        stats["folder_errors"] += 1
             except (art.ArtworkError, sources.SourceError) as exc:
                 log.info("fanart logo for %s failed: %s", artist.title, exc)
                 stats["failed"] += 1

@@ -6,6 +6,9 @@ may use these endpoints.
 
 from __future__ import annotations
 
+import asyncio
+import os
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
@@ -27,14 +30,25 @@ from plekstender.api.schemas import (
     CandidateOut,
     CandidatesOut,
     FanartJobIn,
+    FolderExample,
+    FolderSettingsIn,
+    FolderSettingsOut,
     FontGroup,
     UploadOut,
 )
-from plekstender.artwork import images
+from plekstender.artwork import folders, images
 from plekstender.artwork import service as art
 from plekstender.artwork.images import ImageError, Transform
 from plekstender.artwork.text import FONTS
-from plekstender.db.models import Artist, ArtistArtwork, ArtworkJob, User, UserServer
+from plekstender.db.models import (
+    Artist,
+    ArtistArtwork,
+    ArtworkJob,
+    PlexServer,
+    Track,
+    User,
+    UserServer,
+)
 from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import epoch
 from plekstender.worker import ACTIVE, enqueue_artwork_job
@@ -294,11 +308,12 @@ async def apply(
     artist = await get_artist(db, user, us, rating_key)
     client = server_client(us, cipher, settings, http)
     try:
-        row = await art.apply(
+        applied = await art.apply(
             db, http, settings, client, artist, body.source, body.transform, user.id
         )
     except art.ArtworkError as exc:
         raise artwork_error(exc) from exc
+    row = applied.artwork
     # Pick up the new poster's path so the app shows it straight away.
     try:
         [meta] = await client.metadata([rating_key])
@@ -315,6 +330,8 @@ async def apply(
         source=row.source,
         applied_at=row.applied_at,
         has_mbid=bool(artist.mbid or row.mbid),
+        folder=applied.folder,
+        folder_error=applied.folder_error,
     )
 
 
@@ -376,3 +393,90 @@ async def start_fanart_job(
     if body.rating_keys:
         params["rating_keys"] = body.rating_keys
     return job_out(server_id, await start_job(db, us, "fanart", params))
+
+
+# --- saving to artist folders --------------------------------------------------------------
+
+
+async def folder_settings(db: AsyncSession, user: User, us: UserServer) -> FolderSettingsOut:
+    server = await db.get(PlexServer, us.server_id)
+    assert server is not None
+    sample_paths = [
+        p
+        for p in await db.scalars(
+            select(Track.file_path)
+            .where(Track.server_id == us.server_id, Track.file_path.is_not(None))
+            .limit(500)
+        )
+        if p
+    ]
+    plex_root = os.path.commonpath(sample_paths) if sample_paths else None
+    example = None
+    if server.plex_path_prefix and server.local_path_prefix:
+        # Check the mapping on the most popular artist (a likely, well-filed one).
+        state, cond, where = visible(Artist, user.id, us)
+        artist = await db.scalar(
+            select(Artist)
+            .join(state, cond)
+            .where(*where, Artist.title.not_ilike("various%"))
+            .order_by(Artist.popularity.desc().nulls_last(), Artist.rating_key)
+            .limit(1)
+        )
+        if artist is not None:
+            try:
+                local = await folders.artist_folder(db, server, artist)
+                exists = await asyncio.to_thread(folders.is_dir, local)
+                example = FolderExample(
+                    artist=artist.title,
+                    local_folder=str(local),
+                    exists=exists,
+                    problem=None if exists else "Not found in Plekstender's container.",
+                )
+            except folders.FolderError as exc:
+                example = FolderExample(
+                    artist=artist.title, local_folder=None, exists=False, problem=str(exc)
+                )
+    return FolderSettingsOut(
+        enabled=server.folder_save,
+        plex_prefix=server.plex_path_prefix,
+        local_prefix=server.local_path_prefix,
+        plex_root=plex_root or None,
+        example=example,
+    )
+
+
+@router.get("/folder", response_model=FolderSettingsOut)
+async def get_folder(server_id: int, db: DbDep, user: UserDep) -> FolderSettingsOut:
+    us = await owner_server(db, user, server_id)
+    return await folder_settings(db, user, us)
+
+
+@router.put("/folder", response_model=FolderSettingsOut)
+async def put_folder(
+    server_id: int, body: FolderSettingsIn, db: DbDep, user: UserDep
+) -> FolderSettingsOut:
+    """Turn saving artist.jpg into artist folders on or off, with the path mapping."""
+    us = await owner_server(db, user, server_id)
+    server = await db.get(PlexServer, us.server_id)
+    assert server is not None
+    plex_prefix = (body.plex_prefix or "").strip().rstrip("/") or None
+    local_prefix = (body.local_prefix or "").strip().rstrip("/") or None
+    if body.enabled:
+        if not plex_prefix or not local_prefix:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Enter both the Plex path and the local path.",
+            )
+        if not plex_prefix.startswith("/") or not local_prefix.startswith("/"):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Use absolute paths.")
+        if not await asyncio.to_thread(folders.is_dir, Path(local_prefix)):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"{local_prefix} doesn't exist in Plekstender's container. Mount your music "
+                "folder there (see compose.override.example.yaml).",
+            )
+    server.folder_save = body.enabled
+    server.plex_path_prefix = plex_prefix
+    server.local_path_prefix = local_prefix
+    await db.commit()
+    return await folder_settings(db, user, us)

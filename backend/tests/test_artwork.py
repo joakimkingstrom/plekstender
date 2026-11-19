@@ -406,7 +406,13 @@ async def test_bulk_fanart_job(app: FastAPI, plex: FakePlex, web: respx.MockRout
     [done] = (await owner.get(f"{base}/jobs")).json()
     assert done["status"] == "succeeded", done["error"]
     assert done["progress"] == {"done": 2, "total": 2}  # the two "to do" artists
-    assert done["stats"] == {"applied": 2, "no_mbid": 0, "no_logo": 0, "failed": 0}
+    assert done["stats"] == {
+        "applied": 2,
+        "no_mbid": 0,
+        "no_logo": 0,
+        "failed": 0,
+        "folder_errors": 0,
+    }
     assert sorted(k for k, _ in plex.library.uploaded) == [100, 101]
     statuses = {
         a["title"]: a["status"] for a in (await owner.get(f"{base}/artists")).json()["items"]
@@ -420,3 +426,80 @@ async def test_bulk_fanart_job(app: FastAPI, plex: FakePlex, web: respx.MockRout
     await artwork_job.func(job_id=picked["id"])
     latest = (await owner.get(f"{base}/jobs")).json()[0]
     assert latest["stats"]["no_mbid"] == 1
+
+
+# --- artist folders ---------------------------------------------------------------------------
+
+
+def test_artist_folder_from_track_paths() -> None:
+    from pathlib import PurePosixPath
+
+    from plekstender.artwork.folders import artist_plex_folder, map_path
+
+    two_albums = ["/music/Radiohead/OK Computer/01.flac", "/music/Radiohead/Kid A/01.flac"]
+    assert artist_plex_folder(two_albums) == PurePosixPath("/music/Radiohead")
+    one_album = ["/music/Portishead/Dummy/01.flac", "/music/Portishead/Dummy/02.flac"]
+    assert artist_plex_folder(one_album) == PurePosixPath("/music/Portishead")
+    assert artist_plex_folder([]) is None
+    assert str(map_path("/music/Radiohead", "/music", "/srv/media")) == "/srv/media/Radiohead"
+    assert map_path("/other/Radiohead", "/music", "/srv/media") is None
+
+
+@pytest.mark.db
+async def test_saving_to_artist_folders(
+    app: FastAPI, plex: FakePlex, web: respx.MockRouter, tmp_path: Any
+) -> None:
+    from sqlalchemy import text as sql
+
+    from plekstender.db import get_sessionmaker
+
+    owner, sid = await setup(app, plex)
+    base = f"/api/servers/{sid}/artwork"
+    async with get_sessionmaker()() as db:  # realistic paths: Artist/Album/track
+        await db.execute(
+            sql(
+                "UPDATE tracks SET file_path = '/music/' || CASE artist_rating_key "
+                "WHEN 100 THEN 'Radiohead' WHEN 101 THEN 'Portishead' ELSE 'Compilations' END "
+                "|| '/Album ' || album_rating_key || '/' || rating_key || '.flac'"
+            )
+        )
+        await db.commit()
+    music = tmp_path / "music"
+    (music / "Radiohead").mkdir(parents=True)
+
+    off = (await owner.get(f"{base}/folder")).json()
+    assert (off["enabled"], off["plex_root"]) == (False, "/music")
+    missing = await owner.put(
+        f"{base}/folder",
+        json={"enabled": True, "plex_prefix": "/music", "local_prefix": "/nope"},
+        headers=CSRF,
+    )
+    assert missing.status_code == 422
+    on = await owner.put(
+        f"{base}/folder",
+        json={"enabled": True, "plex_prefix": "/music/", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    assert on.status_code == 200, on.text
+    example = on.json()["example"]
+    assert (example["artist"], example["exists"]) == ("Radiohead", True)
+
+    body = {"source": {"kind": "current"}}
+    radiohead = (await owner.post(f"{base}/artists/100/apply", json=body, headers=CSRF)).json()
+    assert radiohead["folder"] == str((music / "Radiohead" / "artist.jpg").resolve())
+    assert jpeg_size((music / "Radiohead" / "artist.jpg").read_bytes()) == (1000, 1000)
+
+    # Still saved to Plex when the folder can't be used, with the reason.
+    portishead = (await owner.post(f"{base}/artists/101/apply", json=body, headers=CSRF)).json()
+    assert portishead["folder"] is None and "doesn't exist" in portishead["folder_error"]
+    secret = (await owner.post(f"{base}/artists/102/apply", json=body, headers=CSRF)).json()
+    assert "doesn't match" in secret["folder_error"]
+    assert len(plex.library.uploaded) == 3
+
+    # A symlink can't lead outside the mapped folder.
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (music / "Portishead").symlink_to(outside)
+    escaped = (await owner.post(f"{base}/artists/101/apply", json=body, headers=CSRF)).json()
+    assert "outside" in escaped["folder_error"]
+    assert not (outside / "artist.jpg").exists()

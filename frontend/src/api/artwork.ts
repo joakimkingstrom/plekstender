@@ -212,3 +212,20 @@ export function useStartFanartJob(serverId: number) {
     onSuccess: () => qc.invalidateQueries({ queryKey: [...artworkKeys.all(serverId), 'jobs'] }),
   })
 }
+
+export function useFolderSettings(serverId: number) {
+  return useQuery({
+    queryKey: [...artworkKeys.all(serverId), 'folder'],
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/artwork/folder', { params: { path: { server_id: serverId } } })),
+  })
+}
+
+export function useSetFolderSettings(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['FolderSettingsIn']) =>
+      unwrap(api.PUT('/api/servers/{server_id}/artwork/folder', { params: { path: { server_id: serverId } }, body })),
+    onSuccess: (data) => qc.setQueryData([...artworkKeys.all(serverId), 'folder'], data),
+  })
+}

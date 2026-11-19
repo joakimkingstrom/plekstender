@@ -93,6 +93,11 @@ class PlexServer(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255))
     # Approved servers: in "servers" access mode, users need access to one of these.
     approved: Mapped[bool] = mapped_column(default=False)
+    # Saving artist images as artist.jpg in the artist folders (owner setting): Plex's
+    # path prefix maps to where the music is mounted in Plekstender's containers.
+    folder_save: Mapped[bool] = mapped_column(default=False, server_default="false")
+    plex_path_prefix: Mapped[str | None] = mapped_column(Text)
+    local_path_prefix: Mapped[str | None] = mapped_column(Text)
 
     users: Mapped[list[UserServer]] = relationship(back_populates="server")
 

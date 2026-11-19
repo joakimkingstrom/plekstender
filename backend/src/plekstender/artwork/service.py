@@ -6,6 +6,7 @@ import datetime as dt
 import hashlib
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -18,12 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.artwork import images, sources, text
 from plekstender.artwork.fetch import FetchError, fetch
+from plekstender.artwork.folders import FolderError, save_to_folder
 from plekstender.artwork.images import ImageError, Transform
 from plekstender.artwork.sources import Candidate, SourceError
 from plekstender.artwork.text import TextLogo
 from plekstender.config import Settings
 from plekstender.db.instance import get_fanart_api_key
-from plekstender.db.models import Artist, ArtistArtwork, ImageSearchCache
+from plekstender.db.models import Artist, ArtistArtwork, ImageSearchCache, PlexServer
 from plekstender.plex.server import PlexServerClient
 from plekstender.plex.tv import PlexError
 from plekstender.security.crypto import Signer
@@ -292,13 +294,15 @@ async def apply(
     spec: SourceSpec,
     transform: Transform,
     user_id: int,
-) -> ArtistArtwork:
-    """Render the image and make it the artist's poster in Plex."""
+) -> Applied:
+    """Render the image and make it the artist's poster in Plex (and, if set up, save it
+    as artist.jpg in the artist's folder; see `Applied.folder` / `folder_error`)."""
     jpeg = await render(http, settings, client, artist, spec, transform)
     try:
         await client.upload_poster(artist.rating_key, jpeg)
     except PlexError as exc:
         raise ArtworkError(f"Plex didn't accept the image: {exc}") from exc
+    folder, folder_error = await _save_folder(db, artist, jpeg)
     source, url = source_name(spec, settings)
     settings_json: dict[str, object] = {"transform": transform.model_dump()}
     if spec.text is not None:
@@ -325,4 +329,23 @@ async def apply(
         .execution_options(populate_existing=True)
     )
     assert row is not None
-    return row
+    return Applied(row, folder, folder_error)
+
+
+@dataclass
+class Applied:
+    artwork: ArtistArtwork
+    folder: str | None = None  # where artist.jpg was written
+    folder_error: str | None = None  # why it wasn't, when folder saving is on
+
+
+async def _save_folder(
+    db: AsyncSession, artist: Artist, jpeg: bytes
+) -> tuple[str | None, str | None]:
+    server = await db.get(PlexServer, artist.server_id)
+    if server is None or not server.folder_save:
+        return None, None
+    try:
+        return str(await save_to_folder(db, server, artist, jpeg)), None
+    except FolderError as exc:
+        return None, str(exc)

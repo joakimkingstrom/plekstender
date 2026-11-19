@@ -717,6 +717,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Folder */
+        get: operations["get_folder_api_servers__server_id__artwork_folder_get"];
+        /**
+         * Put Folder
+         * @description Turn saving artist.jpg into artist folders on or off, with the path mapping.
+         */
+        put: operations["put_folder_api_servers__server_id__artwork_folder_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/export/tracks.csv": {
         parameters: {
             query?: never;
@@ -1151,6 +1172,16 @@ export interface components {
             applied_at: string | null;
             /** Has Mbid */
             has_mbid: boolean;
+            /**
+             * Folder
+             * @description Apply: where artist.jpg was saved.
+             */
+            folder?: string | null;
+            /**
+             * Folder Error
+             * @description Apply: why it wasn't saved.
+             */
+            folder_error?: string | null;
         };
         /** ArtworkArtistPage */
         ArtworkArtistPage: {
@@ -1298,6 +1329,41 @@ export interface components {
             configured: boolean;
             /** Source */
             source: ("settings" | "environment") | null;
+        };
+        /** FolderExample */
+        FolderExample: {
+            /** Artist */
+            artist: string;
+            /** Local Folder */
+            local_folder: string | null;
+            /** Exists */
+            exists: boolean;
+            /** Problem */
+            problem: string | null;
+        };
+        /** FolderSettingsIn */
+        FolderSettingsIn: {
+            /** Enabled */
+            enabled: boolean;
+            /** Plex Prefix */
+            plex_prefix?: string | null;
+            /** Local Prefix */
+            local_prefix?: string | null;
+        };
+        /** FolderSettingsOut */
+        FolderSettingsOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Plex Prefix */
+            plex_prefix: string | null;
+            /** Local Prefix */
+            local_prefix: string | null;
+            /**
+             * Plex Root
+             * @description The common start of Plex's music paths (a hint).
+             */
+            plex_root: string | null;
+            example: components["schemas"]["FolderExample"] | null;
         };
         /** FontGroup */
         FontGroup: {
@@ -3447,6 +3513,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtworkJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_folder_api_servers__server_id__artwork_folder_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_folder_api_servers__server_id__artwork_folder_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderSettingsOut"];
                 };
             };
             /** @description Validation Error */

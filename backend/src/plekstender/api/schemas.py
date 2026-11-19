@@ -479,6 +479,8 @@ class ArtworkArtistOut(BaseModel):
     source: str | None
     applied_at: dt.datetime | None
     has_mbid: bool
+    folder: str | None = Field(default=None, description="Apply: where artist.jpg was saved.")
+    folder_error: str | None = Field(default=None, description="Apply: why it wasn't saved.")
 
 
 class ArtworkArtistPage(BaseModel):
@@ -540,3 +542,24 @@ class FanartJobIn(BaseModel):
     status: Literal["none", "custom", "done"] = Field(
         default="none", description="Without rating_keys: every artist with this status."
     )
+
+
+class FolderSettingsIn(BaseModel):
+    enabled: bool
+    plex_prefix: str | None = Field(default=None, max_length=1000)
+    local_prefix: str | None = Field(default=None, max_length=1000)
+
+
+class FolderExample(BaseModel):
+    artist: str
+    local_folder: str | None
+    exists: bool
+    problem: str | None
+
+
+class FolderSettingsOut(BaseModel):
+    enabled: bool
+    plex_prefix: str | None
+    local_prefix: str | None
+    plex_root: str | None = Field(description="The common start of Plex's music paths (a hint).")
+    example: FolderExample | None

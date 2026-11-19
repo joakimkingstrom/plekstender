@@ -20,3 +20,17 @@ services:
 networks:
   proxy:
     external: true
+
+# Optional: let the Artwork page also save artist.jpg into your artist folders. Mount the
+# music folder read-write into the app and worker (here at /music), then on the Artwork
+# page set "Music folder as Plex sees it" and "Same folder in Plekstender's container".
+#
+# services:
+#   frontend:
+#     volumes:
+#       - data:/data
+#       - /mnt/media/music:/music
+#   worker:
+#     volumes:
+#       - data:/data
+#       - /mnt/media/music:/music

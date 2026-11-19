@@ -385,7 +385,7 @@ Ordered by the Last.fm deadline (1 Dec 2026):
 - [x] Editor UI and status tracking
   - Artwork page (server owners): artist list with search and To do / Custom / Done filters; per artist, candidates from fanart.tv, Plex, Search, Upload or Text, adjustments (fit or zoom, contrast, invert, greyscale, all white, tint, background), a live preview next to the current image, and "Save to Plex". "Edit current" re-works the image Plex has. fanart.tv key on Settings → Library.
 - [x] Bulk apply job: "Apply fanart.tv logos to all To do" (or chosen artists) runs in the worker (`artwork_jobs`, one per server at a time, resumes after a restart), applies each artist's most-liked logo with the default transform and reports applied / no logo / not on MusicBrainz / failed.
-- [ ] Folder save with path mapping
+- [x] Folder save with path mapping: per server (owner, Artwork page → "Save to artist folders"), Plex's music path is mapped to where the music is mounted in the containers. The artist folder is the common parent of its album folders (one album: its parent); `artist.jpg` is only written when that folder exists, its name matches the artist and (after resolving symlinks) it lies inside the mapped folder. A folder problem never blocks the Plex upload; it's reported with the result. Mount example in `compose.override.example.yaml`.
 - [ ] Export/import zip with matching preview
 
 ### Phase 5 — Smart playlists

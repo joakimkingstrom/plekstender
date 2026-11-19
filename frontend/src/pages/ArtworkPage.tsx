@@ -5,9 +5,11 @@ import {
   useArtworkArtists,
   useArtworkJobs,
   useCandidates,
+  useFolderSettings,
   useFonts,
   usePreview,
   useSetArtworkStatus,
+  useSetFolderSettings,
   useStartFanartJob,
   useUploadImage,
   type ArtworkStatus,
@@ -145,6 +147,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
             {items.length === 0 && <li className="p-3 text-sm text-muted">No artists match.</li>}
           </ul>
         )}
+        <FolderSettings serverId={serverId} />
       </div>
       {current ? (
         <ArtistEditor key={current.rating_key} serverId={serverId} artist={current} isAdmin={isAdmin} onBack={() => setSelected(null)} />
@@ -272,7 +275,16 @@ function ArtistEditor({
                   source &&
                   apply.mutate(
                     { key: artist.rating_key, source, transform },
-                    { onSuccess: () => setNotice('Saved to Plex.') },
+                    {
+                      onSuccess: (result) =>
+                        setNotice(
+                          result.folder
+                            ? `Saved to Plex and to ${result.folder}.`
+                            : result.folder_error
+                              ? `Saved to Plex, but not to the artist folder: ${result.folder_error}`
+                              : 'Saved to Plex.',
+                        ),
+                    },
                   )
                 }
               >
@@ -599,5 +611,59 @@ function BulkFanart({ serverId, todo }: { serverId: number; todo: number }) {
       )}
       {start.isError && <div className="mt-2"><Notice tone="error">{errorMessage(start.error)}</Notice></div>}
     </div>
+  )
+}
+
+function FolderSettings({ serverId }: { serverId: number }) {
+  const current = useFolderSettings(serverId)
+  const save = useSetFolderSettings(serverId)
+  const [form, setForm] = useState<{ plex: string; local: string } | null>(null)
+  if (current.isPending || current.isError) return null
+  const data = current.data
+  const plex = form?.plex ?? data.plex_prefix ?? data.plex_root ?? ''
+  const local = form?.local ?? data.local_prefix ?? ''
+  const field = 'w-full rounded-lg border border-border bg-surface-2 px-2 py-1.5 font-mono text-xs'
+  return (
+    <details className="rounded-2xl border border-border bg-surface p-3 text-sm">
+      <summary className="cursor-pointer font-medium">
+        Save to artist folders {data.enabled ? <span className="text-ok">· on</span> : <span className="text-muted">· off</span>}
+      </summary>
+      <div className="mt-3 space-y-3">
+        <p className="text-xs text-muted">
+          Also writes <code>artist.jpg</code> into each artist's music folder, for other players. Mount your music
+          folder into Plekstender's containers read-write (see <code>compose.override.example.yaml</code>), then map
+          Plex's path to it.
+        </p>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium">Music folder as Plex sees it</span>
+          <input value={plex} onChange={(e) => setForm({ plex: e.target.value, local })} className={field} placeholder="/music" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium">Same folder in Plekstender's container</span>
+          <input value={local} onChange={(e) => setForm({ plex, local: e.target.value })} className={field} placeholder="/music" />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="primary"
+            busy={save.isPending}
+            onClick={() => save.mutate({ enabled: true, plex_prefix: plex, local_prefix: local }, { onSuccess: () => setForm(null) })}
+          >
+            {data.enabled ? 'Update' : 'Turn on'}
+          </Button>
+          {data.enabled && (
+            <Button variant="ghost" busy={save.isPending} onClick={() => save.mutate({ enabled: false, plex_prefix: plex, local_prefix: local })}>
+              Turn off
+            </Button>
+          )}
+        </div>
+        {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+        {data.enabled && data.example && (
+          <p className={`text-xs ${data.example.problem ? 'text-danger' : 'text-muted'}`}>
+            Check with {data.example.artist}:{' '}
+            {data.example.problem ?? `${data.example.local_folder} ✓`}
+          </p>
+        )}
+      </div>
+    </details>
   )
 }

@@ -33,6 +33,8 @@ beforeEach(() => {
         return new Response(new Blob(['jpeg']), { headers: { 'content-type': 'image/jpeg' } })
       case '/api/servers/1/artwork/jobs':
         return json([])
+      case '/api/servers/1/artwork/folder':
+        return json({ enabled: false, plex_prefix: null, local_prefix: null, plex_root: '/music', example: null })
       case '/api/servers/1/artwork/artists/100/apply':
         return json({ ...radiohead, status: 'done', source: 'fanart', applied_at: '2026-11-18T12:00:00Z' })
       default:
