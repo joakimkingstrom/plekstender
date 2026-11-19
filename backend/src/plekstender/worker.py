@@ -342,10 +342,11 @@ async def watch_sessions(timestamp: int) -> None:
         await watch(db, http, get_settings(), connections, POLLS_PER_RUN, asyncio.sleep)
 
 
-@app.periodic(cron="40 3 * * *", periodic_id="update-geoip")
+@app.periodic(cron="40 * * * *", periodic_id="update-geoip")
 @app.task(queue="maintenance", queueing_lock="update-geoip")
 async def update_geoip(timestamp: int) -> None:
-    """Daily: fetch the IP location database when the copy is missing or a month old."""
+    """Hourly check (a no-op while the copy is fresh): fetch the IP location database when
+    it's missing or a month old, so a new install has locations within the hour."""
     async with httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http:
         await update_geoip_database(http, get_settings())
 
