@@ -1,5 +1,6 @@
 import { playSample, playTrack, sampleKey, stopAudio, unlockAudio, useAudio } from '../audio'
 import type { GameMode } from '../api/game'
+import { Mark } from './Mark'
 import { Tooltip } from './Tooltip'
 
 /** Play / stop a 40-second preview (one plays at a time, app-wide): of a song, or with
@@ -50,7 +51,7 @@ export function PlayButton({
         }`}
       >
         {loading ? (
-          <span className="size-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden />
+          <Mark className="pick-spin size-4" />
         ) : playing ? (
           <svg viewBox="0 0 12 12" className="size-3" aria-hidden>
             <rect x="2" y="2" width="8" height="8" rx="1" fill="currentColor" />

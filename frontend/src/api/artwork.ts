@@ -64,7 +64,11 @@ export type FontGroupName = Schemas['FontIn']['group']
 /** Admin: change which Google Fonts the text logo offers. */
 export function useEditFonts() {
   const qc = useQueryClient()
-  const onSuccess = (data: Schemas['FontGroup'][]) => qc.setQueryData(artworkKeys.fonts, data)
+  const onSuccess = (data: Schemas['FontGroup'][]) => {
+    qc.setQueryData(artworkKeys.fonts, data)
+    // The catalogue marks what's offered: look again.
+    void qc.invalidateQueries({ queryKey: ['admin', 'font-catalogue'] })
+  }
   const add = useMutation({
     mutationFn: (name: string) => unwrap(api.POST('/api/admin/fonts', { body: { name } })),
     onSuccess,

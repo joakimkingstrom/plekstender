@@ -15,7 +15,7 @@ import {
   type RatePool,
 } from '../api/ratings'
 import { Artwork, Stars } from '../components/library'
-import { Mark } from '../components/Layout'
+import { Mark } from '../components/Mark'
 import { PlayButton } from '../components/PlayButton'
 import { GuessBox, RoundClock } from '../components/IntroGame'
 import { useGameSettings, useIntroRound } from '../game'

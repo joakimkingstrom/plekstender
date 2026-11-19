@@ -153,7 +153,16 @@ export function FontsCard() {
   const fonts = useFonts()
   const { add, remove, reset } = useEditFonts()
   const [sample, setSample] = useState('')
+  // The font just added: highlighted in the list, and named under the search.
+  const [justAdded, setJustAdded] = useState<{ name: string; group: string } | null>(null)
   const error = add.error ?? remove.error ?? reset.error
+  const addFont = (name: string) =>
+    add.mutate(name, {
+      onSuccess: (groups) => {
+        const group = groups.find((g) => g.fonts.includes(name))?.name ?? ''
+        setJustAdded({ name, group })
+      },
+    })
   const total = (fonts.data ?? []).reduce((n, g) => n + g.fonts.length, 0)
   return (
     <Card
@@ -204,7 +213,12 @@ export function FontsCard() {
                   </h4>
                   <ul className="space-y-1">
                     {g.fonts.map((f) => (
-                      <li key={f} className="group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-surface-2">
+                      <li
+                        key={f}
+                        className={`group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-surface-2 ${
+                          justAdded?.name === f ? 'bg-accent/10 ring-1 ring-accent' : ''
+                        }`}
+                      >
                         <div className="min-w-0 flex-1">
                           <FontPreview family={f} text={sample} />
                           {sample.trim() && <span className="block text-[11px] text-muted">{f}</span>}
@@ -228,14 +242,29 @@ export function FontsCard() {
           )}
         </section>
 
-        <FontBrowser sample={sample} onAdd={(name) => add.mutate(name)} adding={add.isPending ? add.variables : null} />
+        <FontBrowser
+          sample={sample}
+          onAdd={addFont}
+          adding={add.isPending ? add.variables : null}
+          added={justAdded}
+        />
       </div>
     </Card>
   )
 }
 
 /** Browse Google Fonts (most used first) and add fonts; their group comes from Google. */
-function FontBrowser({ sample, onAdd, adding }: { sample: string; onAdd: (name: string) => void; adding: string | null | undefined }) {
+function FontBrowser({
+  sample,
+  onAdd,
+  adding,
+  added,
+}: {
+  sample: string
+  onAdd: (name: string) => void
+  adding: string | null | undefined
+  added: { name: string; group: string } | null
+}) {
   const [q, setQ] = useState('')
   const [group, setGroup] = useState<FontGroupName | null>(null)
   const [limit, setLimit] = useState(CATALOGUE_PAGE)
@@ -276,6 +305,11 @@ function FontBrowser({ sample, onAdd, adding }: { sample: string; onAdd: (name: 
           </button>
         ))}
       </div>
+      {added && (
+        <p className="text-sm text-ok" role="status">
+          {added.name} added{added.group ? ` to ${added.group}` : ''}: it's now offered on the Artwork page.
+        </p>
+      )}
       {page.isPending ? (
         <Spinner small />
       ) : page.isError ? (
@@ -295,17 +329,18 @@ function FontBrowser({ sample, onAdd, adding }: { sample: string; onAdd: (name: 
                     {f.name} · {f.group}
                   </p>
                 </div>
-                {f.offered ? (
+                {f.offered || added?.name === f.name ? (
                   <span className="shrink-0 text-xs text-ok">Added ✓</span>
                 ) : (
                   <Button
                     variant="secondary"
                     className="shrink-0 px-3 py-1.5 text-xs"
                     busy={adding === f.name}
+                    disabled={Boolean(adding)}
                     onClick={() => onAdd(f.name)}
                     aria-label={`Add ${f.name}`}
                   >
-                    Add
+                    {adding === f.name ? 'Adding…' : 'Add'}
                   </Button>
                 )}
               </li>

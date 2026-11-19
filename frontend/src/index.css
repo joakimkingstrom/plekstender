@@ -200,3 +200,69 @@ input[type='number']::-webkit-outer-spin-button {
 :root:not([data-theme='light']) .font-preview {
   filter: invert(1);
 }
+
+/* The brand's spinning pick, looping (loading): the same frames as clicking the logo
+   (src/brand.ts). With reduced motion, a gentle pulse instead. */
+@keyframes pick-spin {
+  0.0% { transform: scaleX(1.000); }
+  2.083% { transform: scaleX(1.000); }
+  4.167% { transform: scaleX(1.000); }
+  6.25% { transform: scaleX(0.999); }
+  8.333% { transform: scaleX(0.997); }
+  10.417% { transform: scaleX(0.993); }
+  12.5% { transform: scaleX(0.985); }
+  14.583% { transform: scaleX(0.971); }
+  16.667% { transform: scaleX(0.949); }
+  18.75% { transform: scaleX(0.917); }
+  20.833% { transform: scaleX(0.872); }
+  22.917% { transform: scaleX(0.810); }
+  25.0% { transform: scaleX(0.728); }
+  27.083% { transform: scaleX(0.625); }
+  29.167% { transform: scaleX(0.499); }
+  31.25% { transform: scaleX(0.349); }
+  33.333% { transform: scaleX(0.178); }
+  35.417% { transform: scaleX(-0.030); }
+  37.5% { transform: scaleX(-0.209); }
+  39.583% { transform: scaleX(-0.408); }
+  41.667% { transform: scaleX(-0.597); }
+  43.75% { transform: scaleX(-0.761); }
+  45.833% { transform: scaleX(-0.890); }
+  47.917% { transform: scaleX(-0.972); }
+  50.0% { transform: scaleX(-1.000); }
+  52.083% { transform: scaleX(-0.972); }
+  54.167% { transform: scaleX(-0.890); }
+  56.25% { transform: scaleX(-0.761); }
+  58.333% { transform: scaleX(-0.597); }
+  60.417% { transform: scaleX(-0.408); }
+  62.5% { transform: scaleX(-0.209); }
+  64.583% { transform: scaleX(-0.030); }
+  66.667% { transform: scaleX(0.178); }
+  68.75% { transform: scaleX(0.349); }
+  70.833% { transform: scaleX(0.499); }
+  72.917% { transform: scaleX(0.625); }
+  75.0% { transform: scaleX(0.728); }
+  77.083% { transform: scaleX(0.810); }
+  79.167% { transform: scaleX(0.872); }
+  81.25% { transform: scaleX(0.917); }
+  83.333% { transform: scaleX(0.949); }
+  85.417% { transform: scaleX(0.971); }
+  87.5% { transform: scaleX(0.985); }
+  89.583% { transform: scaleX(0.993); }
+  91.667% { transform: scaleX(0.997); }
+  93.75% { transform: scaleX(0.999); }
+  95.833% { transform: scaleX(1.000); }
+  97.917% { transform: scaleX(1.000); }
+  100.0% { transform: scaleX(1.000); }
+}
+@keyframes pick-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.pick-spin {
+  animation: pick-spin 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pick-spin {
+    animation: pick-pulse 1.6s ease-in-out infinite;
+  }
+}

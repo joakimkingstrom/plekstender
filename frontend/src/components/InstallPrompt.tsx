@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import { install, installOffer, isPhone, isStandalone, onInstallOffer, platform } from '../install'
-import { Mark } from './Layout'
+import { Mark } from './Mark'
 import { Dialog } from './Dialog'
 import { Button } from './ui'
 

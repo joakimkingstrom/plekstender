@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { Mark } from './Mark'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
@@ -55,14 +56,13 @@ export function Card({
   )
 }
 
+/** Loading: the brand's spinning pick (the same turn as clicking the logo). */
 export function Spinner({ small = false }: { small?: boolean }) {
-  const size = small ? 'size-4' : 'size-6'
+  const size = small ? 'size-4' : 'size-7'
   return (
-    <span
-      role="status"
-      aria-label="Loading"
-      className={`${size} inline-block animate-spin rounded-full border-2 border-current border-r-transparent`}
-    />
+    <span role="status" aria-label="Loading" className={`inline-flex shrink-0 ${size}`}>
+      <Mark className="pick-spin size-full" />
+    </span>
   )
 }
 

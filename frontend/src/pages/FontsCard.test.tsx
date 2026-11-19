@@ -11,6 +11,8 @@ afterEach(() => {
 
 describe('FontsCard', () => {
   it('previews the offered fonts, browses Google Fonts and adds one (any capitals)', async () => {
+    let finishSaving = () => {}
+    const saved = new Promise<void>((resolve) => (finishSaving = resolve))
     let offered = [
       { name: 'Sans serif', fonts: ['Anton'] },
       { name: 'Serif', fonts: [] },
@@ -33,6 +35,7 @@ describe('FontsCard', () => {
         return json({ items, total: items.length, available: true })
       }
       if (url.pathname === '/api/admin/fonts' && input.method === 'POST') {
+        await saved // the server takes a moment
         offered = offered.map((g) => (g.name === 'Sans serif' ? { ...g, fonts: ['Anton', 'Roboto'] } : g))
         return json(offered)
       }
@@ -55,6 +58,16 @@ describe('FontsCard', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search Google Fonts' }), { target: { value: 'roboto' } })
     expect(await screen.findByText('Roboto Slab · Serif')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Add Roboto' }))
+    // While it's saved: the button says so (and other Add buttons wait).
+    expect(await screen.findByText('Adding…')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add Roboto Slab' })).toBeDisabled()
+    const catalogueCalls = () => fetch.mock.calls.filter(([r]) => new URL(r.url).pathname === '/api/admin/fonts/catalogue').length
+    const before = catalogueCalls()
+    finishSaving()
+    // Then: said, marked in the results, and in the list without a reload.
+    expect(await screen.findByText(/Roboto added to Sans serif/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add Roboto' })).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(catalogueCalls()).toBeGreaterThan(before))
     await vi.waitFor(async () => {
       const post = fetch.mock.calls.find(([r]) => r.method === 'POST')
       expect(await post![0].clone().json()).toEqual({ name: 'Roboto' })
