@@ -61,6 +61,7 @@ Open your Plekstender address in Safari and choose **Share → Add to Home Scree
 - **fanart.tv:** artist logos need a free API key (Settings → Connections, or `FANART_API_KEY`).
 - **Last.fm import:** needs an API key (Settings → Connections, or `LASTFM_API_KEY`). From 1 December 2026, Last.fm only allows this with a Last.fm Pro subscriber's key.
 - **Identifying files by sound:** needs a free AcoustID application key (register one at [acoustid.org/new-application](https://acoustid.org/new-application); Settings → Connections, or `ACOUSTID_API_KEY`). The Docker image includes Chromaprint's `fpcalc`; elsewhere, install it or set `FPCALC_PATH`.
+- **Live (upcoming shows):** needs a JamBase Data API key (the free Developer plan at [data.jambase.com](https://data.jambase.com) is for non-commercial use; Settings → Connections, or `JAMBASE_API_KEY`). It has 1,000 requests a month and bills requests past that, so Plekstender stops at `JAMBASE_MONTHLY_CAP` (default 900) and spreads each person's daily refresh over the month. Places are searched with Open-Meteo's free geocoding (only the typed text is sent).
 - **Image search:** start with `--profile search` to run SearXNG next to Plekstender, or point `SEARXNG_URL` at your own.
 - **Artist folders:** to save `artist.jpg` next to your music, mount the music folder read-write into the **worker** container only (see `compose.override.example.yaml`; the web app never touches music files) and set it up in Settings → Music files.
 

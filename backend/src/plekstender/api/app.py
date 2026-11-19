@@ -24,6 +24,7 @@ from plekstender.api.routes import (
     identify,
     library,
     listens,
+    live,
     playlists,
     previews,
     ratings,
@@ -83,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         renames,
         artwork,
         export,
+        live,
         admin,
     ):
         app.include_router(module.router)

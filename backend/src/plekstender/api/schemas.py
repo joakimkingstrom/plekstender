@@ -1322,3 +1322,91 @@ class ShrinkCoversIn(BaseModel):
 
 class TagSettingsIn(BaseModel):
     tag_editing: bool
+
+
+# --- live ----------------------------------------------------------------------------------
+
+
+class LiveSettingsIn(BaseModel):
+    place_name: str = Field(min_length=1, max_length=200)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    radius_km: int = Field(default=100, ge=5, le=1000)
+    top_percent: int = Field(default=10, ge=1, le=100)
+
+
+class LiveSettingsOut(BaseModel):
+    place_name: str | None
+    latitude: float | None
+    longitude: float | None
+    radius_km: int
+    top_percent: int
+    listened_artists: int = Field(description="Artists the user has played (what % is of).")
+    followed_artists: int = Field(description="Artists looked up with the current %.")
+    max_artists: int
+    refresh_status: Literal["queued", "running", "done", "failed"] | None
+    refresh_error: str | None
+    refreshed_at: dt.datetime | None
+    refresh_available_at: dt.datetime | None = Field(
+        description="When a refresh can be asked for again (None: now)."
+    )
+    source_ready: bool = Field(description="JamBase has a key.")
+
+
+class PlaceOut(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    country: str | None
+
+
+class LiveArtistOut(BaseModel):
+    name: str
+    headliner: bool
+    server_id: int | None = None
+    rating_key: int | None = None
+
+
+class LiveShowOut(BaseModel):
+    id: int
+    source: str
+    name: str
+    festival: bool
+    start_date: dt.date
+    start_time: str | None
+    end_date: dt.date | None
+    status: str
+    venue: str | None
+    city: str | None
+    region: str | None
+    country: str | None
+    distance_km: float | None
+    ticket_url: str | None
+    seller: str | None
+    page_url: str | None
+    artists: list[LiveArtistOut] = Field(description="The user's artists on the bill.")
+    performers: list[LiveArtistOut] = Field(description="Everyone on the bill.")
+
+
+class LiveArtistCount(BaseModel):
+    name: str
+    shows: int
+
+
+class LiveShowsOut(BaseModel):
+    shows: list[LiveShowOut]
+    artists: list[LiveArtistCount] = Field(description="Artists with shows, for the filter.")
+
+
+class JamBaseKeyIn(BaseModel):
+    api_key: str | None = Field(default=None, pattern=r"^jbd_[A-Za-z0-9_\-]{8,200}$")
+
+
+class JamBaseKeyOut(BaseModel):
+    configured: bool
+    source: Literal["settings", "environment"] | None
+    month: str
+    calls: int = Field(description="Requests Plekstender sent this month.")
+    cap: int = Field(description="Plekstender stops at this many requests a month.")
+    quota: dict[str, Any] | None = Field(description="JamBase's own count, when last checked.")
+    quota_checked_at: dt.datetime | None

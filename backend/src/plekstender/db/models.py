@@ -803,3 +803,64 @@ class TagSnapshot(Base):
     path: Mapped[str] = mapped_column(Text)
     tags: Mapped[dict[str, Any]] = mapped_column(default=dict)
     taken_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class LiveSettings(Base):
+    """A user's Live tab: where they are, how far they'd go, and how many artists to follow."""
+
+    __tablename__ = "live_settings"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    place_name: Mapped[str | None] = mapped_column(Text)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    radius_km: Mapped[int] = mapped_column(default=100, server_default="100")
+    # Follow the top N% of the artists the user has listened to (at most MAX_ARTISTS).
+    top_percent: Mapped[int] = mapped_column(SmallInteger, default=10, server_default="10")
+    # Last refresh: queued | running | done | failed; when; how many artists and requests.
+    refresh_status: Mapped[str | None] = mapped_column(String(8))
+    refresh_error: Mapped[str | None] = mapped_column(Text)
+    refreshed_at: Mapped[dt.datetime | None]
+    refresh_requested_at: Mapped[dt.datetime | None]
+    artist_count: Mapped[int | None]
+    request_count: Mapped[int | None]
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now(), onupdate=utcnow)
+
+
+class LiveShow(Base):
+    """An upcoming show by an artist the user follows, near them, from one source."""
+
+    __tablename__ = "live_shows"
+    __table_args__ = (
+        UniqueConstraint("user_id", "source", "source_id"),
+        Index("ix_live_shows_user_date", "user_id", "start_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    source: Mapped[str] = mapped_column(String(16))  # jambase
+    source_id: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(Text)
+    festival: Mapped[bool] = mapped_column(default=False)
+    # The venue's local date and time ("20:00"), as the source gives them.
+    start_date: Mapped[dt.date] = mapped_column(Date)
+    start_time: Mapped[str | None] = mapped_column(String(5))
+    end_date: Mapped[dt.date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(16), default="scheduled")
+    venue: Mapped[str | None] = mapped_column(Text)
+    city: Mapped[str | None] = mapped_column(Text)
+    region: Mapped[str | None] = mapped_column(Text)
+    country: Mapped[str | None] = mapped_column(String(2))
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    distance_km: Mapped[float | None] = mapped_column(Float)
+    ticket_url: Mapped[str | None] = mapped_column(Text)
+    seller: Mapped[str | None] = mapped_column(Text)
+    page_url: Mapped[str | None] = mapped_column(Text)
+    # Everyone on the bill: [{"name", "headliner"}]; the user's artists among them:
+    # [{"name", "headliner", "server_id", "rating_key"}].
+    performers: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    artists: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    fetched_at: Mapped[dt.datetime]

@@ -26,6 +26,8 @@ from plekstender.api.schemas import (
     FontGroup,
     FontGroupName,
     FontIn,
+    JamBaseKeyIn,
+    JamBaseKeyOut,
     LastFmKeyIn,
     LastFmKeyOut,
     PopularityPreviewItem,
@@ -39,17 +41,22 @@ from plekstender.db.instance import (
     get_acoustid_api_key,
     get_fanart_api_key,
     get_fonts,
+    get_jambase_api_key,
+    get_jambase_usage,
     get_lastfm_api_key,
     get_library_settings,
+    save_jambase_quota,
     set_access_settings,
     set_acoustid_api_key,
     set_fanart_api_key,
     set_fonts,
+    set_jambase_api_key,
     set_lastfm_api_key,
     set_library_settings,
 )
 from plekstender.db.models import PlexServer, User, UserServer
 from plekstender.history.lastfm import LastFmClient, LastFmError
+from plekstender.live import jambase
 from plekstender.sync.popularity import preview_artist_ranking
 from plekstender.worker import enqueue_popularity_recompute
 
@@ -271,6 +278,47 @@ async def put_acoustid(
     await set_acoustid_api_key(db, settings, body.api_key)
     await db.commit()
     return await get_acoustid(db, admin, settings)
+
+
+@router.get("/jambase", response_model=JamBaseKeyOut)
+async def get_jambase(
+    db: DbDep, _: AdminDep, settings: SettingsDep, http: HttpDep, check: bool = False
+) -> JamBaseKeyOut:
+    """The JamBase key and this month's requests; `check` asks JamBase for its own count
+    (a free request)."""
+    key, source = await get_jambase_api_key(db, settings)
+    if check and key:
+        try:
+            await save_jambase_quota(db, await jambase.quota(http, settings.jambase_api_url, key))
+            await db.commit()
+        except jambase.JamBaseError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    usage = await get_jambase_usage(db)
+    return JamBaseKeyOut(
+        configured=key is not None,
+        source=source,
+        month=usage.month,
+        calls=usage.calls,
+        cap=settings.jambase_monthly_cap,
+        quota=usage.quota,
+        quota_checked_at=usage.quota_checked_at,
+    )
+
+
+@router.put("/jambase", response_model=JamBaseKeyOut)
+async def put_jambase(
+    body: JamBaseKeyIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
+) -> JamBaseKeyOut:
+    """Set (after checking it with JamBase's free quota request) or clear the JamBase key."""
+    if body.api_key:
+        try:
+            quota = await jambase.quota(http, settings.jambase_api_url, body.api_key)
+        except jambase.JamBaseError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        await save_jambase_quota(db, quota)
+    await set_jambase_api_key(db, settings, body.api_key)
+    await db.commit()
+    return await get_jambase(db, admin, settings, http)
 
 
 # --- text logo fonts -----------------------------------------------------------------------

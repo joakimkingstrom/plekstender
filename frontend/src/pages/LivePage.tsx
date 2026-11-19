@@ -1,0 +1,446 @@
+import { useDeferredValue, useId, useMemo, useState } from 'react'
+import { Link } from 'react-router'
+import { errorMessage } from '../api/client'
+import { useMe } from '../api/hooks'
+import { useActiveServer } from '../api/library'
+import {
+  useForgetLiveSettings,
+  useLiveSettings,
+  useLiveShows,
+  usePlaces,
+  useRefreshLive,
+  useSaveLiveSettings,
+  type LiveSettings,
+  type LiveShow,
+  type Place,
+} from '../api/live'
+import { Slider } from '../components/controls'
+import { Select } from '../components/Select'
+import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
+import { formatRelative } from '../format'
+import { followCount } from '../live'
+import { countryName } from '../places'
+
+const DISTANCES = [25, 50, 100, 200, 500, 1000]
+type Range = 'all' | '30' | '90'
+const RANGES: [Range, string][] = [
+  ['all', 'Any time'],
+  ['30', 'Next 30 days'],
+  ['90', 'Next 3 months'],
+]
+
+/** "2027-03-04" as a local date (no time zone shift). */
+function localDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function LivePage() {
+  const settings = useLiveSettings()
+  const [editing, setEditing] = useState(false)
+  return (
+    <>
+      <PageTitle subtitle="Upcoming shows near you by the artists you listen to most.">Live</PageTitle>
+      {settings.isPending ? (
+        <Spinner />
+      ) : settings.isError ? (
+        <Notice tone="error">{errorMessage(settings.error)}</Notice>
+      ) : !settings.data.place_name || editing ? (
+        <div className="max-w-xl">
+          <SetupCard settings={settings.data} onDone={() => setEditing(false)} onCancel={settings.data.place_name ? () => setEditing(false) : undefined} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_18rem]">
+          <Shows settings={settings.data} />
+          <div className="order-first space-y-4 lg:order-none">
+            <Summary settings={settings.data} onEdit={() => setEditing(true)} />
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+function SourceMissing() {
+  const me = useMe()
+  return (
+    <Notice tone="warn">
+      Live needs a JamBase API key.{' '}
+      {me.data?.is_admin ? (
+        <>
+          Add one in{' '}
+          <Link to="/settings/connections" className="underline">
+            Settings → Connections
+          </Link>
+          .
+        </>
+      ) : (
+        'Ask an admin to add one.'
+      )}
+    </Notice>
+  )
+}
+
+function Summary({ settings, onEdit }: { settings: LiveSettings; onEdit: () => void }) {
+  const refresh = useRefreshLive()
+  const busy = settings.refresh_status === 'queued' || settings.refresh_status === 'running'
+  return (
+    <Card>
+      <div className="space-y-3 text-sm">
+        <p>
+          Within <strong>{settings.radius_km} km</strong> of <strong>{settings.place_name}</strong>, for your top{' '}
+          {settings.top_percent}% ({settings.followed_artists} of {settings.listened_artists} artists you've played).
+        </p>
+        <p className="text-muted" aria-live="polite">
+          {busy
+            ? 'Looking up shows…'
+            : settings.refreshed_at
+              ? `Updated ${formatRelative(settings.refreshed_at)}. Shows are looked up about once a day.`
+              : 'Not looked up yet.'}
+        </p>
+        {settings.refresh_status === 'failed' && settings.refresh_error && <Notice tone="warn">{settings.refresh_error}</Notice>}
+        {!settings.source_ready && <SourceMissing />}
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onEdit}>Change</Button>
+          <Button
+            variant="ghost"
+            busy={refresh.isPending}
+            disabled={busy || !settings.source_ready || Boolean(settings.refresh_available_at)}
+            onClick={() => refresh.mutate()}
+          >
+            Refresh
+          </Button>
+        </div>
+        {settings.refresh_available_at && !busy && (
+          <p className="text-xs text-muted">You can refresh again {formatRelative(settings.refresh_available_at)}.</p>
+        )}
+        {refresh.isError && <Notice tone="error">{errorMessage(refresh.error)}</Notice>}
+      </div>
+    </Card>
+  )
+}
+
+function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onDone: () => void; onCancel?: () => void }) {
+  const save = useSaveLiveSettings()
+  const forget = useForgetLiveSettings()
+  const [place, setPlace] = useState<Place | null>(
+    settings.place_name && settings.latitude != null && settings.longitude != null
+      ? { name: settings.place_name, latitude: settings.latitude, longitude: settings.longitude, country: null }
+      : null,
+  )
+  const [query, setQuery] = useState('')
+  const [radius, setRadius] = useState(settings.radius_km)
+  const [percent, setPercent] = useState(settings.top_percent)
+  const [locating, setLocating] = useState(false)
+  const [locateError, setLocateError] = useState<string | null>(null)
+  const q = useDeferredValue(query.trim())
+  const places = usePlaces(q)
+  const distanceId = useId()
+  const following = followCount(settings.listened_artists, percent, settings.max_artists)
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      setLocateError("This browser can't share its location.")
+      return
+    }
+    setLocating(true)
+    setLocateError(null)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false)
+        // About a kilometre is precise enough, and that's all that's stored.
+        const round = (v: number) => Math.round(v * 100) / 100
+        setPlace({ name: 'My location', latitude: round(pos.coords.latitude), longitude: round(pos.coords.longitude), country: null })
+        setQuery('')
+      },
+      () => {
+        setLocating(false)
+        setLocateError("Your location isn't available; search for a place instead.")
+      },
+      { timeout: 15000, maximumAge: 600000 },
+    )
+  }
+
+  return (
+    <Card title="Where are you?">
+      <div className="space-y-4">
+        {!settings.source_ready && <SourceMissing />}
+        <div className="space-y-2">
+          {place ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm">
+              <span>
+                <span className="font-medium">{place.name}</span>
+              </span>
+              <button type="button" className="text-xs text-accent underline" onClick={() => setPlace(null)}>
+                Change place
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search for a city"
+                aria-label="Search for a city"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+              />
+              {q.length >= 2 &&
+                (places.isPending ? (
+                  <Spinner small />
+                ) : places.isError ? (
+                  <Notice tone="error">{errorMessage(places.error)}</Notice>
+                ) : places.data.length === 0 ? (
+                  <p className="text-sm text-muted">No places found.</p>
+                ) : (
+                  <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border" aria-label="Places">
+                    {places.data.map((p) => (
+                      <li key={`${p.latitude},${p.longitude}`}>
+                        <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-surface-2" onClick={() => setPlace(p)}>
+                          {p.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+              <Button variant="ghost" busy={locating} onClick={useMyLocation}>
+                Use my location
+              </Button>
+              {locateError && <p className="text-xs text-danger">{locateError}</p>}
+            </>
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <span id={distanceId} className="block text-sm">
+            How far you'd go
+          </span>
+          <Select
+            labelledBy={distanceId}
+            value={radius}
+            options={(DISTANCES.includes(radius) ? DISTANCES : [...DISTANCES, radius].sort((a, b) => a - b)).map((d) => ({
+              value: d,
+              label: `${d} km`,
+            }))}
+            onChange={setRadius}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Slider label="Artists to follow" value={percent} min={1} max={100} step={1} format={(v) => `Top ${v}%`} onChange={setPercent} />
+          <p className="text-xs text-muted">
+            {settings.listened_artists === 0
+              ? "You haven't played any artists yet; shows are found for the artists you play."
+              : `Your ${following} most played of ${settings.listened_artists} artists${
+                  following === settings.max_artists ? ` (at most ${settings.max_artists})` : ''
+                }.`}
+          </p>
+        </div>
+
+        <p className="text-xs text-muted">
+          Only the place is stored, and it's used just to look up shows (about once a day, from JamBase).
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="primary"
+            disabled={!place}
+            busy={save.isPending}
+            onClick={() =>
+              place &&
+              save.mutate(
+                { place_name: place.name, latitude: place.latitude, longitude: place.longitude, radius_km: radius, top_percent: percent },
+                { onSuccess: onDone },
+              )
+            }
+          >
+            Save
+          </Button>
+          {onCancel && (
+            <Button variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+          {settings.place_name && (
+            <Button variant="ghost" busy={forget.isPending} onClick={() => forget.mutate(undefined, { onSuccess: onDone })}>
+              Forget my place
+            </Button>
+          )}
+        </div>
+        {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+      </div>
+    </Card>
+  )
+}
+
+function Shows({ settings }: { settings: LiveSettings }) {
+  const [artist, setArtist] = useState('')
+  const [range, setRange] = useState<Range>('all')
+  const [to, setTo] = useState<string | undefined>(undefined)
+  const chooseRange = (key: Range) => {
+    setRange(key)
+    if (key === 'all') return setTo(undefined)
+    const d = new Date()
+    d.setDate(d.getDate() + Number(key))
+    setTo(isoDate(d))
+  }
+  const busy = settings.refresh_status === 'queued' || settings.refresh_status === 'running'
+  const shows = useLiveShows({ artist, to }, busy)
+  const { active } = useActiveServer()
+  const artistId = useId()
+
+  const months = useMemo(() => {
+    const groups: [string, LiveShow[]][] = []
+    for (const show of shows.data?.shows ?? []) {
+      const label = localDate(show.start_date).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+      const last = groups.at(-1)
+      if (last?.[0] === label) last[1].push(show)
+      else groups.push([label, [show]])
+    }
+    return groups
+  }, [shows.data])
+
+  if (shows.isPending) return <Spinner />
+  if (shows.isError) return <Notice tone="error">{errorMessage(shows.error)}</Notice>
+  const artists = shows.data.artists
+  return (
+    <div className="min-w-0 space-y-4">
+      {(artists.length > 0 || artist) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span id={artistId} className="sr-only">
+            Artist
+          </span>
+          <Select
+            labelledBy={artistId}
+            value={artist}
+            options={[
+              { value: '', label: 'All artists' },
+              ...(artist && !artists.some((a) => a.name === artist) ? [{ value: artist, label: artist }] : []),
+              ...artists.map((a) => ({ value: a.name, label: `${a.name} (${a.shows})` })),
+            ]}
+            onChange={setArtist}
+          />
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="When">
+            {RANGES.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={range === key}
+                onClick={() => chooseRange(key)}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  range === key ? 'bg-accent text-on-accent' : 'bg-surface-2 text-muted hover:text-text'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {shows.data.shows.length === 0 ? (
+        busy ? (
+          <p className="text-sm text-muted">Looking up shows…</p>
+        ) : settings.refreshed_at ? (
+          <Card>
+            <p className="text-sm text-muted">
+              {artist || range !== 'all'
+                ? 'No shows match these filters.'
+                : `No upcoming shows within ${settings.radius_km} km by your top ${settings.followed_artists} artists. A larger distance or more artists may find some.`}
+            </p>
+          </Card>
+        ) : null
+      ) : (
+        months.map(([label, list]) => (
+          <section key={label} className="space-y-2">
+            <h2 className="text-sm font-semibold text-muted">{label}</h2>
+            <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+              {list.map((show) => (
+                <ShowRow key={show.id} show={show} serverId={active?.id ?? null} />
+              ))}
+            </ul>
+          </section>
+        ))
+      )}
+
+      <p className="text-xs text-muted">
+        <a href="https://www.jambase.com" target="_blank" rel="nofollow noopener noreferrer" className="underline">
+          Powered by JamBase
+        </a>
+      </p>
+    </div>
+  )
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  cancelled: 'Cancelled',
+  postponed: 'Postponed',
+  rescheduled: 'Rescheduled',
+  movedOnline: 'Moved online',
+}
+
+function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }) {
+  const day = localDate(show.start_date)
+  const yours = new Set(show.artists.map((a) => a.name))
+  const others = show.performers.filter((p) => !yours.has(p.name))
+  const where = [show.venue, show.city, show.country ? countryName(show.country) : null].filter(Boolean).join(' · ')
+  const status = STATUS_LABEL[show.status]
+  const link = show.ticket_url ?? show.page_url
+  return (
+    <li className="flex items-start gap-3 p-3">
+      <div className="w-12 shrink-0 text-center">
+        <div className="text-xs uppercase text-muted">{day.toLocaleDateString(undefined, { weekday: 'short' })}</div>
+        <div className="text-xl font-bold tabular-nums leading-tight">{day.getDate()}</div>
+        <div className="text-xs text-muted">{day.toLocaleDateString(undefined, { month: 'short' })}</div>
+      </div>
+      <div className="min-w-0 flex-1 space-y-0.5 text-sm">
+        <p className="font-medium">
+          {show.artists.map((a, i) => (
+            <span key={a.name}>
+              {i > 0 && ', '}
+              {a.server_id === serverId && a.rating_key != null ? (
+                <Link to={`/library/artists/${a.rating_key}`} className={a.headliner ? 'font-semibold hover:underline' : 'font-normal hover:underline'}>
+                  {a.name}
+                </Link>
+              ) : (
+                <span className={a.headliner ? 'font-semibold' : 'font-normal'}>{a.name}</span>
+              )}
+            </span>
+          ))}
+          {status && <span className="ml-2 rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">{status}</span>}
+        </p>
+        {(show.festival || others.length > 0) && (
+          <p className="truncate text-muted">
+            {show.festival ? show.name : null}
+            {show.festival && others.length > 0 ? ' · ' : null}
+            {others.length > 0 &&
+              `with ${others
+                .slice(0, 3)
+                .map((p) => p.name)
+                .join(', ')}${others.length > 3 ? ` and ${others.length - 3} more` : ''}`}
+          </p>
+        )}
+        <p className="text-muted">
+          {where}
+          {show.start_time && ` · ${show.start_time}`}
+          {show.end_date && ` · until ${localDate(show.end_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
+        </p>
+        {show.distance_km != null && <p className="text-xs text-muted">{Math.round(show.distance_km)} km away</p>}
+      </div>
+      {link && (
+        <a
+          href={link}
+          target="_blank"
+          rel="nofollow noopener noreferrer"
+          className="shrink-0 rounded-lg bg-surface-2 px-3 py-1.5 text-sm font-medium hover:text-accent"
+          title={show.seller ? `Tickets from ${show.seller}` : undefined}
+        >
+          {show.ticket_url ? 'Tickets' : 'Details'}
+        </a>
+      )}
+    </li>
+  )
+}

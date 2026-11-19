@@ -199,6 +199,93 @@ async def set_acoustid_api_key(db: AsyncSession, settings: Settings, api_key: st
     await _put(db, ACOUSTID_KEY, value)
 
 
+# --- JamBase (Live) -------------------------------------------------------------------------
+
+JAMBASE_KEY = "jambase"
+JAMBASE_PURPOSE = "instance.jambase_api_key"
+JAMBASE_USAGE_KEY = "jambase_usage"
+
+
+async def get_jambase_api_key(
+    db: AsyncSession, settings: Settings
+) -> tuple[str | None, Literal["settings", "environment"] | None]:
+    """The JamBase API key and where it came from: Settings page first, then JAMBASE_API_KEY."""
+    stored = await _get(db, JAMBASE_KEY) or {}
+    if encrypted := stored.get("api_key_enc"):
+        try:
+            return _cipher(settings).decrypt(encrypted, purpose=JAMBASE_PURPOSE), "settings"
+        except DecryptionError:
+            pass
+    if settings.jambase_api_key and (env := settings.jambase_api_key.get_secret_value().strip()):
+        return env, "environment"
+    return None, None
+
+
+async def set_jambase_api_key(db: AsyncSession, settings: Settings, api_key: str | None) -> None:
+    value = (
+        {"api_key_enc": _cipher(settings).encrypt(api_key, purpose=JAMBASE_PURPOSE)}
+        if api_key
+        else {}
+    )
+    await _put(db, JAMBASE_KEY, value)
+
+
+class JamBaseUsage(BaseModel):
+    """Requests Plekstender sent to JamBase this calendar month (UTC), and JamBase's own
+    count from GET /quota (which doesn't count against the quota) when last checked."""
+
+    month: str = ""
+    calls: int = 0
+    quota: dict[str, Any] | None = None
+    quota_checked_at: dt.datetime | None = None
+
+
+def _month(now: dt.datetime) -> str:
+    return now.astimezone(dt.UTC).strftime("%Y-%m")
+
+
+async def get_jambase_usage(db: AsyncSession, now: dt.datetime | None = None) -> JamBaseUsage:
+    stored = await _get(db, JAMBASE_USAGE_KEY) or {}
+    try:
+        usage = JamBaseUsage.model_validate(stored)
+    except ValidationError:
+        usage = JamBaseUsage()
+    month = _month(now or dt.datetime.now(dt.UTC))
+    if usage.month != month:
+        usage.month, usage.calls = month, 0
+    return usage
+
+
+async def reserve_jambase_call(db: AsyncSession, cap: int, now: dt.datetime | None = None) -> bool:
+    """Count one request before it's sent; False (nothing counted) once the cap is reached.
+    The row is locked so concurrent refreshes can't both take the last request. Commits."""
+    await db.execute(
+        insert(InstanceSetting)
+        .values(key=JAMBASE_USAGE_KEY, value={})
+        .on_conflict_do_nothing(index_elements=[InstanceSetting.key])
+    )
+    row = await db.scalar(
+        select(InstanceSetting).where(InstanceSetting.key == JAMBASE_USAGE_KEY).with_for_update()
+    )
+    assert row is not None
+    usage = await get_jambase_usage(db, now)
+    if usage.calls >= cap:
+        await db.rollback()
+        return False
+    usage.calls += 1
+    row.value = usage.model_dump(mode="json")
+    await db.commit()
+    return True
+
+
+async def save_jambase_quota(
+    db: AsyncSession, quota: dict[str, Any], now: dt.datetime | None = None
+) -> None:
+    usage = await get_jambase_usage(db, now)
+    usage.quota, usage.quota_checked_at = quota, now or dt.datetime.now(dt.UTC)
+    await _put(db, JAMBASE_USAGE_KEY, usage.model_dump(mode="json"))
+
+
 # --- text logo fonts ------------------------------------------------------------------------
 
 FONTS_KEY = "fonts"

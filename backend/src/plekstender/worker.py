@@ -27,6 +27,7 @@ from plekstender.db.models import (
     FileScan,
     ListenBrainzLink,
     ListenImport,
+    LiveSettings,
     Playlist,
     PlexServer,
     SyncRun,
@@ -570,6 +571,58 @@ async def enqueue_tag_changes(change_set: TagChangeSet) -> None:
 
 
 # --- housekeeping --------------------------------------------------------------------
+
+
+# --- live shows -------------------------------------------------------------------------
+
+# Shows are looked up about once a day; a refresh asked for by hand waits this long.
+LIVE_MIN_AGE = dt.timedelta(hours=20)
+LIVE_MANUAL_GAP = dt.timedelta(hours=1)
+
+
+@app.task(queue="live", lock="jambase")
+async def refresh_live(user_id: int) -> None:
+    """Look up one user's upcoming shows (one refresh at a time: they share the budget)."""
+    from plekstender.live.refresh import refresh_user as refresh_live_user  # (import cycle)
+
+    async with httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http:
+        await refresh_live_user(get_sessionmaker(), http, get_settings(), user_id)
+
+
+async def enqueue_live_refresh(db: AsyncSession, user_id: int, delay_seconds: int = 0) -> bool:
+    """Queue a refresh (once: a queued one already reads the latest settings). Commits."""
+    live = await db.get(LiveSettings, user_id)
+    if live is None:
+        return False
+    try:
+        await refresh_live.configure(
+            queueing_lock=f"live-{user_id}", schedule_in={"seconds": delay_seconds}
+        ).defer_async(user_id=user_id)
+    except AlreadyEnqueued:
+        return True
+    live.refresh_status, live.refresh_error = "queued", None
+    live.refresh_requested_at = dt.datetime.now(dt.UTC)
+    await db.commit()
+    return True
+
+
+async def schedule_live_refreshes(now: dt.datetime | None = None) -> list[int]:
+    from plekstender.live.refresh import due_users as due_live_users  # (import cycle)
+
+    now = now or dt.datetime.now(dt.UTC)
+    settings = get_settings()
+    async with get_sessionmaker()() as db:
+        users = await due_live_users(db, settings, now, LIVE_MIN_AGE)
+        for user_id in users:
+            await enqueue_live_refresh(db, user_id)
+    return users
+
+
+@app.periodic(cron="20 5 * * *", periodic_id="schedule-live")
+@app.task(queue="maintenance", queueing_lock="schedule-live")
+async def schedule_live(timestamp: int) -> None:
+    """Daily (05:20 UTC): refresh users' shows, as many as today's share of the budget allows."""
+    await schedule_live_refreshes()
 
 
 @app.periodic(cron="* * * * *", periodic_id="heartbeat")

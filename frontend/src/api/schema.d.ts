@@ -1898,6 +1898,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Live Settings */
+        get: operations["get_live_settings_api_live_settings_get"];
+        /**
+         * Put Live Settings
+         * @description Save the place, distance and artists to follow; the shows are looked up again.
+         */
+        put: operations["put_live_settings_api_live_settings_put"];
+        post?: never;
+        /**
+         * Delete Live Settings
+         * @description Forget the place and the shows.
+         */
+        delete: operations["delete_live_settings_api_live_settings_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh
+         * @description Look the shows up again now (at most once an hour: it uses the shared budget).
+         */
+        post: operations["refresh_api_live_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Places */
+        get: operations["places_api_live_places_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/shows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shows
+         * @description Upcoming shows, soonest first; `artist` narrows to one of the user's artists.
+         */
+        get: operations["shows_api_live_shows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/access": {
         parameters: {
             query?: never;
@@ -2082,6 +2164,31 @@ export interface paths {
          * @description Set (after checking it with AcoustID) or clear the instance's AcoustID application key.
          */
         put: operations["put_acoustid_api_admin_acoustid_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/jambase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Jambase
+         * @description The JamBase key and this month's requests; `check` asks JamBase for its own count
+         *     (a free request).
+         */
+        get: operations["get_jambase_api_admin_jambase_get"];
+        /**
+         * Put Jambase
+         * @description Set (after checking it with JamBase's free quota request) or clear the JamBase key.
+         */
+        put: operations["put_jambase_api_admin_jambase_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3406,6 +3513,39 @@ export interface components {
              */
             album_key: string | null;
         };
+        /** JamBaseKeyIn */
+        JamBaseKeyIn: {
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /** JamBaseKeyOut */
+        JamBaseKeyOut: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source: ("settings" | "environment") | null;
+            /** Month */
+            month: string;
+            /**
+             * Calls
+             * @description Requests Plekstender sent this month.
+             */
+            calls: number;
+            /**
+             * Cap
+             * @description Plekstender stops at this many requests a month.
+             */
+            cap: number;
+            /**
+             * Quota
+             * @description JamBase's own count, when last checked.
+             */
+            quota: {
+                [key: string]: unknown;
+            } | null;
+            /** Quota Checked At */
+            quota_checked_at: string | null;
+        };
         /** LastFmImportIn */
         LastFmImportIn: {
             /** Username */
@@ -3636,6 +3776,142 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** LiveArtistCount */
+        LiveArtistCount: {
+            /** Name */
+            name: string;
+            /** Shows */
+            shows: number;
+        };
+        /** LiveArtistOut */
+        LiveArtistOut: {
+            /** Name */
+            name: string;
+            /** Headliner */
+            headliner: boolean;
+            /** Server Id */
+            server_id?: number | null;
+            /** Rating Key */
+            rating_key?: number | null;
+        };
+        /** LiveSettingsIn */
+        LiveSettingsIn: {
+            /** Place Name */
+            place_name: string;
+            /** Latitude */
+            latitude: number;
+            /** Longitude */
+            longitude: number;
+            /**
+             * Radius Km
+             * @default 100
+             */
+            radius_km: number;
+            /**
+             * Top Percent
+             * @default 10
+             */
+            top_percent: number;
+        };
+        /** LiveSettingsOut */
+        LiveSettingsOut: {
+            /** Place Name */
+            place_name: string | null;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
+            /** Radius Km */
+            radius_km: number;
+            /** Top Percent */
+            top_percent: number;
+            /**
+             * Listened Artists
+             * @description Artists the user has played (what % is of).
+             */
+            listened_artists: number;
+            /**
+             * Followed Artists
+             * @description Artists looked up with the current %.
+             */
+            followed_artists: number;
+            /** Max Artists */
+            max_artists: number;
+            /** Refresh Status */
+            refresh_status: ("queued" | "running" | "done" | "failed") | null;
+            /** Refresh Error */
+            refresh_error: string | null;
+            /** Refreshed At */
+            refreshed_at: string | null;
+            /**
+             * Refresh Available At
+             * @description When a refresh can be asked for again (None: now).
+             */
+            refresh_available_at: string | null;
+            /**
+             * Source Ready
+             * @description JamBase has a key.
+             */
+            source_ready: boolean;
+        };
+        /** LiveShowOut */
+        LiveShowOut: {
+            /** Id */
+            id: number;
+            /** Source */
+            source: string;
+            /** Name */
+            name: string;
+            /** Festival */
+            festival: boolean;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Start Time */
+            start_time: string | null;
+            /** End Date */
+            end_date: string | null;
+            /** Status */
+            status: string;
+            /** Venue */
+            venue: string | null;
+            /** City */
+            city: string | null;
+            /** Region */
+            region: string | null;
+            /** Country */
+            country: string | null;
+            /** Distance Km */
+            distance_km: number | null;
+            /** Ticket Url */
+            ticket_url: string | null;
+            /** Seller */
+            seller: string | null;
+            /** Page Url */
+            page_url: string | null;
+            /**
+             * Artists
+             * @description The user's artists on the bill.
+             */
+            artists: components["schemas"]["LiveArtistOut"][];
+            /**
+             * Performers
+             * @description Everyone on the bill.
+             */
+            performers: components["schemas"]["LiveArtistOut"][];
+        };
+        /** LiveShowsOut */
+        LiveShowsOut: {
+            /** Shows */
+            shows: components["schemas"]["LiveShowOut"][];
+            /**
+             * Artists
+             * @description Artists with shows, for the filter.
+             */
+            artists: components["schemas"]["LiveArtistCount"][];
+        };
         /** MbApplyIn */
         MbApplyIn: {
             /** Release Id */
@@ -3812,6 +4088,17 @@ export interface components {
              * @description For a country: its towns and cities.
              */
             cities: components["schemas"]["CityListensOut"][];
+        };
+        /** PlaceOut */
+        PlaceOut: {
+            /** Name */
+            name: string;
+            /** Latitude */
+            latitude: number;
+            /** Longitude */
+            longitude: number;
+            /** Country */
+            country: string | null;
         };
         /** PlacesOut */
         PlacesOut: {
@@ -8629,6 +8916,161 @@ export interface operations {
             };
         };
     };
+    get_live_settings_api_live_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSettingsOut"];
+                };
+            };
+        };
+    };
+    put_live_settings_api_live_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_live_settings_api_live_settings_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    refresh_api_live_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSettingsOut"];
+                };
+            };
+        };
+    };
+    places_api_live_places_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shows_api_live_shows_get: {
+        parameters: {
+            query?: {
+                artist?: string | null;
+                from?: string | null;
+                to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveShowsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_access_api_admin_access_get: {
         parameters: {
             query?: never;
@@ -9053,6 +9495,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AcoustIdKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_jambase_api_admin_jambase_get: {
+        parameters: {
+            query?: {
+                check?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JamBaseKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_jambase_api_admin_jambase_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JamBaseKeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JamBaseKeyOut"];
                 };
             };
             /** @description Validation Error */

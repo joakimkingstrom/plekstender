@@ -77,6 +77,14 @@ class Settings(BaseSettings):
     fpcalc_path: str = "fpcalc"
     acoustid_api_key: SecretStr | None = None
     acoustid_api_url: str = "https://api.acoustid.org/v2"
+    # Live: upcoming shows from JamBase (an admin's Developer key, or set on Settings →
+    # Connections; that wins). Plekstender stops at its own monthly cap, well under the
+    # plan's 1,000 requests, because requests past the quota are billed.
+    jambase_api_key: SecretStr | None = None
+    jambase_api_url: str = "https://api.data.jambase.com/v3"
+    jambase_monthly_cap: int = 900
+    # City search for the Live tab (Open-Meteo's free geocoding, no key).
+    geocoding_api_url: str = "https://geocoding-api.open-meteo.com/v1"
 
     @field_validator("app_url")
     @classmethod
