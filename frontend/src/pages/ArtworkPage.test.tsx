@@ -83,7 +83,7 @@ describe('ArtworkPage', () => {
   it('picks a fanart.tv logo, previews it and saves it to Plex', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Radiohead' }))
-    fireEvent.click(await screen.findByRole('button', { name: /HD logo · 30 likes/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'HD logo · 30 likes' }))
     expect(await screen.findByAltText('New image for Radiohead')).toHaveAttribute('src', 'blob:preview')
     expect(bodiesFor('/api/servers/1/artwork/artists/100/preview')[0]).toEqual({
       source: { kind: 'candidate', token: 'tok-1' },

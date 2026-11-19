@@ -1,9 +1,11 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { Zoomable } from '../components/Lightbox'
 import { Select } from '../components/Select'
 import { Tooltip } from '../components/Tooltip'
 import { Link, useParams } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import {
+  imageUrl,
   useAlbum,
   useArtist,
   useArtists,
@@ -359,7 +361,12 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
     <>
       <BackLink to="/library" label="Library" />
       <div className="mb-8 flex flex-col gap-6 sm:flex-row">
-        <Artwork serverId={serverId} path={a.thumb} title={a.title} size={400} round className="w-40 shrink-0 self-center sm:self-start" />
+        <Zoomable
+          image={a.thumb ? { src: imageUrl(serverId, a.thumb, 1000)!, alt: a.title } : null}
+          className="w-40 shrink-0 self-center sm:self-start"
+        >
+          <Artwork serverId={serverId} path={a.thumb} title={a.title} size={400} round className="w-full" />
+        </Zoomable>
         <div className="min-w-0 flex-1 space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">{a.title}</h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
@@ -432,7 +439,12 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
         <BackLink to="/library" label="Library" />
       )}
       <div className="mb-8 flex flex-col gap-6 sm:flex-row">
-        <Artwork serverId={serverId} path={al.thumb} title={al.title} size={600} className="w-56 shrink-0 self-center sm:self-start" />
+        <Zoomable
+          image={al.thumb ? { src: imageUrl(serverId, al.thumb, 1000)!, alt: al.title, caption: al.artist_title ?? undefined } : null}
+          className="w-56 shrink-0 self-center sm:self-start"
+        >
+          <Artwork serverId={serverId} path={al.thumb} title={al.title} size={600} className="w-full" />
+        </Zoomable>
         <div className="min-w-0 flex-1 space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">{al.title}</h1>
           <p className="text-sm text-muted">

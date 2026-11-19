@@ -1,4 +1,6 @@
 import { useDeferredValue, useId, useState, type ReactNode } from 'react'
+import { imageUrl } from '../api/library'
+import { Lightbox, Zoomable } from '../components/Lightbox'
 import { ColorPicker, FilePicker, Slider } from '../components/controls'
 import { Select } from '../components/Select'
 import { Tooltip } from '../components/Tooltip'
@@ -255,11 +257,17 @@ function ArtistEditor({
           <Card title="Preview">
             <div className="grid grid-cols-2 gap-3">
               <Figure label="Now">
-                <Artwork serverId={serverId} path={artist.thumb} title={artist.title} size={400} className="w-full" />
+                <Zoomable image={artist.thumb ? { src: imageUrl(serverId, artist.thumb, 1000)!, alt: `Current image for ${artist.title}` } : null}>
+                  <Artwork serverId={serverId} path={artist.thumb} title={artist.title} size={400} className="w-full" />
+                </Zoomable>
               </Figure>
               <Figure label="New">
                 <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
-                  {preview.url && <img src={preview.url} alt={`New image for ${artist.title}`} className="size-full object-cover" />}
+                  {preview.url && (
+                    <Zoomable image={{ src: preview.url, alt: `New image for ${artist.title}` }} className="size-full">
+                      <img src={preview.url} alt={`New image for ${artist.title}`} className="size-full object-cover" />
+                    </Zoomable>
+                  )}
                   {!source && (
                     <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-muted">
                       Choose an image
@@ -362,7 +370,7 @@ function CandidateGrid({
       )}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
         {candidates.map((c) => (
-          <li key={c.token}>
+          <li key={c.token} className="relative">
             <button
               type="button"
               onClick={() => onChoose(c.token)}
@@ -379,6 +387,7 @@ function CandidateGrid({
                 {c.width && c.height ? ` · ${c.width}×${c.height}` : ''}
               </span>
             </button>
+            <ZoomCandidate src={`${c.thumb}&size=600`} label={c.label ?? 'Candidate'} />
           </li>
         ))}
       </ul>
@@ -778,5 +787,23 @@ function StatusDot({ serverId, artist }: { serverId: number; artist: Artist }) {
     >
       <span className={`size-2.5 rounded-full ${STATUS_DOT[shown]}`} />
     </button>
+  )
+}
+
+/** A small "show larger" button over a candidate (the card itself selects it). */
+function ZoomCandidate({ src, label }: { src: string; label: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`Show ${label} larger`}
+        className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-md bg-black/60 text-sm text-white opacity-70 hover:opacity-100"
+      >
+        ⤢
+      </button>
+      {open && <Lightbox images={[{ src, alt: label, caption: label }]} onClose={() => setOpen(false)} />}
+    </>
   )
 }

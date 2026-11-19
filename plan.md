@@ -402,7 +402,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
   *Styled replacements sharing the same tokens; file pickers become a button with drag-and-drop.*
 - [ ] Choose the accent colour (the yellow/orange) yourself.
   *Per user, saved to the account so it follows them across devices: a few presets plus a custom colour. The darker and lighter variants and the chart colour are derived from it, and the chart colour is adjusted until it keeps at least 3:1 contrast in both themes.*
-- [ ] Clicking album covers, artwork, artist images etc. opens a larger version in a lightbox.
+- [x] Clicking album covers, artwork, artist images etc. opens a larger version in a lightbox.
   *A shared Lightbox (Esc / click outside to close, arrow keys where there's a set, focus kept inside); full-size images through the existing image proxy.*
 
 **History**
