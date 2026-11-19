@@ -397,6 +397,16 @@ function Shows({ settings }: { settings: LiveSettings }) {
             ]}
             onChange={setArtist}
           />
+          {artist && (
+            <a
+              href={`https://www.songkick.com/search?type=artists&query=${encodeURIComponent(artist)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted underline hover:text-accent"
+            >
+              Find {artist} on Songkick
+            </a>
+          )}
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="When">
             {RANGES.map(([key, label]) => (
               <button

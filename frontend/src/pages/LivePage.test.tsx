@@ -228,6 +228,10 @@ describe('LivePage', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Portishead (1)' }))
     await vi.waitFor(() => expect(screen.queryByRole('link', { name: 'Radiohead' })).not.toBeInTheDocument())
     expect(requestsTo('/api/live/shows').at(-1)!.url).toContain('artist=Portishead')
+    expect(screen.getByRole('link', { name: 'Find Portishead on Songkick' })).toHaveAttribute(
+      'href',
+      'https://www.songkick.com/search?type=artists&query=Portishead',
+    )
   })
 
   it('shows the private calendar address to subscribe to', async () => {
