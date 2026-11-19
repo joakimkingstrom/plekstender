@@ -19,8 +19,8 @@ import { Mark } from '../components/Layout'
 import { PlayButton } from '../components/PlayButton'
 import { GuessBox, RoundClock } from '../components/IntroGame'
 import { useIntroRound } from '../game'
-import { useGameStats } from '../api/game'
-import { stopAudio, unlockAudio } from '../audio'
+import { fetchSample, useGameStats } from '../api/game'
+import { playSample, stopAudio, unlockAudio } from '../audio'
 import { StarRating } from '../components/StarRating'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDuration } from '../format'
@@ -28,7 +28,7 @@ import { starsText, swipeResult } from '../swipe'
 import { useLibraryServer } from '../components/useLibraryServer'
 
 type Layout = 'swipe' | 'desktop'
-type Settings = { kind: RateKind; pool: RatePool; order: RateOrder; layout: Layout; tag: number | null; game: boolean }
+type Settings = { kind: RateKind; pool: RatePool; order: RateOrder; layout: Layout; tag: number | null; game: boolean; autoplay: boolean }
 
 const STORAGE_KEY = 'plekstender.rate'
 const KINDS: [RateKind, string][] = [
@@ -53,7 +53,7 @@ const ORDERS: [RateOrder, string][] = [
 
 function loadSettings(): Settings {
   const wide = typeof window !== 'undefined' && window.matchMedia?.('(min-width: 768px)').matches
-  const defaults: Settings = { kind: 'track', pool: 'listened', order: 'weighted', layout: wide ? 'desktop' : 'swipe', tag: null, game: false }
+  const defaults: Settings = { kind: 'track', pool: 'listened', order: 'weighted', layout: wide ? 'desktop' : 'swipe', tag: null, game: false, autoplay: false }
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }
   } catch {
@@ -214,6 +214,24 @@ function Rater({ serverId }: { serverId: number }) {
           <div className="md:hidden">
             <Segmented label="Layout" value={settings.layout} options={LAYOUTS} onChange={(layout) => update({ layout })} />
           </div>
+          {settings.layout === 'swipe' && !settings.game && (
+            <Tooltip content="Play each card's song as it comes up (for albums and artists, one of their most popular songs).">
+              <button
+                type="button"
+                aria-pressed={settings.autoplay}
+                onClick={() => {
+                  unlockAudio() // a tap: lets the songs play on iPhones
+                  if (settings.autoplay) stopAudio()
+                  update({ autoplay: !settings.autoplay })
+                }}
+                className={`rounded-lg border px-3 py-[7px] text-sm font-medium ${
+                  settings.autoplay ? 'border-accent bg-accent/15 text-accent' : 'border-border bg-surface-2 text-muted hover:text-text'
+                }`}
+              >
+                ▶ Play songs
+              </button>
+            </Tooltip>
+          )}
           {settings.layout === 'swipe' && (
             <Tooltip content="A song plays with the card hidden: guess it within 30 seconds, then rate it.">
               <button
@@ -352,6 +370,17 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
   const best = stats.data?.find((s) => s.mode === settings.kind)?.best_streak ?? 0
   // While guessing, the card can't be swiped (rating comes after the answer).
   const guessing = game && round.playing
+  const autoplay = settings.autoplay && !game
+
+  // "Play songs": each card's song starts as the card comes up; the next one is prepared.
+  const nextKey = next?.rating_key ?? null
+  useEffect(() => {
+    if (!autoplay) return
+    void playSample(serverId, settings.kind, item.rating_key)
+    if (nextKey !== null) void fetchSample(serverId, settings.kind, nextKey).catch(() => undefined)
+  }, [autoplay, serverId, settings.kind, item.rating_key, nextKey])
+  // Leaving the card view stops whatever plays.
+  useEffect(() => () => stopAudio(), [])
   const cardRef = useRef<HTMLDivElement>(null)
   const start = useRef<{ x: number; y: number } | null>(null)
   const lastRating = useRef<number | null>(null)
@@ -363,7 +392,7 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
   const result = swipeResult(drag.dx, drag.dy, width)
 
   const next_ = () => {
-    if (game) stopAudio()
+    if (!autoplay) stopAudio() // (with autoplay, the next card's song takes over)
     if (round.phase === 'won' || round.phase === 'lost') {
       skippedInARow.current = 0
       setUnplayable(0)
@@ -502,9 +531,9 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
               {value !== null && value !== undefined && <Badge tone="accent">Rated {starsText(value)} ★</Badge>}
               {!guessing && <span>{formatCount(item.plays)} plays</span>}
               {!guessing && item.popularity !== null && <span>Popularity {formatCompact(item.popularity)}</span>}
-              {!game && item.kind === 'track' && (
+              {!game && (
                 <span className="ml-auto">
-                  <PlayButton serverId={serverId} ratingKey={item.rating_key} title={item.title} size="size-8" />
+                  <PlayButton serverId={serverId} ratingKey={item.rating_key} title={item.title} size="size-8" kind={settings.kind} />
                 </span>
               )}
             </div>

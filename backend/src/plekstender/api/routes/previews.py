@@ -17,6 +17,9 @@ from plekstender.previews import Clip, PreviewError, get_clip
 
 router = APIRouter(prefix="/api/servers/{server_id}/tracks", tags=["previews"])
 
+# Clips are 40 s: start no later than this, so there's always something to hear.
+LATEST_START_MS = 25_000
+
 
 async def visible_track(db: AsyncSession, user: User, us: UserServer, rating_key: int) -> Track:
     state, cond, where = visible(Track, user.id, us)
@@ -33,8 +36,8 @@ def clip_url(server_id: int, rating_key: int) -> str:
 
 
 def preview_out(server_id: int, rating_key: int, clip: Clip) -> PreviewOut:
-    # Start just before the music does (but never skip a quiet intro entirely).
-    start = max(0, clip.intro_ms - 300) if not clip.quiet_intro else 0
+    # Start just before the music does, skipping any silence (but leave at least 15 s).
+    start = max(0, min(clip.intro_ms - 300, LATEST_START_MS))
     return PreviewOut(
         rating_key=rating_key,
         url=clip_url(server_id, rating_key),

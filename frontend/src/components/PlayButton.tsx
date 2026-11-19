@@ -1,25 +1,29 @@
-import { playTrack, stopAudio, unlockAudio, useAudio } from '../audio'
+import { playSample, playTrack, sampleKey, stopAudio, unlockAudio, useAudio } from '../audio'
+import type { GameMode } from '../api/game'
 import { Tooltip } from './Tooltip'
 
-/** Play / stop a song's 40-second preview (one plays at a time, app-wide). */
+/** Play / stop a 40-second preview (one plays at a time, app-wide): of a song, or with
+ * `kind`, the song for a rating card (an album's or artist's popular song). */
 export function PlayButton({
   serverId,
   ratingKey,
   title,
   size = 'size-8',
+  kind,
 }: {
   serverId: number
   ratingKey: number
   title: string
   size?: string
+  kind?: GameMode
 }) {
   const audio = useAudio()
-  const key = `track:${serverId}:${ratingKey}`
+  const key = kind ? sampleKey(serverId, kind, ratingKey) : `track:${serverId}:${ratingKey}`
   const mine = audio.key === key
   const loading = mine && audio.status === 'loading'
   const playing = mine && audio.status === 'playing'
   return (
-    <Tooltip content={playing ? 'Stop' : 'Play a preview'}>
+    <Tooltip content={playing ? 'Stop' : kind && kind !== 'track' ? 'Play one of the most popular songs' : 'Play a preview'}>
       <button
         type="button"
         aria-label={playing ? `Stop ${title}` : `Play a preview of ${title}`}
@@ -32,7 +36,7 @@ export function PlayButton({
             return
           }
           unlockAudio()
-          void playTrack(serverId, ratingKey)
+          void (kind ? playSample(serverId, kind, ratingKey) : playTrack(serverId, ratingKey))
         }}
         className={`flex ${size} shrink-0 items-center justify-center rounded-full ${
           playing ? 'bg-accent text-on-accent' : 'bg-surface-2 text-text hover:bg-border'

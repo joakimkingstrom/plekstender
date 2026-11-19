@@ -496,6 +496,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] The same pass measures the intro with `silencedetect`: leading silence and quiet start are stored per track (`track_intros`), so clips can start where the music does.
 - [x] Clips are cached under `DATA_DIR/previews` (a few hundred MB at most, oldest removed first) and served with byte ranges (iOS Safari needs them).
 - [x] Play buttons: playlist builder preview list, Rate cards and the Lists layout.
+- [x] "Play songs" while rating cards: each card's song plays as it comes up (albums and artists: one of their top 3 songs, preferring ones without a silent intro); silence at the start is skipped. The next card's song is prepared ahead.
 
 **Guess the intro** (a mode of the card view in Rate)
 - [x] Toggle "Guess the intro" on the card view. The card's artwork, artist and title are hidden and the song starts playing: the song itself, an album's or artist's popular songs (one of the top 3 by popularity, at random).

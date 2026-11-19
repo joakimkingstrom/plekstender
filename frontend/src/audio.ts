@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { api, unwrap, type Schemas } from './api/client'
+import { fetchSample, type GameMode } from './api/game'
 
 export type Preview = Schemas['PreviewOut']
 type State = { key: string | null; status: 'idle' | 'loading' | 'playing' | 'error'; error: string | null }
@@ -107,6 +108,28 @@ export async function playTrack(serverId: number, ratingKey: number): Promise<vo
   } catch (e) {
     if (state.key === key) set({ status: 'error', error: e instanceof Error ? e.message : 'Playback failed.', key: null })
   }
+}
+
+/** Play the song for a rating card: the song itself, or an album's or artist's popular one
+ * (avoiding silent intros). */
+export async function playSample(serverId: number, mode: GameMode, ratingKey: number): Promise<void> {
+  const key = sampleKey(serverId, mode, ratingKey)
+  set({ key, status: 'loading', error: null })
+  try {
+    const sample = await fetchSample(serverId, mode, ratingKey)
+    if (state.key !== key) return
+    if (!sample.playable || !sample.preview) {
+      set({ key: null, status: 'error', error: 'Nothing to play for this one (no audio file in Plex).' })
+      return
+    }
+    await playClip(key, sample.preview)
+  } catch (e) {
+    if (state.key === key) set({ status: 'error', error: e instanceof Error ? e.message : 'Playback failed.', key: null })
+  }
+}
+
+export function sampleKey(serverId: number, mode: GameMode, ratingKey: number) {
+  return `sample:${serverId}:${mode}:${ratingKey}`
 }
 
 export function stopAudio() {

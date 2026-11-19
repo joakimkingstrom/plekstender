@@ -68,3 +68,22 @@ export function useRecordResult() {
       qc.setQueryData<GameStats[]>(gameKeys.stats, (old) => [...(old ?? []).filter((s) => s.mode !== row.mode), row]),
   })
 }
+
+// A song to listen to while rating a card (prepared ahead, like game rounds).
+const samples = new Map<string, Promise<GameRound>>()
+
+export function fetchSample(serverId: number, mode: GameMode, ratingKey: number): Promise<GameRound> {
+  const key = `${serverId}:${mode}:${ratingKey}`
+  let sample = samples.get(key)
+  if (!sample) {
+    sample = unwrap(
+      api.GET('/api/servers/{server_id}/rate/sample', {
+        params: { path: { server_id: serverId }, query: { mode, rating_key: ratingKey } },
+      }),
+    )
+    sample.catch(() => samples.delete(key))
+    samples.set(key, sample)
+    if (samples.size > 50) samples.delete(samples.keys().next().value!)
+  }
+  return sample
+}

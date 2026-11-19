@@ -80,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.include_router(module.router)
     app.include_router(artwork.fonts_router)
     app.include_router(game.stats_router)
+    app.include_router(game.sample_router)
 
     if settings.static_dir:
         _mount_spa(app, settings.static_dir)

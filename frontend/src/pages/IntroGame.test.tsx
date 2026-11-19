@@ -73,6 +73,10 @@ beforeEach(() => {
       const body = await input.clone().json()
       return json({ correct: body.guess === body.target })
     }
+    if (path === '/api/servers/1/rate/sample') {
+      const key = Number(url.searchParams.get('rating_key'))
+      return json({ playable: true, reason: null, preview: preview(key * 10) })
+    }
     if (path === '/api/game/stats') return json([])
     if (path === '/api/game/results') {
       const body = await input.clone().json()
@@ -134,5 +138,28 @@ describe('Guess the intro', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     })
     expect(await screen.findByRole('heading', { name: '? ? ?' })).toBeInTheDocument()
+  })
+})
+
+describe('Play songs (while rating)', () => {
+  it("plays each card's song as it comes up and prepares the next one", async () => {
+    localStorage.setItem('plekstender.rate', JSON.stringify({ layout: 'swipe', autoplay: true, kind: 'album' }))
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <RatePage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    // The card is shown as usual (no game), with its song playing.
+    expect(await screen.findByRole('heading', { name: 'Airbag' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Stop Airbag' })).toBeInTheDocument()
+    const samples = () =>
+      fetchMock.mock.calls
+        .map(([r]) => new URL(r.url))
+        .filter((u) => u.pathname === '/api/servers/1/rate/sample')
+        .map((u) => `${u.searchParams.get('mode')}:${u.searchParams.get('rating_key')}`)
+    expect(samples()).toEqual(expect.arrayContaining(['album:1', 'album:2']))
+    expect(screen.getByRole('button', { name: '▶ Play songs' })).toHaveAttribute('aria-pressed', 'true')
   })
 })

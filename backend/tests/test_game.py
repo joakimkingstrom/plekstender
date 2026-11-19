@@ -92,7 +92,9 @@ async def test_previews(app: FastAPI, plex: FakePlex, songs: dict[str, bytes]) -
     assert lib.part_requests == requests  # cached: Plex isn't asked again
 
     quiet = (await owner.get(f"{base}/301/preview")).json()
-    assert quiet["quiet_intro"] is True and quiet["start_ms"] == 0
+    # A long silent intro is skipped (the music starts at 11 s).
+    assert quiet["quiet_intro"] is True
+    assert 10_000 <= quiet["start_ms"] <= 11_000
 
     missing = await owner.get(f"{base}/303/preview")
     assert missing.status_code == 502  # Plex has no file for it
@@ -184,3 +186,32 @@ async def test_previews_survive_plex_errors(app: FastAPI, plex: FakePlex) -> Non
     resp = await owner.get(f"/api/servers/{sid}/tracks/300/preview")
     assert resp.status_code == 502
     assert "couldn't be read" in resp.json()["detail"]
+
+
+@pytest.mark.db
+async def test_songs_to_rate_by(app: FastAPI, plex: FakePlex, songs: dict[str, bytes]) -> None:
+    """Rating cards can play their song too: the song itself from where the music starts,
+    or an album's or artist's popular song without a silent intro."""
+    owner, sid = await owner_with_library(app, plex)
+
+    async def sample(mode: str, key: int) -> dict:
+        resp = await owner.get(
+            f"/api/servers/{sid}/rate/sample", params={"mode": mode, "rating_key": key}
+        )
+        assert resp.status_code == 200, resp.text
+        body: dict = resp.json()
+        return body
+
+    # OK Computer with only Karma Police's file (a silent intro): played anyway, after the
+    # silence, rather than nothing; the game would skip it.
+    plex.library.part_files = {301: songs["silent_intro"]}
+    only_quiet = await sample("album", 200)
+    assert only_quiet["playable"] is True and only_quiet["preview"]["rating_key"] == 301
+    assert only_quiet["preview"]["quiet_intro"] is True
+
+    plex.library.part_files = {300: songs["starts_soon"], 301: songs["silent_intro"]}
+    quiet = await sample("track", 301)  # the game skips it; rating plays it after the silence
+    assert quiet["playable"] is True and quiet["preview"]["start_ms"] >= 10_000
+    assert (await sample("album", 200))["preview"]["rating_key"] == 300
+    assert (await sample("artist", 100))["preview"]["rating_key"] == 300
+    assert (await sample("artist", 101))["reason"] == "no-file"

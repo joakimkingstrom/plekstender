@@ -860,8 +860,7 @@ export interface paths {
         };
         /**
          * Game Round
-         * @description The song to play for a card: the song itself, or one of an album's or artist's most
-         *     popular songs. Songs with very short titles or a silent intro aren't played.
+         * @description The song to play for a game round (not played: very short titles, silent intros).
          */
         get: operations["game_round_api_servers__server_id__game_round_get"];
         put?: never;
@@ -1497,6 +1496,27 @@ export interface paths {
          * @description Record a finished round: totals and the best streak per mode.
          */
         post: operations["game_result_api_game_results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/rate/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rate Sample
+         * @description A song to listen to while rating a card: the song itself (from where the music
+         *     starts), or one of an album's or artist's most popular songs without a silent intro.
+         */
+        get: operations["rate_sample_api_servers__server_id__rate_sample_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6207,6 +6227,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_sample_api_servers__server_id__rate_sample_get: {
+        parameters: {
+            query: {
+                mode: "track" | "album" | "artist";
+                rating_key: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameRoundOut"];
                 };
             };
             /** @description Validation Error */

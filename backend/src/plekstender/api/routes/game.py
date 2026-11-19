@@ -31,6 +31,7 @@ from plekstender.sync.parse import fold
 
 router = APIRouter(prefix="/api/servers/{server_id}/game", tags=["game"])
 stats_router = APIRouter(prefix="/api/game", tags=["game"])
+sample_router = APIRouter(prefix="/api/servers/{server_id}/rate", tags=["ratings"])
 
 # Titles shorter than this (letters and digits) are too easy to stumble on: not played.
 MIN_TITLE = 4
@@ -46,7 +47,14 @@ def title_ok(title: str) -> bool:
 
 
 async def _top_tracks(
-    db: DbDep, user_id: int, us: UserServer, column: Any, key: int, limit: int
+    db: DbDep,
+    user_id: int,
+    us: UserServer,
+    column: Any,
+    key: int,
+    limit: int,
+    *,
+    short_titles: bool = False,
 ) -> list[Track]:
     """Most popular songs of an album or artist (one release per song)."""
     state, cond, where = visible(Track, user_id, us)
@@ -62,11 +70,61 @@ async def _top_tracks(
     seen: set[str] = set()
     out = []
     for track in rows:
-        if track.title_norm in seen or not title_ok(track.title):
+        if track.title_norm in seen or not (short_titles or title_ok(track.title)):
             continue
         seen.add(track.title_norm)
         out.append(track)
     return out[:limit]
+
+
+async def pick_song(
+    db: DbDep,
+    user: Any,
+    us: UserServer,
+    settings: SettingsDep,
+    http: HttpDep,
+    cipher: CipherDep,
+    mode: GameMode,
+    rating_key: int,
+    *,
+    for_game: bool,
+) -> GameRoundOut:
+    """The song to play for a card: the song itself, or one of an album's or artist's most
+    popular songs, avoiding silent intros. For the game, songs with very short titles or a
+    silent intro aren't played at all; for rating, the silence is skipped instead."""
+    if mode == "track":
+        track = await visible_track(db, user, us, rating_key)
+        if for_game and not title_ok(track.title):
+            return GameRoundOut(playable=False, reason="short-title", preview=None)
+        candidates = [track]
+    else:
+        column = Track.album_rating_key if mode == "album" else Track.artist_rating_key
+        candidates = await _top_tracks(
+            db, user.id, us, column, rating_key, TOP_SONGS, short_titles=not for_game
+        )
+        random.shuffle(candidates)
+    if not candidates:
+        return GameRoundOut(playable=False, reason="no-file", preview=None)
+    client = server_client(us, cipher, settings, http)
+    reason = "no-file"
+    fallback: GameRoundOut | None = None
+    for track in candidates[:MAX_TRIES]:
+        try:
+            clip = await get_clip(db, settings, client, track)
+        except PreviewError:
+            continue
+        found = GameRoundOut(
+            playable=True,
+            reason=None,
+            preview=preview_out(us.id, track.rating_key, clip),
+        )
+        if not clip.quiet_intro:
+            return found
+        reason = "quiet-intro"
+        fallback = fallback or found
+    if fallback is not None and not for_game:
+        return fallback  # every candidate starts quietly: play one, from where it starts
+    return GameRoundOut(playable=False, reason=reason, preview=None)
 
 
 @router.get(
@@ -84,34 +142,30 @@ async def game_round(
     http: HttpDep,
     cipher: CipherDep,
 ) -> GameRoundOut:
-    """The song to play for a card: the song itself, or one of an album's or artist's most
-    popular songs. Songs with very short titles or a silent intro aren't played."""
+    """The song to play for a game round (not played: very short titles, silent intros)."""
     us = await get_user_server(db, user, server_id)
-    if mode == "track":
-        track = await visible_track(db, user, us, rating_key)
-        if not title_ok(track.title):
-            return GameRoundOut(playable=False, reason="short-title", preview=None)
-        candidates = [track]
-    else:
-        column = Track.album_rating_key if mode == "album" else Track.artist_rating_key
-        candidates = await _top_tracks(db, user.id, us, column, rating_key, TOP_SONGS)
-        random.shuffle(candidates)
-    if not candidates:
-        return GameRoundOut(playable=False, reason="no-file", preview=None)
-    client = server_client(us, cipher, settings, http)
-    reason = "no-file"
-    for track in candidates[:MAX_TRIES]:
-        try:
-            clip = await get_clip(db, settings, client, track)
-        except PreviewError:
-            continue
-        if clip.quiet_intro:
-            reason = "quiet-intro"
-            continue
-        return GameRoundOut(
-            playable=True, reason=None, preview=preview_out(server_id, track.rating_key, clip)
-        )
-    return GameRoundOut(playable=False, reason=reason, preview=None)
+    return await pick_song(db, user, us, settings, http, cipher, mode, rating_key, for_game=True)
+
+
+@sample_router.get(
+    "/sample",
+    response_model=GameRoundOut,
+    dependencies=[rate_limit("rate-sample", limit=90, window=60)],
+)
+async def rate_sample(
+    server_id: int,
+    mode: GameMode,
+    rating_key: int,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+    cipher: CipherDep,
+) -> GameRoundOut:
+    """A song to listen to while rating a card: the song itself (from where the music
+    starts), or one of an album's or artist's most popular songs without a silent intro."""
+    us = await get_user_server(db, user, server_id)
+    return await pick_song(db, user, us, settings, http, cipher, mode, rating_key, for_game=False)
 
 
 @router.get("/search", response_model=list[GameSearchItem])
