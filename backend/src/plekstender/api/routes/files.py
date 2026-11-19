@@ -271,6 +271,19 @@ def _stored(media: MediaFile, field: str) -> Any:
 LISTED = 200
 
 
+def _shown(value: Any) -> Any:
+    """A change's value for the history: a picture still to be made is described in words
+    (once written, it's the picture's SHA-1)."""
+    if not isinstance(value, dict):
+        return value
+    origin = value.get("from")
+    if origin == "plex":
+        return "Plex's poster"
+    if origin == "self":
+        return f"its own cover, shrunk to {value.get('max_px')} px"
+    return f"from {PurePosixPath(str(value.get('path', ''))).name}"
+
+
 async def _sets_out(db: DbDep, sets: list[TagChangeSet]) -> list[TagChangeSetOut]:
     if not sets:
         return []
@@ -340,8 +353,8 @@ async def _sets_out(db: DbDep, sets: list[TagChangeSet]) -> list[TagChangeSetOut
                 path=c.path,
                 rating_key=c.rating_key,
                 field=c.field,
-                old_value=c.old_value,
-                new_value=c.new_value,
+                old_value=_shown(c.old_value),
+                new_value=_shown(c.new_value),
                 status=c.status,
                 error=c.error,
                 undoes_id=c.undoes_id,

@@ -20,9 +20,12 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from plekstender.db.models import FileScan, MediaFile, NfoFile, PlexServer, Track
+from plekstender.config import get_settings
+from plekstender.db.models import FileScan, FolderImage, MediaFile, NfoFile, PlexServer, Track
 from plekstender.tags.nfo import NfoError, kind_of
 from plekstender.tags.nfo import parse as parse_nfo
+from plekstender.tags.pictures import cover_of, image_kind, thumbnail
+from plekstender.tags.pictures import info as picture_info
 from plekstender.tags.read import AUDIO_EXTENSIONS, READER, TagReadError, read_file
 
 log = logging.getLogger(__name__)
@@ -46,16 +49,19 @@ def walk(root: Path) -> list[Found]:
     return walk_all(root)[0]
 
 
-def walk_all(root: Path) -> tuple[list[Found], list[Found]]:
-    """Every audio file and every artist.nfo / album.nfo under `root` (no symlinks)."""
+def walk_all(root: Path) -> tuple[list[Found], list[Found], list[Found]]:
+    """Every audio file, artist.nfo / album.nfo, and folder image (cover.jpg, artist.jpg...)
+    under `root` (no symlinks)."""
     audio: list[Found] = []
     nfos: list[Found] = []
+    images: list[Found] = []
     for folder, dirs, files in os.walk(root, followlinks=False):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
         for name in sorted(files):
             is_nfo = kind_of(name) is not None
+            is_image = image_kind(name) is not None
             if name.startswith(".") or not (
-                is_nfo or Path(name).suffix.lower() in AUDIO_EXTENSIONS
+                is_nfo or is_image or Path(name).suffix.lower() in AUDIO_EXTENSIONS
             ):
                 continue
             full = Path(folder) / name
@@ -66,8 +72,8 @@ def walk_all(root: Path) -> tuple[list[Found], list[Found]]:
             if not full.is_file() or full.is_symlink():
                 continue
             item = Found(full.relative_to(root).as_posix(), st.st_size, st.st_mtime)
-            (nfos if is_nfo else audio).append(item)
-    return audio, nfos
+            (nfos if is_nfo else images if is_image else audio).append(item)
+    return audio, nfos, images
 
 
 def _read_nfos(root: Path, items: list[Found]) -> list[dict[str, Any]]:
@@ -133,21 +139,108 @@ async def _scan_nfos(db: AsyncSession, server: PlexServer, root: Path, nfos: lis
     return len(nfos)
 
 
-def _read(root: Path, item: Found) -> dict[str, Any]:
+def _read(root: Path, item: Found, data_dir: Path) -> dict[str, Any]:
     try:
-        return {**read_file(root / item.path), "error": None}
+        info = read_file(root / item.path)
     except TagReadError as exc:
         return {
             "format": None,
             "duration_ms": None,
             "tags": {},
             "has_cover": False,
+            "cover": None,
             "error": str(exc),
         }
+    cover = cover_of(root / item.path, data_dir) if info["has_cover"] else None
+    return {**info, "cover": cover, "error": None}
 
 
-def _read_all(root: Path, batch: list[Found]) -> list[dict[str, Any]]:
-    return [_read(root, f) for f in batch]
+def _read_all(root: Path, batch: list[Found], data_dir: Path) -> list[dict[str, Any]]:
+    return [_read(root, f, data_dir) for f in batch]
+
+
+def _read_images(root: Path, items: list[Found], data_dir: Path) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for item in items:
+        try:
+            data = (root / item.path).read_bytes()
+        except OSError as exc:
+            out.append({"sha1": None, "width": None, "height": None, "error": str(exc)})
+            continue
+        described = picture_info(data)
+        if described.width is None:
+            out.append(
+                {
+                    "sha1": described.sha1,
+                    "width": None,
+                    "height": None,
+                    "error": "Not a picture Plekstender can read.",
+                }
+            )
+            continue
+        thumbnail(data_dir, data, described.sha1)
+        out.append(
+            {
+                "sha1": described.sha1,
+                "width": described.width,
+                "height": described.height,
+                "error": None,
+            }
+        )
+    return out
+
+
+async def _scan_images(
+    db: AsyncSession, server: PlexServer, root: Path, images: list[Found]
+) -> int:
+    """Describe new and changed folder images (cover.jpg, artist.jpg...); forget gone ones."""
+    data_dir = get_settings().data_dir
+    known = {
+        path: (size, mtime)
+        for path, size, mtime in (
+            await db.execute(
+                select(FolderImage.path, FolderImage.size, FolderImage.mtime).where(
+                    FolderImage.server_id == server.id
+                )
+            )
+        ).all()
+    }
+    changed = [f for f in images if known.get(f.path) != (f.size, f.mtime)]
+    for start in range(0, len(changed), BATCH):
+        batch = changed[start : start + BATCH]
+        read = await asyncio.to_thread(_read_images, root, batch, data_dir)
+        now = dt.datetime.now(dt.UTC)
+        rows = [
+            {
+                "server_id": server.id,
+                "path": f.path,
+                "kind": image_kind(PurePosixPath(f.path).name) or "cover",
+                "size": f.size,
+                "mtime": f.mtime,
+                **info,
+                "scanned_at": now,
+            }
+            for f, info in zip(batch, read, strict=True)
+        ]
+        stmt = insert(FolderImage).values(rows)
+        await db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[FolderImage.server_id, FolderImage.path],
+                set_={c: stmt.excluded[c] for c in rows[0] if c not in ("server_id", "path")},
+            )
+        )
+        await db.commit()
+    present = {f.path for f in images}
+    gone = [path for path in known if path not in present]
+    for start in range(0, len(gone), 1000):
+        await db.execute(
+            delete(FolderImage).where(
+                FolderImage.server_id == server.id,
+                FolderImage.path.in_(gone[start : start + 1000]),
+            )
+        )
+    await db.commit()
+    return len(images)
 
 
 def plex_path(server: PlexServer, relative: str) -> str:
@@ -197,7 +290,7 @@ async def run_scan(db: AsyncSession, scan_id: int) -> None:
 
 
 async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path) -> dict[str, int]:
-    files, nfos = await asyncio.to_thread(walk_all, root)
+    files, nfos, images = await asyncio.to_thread(walk_all, root)
     known = {
         path: (size, mtime, reader)
         for path, size, mtime, reader in (
@@ -227,7 +320,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
     stats["unchanged"] = len(files) - len(changed)
     for start in range(0, len(changed), BATCH):
         batch = changed[start : start + BATCH]
-        read = await asyncio.to_thread(_read_all, root, batch)
+        read = await asyncio.to_thread(_read_all, root, batch, get_settings().data_dir)
         now = dt.datetime.now(dt.UTC)
         rows = [
             {
@@ -239,6 +332,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
                 "duration_ms": info["duration_ms"],
                 "tags": info["tags"],
                 "has_cover": info["has_cover"],
+                "cover": info["cover"],
                 "reader": READER,
                 "error": info["error"],
                 "rating_key": tracks.get(plex_path(server, f.path)),
@@ -270,6 +364,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
         )
     stats["removed"] = len(gone)
     stats["nfo"] = await _scan_nfos(db, server, root, nfos)
+    stats["images"] = await _scan_images(db, server, root, images)
     unmatched = await db.scalars(
         select(MediaFile).where(MediaFile.server_id == server.id, MediaFile.rating_key.is_(None))
     )

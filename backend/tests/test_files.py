@@ -122,6 +122,7 @@ async def test_scan_and_compare(app: FastAPI, plex: FakePlex, music: Path) -> No
         "unchanged": 0,
         "removed": 0,
         "nfo": 0,
+        "images": 0,
         "errors": 1,
         "matched": 2,
     }
@@ -1224,3 +1225,136 @@ async def test_nfo_files_on_album_and_artist_pages(
     scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
     await scan_music_files.func(scan_id=scan["id"])
     assert (await owner.get(f"{base}/albums/200/nfo")).json() is None
+
+
+# --- Artwork in the files --------------------------------------------------------------------
+
+
+def picture_bytes(width: int, height: int, fmt: str = "PNG", colour: str = "red") -> bytes:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), colour).save(buffer, fmt)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("fmt", ["flac", "mp3", "m4a"])
+def test_embedded_covers_in_each_format(tmp_path: Path, fmt: str) -> None:
+    from mutagen.flac import Picture
+
+    from plekstender.tags.pictures import embed, embedded, info, prepare
+
+    path = tmp_path / f"song.{fmt}"
+    make_audio(path, fmt)
+    assert embedded(path) is None
+    if fmt == "flac":  # a back cover stays when the front one changes
+        audio = FLAC(path)
+        back = Picture()
+        back.type, back.mime, back.data = 4, "image/png", picture_bytes(10, 10)
+        audio.add_picture(back)
+        audio.save()
+    big = picture_bytes(2400, 1800)
+    small = prepare(big)
+    described = info(small)
+    assert (described.mime, described.width, described.height) == ("image/jpeg", 1000, 750)
+    import io
+
+    from PIL import Image
+
+    assert not Image.open(io.BytesIO(small)).info.get("progressive")  # players need baseline
+    embed(path, small)
+    assert embedded(path) == (small, "image/jpeg")
+    if fmt == "flac":
+        assert [p.type for p in FLAC(path).pictures] == [4, 3]
+    embed(path, None)
+    # No front cover left: a FLAC's back cover is what players show now.
+    assert embedded(path) == ((back.data, "image/png") if fmt == "flac" else None)
+
+
+@pytest.mark.db
+async def test_album_artwork_in_files_and_folders(
+    app: FastAPI, plex: FakePlex, music: Path
+) -> None:
+    from plekstender.tags.pictures import embed, embedded, sha1
+    from plekstender.worker import apply_tag_changes, scan_music_files
+
+    huge = picture_bytes(3000, 3000, "JPEG", "blue")
+    embed(music / "300.flac", huge, "image/jpeg")  # 301 has none
+    folder_cover = picture_bytes(1200, 1200, "JPEG", "green")
+    (music / "cover.jpg").write_bytes(folder_cover)
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    art = (await owner.get(f"{base}/albums/200/artwork")).json()
+    assert (art["songs"], art["without_cover"], art["folder"], art["plex_poster"]) == (
+        2,
+        1,
+        ".",
+        True,
+    )
+    [cover] = art["covers"]
+    assert (cover["sha1"], cover["width"], cover["files"], cover["oversized"]) == (
+        sha1(huge),
+        3000,
+        1,
+        True,
+    )
+    [image] = art["folder_images"]
+    assert (image["path"], image["kind"], image["width"]) == ("cover.jpg", "cover", 1200)
+    thumb = await owner.get(f"{base}/pictures/{cover['sha1']}.jpg")
+    assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg"
+    summary = (await owner.get(f"{base}/artwork/summary")).json()
+    assert summary["oversized"] == 1 and summary["without_cover"] >= 1
+
+    # The folder's cover into every song, player-sized; undo puts back what was there.
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    body = {"source": "folder", "path": "cover.jpg", "max_px": 1000}
+    resp = await owner.post(f"{base}/albums/200/artwork/embed", json=body, headers=CSRF)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["description"] == "Embedded cover.jpg in 2 songs (1000 px)"
+    await apply_tag_changes.func(set_id=resp.json()["id"])
+    for name in ("300.flac", "301.flac"):
+        data, mime = embedded(music / name) or (b"", "")
+        assert mime == "image/jpeg" and data != huge
+    [done] = (await owner.get(f"{base}/changes")).json()
+    assert done["counts"] == {"applied": 2}
+    undo = await owner.post(f"{base}/undo", json={"set_id": done["id"]}, headers=CSRF)
+    await apply_tag_changes.func(set_id=undo.json()["id"])
+    assert embedded(music / "300.flac") == (huge, "image/jpeg")
+    assert embedded(music / "301.flac") is None
+
+    # Plex's poster as folder.jpg; undo removes the file it made.
+    resp = await owner.post(
+        f"{base}/albums/200/artwork/folder",
+        json={"source": "plex", "name": "folder.jpg"},
+        headers=CSRF,
+    )
+    assert resp.json()["description"] == "Saved Plex's poster as folder.jpg"
+    await apply_tag_changes.func(set_id=resp.json()["id"])
+    assert (music / "folder.jpg").read_bytes()[:2] == b"\xff\xd8"
+    names = [
+        i["path"] for i in (await owner.get(f"{base}/albums/200/artwork")).json()["folder_images"]
+    ]
+    assert names == ["cover.jpg", "folder.jpg"]
+    latest = (await owner.get(f"{base}/changes")).json()[0]
+    undo = await owner.post(f"{base}/undo", json={"set_id": latest["id"]}, headers=CSRF)
+    await apply_tag_changes.func(set_id=undo.json()["id"])
+    assert not (music / "folder.jpg").exists()
+
+    # Oversized covers, library-wide.
+    resp = await owner.post(f"{base}/artwork/shrink", json={"max_px": 800}, headers=CSRF)
+    assert resp.json()["description"] == "Shrank 1 embedded cover to 800 px"
+    await apply_tag_changes.func(set_id=resp.json()["id"])
+    from plekstender.tags.pictures import info
+
+    assert info(embedded(music / "300.flac")[0]).width == 800  # type: ignore[index]
+    assert (await owner.post(f"{base}/artwork/shrink", json={}, headers=CSRF)).status_code == 400

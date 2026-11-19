@@ -1281,6 +1281,121 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/pictures/{sha1}.jpg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Picture
+         * @description A cover's thumbnail (made by the worker when it saw the picture).
+         */
+        get: operations["picture_api_servers__server_id__files_pictures__sha1__jpg_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/{album_key}/artwork": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Album Artwork */
+        get: operations["album_artwork_api_servers__server_id__files_albums__album_key__artwork_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/{album_key}/artwork/embed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Embed Cover
+         * @description Put one cover in every song of the album (resized for players), as one edit.
+         */
+        post: operations["embed_cover_api_servers__server_id__files_albums__album_key__artwork_embed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/{album_key}/artwork/folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Folder Cover
+         * @description Save a cover.jpg (or folder.jpg) in the album's folder, as an edit (undo removes it, or
+         *     puts back the one it replaced).
+         */
+        post: operations["folder_cover_api_servers__server_id__files_albums__album_key__artwork_folder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/artwork/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Artwork Summary */
+        get: operations["artwork_summary_api_servers__server_id__files_artwork_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/artwork/shrink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shrink Covers
+         * @description Make every oversized embedded cover player-sized (one edit; undo puts them back).
+         */
+        post: operations["shrink_covers_api_servers__server_id__files_artwork_shrink_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/unknown": {
         parameters: {
             query?: never;
@@ -2227,6 +2342,30 @@ export interface components {
             /** Server Count */
             server_count: number;
         };
+        /** AlbumArtworkOut */
+        AlbumArtworkOut: {
+            /**
+             * Songs
+             * @description The album's songs with a file.
+             */
+            songs: number;
+            /** Without Cover */
+            without_cover: number;
+            /**
+             * Covers
+             * @description Embedded covers, most songs first.
+             */
+            covers: components["schemas"]["EmbeddedCoverOut"][];
+            /** Folder Images */
+            folder_images: components["schemas"]["FolderImageOut"][];
+            /**
+             * Folder
+             * @description The album's folder (where cover.jpg goes).
+             */
+            folder: string | null;
+            /** Plex Poster */
+            plex_poster: boolean;
+        };
         /** AlbumDetail */
         AlbumDetail: {
             /** Rating Key */
@@ -2459,6 +2598,23 @@ export interface components {
              */
             status: "none" | "custom" | "done";
         };
+        /** ArtworkSummaryOut */
+        ArtworkSummaryOut: {
+            /** Songs */
+            songs: number;
+            /** Without Cover */
+            without_cover: number;
+            /**
+             * Oversized
+             * @description Embedded covers over 1000 px or about 1 MB.
+             */
+            oversized: number;
+            /**
+             * Folders Without Cover
+             * @description Folders with songs and no cover image.
+             */
+            folders_without_cover: number;
+        };
         /**
          * AvailableServerOut
          * @description A server the user can see on plex.tv.
@@ -2596,6 +2752,47 @@ export interface components {
             /** Deleted */
             deleted: number;
         };
+        /** EmbedCoverIn */
+        EmbedCoverIn: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "folder" | "plex";
+            /**
+             * Path
+             * @description The folder image (source folder).
+             */
+            path?: string | null;
+            /**
+             * Max Px
+             * @default 1000
+             */
+            max_px: number;
+        };
+        /** EmbeddedCoverOut */
+        EmbeddedCoverOut: {
+            /** Sha1 */
+            sha1: string;
+            /** Mime */
+            mime: string;
+            /** Bytes */
+            bytes: number;
+            /** Width */
+            width: number | null;
+            /** Height */
+            height: number | null;
+            /**
+             * Files
+             * @description Songs with this cover.
+             */
+            files: number;
+            /**
+             * Oversized
+             * @description Bigger than players cope with well.
+             */
+            oversized: boolean;
+        };
         /** FanartJobIn */
         FanartJobIn: {
             /** Rating Keys */
@@ -2675,6 +2872,25 @@ export interface components {
             active: components["schemas"]["FileScanOut"] | null;
             last: components["schemas"]["FileScanOut"] | null;
         };
+        /** FolderCoverIn */
+        FolderCoverIn: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "embedded" | "plex";
+            /**
+             * Sha1
+             * @description Which embedded cover (source embedded).
+             */
+            sha1?: string | null;
+            /**
+             * Name
+             * @default cover.jpg
+             * @enum {string}
+             */
+            name: "cover.jpg" | "folder.jpg";
+        };
         /** FolderExample */
         FolderExample: {
             /** Artist */
@@ -2685,6 +2901,26 @@ export interface components {
             exists: boolean;
             /** Problem */
             problem: string | null;
+        };
+        /** FolderImageOut */
+        FolderImageOut: {
+            /** Path */
+            path: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "cover" | "artist";
+            /** Sha1 */
+            sha1: string | null;
+            /** Width */
+            width: number | null;
+            /** Height */
+            height: number | null;
+            /** Size */
+            size: number;
+            /** Error */
+            error: string | null;
         };
         /** FolderSettingsIn */
         FolderSettingsIn: {
@@ -4199,6 +4435,14 @@ export interface components {
             music_section_keys: string[];
             /** Last Connected At */
             last_connected_at: string | null;
+        };
+        /** ShrinkCoversIn */
+        ShrinkCoversIn: {
+            /**
+             * Max Px
+             * @default 1000
+             */
+            max_px: number;
         };
         /** SimilarArtistOut */
         SimilarArtistOut: {
@@ -7190,6 +7434,208 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NfoOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    picture_api_servers__server_id__files_pictures__sha1__jpg_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                sha1: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    album_artwork_api_servers__server_id__files_albums__album_key__artwork_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumArtworkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    embed_cover_api_servers__server_id__files_albums__album_key__artwork_embed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmbedCoverIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    folder_cover_api_servers__server_id__files_albums__album_key__artwork_folder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderCoverIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artwork_summary_api_servers__server_id__files_artwork_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shrink_covers_api_servers__server_id__files_artwork_shrink_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShrinkCoversIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
                 };
             };
             /** @description Validation Error */

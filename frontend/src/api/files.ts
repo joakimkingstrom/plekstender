@@ -86,6 +86,7 @@ export function useTagHistory(serverId: number, filter: { album?: number; artist
         // The worker finished: the files' tags changed.
         void qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'album'] })
         void qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'unknown'] })
+        void qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'artwork-summary'] })
       }
       return data
     },
@@ -372,4 +373,66 @@ export function useArtistNfo(serverId: number, artistKey: number) {
         }),
       ),
   })
+}
+
+// --- artwork in the files -------------------------------------------------------------------
+
+export type AlbumArtwork = Schemas['AlbumArtworkOut']
+
+/** A cover's thumbnail (by its SHA-1). */
+export function pictureUrl(serverId: number, sha1: string) {
+  return `/api/servers/${serverId}/files/pictures/${sha1}.jpg`
+}
+
+export function useAlbumArtwork(serverId: number, albumKey: number) {
+  return useQuery({
+    queryKey: [...filesKeys.album(serverId, albumKey), 'artwork'],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/albums/{album_key}/artwork', {
+          params: { path: { server_id: serverId, album_key: albumKey } },
+        }),
+      ),
+  })
+}
+
+export function useEmbedCover(serverId: number, albumKey: number) {
+  return useQueueTags(serverId, (body: Schemas['EmbedCoverIn']) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/albums/{album_key}/artwork/embed', {
+        params: { path: { server_id: serverId, album_key: albumKey } },
+        body,
+      }),
+    ),
+  )
+}
+
+export function useSaveFolderCover(serverId: number, albumKey: number) {
+  return useQueueTags(serverId, (body: Schemas['FolderCoverIn']) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/albums/{album_key}/artwork/folder', {
+        params: { path: { server_id: serverId, album_key: albumKey } },
+        body,
+      }),
+    ),
+  )
+}
+
+export function useArtworkSummary(serverId: number) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'artwork-summary'],
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/files/artwork/summary', { params: { path: { server_id: serverId } } })),
+  })
+}
+
+export function useShrinkCovers(serverId: number) {
+  return useQueueTags(serverId, (maxPx: number) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/artwork/shrink', {
+        params: { path: { server_id: serverId } },
+        body: { max_px: maxPx },
+      }),
+    ),
+  )
 }

@@ -3,6 +3,7 @@ import { errorMessage } from '../api/client'
 import { useState } from 'react'
 import { useAlbumFiles, useFilesSummary, useSetTagEditing, useStartScan, type TrackFile } from '../api/files'
 import { MusicBrainzLookup } from './MusicBrainzLookup'
+import { AlbumArtworkCard } from './FileArtwork'
 import { AlbumNfo } from './NfoCards'
 import { PlexSync } from './PlexSync'
 import { RenameFiles } from './RenameFiles'
@@ -252,6 +253,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
         </div>
       )}
     </Card>
+    <AlbumArtworkCard serverId={serverId} albumKey={albumKey} canWrite={Boolean(summary.data?.tag_editing)} />
     <AlbumNfo serverId={serverId} albumKey={albumKey} onApplyRelease={(releaseId) => setLookup({ releaseId })} />
     <TagHistory serverId={serverId} album={albumKey} />
     </div>

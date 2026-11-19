@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { errorMessage } from '../api/client'
-import { useEditTags, useTagHistory, useUndoTags, type TagChange, type TagChangeSet, type TrackFile } from '../api/files'
+import { pictureUrl, useEditTags, useTagHistory, useUndoTags, type TagChange, type TagChangeSet, type TrackFile } from '../api/files'
 import { formatCount, formatRelative } from '../format'
 import {
   ALBUM_FIELDS,
@@ -238,7 +238,19 @@ const STATUS: Record<TagChangeSet['status'], { label: string; tone: 'muted' | 'a
 const undoable = (c: TagChange) => c.status === 'applied' && !c.undone
 
 /** A value as the history shows it: MusicBrainz IDs shortened, linked to their page. */
-function HistoryValue({ field, value, old }: { field: string; value: TagChange['new_value']; old?: boolean }) {
+function HistoryValue({
+  serverId,
+  field,
+  value,
+  old,
+}: {
+  serverId: number
+  field: string
+  value: TagChange['new_value']
+  old?: boolean
+}) {
+  if ((field === 'picture' || field === 'image') && typeof value === 'string' && /^[0-9a-f]{40}$/.test(value))
+    return <img src={pictureUrl(serverId, value)} alt={old ? 'Before' : 'After'} className="inline-block size-12 rounded object-cover align-middle" />
   const page = MB_PAGES[field]
   const text = showFieldValue(field, value)
   if (page && typeof value === 'string' && value.length > 12) {
@@ -262,7 +274,17 @@ function HistoryValue({ field, value, old }: { field: string; value: TagChange['
   return <span className="break-words">{text}</span>
 }
 
-function ChangeRow({ change: c, picked, onToggle }: { change: TagChange; picked: boolean; onToggle: () => void }) {
+function ChangeRow({
+  serverId,
+  change: c,
+  picked,
+  onToggle,
+}: {
+  serverId: number
+  change: TagChange
+  picked: boolean
+  onToggle: () => void
+}) {
   const written = c.status === 'applied'
   const name = `${fieldLabel(c.field)} of ${songName(c.path)}`
   return (
@@ -275,13 +297,13 @@ function ChangeRow({ change: c, picked, onToggle }: { change: TagChange; picked:
       <span className="text-muted">{fieldLabel(c.field)}</span>
       <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
         <span className={written && !c.undone ? 'text-muted line-through decoration-1' : 'text-muted'}>
-          {c.old_value === null ? <span className="italic">none</span> : <HistoryValue field={c.field} value={c.old_value} old />}
+          {c.old_value === null ? <span className="italic">none</span> : <HistoryValue serverId={serverId} field={c.field} value={c.old_value} old />}
         </span>
         <span aria-hidden className="text-muted">
           →
         </span>
         <span className={written ? 'font-medium' : 'text-muted'}>
-          {c.new_value === null ? <span className="italic">removed</span> : <HistoryValue field={c.field} value={c.new_value} />}
+          {c.new_value === null ? <span className="italic">removed</span> : <HistoryValue serverId={serverId} field={c.field} value={c.new_value} />}
         </span>
         {c.undone && <Badge>undone</Badge>}
         {c.status === 'conflict' && (
@@ -383,7 +405,7 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                         </h4>
                         <ul className="mt-0.5">
                           {changes.map((c) => (
-                            <ChangeRow key={c.id} change={c} picked={picked.has(c.id)} onToggle={() => toggle(c.id)} />
+                            <ChangeRow key={c.id} serverId={serverId} change={c} picked={picked.has(c.id)} onToggle={() => toggle(c.id)} />
                           ))}
                         </ul>
                       </section>

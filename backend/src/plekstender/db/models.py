@@ -670,6 +670,8 @@ class MediaFile(Base):
     has_cover: Mapped[bool] = mapped_column(default=False)
     # The tag reader's version when the file was read (older: re-read on the next scan).
     reader: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
+    # The embedded front cover: {"sha1", "mime", "bytes", "width", "height"}.
+    cover: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     # Identified by sound: {"key": "size:mtime", "fingerprint", "duration", "results": [...],
     # "error", "at"} (AcoustID's matches, condensed; see tags/identify.py).
     identity: Mapped[dict[str, Any] | None]
@@ -693,6 +695,26 @@ class NfoFile(Base):
     size: Mapped[int] = mapped_column(BigInteger)
     mtime: Mapped[float]
     data: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    scanned_at: Mapped[dt.datetime]
+
+
+class FolderImage(Base):
+    """A cover.jpg / folder.jpg / front.jpg / album.jpg or artist.jpg in the music folder
+    (worker scans), described like embedded covers."""
+
+    __tablename__ = "folder_images"
+    __table_args__ = (UniqueConstraint("server_id", "path"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    path: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(8))  # cover | artist
+    size: Mapped[int] = mapped_column(BigInteger)
+    mtime: Mapped[float]
+    sha1: Mapped[str | None] = mapped_column(String(40))
+    width: Mapped[int | None]
+    height: Mapped[int | None]
     error: Mapped[str | None] = mapped_column(Text)
     scanned_at: Mapped[dt.datetime]
 

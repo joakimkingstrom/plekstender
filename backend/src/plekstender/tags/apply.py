@@ -13,7 +13,7 @@ import httpx
 from sqlalchemy import ColumnElement, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from plekstender.config import Settings
+from plekstender.config import Settings, get_settings
 from plekstender.db.models import (
     MediaFile,
     PlexServer,
@@ -24,6 +24,8 @@ from plekstender.db.models import (
     UserServer,
 )
 from plekstender.plex.tv import PlexError
+from plekstender.tags.picture_changes import apply_pictures
+from plekstender.tags.pictures import cover_of
 from plekstender.tags.read import READER, TagReadError, read_file, unread_fields
 from plekstender.tags.rename import MoveError, move, remove_empty_folders
 from plekstender.tags.write import Planned, TagWriteError, apply, snapshot
@@ -31,6 +33,8 @@ from plekstender.tags.write import Planned, TagWriteError, apply, snapshot
 log = logging.getLogger(__name__)
 
 FILE_BATCH = 200
+# Changes handled apart from tags: moves first, then pictures.
+SPECIAL = ("path", "picture", "image")
 # More folders than this changed: Plex rescans the library section(s) instead.
 MAX_FOLDER_RESCANS = 25
 
@@ -69,6 +73,8 @@ async def run_change_set(
         return
     root = await asyncio.to_thread(lambda: Path(server.local_path_prefix or "").resolve())
     moved = await _apply_moves(db, root, server, set_id)
+    touched: set[tuple[int | None, str]] = set()  # (Plex track, folder) for Plex rescans
+    await apply_pictures(db, http, settings, root, server, set_id, touched)
     # File by file, a batch of files at a time (a library-wide edit can be very big).
     file_ids = list(
         await db.scalars(
@@ -76,13 +82,12 @@ async def run_change_set(
             .where(
                 TagChange.change_set_id == set_id,
                 TagChange.status == "pending",
-                TagChange.field != "path",
+                TagChange.field.not_in(SPECIAL),
             )
             .group_by(TagChange.media_file_id)
             .order_by(func.min(TagChange.id))
         )
     )
-    touched: set[tuple[int | None, str]] = set()  # (Plex track, folder) for Plex rescans
     for start in range(0, len(file_ids), FILE_BATCH):
         batch = file_ids[start : start + FILE_BATCH]
         ids = [f for f in batch if f is not None]
@@ -95,7 +100,7 @@ async def run_change_set(
                 .where(
                     TagChange.change_set_id == set_id,
                     TagChange.status == "pending",
-                    TagChange.field != "path",
+                    TagChange.field.not_in(SPECIAL),
                     in_batch,
                 )
                 .order_by(TagChange.id)
@@ -231,6 +236,11 @@ async def _reread(media: MediaFile, path: Path) -> None:
         return
     media.tags = info["tags"]
     media.has_cover = info["has_cover"]
+    media.cover = (
+        await asyncio.to_thread(cover_of, path, get_settings().data_dir)
+        if info["has_cover"]
+        else None
+    )
     media.reader = READER
     media.size, media.mtime = st.st_size, st.st_mtime
     media.error = None

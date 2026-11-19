@@ -1260,5 +1260,57 @@ class NfoOut(BaseModel):
     plex_mbid: str | None = Field(default=None, description="Artist: Plex's MusicBrainz ID.")
 
 
+class FolderImageOut(BaseModel):
+    path: str
+    kind: Literal["cover", "artist"]
+    sha1: str | None
+    width: int | None
+    height: int | None
+    size: int
+    error: str | None
+
+
+class EmbeddedCoverOut(BaseModel):
+    sha1: str
+    mime: str
+    bytes: int
+    width: int | None
+    height: int | None
+    files: int = Field(description="Songs with this cover.")
+    oversized: bool = Field(description="Bigger than players cope with well.")
+
+
+class AlbumArtworkOut(BaseModel):
+    songs: int = Field(description="The album's songs with a file.")
+    without_cover: int
+    covers: list[EmbeddedCoverOut] = Field(description="Embedded covers, most songs first.")
+    folder_images: list[FolderImageOut]
+    folder: str | None = Field(description="The album's folder (where cover.jpg goes).")
+    plex_poster: bool
+
+
+class EmbedCoverIn(BaseModel):
+    source: Literal["folder", "plex"]
+    path: str | None = Field(default=None, description="The folder image (source folder).")
+    max_px: int = Field(default=1000, ge=300, le=3000)
+
+
+class FolderCoverIn(BaseModel):
+    source: Literal["embedded", "plex"]
+    sha1: str | None = Field(default=None, description="Which embedded cover (source embedded).")
+    name: Literal["cover.jpg", "folder.jpg"] = "cover.jpg"
+
+
+class ArtworkSummaryOut(BaseModel):
+    songs: int
+    without_cover: int
+    oversized: int = Field(description="Embedded covers over 1000 px or about 1 MB.")
+    folders_without_cover: int = Field(description="Folders with songs and no cover image.")
+
+
+class ShrinkCoversIn(BaseModel):
+    max_px: int = Field(default=1000, ge=300, le=3000)
+
+
 class TagSettingsIn(BaseModel):
     tag_editing: bool

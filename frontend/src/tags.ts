@@ -28,6 +28,8 @@ const MORE_LABELS: Record<string, string> = {
   musicbrainz_releasegroupid: 'MusicBrainz release group ID',
   rating: 'Rating',
   path: 'File',
+  picture: 'Cover',
+  image: 'Folder picture',
 }
 
 export function fieldLabel(field: string): string {

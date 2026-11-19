@@ -26,12 +26,13 @@ TEXT_FIELDS = (
 )  # fmt: skip
 LIST_FIELDS = ("genre",)
 # Bumped when more fields are read: the next scan re-reads every file once.
-READER = 3
+READER = 4
 # The fields each reader version added: a file read by an older reader may have them without
 # Plekstender knowing (until it's read again).
 ADDED = {
     2: frozenset({"musicbrainz_releasetrackid", "releasecountry"}),
     3: frozenset({"rating"}),
+    4: frozenset(),  # embedded covers described (not a tag)
 }
 
 

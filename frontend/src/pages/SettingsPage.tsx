@@ -10,6 +10,7 @@ import { fontPreviewUrl, useEditFonts, useFanartKey, useFontCatalogue, useFonts,
 import { Segmented } from '../components/Segmented'
 import { FolderSettings } from '../components/FolderSettings'
 import { ScanCard } from '../components/MusicFiles'
+import { ArtworkSummaryCard } from '../components/FileArtwork'
 import { PlexSync } from '../components/PlexSync'
 import { TagHistory } from '../components/TagEditor'
 import { UnknownFiles } from '../components/UnknownFiles'
@@ -687,6 +688,12 @@ function PlexSyncCard({ serverId }: { serverId: number }) {
   )
 }
 
+function ArtworkCard({ serverId }: { serverId: number }) {
+  const summary = useFilesSummary(serverId)
+  if (!summary.data?.mapped || !summary.data.files) return null
+  return <ArtworkSummaryCard serverId={serverId} canWrite={summary.data.tag_editing} />
+}
+
 function UnknownFilesCard({ serverId }: { serverId: number }) {
   const summary = useFilesSummary(serverId)
   const me = useMe()
@@ -708,6 +715,7 @@ export function FilesSettingsPage() {
       <div className="space-y-4">
         <ScanCard serverId={active.id} />
         <PlexSyncCard serverId={active.id} />
+        <ArtworkCard serverId={active.id} />
         <TagHistory serverId={active.id} />
       </div>
     </div>
