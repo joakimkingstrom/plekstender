@@ -35,6 +35,7 @@ const concert = {
   source: 'jambase',
   sources: ['jambase', 'ticketmaster'],
   starred: false,
+  got_ticket: false,
   tickets: [
     { source: 'jambase', url: 'https://www.ticketmaster.se/event/radiohead', seller: 'Ticketmaster' },
     { source: 'ticketmaster', url: 'https://www.ticketmaster.se/event/A1', seller: 'Ticketmaster' },
@@ -65,6 +66,7 @@ const festival = {
   ids: [2],
   sources: ['jambase'],
   starred: true,
+  got_ticket: false,
   tickets: [{ source: 'jambase', url: 'https://www.jambase.com/show/radiohead', seller: null }],
   name: 'Way Out West 2027',
   festival: true,
@@ -82,6 +84,7 @@ let fetchMock: ReturnType<typeof vi.fn<(input: Request | string, init?: RequestI
 
 beforeEach(() => {
   settings = base
+  festival.got_ticket = false
   fetchMock = vi.fn<(input: Request | string, init?: RequestInit) => Promise<Response>>(async (input) => {
     const request = typeof input === 'string' ? null : input
     const url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost')
@@ -100,6 +103,9 @@ beforeEach(() => {
         return json(settings)
       case '/api/live/listened':
         return json({ listened_artists: url.searchParams.get('period_months') ? 12 : 40 })
+      case '/api/live/tickets':
+        festival.got_ticket = (await request!.clone().json()).got_ticket
+        return new Response(null, { status: 204 })
       case '/api/live/stars':
         return new Response(null, { status: 204 })
       case '/api/live/calendar':
@@ -193,6 +199,14 @@ describe('LivePage', () => {
     expect(within(row).getByRole('link', { name: 'Also on Ticketmaster' })).toHaveAttribute('href', 'https://www.ticketmaster.se/event/A1')
     // A starred show can be added to a calendar by hand.
     expect(screen.getByRole('link', { name: 'Add to calendar' })).toHaveAttribute('href', '/api/live/shows/2.ics')
+    // Only starred shows offer "I've got a ticket".
+    expect(within(row).queryByRole('button', { name: "I've got a ticket" })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: "I've got a ticket" }))
+    expect(await screen.findByText('🎟 Got a ticket')).toBeInTheDocument()
+    await vi.waitFor(async () => {
+      const put = requestsTo('/api/live/tickets').at(-1)
+      expect(put && (await put.clone().json())).toEqual({ ids: [2], got_ticket: true })
+    })
 
     fireEvent.click(within(row).getByRole('button', { name: 'Star' }))
     await vi.waitFor(async () => {

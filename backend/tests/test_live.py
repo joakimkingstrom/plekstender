@@ -613,6 +613,23 @@ async def test_ticketmaster_merging_stars_and_calendar(app: FastAPI, plex: FakeP
     assert body.count("BEGIN:VEVENT") == 1
     assert "SUMMARY:Radiohead\r\n" in body and "DTSTART:20270304T193000" in body
     assert "LOCATION:Avicii Arena\\, Stockholm" in body
+    assert "STATUS:TENTATIVE" in body and "You have a ticket" not in body
+
+    # A ticket: confirmed in the calendar; unstarring forgets it.
+    got = await owner.put(
+        "/api/live/tickets", json={"ids": merged["ids"], "got_ticket": True}, headers=CSRF
+    )
+    assert got.status_code == 204
+    shows_now = (await owner.get("/api/live/shows", params={"starred": True})).json()["shows"]
+    assert [(s["name"], s["got_ticket"]) for s in shows_now] == [
+        ("Radiohead at Avicii Arena", True)
+    ]
+    body = (
+        await httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test").get(
+            path
+        )
+    ).text
+    assert "STATUS:CONFIRMED" in body and "DESCRIPTION:You have a ticket." in body
     assert (await owner.get("/api/live/calendar")).json()["url"] == address
     new = (await owner.post("/api/live/calendar/reset", headers=CSRF)).json()["url"]
     assert new != address
@@ -623,8 +640,13 @@ async def test_ticketmaster_merging_stars_and_calendar(app: FastAPI, plex: FakeP
     one = await owner.get(f"/api/live/shows/{merged['id']}.ics")
     assert one.status_code == 200 and "attachment" in one.headers["content-disposition"]
 
-    # Unstarring lets the next refresh drop it.
+    # Unstarring forgets the ticket and lets the next refresh drop the show.
     await owner.put("/api/live/stars", json={"ids": merged["ids"], "starred": False}, headers=CSRF)
+    async with get_sessionmaker()() as db:
+        assert (
+            await db.scalar(text("SELECT count(*) FROM live_shows WHERE ticket_at IS NOT NULL"))
+            == 0
+        )
     async with get_sessionmaker()() as db:
         await db.execute(text("UPDATE live_shows SET fetched_at = fetched_at - interval '1 day'"))
         await db.commit()

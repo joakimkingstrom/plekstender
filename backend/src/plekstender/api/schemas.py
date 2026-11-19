@@ -1386,6 +1386,7 @@ class LiveShowOut(BaseModel):
     source: str
     sources: list[str]
     starred: bool
+    got_ticket: bool = Field(description="The user has a ticket (starred shows).")
     tickets: list[LiveTicketOut] = Field(description="Ticket links, the first source's first.")
     name: str
     festival: bool
@@ -1432,6 +1433,11 @@ class JamBaseKeyOut(BaseModel):
 class LiveStarIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=20)
     starred: bool
+
+
+class LiveTicketIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=20)
+    got_ticket: bool
 
 
 class LiveCalendarOut(BaseModel):

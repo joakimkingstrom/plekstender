@@ -27,6 +27,7 @@ class CalendarShow:
     url: str | None
     description: str
     updated: dt.datetime
+    got_ticket: bool = False
 
 
 def _escape(text: str) -> str:
@@ -80,7 +81,9 @@ def _event(show: CalendarShow, now: dt.datetime) -> list[str]:
         lines.append(f"URL:{show.url}")
     if show.description:
         lines.append(f"DESCRIPTION:{_escape(show.description)}")
-    lines.append("STATUS:CANCELLED" if show.status == "cancelled" else "STATUS:CONFIRMED")
+    # A show with a ticket is confirmed; one that's only starred is tentative.
+    confirmed = "CONFIRMED" if show.got_ticket else "TENTATIVE"
+    lines.append(f"STATUS:{'CANCELLED' if show.status == 'cancelled' else confirmed}")
     lines.append("TRANSP:OPAQUE")
     lines.append("END:VEVENT")
     return lines

@@ -28,6 +28,7 @@ from plekstender.api.schemas import (
     LiveShowOut,
     LiveShowsOut,
     LiveStarIn,
+    LiveTicketIn,
     LiveTicketOut,
     PlaceOut,
 )
@@ -246,6 +247,7 @@ def _show(group: list[LiveShow]) -> LiveShowOut:
         source=row.source,
         sources=[r.source for r in group],
         starred=any(r.starred_at for r in group),
+        got_ticket=any(r.ticket_at for r in group),
         tickets=list(tickets.values()),
         name=row.name,
         festival=any(r.festival for r in group),
@@ -269,12 +271,30 @@ def _show(group: list[LiveShow]) -> LiveShowOut:
 @router.put("/stars", status_code=status.HTTP_204_NO_CONTENT)
 async def star(body: LiveStarIn, db: DbDep, user: UserDep) -> Response:
     """Star (or unstar) a show: all its sources' rows, so it stays starred whichever is
-    listed first."""
-    await db.execute(
-        update(LiveShow)
-        .where(LiveShow.user_id == user.id, LiveShow.id.in_(body.ids))
-        .values(starred_at=dt.datetime.now(dt.UTC) if body.starred else None)
-    )
+    listed first. Unstarring forgets the ticket too."""
+    rows = update(LiveShow).where(LiveShow.user_id == user.id, LiveShow.id.in_(body.ids))
+    if body.starred:
+        rows = rows.values(starred_at=func.coalesce(LiveShow.starred_at, dt.datetime.now(dt.UTC)))
+    else:
+        rows = rows.values(starred_at=None, ticket_at=None)
+    await db.execute(rows)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/tickets", status_code=status.HTTP_204_NO_CONTENT)
+async def got_ticket(body: LiveTicketIn, db: DbDep, user: UserDep) -> Response:
+    """Mark (or unmark) that the user has a ticket for a show; marking stars it too."""
+    now = dt.datetime.now(dt.UTC)
+    rows = update(LiveShow).where(LiveShow.user_id == user.id, LiveShow.id.in_(body.ids))
+    if body.got_ticket:
+        rows = rows.values(
+            ticket_at=func.coalesce(LiveShow.ticket_at, now),
+            starred_at=func.coalesce(LiveShow.starred_at, now),
+        )
+    else:
+        rows = rows.values(ticket_at=None)
+    await db.execute(rows)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -317,7 +337,7 @@ def _calendar_shows(groups: list[list[LiveShow]]) -> list[ical.CalendarShow]:
         title = show.name if show.festival else " + ".join(names) or show.name
         others = [p.name for p in show.performers if p.name not in names]
         where = ", ".join(x for x in (show.venue, show.city) if x)
-        lines = []
+        lines = ["You have a ticket."] if show.got_ticket else []
         if others:
             lines.append("With " + ", ".join(others[:10]))
         lines += [f"Tickets ({t.seller or t.source}): {t.url}" for t in show.tickets]
@@ -329,6 +349,7 @@ def _calendar_shows(groups: list[list[LiveShow]]) -> list[ical.CalendarShow]:
                 start_time=show.start_time,
                 end_date=show.end_date,
                 status=show.status,
+                got_ticket=show.got_ticket,
                 location=where or None,
                 url=show.tickets[0].url if show.tickets else None,
                 description="\n".join(lines),

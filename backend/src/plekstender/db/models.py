@@ -870,3 +870,5 @@ class LiveShow(Base):
     fetched_at: Mapped[dt.datetime]
     # Starred by the user: kept (and in their calendar) even when no longer found.
     starred_at: Mapped[dt.datetime | None]
+    # The user has a ticket (only for starred shows).
+    ticket_at: Mapped[dt.datetime | None]

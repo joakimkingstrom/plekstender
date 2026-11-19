@@ -2012,9 +2012,29 @@ export interface paths {
         /**
          * Star
          * @description Star (or unstar) a show: all its sources' rows, so it stays starred whichever is
-         *     listed first.
+         *     listed first. Unstarring forgets the ticket too.
          */
         put: operations["star_api_live_stars_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Got Ticket
+         * @description Mark (or unmark) that the user has a ticket for a show; marking stars it too.
+         */
+        put: operations["got_ticket_api_live_tickets_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4045,6 +4065,11 @@ export interface components {
             /** Starred */
             starred: boolean;
             /**
+             * Got Ticket
+             * @description The user has a ticket (starred shows).
+             */
+            got_ticket: boolean;
+            /**
              * Tickets
              * @description Ticket links, the first source's first.
              */
@@ -4107,6 +4132,13 @@ export interface components {
             ids: number[];
             /** Starred */
             starred: boolean;
+        };
+        /** LiveTicketIn */
+        LiveTicketIn: {
+            /** Ids */
+            ids: number[];
+            /** Got Ticket */
+            got_ticket: boolean;
         };
         /** LiveTicketOut */
         LiveTicketOut: {
@@ -9342,6 +9374,37 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LiveStarIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    got_ticket_api_live_tickets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveTicketIn"];
             };
         };
         responses: {

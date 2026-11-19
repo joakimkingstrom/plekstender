@@ -150,3 +150,12 @@ export function useListenedCount(periodMonths: number | null) {
     placeholderData: keepPreviousData,
   })
 }
+
+export function useGotTicket() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ids, gotTicket }: { ids: number[]; gotTicket: boolean }) =>
+      unwrap(api.PUT('/api/live/tickets', { body: { ids, got_ticket: gotTicket } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...liveKeys.all, 'shows'] }),
+  })
+}

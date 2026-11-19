@@ -6,6 +6,7 @@ import { useActiveServer } from '../api/library'
 import {
   useCalendarAddress,
   useForgetLiveSettings,
+  useGotTicket,
   useListenedCount,
   useLiveSettings,
   useLiveShows,
@@ -471,6 +472,8 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
   const extra = more.filter((t, i) => t.source !== first?.source && more.findIndex((o) => o.source === t.source) === i)
   const star = useStarShow()
   const starred = star.isPending ? star.variables.starred : show.starred
+  const ticket = useGotTicket()
+  const gotTicket = starred && (ticket.isPending ? ticket.variables.gotTicket : show.got_ticket)
   return (
     <li className="flex items-start gap-3 p-3">
       <div className="w-12 shrink-0 text-center">
@@ -493,6 +496,7 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
             </span>
           ))}
           {status && <span className="ml-2 rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">{status}</span>}
+          {gotTicket && <span className="ml-2 rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok">🎟 Got a ticket</span>}
         </p>
         {(show.festival || others.length > 0) && (
           <p className="truncate text-muted">
@@ -517,6 +521,16 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
               Also on {SOURCE_NAMES[t.source] ?? t.source}
             </a>
           ))}
+          {starred && (
+            <button
+              type="button"
+              aria-pressed={gotTicket}
+              onClick={() => ticket.mutate({ ids: show.ids, gotTicket: !gotTicket })}
+              className="underline hover:text-accent"
+            >
+              {gotTicket ? "I don't have a ticket" : "I've got a ticket"}
+            </button>
+          )}
           {starred && (
             <a href={`/api/live/shows/${show.id}.ics`} download className="underline hover:text-accent">
               Add to calendar
