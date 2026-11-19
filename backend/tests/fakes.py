@@ -152,6 +152,8 @@ class FakeLibrary:
         # Track files (/library/parts/{key}/1/file.flac) by track key; missing ones give 404.
         self.part_files: dict[int, bytes] = {}
         self.part_requests = 0
+        # Folders Plex was asked to rescan: (section, path).
+        self.refreshed: list[tuple[str, str]] = []
 
         for item in (
             _artist(100, "Radiohead", Guid=[{"id": "mbid://a74b1b7f"}]),
@@ -453,6 +455,13 @@ class FakeLibrary:
         found = [self.items[k] for k in self.nearest[key]]
         return httpx.Response(200, json={"MediaContainer": {"Metadata": found}})
 
+    def refresh_request(self, request: httpx.Request) -> httpx.Response:
+        if request.headers.get("X-Plex-Token") not in SERVER_TOKENS:
+            return httpx.Response(401)
+        section = request.url.path.split("/")[3]
+        self.refreshed.append((section, request.url.params.get("path", "")))
+        return httpx.Response(200)
+
     def part_request(self, request: httpx.Request) -> httpx.Response:
         if request.headers.get("X-Plex-Token") not in SERVER_TOKENS:
             return httpx.Response(401)
@@ -502,6 +511,9 @@ class FakePlex:
         router.get(f"{SERVER_URI}/status/sessions").mock(side_effect=self.library.sessions_list)
         router.get(url__regex=rf"{re.escape(SERVER_URI)}/library/parts/\d+/").mock(
             side_effect=self.library.part_request
+        )
+        router.get(url__regex=rf"{re.escape(SERVER_URI)}/library/sections/\d+/refresh").mock(
+            side_effect=self.library.refresh_request
         )
         router.post(f"{SERVER_URI}/playlists").mock(side_effect=self.library.playlists_create)
         router.get(f"{SERVER_URI}/playlists").mock(side_effect=self.library.playlists_list)

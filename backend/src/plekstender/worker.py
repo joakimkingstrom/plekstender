@@ -30,6 +30,7 @@ from plekstender.db.models import (
     Playlist,
     PlexServer,
     SyncRun,
+    TagChangeSet,
     UserSectionSync,
     UserServer,
 )
@@ -47,6 +48,7 @@ from plekstender.previews import trim_cache as trim_preview_cache
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
+from plekstender.tags.apply import run_change_set as run_tag_change_set
 from plekstender.tags.scan import run_scan as run_file_scan
 
 log = logging.getLogger(__name__)
@@ -505,6 +507,25 @@ async def enqueue_file_scan(scan: FileScan) -> None:
         await scan_music_files.configure(
             lock=f"folders-{scan.server_id}", queueing_lock=f"file-scan-{scan.id}"
         ).defer_async(scan_id=scan.id)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.task(queue="files")
+async def apply_tag_changes(set_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_tag_change_set(db, http, get_settings(), set_id)
+
+
+async def enqueue_tag_changes(change_set: TagChangeSet) -> None:
+    """Apply an edit. One file job per server at a time (scans and edits don't overlap)."""
+    try:
+        await apply_tag_changes.configure(
+            lock=f"folders-{change_set.server_id}", queueing_lock=f"tag-set-{change_set.id}"
+        ).defer_async(set_id=change_set.id)
     except AlreadyEnqueued:
         pass
 

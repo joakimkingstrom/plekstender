@@ -103,6 +103,8 @@ class PlexServer(TimestampMixin, Base):
     # The worker's last check of the folder mapping (only the worker sees music files):
     # {"requested_at", "checked_at", "root_ok", "problem", "example": {...}}.
     folder_check: Mapped[dict[str, Any]] = mapped_column(default=dict, server_default="{}")
+    # Tag editing writes to music files: off until the owner turns it on.
+    tag_editing: Mapped[bool] = mapped_column(default=False, server_default="false")
     # The server's public IP (from plex.tv), and where that is: home-network plays are
     # placed here on the listens map.
     public_address: Mapped[str | None] = mapped_column(String(64))
@@ -689,3 +691,64 @@ class FileScan(Base):
     started_at: Mapped[dt.datetime | None]
     finished_at: Mapped[dt.datetime | None]
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class TagChangeSet(Base):
+    """One edit of music files' tags (a user's edit, or an undo of earlier changes), applied
+    by the worker. Its changes are recorded before anything is written."""
+
+    __tablename__ = "tag_change_sets"
+    __table_args__ = (Index("ix_tag_change_sets_server", "server_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(8), default="edit")  # edit | undo
+    description: Mapped[str] = mapped_column(Text)
+    # queued | running | applied | partial (some skipped or failed) | failed
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    applied_at: Mapped[dt.datetime | None]
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class TagChange(Base):
+    """One field of one file: what it was, what it becomes. `old_value` is also what the
+    file must still hold when the worker writes (otherwise it's a conflict, not written)."""
+
+    __tablename__ = "tag_changes"
+    __table_args__ = (
+        Index("ix_tag_changes_set", "change_set_id"),
+        Index("ix_tag_changes_file", "media_file_id"),
+        Index("ix_tag_changes_undoes", "undoes_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    change_set_id: Mapped[int] = mapped_column(ForeignKey("tag_change_sets.id", ondelete="CASCADE"))
+    media_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("media_files.id", ondelete="SET NULL")
+    )
+    path: Mapped[str] = mapped_column(Text)  # the file at the time (relative)
+    rating_key: Mapped[int | None] = mapped_column(BigInteger)  # its Plex track
+    field: Mapped[str] = mapped_column(String(32))
+    old_value: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    new_value: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    # pending | applied | conflict (the file changed since) | failed
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    error: Mapped[str | None] = mapped_column(Text)
+    # For an undo: the change it puts back.
+    undoes_id: Mapped[int | None] = mapped_column(ForeignKey("tag_changes.id", ondelete="SET NULL"))
+
+
+class TagSnapshot(Base):
+    """A file's tags the first time Plekstender changed them (what was there before)."""
+
+    __tablename__ = "tag_snapshots"
+
+    media_file_id: Mapped[int] = mapped_column(
+        ForeignKey("media_files.id", ondelete="CASCADE"), primary_key=True
+    )
+    path: Mapped[str] = mapped_column(Text)
+    tags: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    taken_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

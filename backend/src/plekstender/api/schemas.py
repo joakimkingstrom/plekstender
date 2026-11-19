@@ -936,6 +936,7 @@ class FileScanOut(BaseModel):
 
 class FilesSummaryOut(BaseModel):
     mapped: bool = Field(description="The music folder is mapped (Settings → Music files).")
+    tag_editing: bool = Field(default=False, description="Tags may be edited (owner's choice).")
     files: int
     matched: int = Field(description="Files that are a Plex track.")
     errors: int = Field(description="Files whose tags couldn't be read.")
@@ -945,6 +946,7 @@ class FilesSummaryOut(BaseModel):
 
 class TrackFileOut(BaseModel):
     rating_key: int
+    file_id: int | None = Field(default=None, description="The music file, for edits.")
     disc: int | None
     number: int | None
     plex: dict[str, Any] = Field(description="Plex's values, in the same fields as `tags`.")
@@ -960,3 +962,54 @@ class TrackFileOut(BaseModel):
 class AlbumFilesOut(BaseModel):
     scanned: bool = Field(description="The music folder has been scanned.")
     tracks: list[TrackFileOut]
+
+
+TagValue = str | list[str] | None
+
+
+class TagEditChange(BaseModel):
+    file_id: int
+    field: Literal[
+        "title", "artist", "album", "albumartist", "date", "genre",
+        "tracknumber", "discnumber", "composer",
+    ]  # fmt: skip
+    value: TagValue = Field(description="New value; a list for genre; null removes the tag.")
+
+
+class TagEditIn(BaseModel):
+    description: str | None = Field(default=None, max_length=200)
+    changes: list[TagEditChange] = Field(min_length=1, max_length=5000)
+
+
+class TagChangeOut(BaseModel):
+    id: int
+    file_id: int | None
+    path: str
+    rating_key: int | None
+    field: str
+    old_value: TagValue
+    new_value: TagValue
+    status: Literal["pending", "applied", "conflict", "failed"]
+    error: str | None
+    undoes_id: int | None
+    undone: bool = Field(description="An applied undo put this change back.")
+
+
+class TagChangeSetOut(BaseModel):
+    id: int
+    kind: Literal["edit", "undo"]
+    description: str
+    status: Literal["queued", "running", "applied", "partial", "failed"]
+    error: str | None
+    user: str | None
+    created_at: dt.datetime
+    applied_at: dt.datetime | None
+    changes: list[TagChangeOut]
+
+
+class TagUndoIn(BaseModel):
+    change_ids: list[int] = Field(min_length=1, max_length=5000)
+
+
+class TagSettingsIn(BaseModel):
+    tag_editing: bool

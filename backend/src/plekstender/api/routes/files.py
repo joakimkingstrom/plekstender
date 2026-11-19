@@ -3,14 +3,24 @@ routes start scans and show what they found, next to Plex's metadata."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from plekstender.api.deps import DbDep, UserDep
 from plekstender.api.routes.artwork import owner_server
-from plekstender.api.schemas import AlbumFilesOut, FileScanOut, FilesSummaryOut, TrackFileOut
+from plekstender.api.schemas import (
+    AlbumFilesOut,
+    FileScanOut,
+    FilesSummaryOut,
+    TagChangeOut,
+    TagChangeSetOut,
+    TagEditIn,
+    TagSettingsIn,
+    TagUndoIn,
+    TrackFileOut,
+)
 from plekstender.db.models import (
     Album,
     Artist,
@@ -19,9 +29,14 @@ from plekstender.db.models import (
     MediaFile,
     PlexServer,
     Tag,
+    TagChange,
+    TagChangeSet,
     Track,
+    User,
+    UserServer,
 )
-from plekstender.worker import enqueue_file_scan
+from plekstender.tags.write import clean
+from plekstender.worker import enqueue_file_scan, enqueue_tag_changes
 
 router = APIRouter(prefix="/api/servers/{server_id}/files", tags=["files"])
 ACTIVE = ("queued", "running")
@@ -55,6 +70,7 @@ async def files_summary(server_id: int, db: DbDep, user: UserDep) -> FilesSummar
     )
     return FilesSummaryOut(
         mapped=bool(server.plex_path_prefix and server.local_path_prefix),
+        tag_editing=server.tag_editing,
         files=counts[0],
         matched=counts[1],
         errors=counts[2],
@@ -175,6 +191,7 @@ async def album_files(server_id: int, album_key: int, db: DbDep, user: UserDep) 
         tracks.append(
             TrackFileOut(
                 rating_key=track.rating_key,
+                file_id=media.id if media else None,
                 disc=track.disc,
                 number=track.number,
                 plex=plex,
@@ -189,3 +206,229 @@ async def album_files(server_id: int, album_key: int, db: DbDep, user: UserDep) 
         )
     scanned = bool(await db.scalar(select(func.count()).where(FileScan.server_id == us.server_id)))
     return AlbumFilesOut(scanned=scanned, tracks=tracks)
+
+
+# --- editing tags ---------------------------------------------------------------------------
+
+
+@router.put("/settings", response_model=FilesSummaryOut)
+async def files_settings(
+    server_id: int, body: TagSettingsIn, db: DbDep, user: UserDep
+) -> FilesSummaryOut:
+    """Allow (or stop) editing tags: it writes to the music files."""
+    us = await owner_server(db, user, server_id)
+    server = await db.get(PlexServer, us.server_id)
+    assert server is not None
+    server.tag_editing = body.tag_editing
+    await db.commit()
+    return await files_summary(server_id, db, user)
+
+
+async def _editable(db: DbDep, user: User, server_id: int) -> tuple[UserServer, PlexServer]:
+    us = await owner_server(db, user, server_id)
+    server = await db.get(PlexServer, us.server_id)
+    assert server is not None
+    if not server.tag_editing:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Turn on tag editing first (Settings → Music files)."
+        )
+    return us, server
+
+
+def _stored(media: MediaFile, field: str) -> Any:
+    """What the scan found in the file for a field (as the writer compares it)."""
+    return clean(field, (media.tags or {}).get(field))
+
+
+async def _sets_out(db: DbDep, sets: list[TagChangeSet]) -> list[TagChangeSetOut]:
+    if not sets:
+        return []
+    ids = [s.id for s in sets]
+    changes = list(
+        await db.scalars(
+            select(TagChange).where(TagChange.change_set_id.in_(ids)).order_by(TagChange.id)
+        )
+    )
+    undone = set(
+        await db.scalars(
+            select(TagChange.undoes_id).where(
+                TagChange.undoes_id.in_([c.id for c in changes]), TagChange.status == "applied"
+            )
+        )
+    )
+    users = {
+        u.id: u.username
+        for u in await db.scalars(
+            select(User).where(User.id.in_({s.user_id for s in sets if s.user_id}))
+        )
+    }
+    by_set: dict[int, list[TagChangeOut]] = {}
+    for c in changes:
+        by_set.setdefault(c.change_set_id, []).append(
+            TagChangeOut(
+                id=c.id,
+                file_id=c.media_file_id,
+                path=c.path,
+                rating_key=c.rating_key,
+                field=c.field,
+                old_value=c.old_value,
+                new_value=c.new_value,
+                status=c.status,
+                error=c.error,
+                undoes_id=c.undoes_id,
+                undone=c.id in undone,
+            )
+        )
+    return [
+        TagChangeSetOut(
+            id=s.id,
+            kind=s.kind,
+            description=s.description,
+            status=s.status,
+            error=s.error,
+            user=users.get(s.user_id) if s.user_id else None,
+            created_at=s.created_at,
+            applied_at=s.applied_at,
+            changes=by_set.get(s.id, []),
+        )
+        for s in sets
+    ]
+
+
+async def _queue(db: DbDep, change_set: TagChangeSet, changes: list[TagChange]) -> TagChangeSetOut:
+    db.add(change_set)
+    await db.flush()
+    for change in changes:
+        change.change_set_id = change_set.id
+        db.add(change)
+    await db.commit()
+    await enqueue_tag_changes(change_set)
+    [out] = await _sets_out(db, [change_set])
+    return out
+
+
+@router.post("/edits", response_model=TagChangeSetOut, status_code=status.HTTP_201_CREATED)
+async def edit_tags(server_id: int, body: TagEditIn, db: DbDep, user: UserDep) -> TagChangeSetOut:
+    """Change tags in music files. The changes are recorded first, then the worker writes
+    them; a file that changed since it was scanned isn't overwritten (a conflict)."""
+    us, server = await _editable(db, user, server_id)
+    files = {
+        m.id: m
+        for m in await db.scalars(
+            select(MediaFile).where(
+                MediaFile.server_id == us.server_id,
+                MediaFile.id.in_({c.file_id for c in body.changes}),
+            )
+        )
+    }
+    changes = []
+    seen: set[tuple[int, str]] = set()
+    for c in body.changes:
+        media = files.get(c.file_id)
+        if media is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
+        if (c.file_id, c.field) in seen:
+            continue
+        seen.add((c.file_id, c.field))
+        old, new = _stored(media, c.field), clean(c.field, c.value)
+        if old == new:
+            continue
+        changes.append(
+            TagChange(
+                media_file_id=media.id,
+                path=media.path,
+                rating_key=media.rating_key,
+                field=c.field,
+                old_value=old,
+                new_value=new,
+            )
+        )
+    if not changes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nothing to change.")
+    files_changed = len({c.media_file_id for c in changes})
+    description = (body.description or "").strip() or (
+        f"Edited {len(changes)} {'tag' if len(changes) == 1 else 'tags'} in "
+        f"{files_changed} {'file' if files_changed == 1 else 'files'}"
+    )
+    return await _queue(
+        db,
+        TagChangeSet(server_id=server.id, user_id=user.id, kind="edit", description=description),
+        changes,
+    )
+
+
+@router.post("/undo", response_model=TagChangeSetOut, status_code=status.HTTP_201_CREATED)
+async def undo_tags(server_id: int, body: TagUndoIn, db: DbDep, user: UserDep) -> TagChangeSetOut:
+    """Put back the values from before the given changes (any of them: a whole edit, or
+    picked ones). An undo is an edit too: it's recorded, and can itself be undone."""
+    us, server = await _editable(db, user, server_id)
+    originals = list(
+        await db.scalars(
+            select(TagChange)
+            .join(TagChangeSet, TagChangeSet.id == TagChange.change_set_id)
+            .where(
+                TagChangeSet.server_id == us.server_id,
+                TagChange.id.in_(body.change_ids),
+                TagChange.status == "applied",
+            )
+            .order_by(TagChange.id.desc())
+        )
+    )
+    already = set(
+        await db.scalars(
+            select(TagChange.undoes_id).where(
+                TagChange.undoes_id.in_([c.id for c in originals]),
+                TagChange.status.in_(("pending", "applied")),
+            )
+        )
+    )
+    changes = [
+        TagChange(
+            media_file_id=c.media_file_id,
+            path=c.path,
+            rating_key=c.rating_key,
+            field=c.field,
+            old_value=c.new_value,  # what the file should hold now
+            new_value=c.old_value,
+            undoes_id=c.id,
+        )
+        for c in originals
+        if c.id not in already
+    ]
+    if not changes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nothing to undo.")
+    description = f"Undid {len(changes)} {'change' if len(changes) == 1 else 'changes'}"
+    return await _queue(
+        db,
+        TagChangeSet(server_id=server.id, user_id=user.id, kind="undo", description=description),
+        changes,
+    )
+
+
+@router.get("/changes", response_model=list[TagChangeSetOut])
+async def tag_history(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    album: int | None = None,
+    artist: int | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[TagChangeSetOut]:
+    """Edits (newest first) that touched an album's or an artist's files, or any."""
+    us = await owner_server(db, user, server_id)
+    touched = select(TagChange.change_set_id)
+    if album is not None or artist is not None:
+        column = Track.album_rating_key if album is not None else Track.artist_rating_key
+        keys = select(Track.rating_key).where(
+            Track.server_id == us.server_id, column == (album if album is not None else artist)
+        )
+        touched = touched.where(TagChange.rating_key.in_(keys))
+    sets = list(
+        await db.scalars(
+            select(TagChangeSet)
+            .where(TagChangeSet.server_id == us.server_id, TagChangeSet.id.in_(touched))
+            .order_by(TagChangeSet.id.desc())
+            .limit(limit)
+        )
+    )
+    return await _sets_out(db, sets)

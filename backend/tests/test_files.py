@@ -158,3 +158,112 @@ async def test_scan_and_compare(app: FastAPI, plex: FakePlex, music: Path) -> No
     friend_sid = await connect(friend)
     await run_queued_syncs()
     assert (await friend.get(f"/api/servers/{friend_sid}/files/summary")).status_code == 403
+
+
+@pytest.mark.db
+async def test_editing_tags_with_history_and_undo(
+    app: FastAPI, plex: FakePlex, music: Path
+) -> None:
+    from plekstender.worker import apply_tag_changes, scan_music_files
+
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+    album = (await owner.get(f"{base}/albums/200")).json()
+    files = {t["rating_key"]: t["file_id"] for t in album["tracks"]}
+
+    async def edit(changes: list[dict[str, Any]], description: str | None = None) -> dict[str, Any]:
+        resp = await owner.post(
+            f"{base}/edits", json={"changes": changes, "description": description}, headers=CSRF
+        )
+        assert resp.status_code == 201, resp.text
+        body: dict[str, Any] = resp.json()
+        return body
+
+    async def run(change_set: dict[str, Any]) -> dict[str, Any]:
+        await apply_tag_changes.func(set_id=change_set["id"])
+        [done] = [
+            s for s in (await owner.get(f"{base}/changes")).json() if s["id"] == change_set["id"]
+        ]
+        return done
+
+    # Off until the owner turns it on: it writes to the music files.
+    off = await owner.post(
+        f"{base}/edits",
+        json={"changes": [{"file_id": files[301], "field": "title", "value": "Karma Police"}]},
+        headers=CSRF,
+    )
+    assert off.status_code == 403
+    on = await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    assert on.json()["tag_editing"] is True
+
+    # Fix a title and set the genres of two files, in one edit.
+    fix = await edit(
+        [
+            {"file_id": files[301], "field": "title", "value": "Karma Police"},
+            {"file_id": files[301], "field": "genre", "value": ["Alternative", "Rock"]},
+            {"file_id": files[300], "field": "genre", "value": ["Alternative", "Rock"]},
+            {"file_id": files[300], "field": "title", "value": "Paranoid Android"},  # no change
+        ],
+        "Fix OK Computer",
+    )
+    assert (fix["status"], fix["description"], len(fix["changes"])) == (
+        "queued",
+        "Fix OK Computer",
+        3,
+    )
+    assert FLAC(music / "301.flac")["title"] == [
+        "Karma Police (Live)"
+    ]  # not yet: the worker writes
+    done = await run(fix)
+    assert done["status"] == "applied", done
+    assert FLAC(music / "301.flac")["title"] == ["Karma Police"]
+    assert FLAC(music / "300.flac")["genre"] == ["Alternative", "Rock"]
+    album = (await owner.get(f"{base}/albums/200")).json()
+    assert {t["rating_key"]: t["tags"].get("title") for t in album["tracks"]}[301] == "Karma Police"
+    assert ("3", "/m") in plex.library.refreshed  # Plex was asked to rescan the folder
+
+    # Edited elsewhere since the scan: that change isn't written (a conflict).
+    tag_flac(music / "300.flac", composer="Thom Yorke")
+    stale = await edit([{"file_id": files[300], "field": "composer", "value": "Radiohead"}])
+    clash = await run(stale)
+    assert clash["status"] == "failed"
+    assert clash["changes"][0]["status"] == "conflict"
+    assert FLAC(music / "300.flac")["composer"] == ["Thom Yorke"]
+
+    # Undo picked changes: Karma Police's title only (its genre stays).
+    title_change = next(c for c in done["changes"] if c["field"] == "title")
+    resp = await owner.post(f"{base}/undo", json={"change_ids": [title_change["id"]]}, headers=CSRF)
+    assert resp.status_code == 201, resp.text
+    undo = await run(resp.json())
+    assert undo["status"] == "applied" and undo["kind"] == "undo"
+    assert FLAC(music / "301.flac")["title"] == ["Karma Police (Live)"]
+    assert FLAC(music / "301.flac")["genre"] == ["Alternative", "Rock"]
+    again = await owner.post(
+        f"{base}/undo", json={"change_ids": [title_change["id"]]}, headers=CSRF
+    )
+    assert again.status_code == 400  # already undone
+
+    history = (await owner.get(f"{base}/changes", params={"album": 200})).json()
+    assert [s["description"] for s in history] == [
+        "Undid 1 change",
+        "Edited 1 tag in 1 file",
+        "Fix OK Computer",
+    ]
+    original = {c["id"]: c for c in history[2]["changes"]}
+    assert original[title_change["id"]]["undone"] is True
+    assert history[2]["user"] == "owner"
+    nothing = await owner.post(
+        f"{base}/edits",
+        json={
+            "changes": [{"file_id": files[300], "field": "title", "value": " Paranoid  Android "}]
+        },
+        headers=CSRF,
+    )
+    assert nothing.status_code == 400  # the same value (spaces don't count)
