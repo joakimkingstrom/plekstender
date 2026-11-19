@@ -527,7 +527,18 @@ function SwipeView({
       <div className="relative">
         {next && (
           <div className="absolute inset-x-3 top-3 rounded-2xl border border-border bg-surface p-4 opacity-60" aria-hidden>
-            <Artwork serverId={serverId} path={next.thumb} title={next.title} size={400} round={next.kind === 'artist'} className="w-full" />
+            {/* In the game the next card is a puzzle too: hidden like a new round. */}
+            <div className={`overflow-hidden ${next.kind === 'artist' ? 'rounded-full' : 'rounded-lg'}`}>
+              <Artwork
+                serverId={serverId}
+                path={next.thumb}
+                title={game ? '?' : next.title}
+                size={400}
+                round={next.kind === 'artist'}
+                className="w-full"
+                style={game ? { filter: 'blur(28px)', transform: 'scale(1.08)' } : undefined}
+              />
+            </div>
           </div>
         )}
         <div

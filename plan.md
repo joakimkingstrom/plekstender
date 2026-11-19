@@ -524,6 +524,10 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Clicking the logo plays the brand's spinning pick (the loader-spin animation, drawn on the logo: transparent and theme-aware, unlike the GIF's white background).
 - [x] iOS no longer zooms in when a text field is tapped (16px text in fields on touch screens); the guess field is full width, with "Give up" below it.
 
+**Guess the intro fixes**
+- [x] The card behind is blurred in the game (it was the next answer, visible while swiping).
+- [x] Any version of a song or album counts: compilation copies (credited to "Various Artists" in Plex, with the performer on the track), remasters, single edits, live versions and deluxe editions.
+
 **Fonts (19 Nov 2026)**
 - [x] Settings → Artwork: browse Google Fonts (its public catalogue, kept a week under /data; most used first, by name and group), preview every font (offered and about to be added) in a line of text drawn by the server, with your own preview text, and add fonts with any capitals: the exact name and the group come from the catalogue (no group to choose).
 

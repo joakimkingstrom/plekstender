@@ -4,6 +4,7 @@ guesses the song, album or artist from the library."""
 from __future__ import annotations
 
 import random
+import re
 from typing import Annotated, Any
 
 import httpx
@@ -42,7 +43,7 @@ from plekstender.db.models import (
 )
 from plekstender.plex.tv import PlexError
 from plekstender.previews import PreviewError, get_clip
-from plekstender.sync.parse import fold
+from plekstender.sync.parse import fold, normalise_artist, normalise_title
 
 router = APIRouter(prefix="/api/servers/{server_id}/game", tags=["game"])
 stats_router = APIRouter(prefix="/api/game", tags=["game"])
@@ -315,10 +316,35 @@ async def _artist_of(db: DbDep, server_id: int, item: Track | Album | Artist) ->
     return await db.get(Artist, (server_id, item.artist_rating_key))
 
 
-def _same_artist(a: Artist | None, b: Artist | None) -> bool:
-    if a is None or b is None:
-        return False
-    return a.rating_key == b.rating_key or (bool(a.name_key) and a.name_key == b.name_key)
+# The game is forgiving about versions: "Song", "Song (Remastered)", "Song - Single Version"
+# and "Song [Live]" are the same answer, as are an album and its deluxe edition.
+_VERSION = re.compile(r"\s*(?:[\(\[][^\)\]]*[\)\]]|\s[-\u2013\u2014]\s.*)$")
+_FEATURING = re.compile(r"\s+(?:feat\.?|ft\.?|featuring|with)\s.*$", re.IGNORECASE)
+
+
+def core_title(title: str) -> str:
+    previous = None
+    text = title.strip()
+    while previous != text and text:
+        previous = text
+        stripped = _VERSION.sub("", text)
+        text = stripped if stripped.strip() else text  # "(What's the Story)" stays
+    return normalise_title(text)
+
+
+def core_artist(name: str | None) -> str | None:
+    if not name:
+        return None
+    return normalise_artist(_FEATURING.sub("", name.strip()))
+
+
+async def performer(db: DbDep, server_id: int, item: Track | Album | Artist) -> str | None:
+    """Who it's by, as a name: a compilation's song is by its performer (the track artist),
+    not "Various Artists"."""
+    if isinstance(item, Track) and item.original_title:
+        return core_artist(item.original_title)
+    artist = await _artist_of(db, server_id, item)
+    return core_artist(artist.title) if artist else None
 
 
 MODELS: dict[str, Any] = {  # song, album or artist model by game mode
@@ -339,25 +365,25 @@ async def game_check(server_id: int, body: GameCheckIn, db: DbDep, user: UserDep
     guess = await db.get(MODELS[guess_kind], (us.server_id, body.guess))
     if target is None or guess is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    if isinstance(target, Artist) and isinstance(guess, Artist):
-        return GameCheckOut(correct=_same_artist(target, guess), artist_correct=None)
-    artist_correct = _same_artist(
-        await _artist_of(db, us.server_id, target), await _artist_of(db, us.server_id, guess)
+    target_by = await performer(db, us.server_id, target)
+    guess_by = await performer(db, us.server_id, guess)
+    same_artist = target.rating_key == guess.rating_key or (
+        target_by is not None and target_by == guess_by
     )
+    if isinstance(target, Artist) and isinstance(guess, Artist):
+        return GameCheckOut(correct=same_artist, artist_correct=None)
     if isinstance(target, Track) and isinstance(guess, Track):
+        # Any version of the song: the album's, a compilation's, a remaster, a single edit.
         correct = target.rating_key == guess.rating_key or (
-            target.artist_rating_key == guess.artist_rating_key
-            and target.title_norm == guess.title_norm
+            same_artist and core_title(target.title) == core_title(guess.title)
         )
     elif isinstance(target, Album) and isinstance(guess, Album):
         correct = target.rating_key == guess.rating_key or (
-            target.artist_rating_key == guess.artist_rating_key
-            and bool(target.title_norm)
-            and target.title_norm == guess.title_norm
+            same_artist and core_title(target.title) == core_title(guess.title)
         )
     else:
         correct = False  # an artist picked while guessing a song or album
-    return GameCheckOut(correct=correct, artist_correct=artist_correct or correct)
+    return GameCheckOut(correct=correct, artist_correct=same_artist or correct)
 
 
 PLAYLIST_SONGS = 5

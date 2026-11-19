@@ -336,3 +336,54 @@ async def test_leaderboard(app: FastAPI, plex: FakePlex) -> None:
     ]
     albums = (await owner.get("/api/game/leaderboard", params={"mode": "album"})).json()
     assert [r["username"] for r in albums] == ["friend"]
+
+
+def test_versions_count_as_the_same_answer() -> None:
+    from plekstender.api.routes.game import core_artist, core_title
+
+    same = [
+        "Don't Speak",
+        "Don’t Speak (Remastered)",  # noqa: RUF001 - a curly apostrophe, as in tags
+        "Don't Speak - Single Version",
+        "Don't Speak [Live]",
+    ]
+    assert len({core_title(t) for t in same}) == 1
+    assert core_title("Tragic Kingdom (Deluxe Edition)") == core_title("Tragic Kingdom")
+    assert core_title("(What's the Story) Morning Glory?") != core_title("Morning Glory?")
+    assert core_title("Spiderwebs") != core_title("Sunday Morning")
+    assert core_artist("No Doubt feat. Bounty Killer") == core_artist("No Doubt")
+    assert core_artist("The Beatles") == core_artist("Beatles")
+
+
+@pytest.mark.db
+async def test_a_compilation_version_is_right(app: FastAPI, plex: FakePlex) -> None:
+    from sqlalchemy import text
+
+    from plekstender.db import get_sessionmaker
+
+    owner, sid = await owner_with_library(app, plex)
+    # Karma Police again, on a "Various Artists" compilation, credited to the band.
+    async with get_sessionmaker()() as db:
+        await db.execute(text("CREATE TEMP TABLE t AS SELECT * FROM tracks WHERE rating_key = 301"))
+        await db.execute(
+            text(
+                "UPDATE t SET rating_key = 990, artist_rating_key = 999, album_rating_key = 998, "
+                "title = 'Karma Police - 2008 Remaster', original_title = 'Radiohead'"
+            )
+        )
+        await db.execute(text("INSERT INTO tracks SELECT * FROM t"))
+        await db.commit()
+
+    async def check(target: int, guess: int) -> dict:
+        resp = await owner.post(
+            f"/api/servers/{sid}/game/check",
+            json={"mode": "track", "target": target, "guess": guess},
+            headers=CSRF,
+        )
+        assert resp.status_code == 200, resp.text
+        result: dict = resp.json()
+        return result
+
+    assert await check(301, 990) == {"correct": True, "artist_correct": True}
+    assert await check(990, 301) == {"correct": True, "artist_correct": True}
+    assert await check(990, 303) == {"correct": False, "artist_correct": True}  # Lucky
