@@ -453,6 +453,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/listens/listenbrainz/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listenbrainz Send Status */
+        get: operations["listenbrainz_send_status_api_listens_listenbrainz_send_get"];
+        put?: never;
+        /**
+         * Send History To Listenbrainz
+         * @description Send every listen (all sources, each play once) to the connected ListenBrainz
+         *     account, leaving out what's already there.
+         */
+        post: operations["send_history_to_listenbrainz_api_listens_listenbrainz_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/listens/listenbrainz": {
         parameters: {
             query?: never;
@@ -1893,9 +1915,10 @@ export interface components {
             id: number;
             /**
              * Source
+             * @description lb_send: sending the history to ListenBrainz.
              * @enum {string}
              */
-            source: "lastfm" | "listenbrainz";
+            source: "lastfm" | "listenbrainz" | "lb_send";
             /** Username */
             username: string;
             /**
@@ -3682,6 +3705,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listenbrainz_send_status_api_listens_listenbrainz_send_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportStatusOut"];
+                };
+            };
+        };
+    };
+    send_history_to_listenbrainz_api_listens_listenbrainz_send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenImportOut"];
                 };
             };
         };

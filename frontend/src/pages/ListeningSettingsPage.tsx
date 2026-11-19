@@ -8,6 +8,7 @@ import {
   useDisconnectListenBrainz,
   useListenBrainz,
   useListenBrainzImport,
+  useListenBrainzSend,
   useLastFmKey,
   useLastFmStatus,
   usePlexCapture,
@@ -15,6 +16,7 @@ import {
   useSetLastFmKey,
   useStartLastFmImport,
   useStartListenBrainzImport,
+  useStartListenBrainzSend,
   type ListenSource,
 } from '../api/listens'
 import { Stepper } from '../components/controls'
@@ -332,9 +334,9 @@ export function ListenBrainzCard() {
           <a href="https://listenbrainz.org" target="_blank" rel="noreferrer" className="text-accent underline">
             ListenBrainz
           </a>{' '}
-          a few minutes after they finish. Plays from before you connect and imported Last.fm
-          scrobbles aren't sent. If another app already scrobbles your Plex plays to ListenBrainz,
-          leave this off to avoid doubles.
+          a few minutes after they finish. If another app already scrobbles your Plex plays to
+          ListenBrainz, leave this off to avoid doubles. Older plays and imported Last.fm scrobbles
+          can be sent once connected.
         </p>
         {status.isPending ? (
           <Spinner small />
@@ -361,6 +363,7 @@ export function ListenBrainzCard() {
             </p>
             {s.error && <Notice tone={s.paused ? 'error' : 'warn'}>{s.error}</Notice>}
             {s.paused && tokenForm('New user token')}
+            {!s.paused && <SendHistory />}
             <Button variant="ghost" busy={disconnect.isPending} onClick={() => disconnect.mutate()}>
               Disconnect
             </Button>
@@ -370,6 +373,79 @@ export function ListenBrainzCard() {
         {disconnect.isError && <Notice tone="error">{errorMessage(disconnect.error)}</Notice>}
       </div>
     </Card>
+  )
+}
+
+/** Send every listen (Plex plays and imported Last.fm scrobbles) to ListenBrainz. */
+function SendHistory() {
+  const status = useListenBrainzSend()
+  const start = useStartListenBrainzSend()
+  const resume = useResumeImport()
+  const active = status.data?.active
+  const last = status.data?.last
+  const stats = (last?.stats ?? {}) as { sent?: number; existing?: number; refused?: number }
+  return (
+    <div className="space-y-3 border-t border-border pt-4">
+      <h3 className="text-sm font-semibold">Your whole history</h3>
+      {active ? (
+        <SendProgress job={active} />
+      ) : (
+        <>
+          <p className="text-sm text-muted">
+            Sends every listen in Plekstender (Plex plays and imported Last.fm scrobbles, each play once). Listens
+            already on ListenBrainz, including ones from its own Last.fm import, are left out, so it's safe to run
+            again later.
+          </p>
+          {last?.status === 'succeeded' && (
+            <p className="text-sm">
+              Last run {last.finished_at && formatRelative(last.finished_at)}: {formatCount(stats.sent ?? 0)} sent,{' '}
+              {formatCount(stats.existing ?? 0)} already there
+              {stats.refused ? `, ${formatCount(stats.refused)} refused by ListenBrainz` : ''}.
+            </p>
+          )}
+          {last?.status === 'failed' && (
+            <Notice tone="error">
+              It stopped {last.finished_at && formatRelative(last.finished_at)}: {last.error ?? 'unknown error'}
+            </Notice>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {last?.status === 'failed' && (
+              <Button busy={resume.isPending} onClick={() => resume.mutate(last.id)}>
+                Resume
+              </Button>
+            )}
+            <Button busy={start.isPending} onClick={() => start.mutate()}>
+              {last ? 'Send again' : 'Send my whole history'}
+            </Button>
+          </div>
+        </>
+      )}
+      {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}
+      {resume.isError && <Notice tone="error">{errorMessage(resume.error)}</Notice>}
+    </div>
+  )
+}
+
+function SendProgress({ job }: { job: Schemas['ListenImportOut'] }) {
+  const { done = 0, total = 0 } = job.progress as { done?: number; total?: number }
+  const pct = total ? Math.min(100, Math.round((done / total) * 100)) : null
+  return (
+    <div className="space-y-2" aria-live="polite">
+      <div className="flex justify-between gap-3 text-sm">
+        <span>{job.status === 'queued' ? 'Waiting for the background worker…' : 'Sending your history…'}</span>
+        {total > 0 && (
+          <span className="text-muted tabular-nums">
+            {formatCount(done)} / {formatCount(total)}
+          </span>
+        )}
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+        <div
+          className={`h-full rounded-full bg-accent transition-[width] ${pct === null ? 'w-1/3 animate-pulse' : ''}`}
+          style={pct === null ? undefined : { width: `${pct}%` }}
+        />
+      </div>
+    </div>
   )
 }
 

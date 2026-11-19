@@ -47,6 +47,8 @@ from plekstender.history.listenbrainz import (
     listen_payload,
 )
 from plekstender.history.listenbrainz_import import ListenBrainzImportError, listen_count
+from plekstender.history.listenbrainz_send import SOURCE as SEND_SOURCE
+from plekstender.history.listenbrainz_send import count_candidates
 from plekstender.history.stats import StatsError
 from plekstender.history.stats import zone as stats_zone
 from plekstender.worker import (
@@ -400,6 +402,46 @@ async def start_listenbrainz_import(
         window_from=await next_window_start(db, user.id, username, "listenbrainz"),
         window_to=dt.datetime.now(dt.UTC),
         progress={"total": total},
+        stats={},
+    )
+    db.add(job)
+    await db.commit()
+    await enqueue_listen_import(db, job)
+    return ListenImportOut.model_validate(job, from_attributes=True)
+
+
+# --- sending the whole history to ListenBrainz ---------------------------------------------
+
+
+@router.get("/listenbrainz/send", response_model=ImportStatusOut)
+async def listenbrainz_send_status(db: DbDep, user: UserDep) -> ImportStatusOut:
+    link = await db.get(ListenBrainzLink, user.id)
+    return await import_status(db, user, SEND_SOURCE, link is not None and not link.paused)
+
+
+@router.post(
+    "/listenbrainz/send",
+    response_model=ListenImportOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[rate_limit("listenbrainz-send", limit=5, window=60)],
+)
+async def send_history_to_listenbrainz(db: DbDep, user: UserDep) -> ListenImportOut:
+    """Send every listen (all sources, each play once) to the connected ListenBrainz
+    account, leaving out what's already there."""
+    link = await db.get(ListenBrainzLink, user.id)
+    if link is None or link.paused:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Connect your ListenBrainz account first.")
+    if await active_import(db, user) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "An import or send is already running.")
+    now = dt.datetime.now(dt.UTC)
+    job = ListenImport(
+        user_id=user.id,
+        source=SEND_SOURCE,
+        username=link.username,
+        status="queued",
+        window_from=None,
+        window_to=now,
+        progress={"total": await count_candidates(db, user.id, now)},
         stats={},
     )
     db.add(job)

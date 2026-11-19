@@ -337,7 +337,9 @@ class ListenSummary(BaseModel):
 
 class ListenImportOut(BaseModel):
     id: int
-    source: Literal["lastfm", "listenbrainz"]
+    source: Literal["lastfm", "listenbrainz", "lb_send"] = Field(
+        description="lb_send: sending the history to ListenBrainz."
+    )
     username: str
     status: Literal["queued", "running", "succeeded", "failed"]
     window_from: dt.datetime | None

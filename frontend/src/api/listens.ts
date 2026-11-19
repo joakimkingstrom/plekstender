@@ -19,6 +19,7 @@ export const listenKeys = {
   plex: ['listens', 'plex'] as const,
   listenbrainz: ['listens', 'listenbrainz'] as const,
   listenbrainzImport: ['listens', 'imports', 'listenbrainz'] as const,
+  listenbrainzSend: ['listens', 'listenbrainz-send'] as const,
   lastfmKey: ['admin', 'lastfm'] as const,
 }
 
@@ -109,6 +110,19 @@ export function useStartListenBrainzImport() {
   })
 }
 
+/** Sending the whole history to ListenBrainz (a resumable job, like an import). */
+export function useListenBrainzSend() {
+  return useImportStatus(listenKeys.listenbrainzSend, () => unwrap(api.GET('/api/listens/listenbrainz/send')))
+}
+
+export function useStartListenBrainzSend() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => unwrap(api.POST('/api/listens/listenbrainz/send')),
+    onSuccess: () => qc.invalidateQueries({ queryKey: listenKeys.listenbrainzSend }),
+  })
+}
+
 export function useStartLastFmImport() {
   const qc = useQueryClient()
   return useMutation({
@@ -127,6 +141,7 @@ export function useResumeImport() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: listenKeys.lastfm })
       void qc.invalidateQueries({ queryKey: listenKeys.listenbrainzImport })
+      void qc.invalidateQueries({ queryKey: listenKeys.listenbrainzSend })
     },
   })
 }

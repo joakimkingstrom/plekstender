@@ -163,6 +163,27 @@ describe('Scrobble to ListenBrainz', () => {
   })
 })
 
+describe('Send history to ListenBrainz', () => {
+  it('shows the last run and sends again', async () => {
+    const lb = { connected: true, username: 'joakim_lb', enabled_at: '2026-11-18T12:00:00Z', sent: 3, pending: 0, last_submitted_at: null, paused: false, error: null }
+    const sendJob = { ...finished, id: 11, source: 'lb_send', username: 'joakim_lb', progress: { total: 900, done: 900 }, stats: { sent: 850, existing: 50, refused: 0 } }
+    const fetch = renderPage(
+      {
+        'GET /api/auth/me': user,
+        'GET /api/listens/listenbrainz': lb,
+        'GET /api/listens/listenbrainz/send': { available: true, username: 'joakim_lb', active: null, last: sendJob },
+        'POST /api/listens/listenbrainz/send': { ...sendJob, id: 12, status: 'queued', stats: {} },
+      },
+      <ConnectionsPage />,
+    )
+    expect(await screen.findByText(/850 sent, 50 already there/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send again' }))
+    await vi.waitFor(() =>
+      expect(fetch.mock.calls.some(([r]) => r.method === 'POST' && r.url.endsWith('/api/listens/listenbrainz/send'))).toBe(true),
+    )
+  })
+})
+
 describe('Import from ListenBrainz', () => {
   it('starts an import for a username', async () => {
     const fetch = renderPage({

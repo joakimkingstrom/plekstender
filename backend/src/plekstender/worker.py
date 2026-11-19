@@ -35,6 +35,7 @@ from plekstender.history.lastfm_import import run_lastfm_import
 from plekstender.history.listen_counts import refresh_listen_counts
 from plekstender.history.listenbrainz import submit_pending
 from plekstender.history.listenbrainz_import import run_listenbrainz_import
+from plekstender.history.listenbrainz_send import run_listenbrainz_send
 from plekstender.history.plex_capture import capture_plays
 from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
 from plekstender.playlists.service import build as build_playlist_in_plex
@@ -194,6 +195,15 @@ async def import_listenbrainz(import_id: int) -> None:
     await _after_import(import_id)
 
 
+@app.task(queue="imports")
+async def send_listenbrainz_history(import_id: int) -> None:
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_listenbrainz_send(db, http, get_settings(), import_id)
+
+
 async def _after_import(import_id: int) -> None:
     async with get_sessionmaker()() as db:
         job = await db.get(ListenImport, import_id)
@@ -203,7 +213,10 @@ async def _after_import(import_id: int) -> None:
 
 async def enqueue_listen_import(db: AsyncSession, job: ListenImport) -> None:
     """Queue a (new or resumed) import. One import per user runs at a time."""
-    task = import_listenbrainz if job.source == "listenbrainz" else import_lastfm
+    task = {
+        "listenbrainz": import_listenbrainz,
+        "lb_send": send_listenbrainz_history,
+    }.get(job.source, import_lastfm)
     try:
         await task.configure(
             lock=f"import-user-{job.user_id}", queueing_lock=f"import-{job.id}"

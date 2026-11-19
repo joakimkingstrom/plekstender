@@ -451,7 +451,10 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 ### Phase 7 — Feedback round 2 (from `.todo.md`, 19 Nov 2026)
 
 **General**
-- [ ] Send all listens to ListenBrainz, not just new Plex plays.
+- [x] Send all listens to ListenBrainz, not just new Plex plays. (Checked in ListenBrainz's
+  source: it ignores a listen only when user, time *and* `recording_msid` - a hash of the
+  names - match, so before each batch the job reads the user's listens on ListenBrainz around
+  those times and leaves out the same song within a minute.)
   *A "Send my whole history" action on Settings → Listening: every listen (all sources, duplicates left out) in `import` batches of up to 1,000 as a resumable job, with progress. Check first: whether ListenBrainz ignores listens it already has (same time and song). If it doesn't, compare against the user's listens on ListenBrainz for each time range before sending, so history copied there by ListenBrainz's own Last.fm importer isn't doubled.*
 
 **History**
