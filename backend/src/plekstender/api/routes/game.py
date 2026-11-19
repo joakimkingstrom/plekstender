@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import aliased
 
@@ -28,8 +28,18 @@ from plekstender.api.schemas import (
     GameRoundOut,
     GameSearchItem,
     GameStatsOut,
+    LeaderboardRow,
 )
-from plekstender.db.models import Album, Artist, GameStats, PlexServer, Track, UserServer
+from plekstender.db.models import (
+    Album,
+    Artist,
+    GameRound,
+    GameStats,
+    PlexServer,
+    Track,
+    User,
+    UserServer,
+)
 from plekstender.plex.tv import PlexError
 from plekstender.previews import PreviewError, get_clip
 from plekstender.sync.parse import fold
@@ -474,7 +484,88 @@ async def game_result(body: GameResultIn, db: DbDep, user: UserDep) -> GameStats
             },
         )
     )
+    db.add(
+        GameRound(
+            user_id=user.id,
+            mode=body.mode,
+            correct=body.correct,
+            points=body.points,
+            streak=body.streak,
+        )
+    )
     await db.commit()
     row = await db.get(GameStats, (user.id, body.mode), populate_existing=True)
     assert row is not None
     return _stats_out(row)
+
+
+# Rounds without a break this long are one game (for "latest game").
+GAME_BREAK = "30 minutes"
+
+_LATEST_GAMES = text(
+    f"""
+    WITH r AS (
+        SELECT user_id, created_at, points,
+               CASE WHEN lag(created_at) OVER w IS NULL
+                         OR created_at - lag(created_at) OVER w > interval '{GAME_BREAK}'
+                    THEN 1 ELSE 0 END AS new_game
+        FROM game_rounds
+        WHERE CAST(:mode AS text) IS NULL OR mode = :mode
+        WINDOW w AS (PARTITION BY user_id ORDER BY created_at, id)
+    ),
+    g AS (
+        SELECT user_id, created_at, points,
+               sum(new_game) OVER (PARTITION BY user_id ORDER BY created_at
+                                   ROWS UNBOUNDED PRECEDING) AS game
+        FROM r
+    )
+    SELECT user_id, sum(points) AS score, count(*) AS rounds, max(created_at) AS played_at
+    FROM g
+    WHERE (user_id, game) IN (SELECT user_id, max(game) FROM g GROUP BY user_id)
+    GROUP BY user_id
+    """  # noqa: S608 - a constant
+)
+
+
+@stats_router.get("/leaderboard", response_model=list[LeaderboardRow])
+async def leaderboard(
+    db: DbDep, user: UserDep, mode: GameMode | None = None
+) -> list[LeaderboardRow]:
+    """Everyone's Guess the intro scores on this instance (all modes, or one), the most
+    points first: totals, best streak and their latest game."""
+    filters = [GameStats.mode == mode] if mode else []
+    totals = await db.execute(
+        select(
+            User.id,
+            User.username,
+            User.thumb_url,
+            func.sum(GameStats.points),
+            func.sum(GameStats.rounds),
+            func.sum(GameStats.correct),
+            func.max(GameStats.best_streak),
+        )
+        .join(GameStats, GameStats.user_id == User.id)
+        .where(*filters)
+        .group_by(User.id)
+    )
+    latest = {row.user_id: row for row in (await db.execute(_LATEST_GAMES, {"mode": mode})).all()}
+    rows = []
+    for user_id, name, thumb, points, rounds, correct, streak in totals.all():
+        last = latest.get(user_id)
+        rows.append(
+            LeaderboardRow(
+                user_id=user_id,
+                username=name,
+                thumb_url=thumb,
+                you=user_id == user.id,
+                points=int(points or 0),
+                rounds=int(rounds or 0),
+                correct=int(correct or 0),
+                best_streak=int(streak or 0),
+                last_score=int(last.score) if last else None,
+                last_rounds=int(last.rounds) if last else None,
+                last_played_at=last.played_at if last else None,
+            )
+        )
+    rows.sort(key=lambda r: (-r.points, -r.best_streak, r.username.lower()))
+    return rows

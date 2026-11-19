@@ -1569,6 +1569,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/game/leaderboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Leaderboard
+         * @description Everyone's Guess the intro scores on this instance (all modes, or one), the most
+         *     points first: totals, best streak and their latest game.
+         */
+        get: operations["leaderboard_api_game_leaderboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/rate/sample": {
         parameters: {
             query?: never;
@@ -2363,6 +2384,37 @@ export interface components {
             configured: boolean;
             /** Source */
             source: ("settings" | "environment") | null;
+        };
+        /** LeaderboardRow */
+        LeaderboardRow: {
+            /** User Id */
+            user_id: number;
+            /** Username */
+            username: string;
+            /** Thumb Url */
+            thumb_url: string | null;
+            /** You */
+            you: boolean;
+            /** Points */
+            points: number;
+            /** Rounds */
+            rounds: number;
+            /** Correct */
+            correct: number;
+            /** Best Streak */
+            best_streak: number;
+            /**
+             * Last Score
+             * @description Points in the latest game (rounds without a 30-minute break).
+             */
+            last_score: number | null;
+            /**
+             * Last Rounds
+             * @description Rounds in the latest game.
+             */
+            last_rounds: number | null;
+            /** Last Played At */
+            last_played_at: string | null;
         };
         /** LibraryCounts */
         LibraryCounts: {
@@ -6558,6 +6610,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    leaderboard_api_game_leaderboard_get: {
+        parameters: {
+            query?: {
+                mode?: ("track" | "album" | "artist") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaderboardRow"][];
                 };
             };
             /** @description Validation Error */

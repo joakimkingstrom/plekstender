@@ -285,3 +285,54 @@ async def test_game_extras(app: FastAPI, plex: FakePlex, songs: dict[str, bytes]
         headers=CSRF,
     )
     assert resp.json()["points"] == 3
+
+
+@pytest.mark.db
+async def test_leaderboard(app: FastAPI, plex: FakePlex) -> None:
+    from sqlalchemy import text
+
+    from plekstender.db import get_sessionmaker
+
+    owner, _ = await owner_with_library(app, plex)
+    friend, _ = await sign_in(app, plex, "friend-token")
+
+    async def play(client, mode: str, results: list[tuple[bool, int, int]]) -> None:
+        for correct, points, streak in results:
+            resp = await client.post(
+                "/api/game/results",
+                json={"mode": mode, "correct": correct, "points": points, "streak": streak},
+                headers=CSRF,
+            )
+            assert resp.status_code == 200, resp.text
+
+    await play(owner, "track", [(True, 20, 1), (True, 25, 2), (True, 15, 3), (False, 3, 0)])
+    await play(friend, "album", [(True, 28, 1), (True, 26, 2)])
+    await play(friend, "track", [(False, 0, 0)])
+    # The owner's first two rounds were yesterday: an earlier game.
+    async with get_sessionmaker()() as db:
+        await db.execute(
+            text(
+                "UPDATE game_rounds SET created_at = created_at - interval '1 day' "
+                "WHERE id IN (SELECT id FROM game_rounds ORDER BY id LIMIT 2)"
+            )
+        )
+        await db.commit()
+
+    board = (await owner.get("/api/game/leaderboard")).json()
+    assert [(r["username"], r["you"], r["points"], r["best_streak"]) for r in board] == [
+        ("owner", True, 63, 3),
+        ("friend", False, 54, 2),
+    ]
+    mine = board[0]
+    assert (mine["rounds"], mine["correct"]) == (4, 3)
+    assert (mine["last_score"], mine["last_rounds"]) == (18, 2)  # today's game only
+    assert board[1]["last_score"] == 54  # one game, both modes
+    assert board[1]["last_played_at"] is not None
+
+    songs = (await friend.get("/api/game/leaderboard", params={"mode": "track"})).json()
+    assert [(r["username"], r["points"], r["you"]) for r in songs] == [
+        ("owner", 63, False),
+        ("friend", 0, True),
+    ]
+    albums = (await owner.get("/api/game/leaderboard", params={"mode": "album"})).json()
+    assert [r["username"] for r in albums] == ["friend"]

@@ -22,6 +22,7 @@ import { MapPage } from './pages/MapPage'
 import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
 import { RatingsPage } from './pages/RatingsPage'
+import { ScoresPage } from './pages/ScoresPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { AppearancePage, ArtworkSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
@@ -56,6 +57,7 @@ const router = createBrowserRouter([
           { path: 'listens', element: <ListensPage /> },
           { path: 'map', element: <MapPage /> },
           { path: 'ratings', element: <RatingsPage /> },
+          { path: 'scores', element: <ScoresPage /> },
         ],
       },
       {

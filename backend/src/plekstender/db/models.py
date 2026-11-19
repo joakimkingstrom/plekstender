@@ -618,3 +618,18 @@ class GameStats(Base):
     points: Mapped[int] = mapped_column(default=0)
     best_streak: Mapped[int] = mapped_column(default=0)
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class GameRound(Base):
+    """One finished round of Guess the intro (for the scores page: latest games)."""
+
+    __tablename__ = "game_rounds"
+    __table_args__ = (Index("ix_game_rounds_user_time", "user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    mode: Mapped[str] = mapped_column(String(8))
+    correct: Mapped[bool]
+    points: Mapped[int]
+    streak: Mapped[int]
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

@@ -105,3 +105,13 @@ export function fetchSample(serverId: number, mode: GameMode, ratingKey: number)
   }
   return sample
 }
+
+export type LeaderboardRow = Schemas['LeaderboardRow']
+
+export function useLeaderboard(mode: GameMode | null) {
+  return useQuery({
+    queryKey: ['game', 'leaderboard', mode],
+    queryFn: () => unwrap(api.GET('/api/game/leaderboard', { params: { query: { mode: mode ?? undefined } } })),
+    placeholderData: keepPreviousData,
+  })
+}

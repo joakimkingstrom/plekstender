@@ -875,3 +875,19 @@ class RatedItemOut(BaseModel):
 class RatedPage(BaseModel):
     items: list[RatedItemOut]
     total: int
+
+
+class LeaderboardRow(BaseModel):
+    user_id: int
+    username: str
+    thumb_url: str | None
+    you: bool
+    points: int
+    rounds: int
+    correct: int
+    best_streak: int
+    last_score: int | None = Field(
+        description="Points in the latest game (rounds without a 30-minute break)."
+    )
+    last_rounds: int | None = Field(description="Rounds in the latest game.")
+    last_played_at: dt.datetime | None

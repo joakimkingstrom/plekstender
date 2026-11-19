@@ -34,7 +34,7 @@ export function HistoryLayout() {
   return (
     <>
       <PageTitle subtitle="What you've listened to. Only you can see this.">History</PageTitle>
-      <nav className="mb-6 flex gap-6 border-b border-border" aria-label="History">
+      <nav className="no-scrollbar mb-6 flex gap-6 overflow-x-auto whitespace-nowrap border-b border-border" aria-label="History">
         <NavLink to="/history" end className={tab}>
           Overview
         </NavLink>
@@ -46,6 +46,9 @@ export function HistoryLayout() {
         </NavLink>
         <NavLink to="/history/ratings" className={tab}>
           Ratings
+        </NavLink>
+        <NavLink to="/history/scores" className={tab}>
+          Scores
         </NavLink>
       </nav>
       <Outlet />

@@ -499,7 +499,12 @@ function SwipeView({
             Score <span className="font-semibold text-text tabular-nums">{round.session.score}</span> · Streak{' '}
             <span className="font-semibold text-text tabular-nums">{round.session.streak}</span>
           </span>
-          <span>Best streak {best}</span>
+          <span>
+            Best streak {best} ·{' '}
+            <Link to="/history/scores" className="underline hover:text-text">
+              Scores
+            </Link>
+          </span>
         </div>
       )}
       {game && unplayable >= MAX_UNPLAYABLE && (
