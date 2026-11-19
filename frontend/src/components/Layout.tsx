@@ -54,6 +54,15 @@ export function Wordmark({ size = 'text-lg' }: { size?: string }) {
   )
 }
 
+/** One full turn of the pick (on clicking the logo), unless the user prefers less motion. */
+function spinPick(link: HTMLElement) {
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+  link.querySelector('svg')?.animate?.(
+    [{ transform: 'rotate(0turn)' }, { transform: 'rotate(1turn)' }],
+    { duration: 700, easing: 'cubic-bezier(0.3, 0, 0.2, 1)' },
+  )
+}
+
 /** Full-page loading state using the animated brand loader. */
 export function PageLoader() {
   return (
@@ -88,7 +97,7 @@ export function Layout() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-10 border-b border-border bg-bg/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-          <NavLink to="/" aria-label="Plekstender home">
+          <NavLink to="/" aria-label="Plekstender home" onClick={(e) => spinPick(e.currentTarget)}>
             <Wordmark />
           </NavLink>
           <nav className="hidden gap-1 md:flex" aria-label="Main">
