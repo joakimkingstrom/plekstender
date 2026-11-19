@@ -11,12 +11,12 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
-from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 
 from plekstender import __version__
+from plekstender.live.events import Event, Performer
 
 USER_AGENT = f"Plekstender/{__version__} (self-hosted music library tool)"
 TIMEOUT = 30.0
@@ -81,33 +81,6 @@ def _unknown_ids(resp: httpx.Response) -> tuple[bool, list[str]]:
                 found.append(f"{m[1]}:{m[2]}".lower())
                 break
     return about_ids, found
-
-
-@dataclass
-class Performer:
-    name: str
-    headliner: bool
-
-
-@dataclass
-class Event:
-    id: str
-    name: str
-    festival: bool
-    start_date: dt.date
-    start_time: str | None
-    end_date: dt.date | None
-    status: str
-    venue: str | None
-    city: str | None
-    region: str | None
-    country: str | None
-    latitude: float | None
-    longitude: float | None
-    ticket_url: str | None
-    seller: str | None
-    page_url: str | None
-    performers: list[Performer] = field(default_factory=list)
 
 
 def _headers(api_key: str) -> dict[str, str]:

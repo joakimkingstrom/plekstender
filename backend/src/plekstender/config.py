@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     jambase_api_key: SecretStr | None = None
     jambase_api_url: str = "https://api.data.jambase.com/v3"
     jambase_monthly_cap: int = 900
+    # Live's second source: Ticketmaster's Discovery API (a free Consumer Key, 5,000 requests
+    # a day; or set on Settings → Connections). Plekstender stops at its own daily cap.
+    ticketmaster_api_key: SecretStr | None = None
+    ticketmaster_api_url: str = "https://app.ticketmaster.com/discovery/v2"
+    ticketmaster_daily_cap: int = 4000
     # City search for the Live tab (Open-Meteo's free geocoding, no key).
     geocoding_api_url: str = "https://geocoding-api.open-meteo.com/v1"
 

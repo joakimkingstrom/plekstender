@@ -5,7 +5,7 @@ export type LiveSettings = Schemas['LiveSettingsOut']
 export type LiveSettingsIn = Schemas['LiveSettingsIn']
 export type LiveShow = Schemas['LiveShowOut']
 export type Place = Schemas['PlaceOut']
-export type ShowFilters = { artist?: string; from?: string; to?: string }
+export type ShowFilters = { artist?: string; from?: string; to?: string; starred?: boolean }
 
 export const liveKeys = {
   all: ['live'] as const,
@@ -30,7 +30,9 @@ export function useLiveShows(filters: ShowFilters, refreshing: boolean) {
     queryFn: () =>
       unwrap(
         api.GET('/api/live/shows', {
-          params: { query: { artist: filters.artist || undefined, from: filters.from, to: filters.to } },
+          params: {
+            query: { artist: filters.artist || undefined, from: filters.from, to: filters.to, starred: filters.starred || undefined },
+          },
         }),
       ),
     placeholderData: keepPreviousData,
@@ -90,5 +92,61 @@ export function useSetJamBaseKey() {
       qc.invalidateQueries({ queryKey: ['admin', 'jambase'] })
       qc.invalidateQueries({ queryKey: liveKeys.settings() })
     },
+  })
+}
+
+export function useStarShow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ids, starred }: { ids: number[]; starred: boolean }) =>
+      unwrap(api.PUT('/api/live/stars', { body: { ids, starred } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...liveKeys.all, 'shows'] }),
+  })
+}
+
+export function useCalendarAddress(enabled: boolean) {
+  return useQuery({
+    queryKey: [...liveKeys.all, 'calendar'],
+    enabled,
+    queryFn: () => unwrap(api.GET('/api/live/calendar')),
+    staleTime: Infinity,
+  })
+}
+
+export function useResetCalendar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => unwrap(api.POST('/api/live/calendar/reset')),
+    onSuccess: (data) => qc.setQueryData([...liveKeys.all, 'calendar'], data),
+  })
+}
+
+export function useTicketmasterKey(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'ticketmaster'],
+    enabled,
+    queryFn: () => unwrap(api.GET('/api/admin/ticketmaster')),
+  })
+}
+
+export function useSetTicketmasterKey() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (apiKey: string | null) =>
+      unwrap(api.PUT('/api/admin/ticketmaster', { body: { api_key: apiKey } })),
+    onSuccess: (data) => {
+      qc.setQueryData(['admin', 'ticketmaster'], data)
+      qc.invalidateQueries({ queryKey: liveKeys.settings() })
+    },
+  })
+}
+
+/** How many artists were played in a period (null: all time), for the settings preview. */
+export function useListenedCount(periodMonths: number | null) {
+  return useQuery({
+    queryKey: [...liveKeys.all, 'listened', periodMonths],
+    queryFn: () =>
+      unwrap(api.GET('/api/live/listened', { params: { query: { period_months: periodMonths ?? undefined } } })),
+    placeholderData: keepPreviousData,
   })
 }

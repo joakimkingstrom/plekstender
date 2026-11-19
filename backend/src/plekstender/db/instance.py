@@ -230,6 +230,20 @@ async def set_jambase_api_key(db: AsyncSession, settings: Settings, api_key: str
     await _put(db, JAMBASE_KEY, value)
 
 
+async def _locked(db: AsyncSession, key: str) -> InstanceSetting:
+    """The setting's row, locked until the transaction ends (created empty if missing)."""
+    await db.execute(
+        insert(InstanceSetting)
+        .values(key=key, value={})
+        .on_conflict_do_nothing(index_elements=[InstanceSetting.key])
+    )
+    row = await db.scalar(
+        select(InstanceSetting).where(InstanceSetting.key == key).with_for_update()
+    )
+    assert row is not None
+    return row
+
+
 class JamBaseUsage(BaseModel):
     """Requests Plekstender sent to JamBase this calendar month (UTC), and JamBase's own
     count from GET /quota (which doesn't count against the quota) when last checked."""
@@ -259,15 +273,7 @@ async def get_jambase_usage(db: AsyncSession, now: dt.datetime | None = None) ->
 async def reserve_jambase_call(db: AsyncSession, cap: int, now: dt.datetime | None = None) -> bool:
     """Count one request before it's sent; False (nothing counted) once the cap is reached.
     The row is locked so concurrent refreshes can't both take the last request. Commits."""
-    await db.execute(
-        insert(InstanceSetting)
-        .values(key=JAMBASE_USAGE_KEY, value={})
-        .on_conflict_do_nothing(index_elements=[InstanceSetting.key])
-    )
-    row = await db.scalar(
-        select(InstanceSetting).where(InstanceSetting.key == JAMBASE_USAGE_KEY).with_for_update()
-    )
-    assert row is not None
+    row = await _locked(db, JAMBASE_USAGE_KEY)
     usage = await get_jambase_usage(db, now)
     if usage.calls >= cap:
         await db.rollback()
@@ -309,6 +315,75 @@ async def add_jambase_unknown_ids(
     kept = {mbid: day for mbid, day in stored.items() if str(day) >= since}
     kept.update(dict.fromkeys(mbids, today.isoformat()))
     await _put(db, JAMBASE_UNKNOWN_KEY, {"ids": kept})
+
+
+# --- Ticketmaster (Live) -------------------------------------------------------------------
+
+TICKETMASTER_KEY = "ticketmaster"
+TICKETMASTER_PURPOSE = "instance.ticketmaster_api_key"
+TICKETMASTER_USAGE_KEY = "ticketmaster_usage"
+
+
+async def get_ticketmaster_api_key(
+    db: AsyncSession, settings: Settings
+) -> tuple[str | None, Literal["settings", "environment"] | None]:
+    """The Ticketmaster key: Settings page first, then TICKETMASTER_API_KEY."""
+    stored = await _get(db, TICKETMASTER_KEY) or {}
+    if encrypted := stored.get("api_key_enc"):
+        try:
+            return _cipher(settings).decrypt(encrypted, purpose=TICKETMASTER_PURPOSE), "settings"
+        except DecryptionError:
+            pass
+    env = settings.ticketmaster_api_key
+    if env and (value := env.get_secret_value().strip()):
+        return value, "environment"
+    return None, None
+
+
+async def set_ticketmaster_api_key(
+    db: AsyncSession, settings: Settings, api_key: str | None
+) -> None:
+    value = (
+        {"api_key_enc": _cipher(settings).encrypt(api_key, purpose=TICKETMASTER_PURPOSE)}
+        if api_key
+        else {}
+    )
+    await _put(db, TICKETMASTER_KEY, value)
+
+
+class TicketmasterUsage(BaseModel):
+    """Requests Plekstender sent to Ticketmaster today (UTC)."""
+
+    day: str = ""
+    calls: int = 0
+
+
+async def get_ticketmaster_usage(
+    db: AsyncSession, now: dt.datetime | None = None
+) -> TicketmasterUsage:
+    try:
+        usage = TicketmasterUsage.model_validate(await _get(db, TICKETMASTER_USAGE_KEY) or {})
+    except ValidationError:
+        usage = TicketmasterUsage()
+    day = (now or dt.datetime.now(dt.UTC)).astimezone(dt.UTC).date().isoformat()
+    if usage.day != day:
+        usage.day, usage.calls = day, 0
+    return usage
+
+
+async def reserve_ticketmaster_call(
+    db: AsyncSession, cap: int, now: dt.datetime | None = None
+) -> bool:
+    """Count one request before it's sent; False once today's cap is reached. Commits."""
+    row = await _locked(db, TICKETMASTER_USAGE_KEY)
+    usage = await get_ticketmaster_usage(db, now)
+    if usage.calls >= cap:
+        await db.rollback()
+        return False
+    usage.calls += 1
+    row.value = usage.model_dump(mode="json")
+    await db.commit()
+    return True
 
 
 # --- text logo fonts ------------------------------------------------------------------------

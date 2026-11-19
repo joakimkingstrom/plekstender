@@ -4,12 +4,16 @@ import { errorMessage } from '../api/client'
 import { useMe } from '../api/hooks'
 import { useActiveServer } from '../api/library'
 import {
+  useCalendarAddress,
   useForgetLiveSettings,
+  useListenedCount,
   useLiveSettings,
   useLiveShows,
   usePlaces,
   useRefreshLive,
+  useResetCalendar,
   useSaveLiveSettings,
+  useStarShow,
   type LiveSettings,
   type LiveShow,
   type Place,
@@ -18,16 +22,18 @@ import { Slider } from '../components/controls'
 import { Select } from '../components/Select'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatRelative } from '../format'
-import { followCount } from '../live'
+import { describePeriod, followCount } from '../live'
 import { countryName } from '../places'
 
 const DISTANCES = [25, 50, 100, 200, 500, 1000]
-type Range = 'all' | '30' | '90'
+type Range = 'all' | '30' | '90' | 'starred'
 const RANGES: [Range, string][] = [
   ['all', 'Any time'],
   ['30', 'Next 30 days'],
   ['90', 'Next 3 months'],
+  ['starred', '★ Starred'],
 ]
+const SOURCE_NAMES: Record<string, string> = { jambase: 'JamBase', ticketmaster: 'Ticketmaster' }
 
 /** "2027-03-04" as a local date (no time zone shift). */
 function localDate(iso: string): Date {
@@ -58,6 +64,7 @@ export function LivePage() {
           <Shows settings={settings.data} />
           <div className="order-first space-y-4 lg:order-none">
             <Summary settings={settings.data} onEdit={() => setEditing(true)} />
+            <CalendarCard />
           </div>
         </div>
       )}
@@ -69,7 +76,7 @@ function SourceMissing() {
   const me = useMe()
   return (
     <Notice tone="warn">
-      Live needs a JamBase API key.{' '}
+      Live needs a JamBase or Ticketmaster API key.{' '}
       {me.data?.is_admin ? (
         <>
           Add one in{' '}
@@ -93,7 +100,8 @@ function Summary({ settings, onEdit }: { settings: LiveSettings; onEdit: () => v
       <div className="space-y-3 text-sm">
         <p>
           Within <strong>{settings.radius_km} km</strong> of <strong>{settings.place_name}</strong>, for your top{' '}
-          {settings.top_percent}% ({settings.followed_artists} of {settings.listened_artists} artists you've played).
+          {settings.top_percent}% of {describePeriod(settings.period_months)} ({settings.followed_artists} of{' '}
+          {settings.listened_artists} artists you've played).
         </p>
         <p className="text-muted" aria-live="polite">
           {busy
@@ -135,12 +143,21 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
   const [query, setQuery] = useState('')
   const [radius, setRadius] = useState(settings.radius_km)
   const [percent, setPercent] = useState(settings.top_percent)
+  const saved = settings.period_months
+  const [periodMode, setPeriodMode] = useState<'all' | 'past'>(saved ? 'past' : 'all')
+  const [periodUnit, setPeriodUnit] = useState<'months' | 'years'>(saved && saved % 12 !== 0 ? 'months' : 'years')
+  const [periodCount, setPeriodCount] = useState(saved ? (saved % 12 === 0 ? saved / 12 : saved) : 1)
+  const periodMonths =
+    periodMode === 'all' ? null : Math.max(1, Math.min(600, Math.round(periodCount || 1) * (periodUnit === 'years' ? 12 : 1)))
+  const listenedNow = useListenedCount(periodMonths)
+  const listened = listenedNow.data?.listened_artists ?? settings.listened_artists
+  const periodId = useId()
   const [locating, setLocating] = useState(false)
   const [locateError, setLocateError] = useState<string | null>(null)
   const q = useDeferredValue(query.trim())
   const places = usePlaces(q)
   const distanceId = useId()
-  const following = followCount(settings.listened_artists, percent, settings.max_artists)
+  const following = followCount(listened, percent)
 
   const useMyLocation = () => {
     if (!navigator.geolocation) {
@@ -231,18 +248,59 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
         </div>
 
         <div className="space-y-1">
+          <span id={periodId} className="block text-sm">
+            Most played over
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              labelledBy={periodId}
+              value={periodMode}
+              options={[
+                { value: 'all', label: 'All time' },
+                { value: 'past', label: 'The past…' },
+              ]}
+              onChange={setPeriodMode}
+            />
+            {periodMode === 'past' && (
+              <>
+                <input
+                  type="number"
+                  min={1}
+                  max={periodUnit === 'years' ? 50 : 600}
+                  value={periodCount}
+                  onChange={(e) => setPeriodCount(Number(e.target.value))}
+                  aria-label="How many"
+                  className="w-20 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm tabular-nums"
+                />
+                <Select
+                  label="Months or years"
+                  value={periodUnit}
+                  options={[
+                    { value: 'months', label: periodCount === 1 ? 'month' : 'months' },
+                    { value: 'years', label: periodCount === 1 ? 'year' : 'years' },
+                  ]}
+                  onChange={setPeriodUnit}
+                />
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-1">
           <Slider label="Artists to follow" value={percent} min={1} max={100} step={1} format={(v) => `Top ${v}%`} onChange={setPercent} />
           <p className="text-xs text-muted">
-            {settings.listened_artists === 0
-              ? "You haven't played any artists yet; shows are found for the artists you play."
-              : `Your ${following} most played of ${settings.listened_artists} artists${
-                  following === settings.max_artists ? ` (at most ${settings.max_artists})` : ''
-                }.`}
+            {listened === 0
+              ? periodMode === 'all'
+                ? "You haven't played any artists yet; shows are found for the artists you play."
+                : `You haven't played any artists in ${describePeriod(periodMonths)}.`
+              : `Your ${following} most played of the ${listened} artists you've played in ${describePeriod(periodMonths)}.${
+                  following > 150 ? ' Following many artists uses more of the shared JamBase allowance, so shows are refreshed less often.' : ''
+                }`}
           </p>
         </div>
 
         <p className="text-xs text-muted">
-          Only the place is stored, and it's used just to look up shows (about once a day, from JamBase).
+          Only the place is stored, and it's used just to look up shows (about once a day).
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -252,7 +310,14 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
             onClick={() =>
               place &&
               save.mutate(
-                { place_name: place.name, latitude: place.latitude, longitude: place.longitude, radius_km: radius, top_percent: percent },
+                {
+                  place_name: place.name,
+                  latitude: place.latitude,
+                  longitude: place.longitude,
+                  radius_km: radius,
+                  top_percent: percent,
+                  period_months: periodMonths,
+                },
                 { onSuccess: onDone },
               )
             }
@@ -265,7 +330,11 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
             </Button>
           )}
           {settings.place_name && (
-            <Button variant="ghost" busy={forget.isPending} onClick={() => forget.mutate(undefined, { onSuccess: onDone })}>
+            <Button
+              variant="ghost"
+              busy={forget.isPending}
+              onClick={() => window.confirm('Forget your place, the shows and your starred shows?') && forget.mutate(undefined, { onSuccess: onDone })}
+            >
               Forget my place
             </Button>
           )}
@@ -282,13 +351,13 @@ function Shows({ settings }: { settings: LiveSettings }) {
   const [to, setTo] = useState<string | undefined>(undefined)
   const chooseRange = (key: Range) => {
     setRange(key)
-    if (key === 'all') return setTo(undefined)
+    if (key === 'all' || key === 'starred') return setTo(undefined)
     const d = new Date()
     d.setDate(d.getDate() + Number(key))
     setTo(isoDate(d))
   }
   const busy = settings.refresh_status === 'queued' || settings.refresh_status === 'running'
-  const shows = useLiveShows({ artist, to }, busy)
+  const shows = useLiveShows({ artist, to, starred: range === 'starred' }, busy)
   const { active } = useActiveServer()
   const artistId = useId()
 
@@ -347,7 +416,9 @@ function Shows({ settings }: { settings: LiveSettings }) {
         ) : settings.refreshed_at ? (
           <Card>
             <p className="text-sm text-muted">
-              {artist || range !== 'all'
+              {range === 'starred'
+                ? 'No starred shows yet: star a show to keep it and put it in your calendar.'
+                : artist || range !== 'all'
                 ? 'No shows match these filters.'
                 : `No upcoming shows within ${settings.radius_km} km by your top ${settings.followed_artists} artists. A larger distance or more artists may find some.`}
             </p>
@@ -366,10 +437,17 @@ function Shows({ settings }: { settings: LiveSettings }) {
         ))
       )}
 
-      <p className="text-xs text-muted">
-        <a href="https://www.jambase.com" target="_blank" rel="nofollow noopener noreferrer" className="underline">
-          Powered by JamBase
-        </a>
+      <p className="flex flex-wrap gap-x-3 text-xs text-muted">
+        {settings.sources.includes('jambase') && (
+          <a href="https://www.jambase.com" target="_blank" rel="nofollow noopener noreferrer" className="underline">
+            Powered by JamBase
+          </a>
+        )}
+        {settings.sources.includes('ticketmaster') && (
+          <a href="https://www.ticketmaster.com" target="_blank" rel="nofollow noopener noreferrer" className="underline">
+            Shows also from Ticketmaster
+          </a>
+        )}
       </p>
     </div>
   )
@@ -388,7 +466,11 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
   const others = show.performers.filter((p) => !yours.has(p.name))
   const where = [show.venue, show.city, show.country ? countryName(show.country) : null].filter(Boolean).join(' · ')
   const status = STATUS_LABEL[show.status]
-  const link = show.ticket_url ?? show.page_url
+  const [first, ...more] = show.tickets
+  // Other sources' links for the same show (one each).
+  const extra = more.filter((t, i) => t.source !== first?.source && more.findIndex((o) => o.source === t.source) === i)
+  const star = useStarShow()
+  const starred = star.isPending ? star.variables.starred : show.starred
   return (
     <li className="flex items-start gap-3 p-3">
       <div className="w-12 shrink-0 text-center">
@@ -428,19 +510,106 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
           {show.start_time && ` · ${show.start_time}`}
           {show.end_date && ` · until ${localDate(show.end_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
         </p>
-        {show.distance_km != null && <p className="text-xs text-muted">{Math.round(show.distance_km)} km away</p>}
+        <p className="flex flex-wrap gap-x-3 text-xs text-muted">
+          {show.distance_km != null && <span>{Math.round(show.distance_km)} km away</span>}
+          {extra.map((t) => (
+            <a key={t.url} href={t.url} target="_blank" rel="nofollow noopener noreferrer" className="underline hover:text-accent">
+              Also on {SOURCE_NAMES[t.source] ?? t.source}
+            </a>
+          ))}
+          {starred && (
+            <a href={`/api/live/shows/${show.id}.ics`} download className="underline hover:text-accent">
+              Add to calendar
+            </a>
+          )}
+        </p>
       </div>
-      {link && (
-        <a
-          href={link}
-          target="_blank"
-          rel="nofollow noopener noreferrer"
-          className="shrink-0 rounded-lg bg-surface-2 px-3 py-1.5 text-sm font-medium hover:text-accent"
-          title={show.seller ? `Tickets from ${show.seller}` : undefined}
+      <div className="flex shrink-0 items-center gap-1.5">
+        <button
+          type="button"
+          aria-pressed={starred}
+          aria-label={starred ? 'Starred' : 'Star'}
+          title={starred ? 'Starred: kept and in your calendar' : 'Star: keep it and put it in your calendar'}
+          onClick={() => star.mutate({ ids: show.ids, starred: !starred })}
+          className={`rounded-lg px-2 py-1 text-lg leading-none ${starred ? 'text-accent' : 'text-muted hover:text-text'}`}
         >
-          {show.ticket_url ? 'Tickets' : 'Details'}
-        </a>
-      )}
+          {starred ? '★' : '☆'}
+        </button>
+        {first && (
+          <a
+            href={first.url}
+            target="_blank"
+            rel="nofollow noopener noreferrer"
+            className="rounded-lg bg-surface-2 px-3 py-1.5 text-sm font-medium hover:text-accent"
+            title={first.seller ? `Tickets from ${first.seller}` : undefined}
+          >
+            {show.ticket_url || first.source !== 'jambase' ? 'Tickets' : 'Details'}
+          </a>
+        )}
+      </div>
     </li>
+  )
+}
+
+/** The private calendar of starred shows, to subscribe to in a calendar app. */
+function CalendarCard() {
+  const [open, setOpen] = useState(false)
+  const address = useCalendarAddress(open)
+  const reset = useResetCalendar()
+  const [copied, setCopied] = useState(false)
+  const url = address.data?.url
+  return (
+    <Card title="Your calendar">
+      <div className="space-y-3 text-sm">
+        <p className="text-muted">
+          Star shows (☆) to keep them and add them to a calendar you subscribe to once in Apple Calendar, Google Calendar
+          or Outlook. It stays up to date by itself.
+        </p>
+        {!open ? (
+          <Button onClick={() => setOpen(true)}>Show calendar address</Button>
+        ) : address.isPending ? (
+          <Spinner small />
+        ) : address.isError ? (
+          <Notice tone="error">{errorMessage(address.error)}</Notice>
+        ) : (
+          url && (
+            <div className="space-y-2">
+              <input
+                readOnly
+                value={url}
+                aria-label="Calendar address"
+                onFocus={(e) => e.currentTarget.select()}
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs"
+              />
+              <div className="flex flex-wrap gap-2">
+                <a href={url.replace(/^https?:/, 'webcal:')} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-on-accent">
+                  Subscribe
+                </a>
+                <Button
+                  onClick={() =>
+                    navigator.clipboard?.writeText(url).then(
+                      () => setCopied(true),
+                      () => setCopied(false),
+                    )
+                  }
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  busy={reset.isPending}
+                  onClick={() => window.confirm('Make a new address? The old one stops working.') && reset.mutate()}
+                >
+                  New address
+                </Button>
+              </div>
+              <p className="text-xs text-muted">
+                Anyone with this address can see your starred shows. Google Calendar: Other calendars → From URL.
+              </p>
+            </div>
+          )
+        )}
+      </div>
+    </Card>
   )
 }

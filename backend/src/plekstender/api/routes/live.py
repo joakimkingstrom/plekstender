@@ -1,43 +1,53 @@
 """Live: upcoming shows near you by the artists you listen to most.
 
-Each user sets a place, a distance and how many of their artists to follow; the worker
-looks the shows up (about daily, within the instance's JamBase budget) and they're read here.
+Each user sets a place, a distance and which of their artists to follow (the top N% of all
+time, or of the past months); the worker looks the shows up (about daily, within the
+instance's budgets) and they're read here. Starred shows are kept, and are in a private
+calendar feed (iCal) the user can subscribe to.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import secrets
 from collections import Counter
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.schemas import (
     LiveArtistCount,
     LiveArtistOut,
+    LiveCalendarOut,
+    LiveListenedOut,
     LiveSettingsIn,
     LiveSettingsOut,
     LiveShowOut,
     LiveShowsOut,
+    LiveStarIn,
+    LiveTicketOut,
     PlaceOut,
 )
-from plekstender.db.instance import get_jambase_api_key
+from plekstender.config import Settings
+from plekstender.db.instance import get_jambase_api_key, get_ticketmaster_api_key
 from plekstender.db.models import LiveSettings, LiveShow, User
-from plekstender.live import geocode
-from plekstender.live.refresh import MAX_ARTISTS, follow_count, listened_artists
+from plekstender.live import geocode, ical
+from plekstender.live.merge import merge
+from plekstender.live.refresh import follow_count, listened_artists, period_start
 from plekstender.worker import LIVE_MANUAL_GAP, enqueue_live_refresh
 
 router = APIRouter(prefix="/api/live", tags=["live"])
 
 # Settings changes are looked up after a short pause, so a few quick changes cost one refresh.
 SETTLE_SECONDS = 20
-
-
 # A lookup still "queued" or "running" after this long was lost (the worker stopped).
 STALE_AFTER = dt.timedelta(minutes=30)
+LOST = "The last lookup didn't finish; refresh to try again."
+# The calendar keeps starred shows this long after they've happened.
+CALENDAR_PAST = dt.timedelta(days=60)
 
 
 def _stale(live: LiveSettings) -> bool:
@@ -55,37 +65,54 @@ def _available_at(live: LiveSettings | None) -> dt.datetime | None:
     return at if at > dt.datetime.now(dt.UTC) else None
 
 
-async def _out(db: DbDep, settings: SettingsDep, user: User) -> LiveSettingsOut:
+async def _sources(db: DbDep, settings: Settings) -> list[Literal["jambase", "ticketmaster"]]:
+    out: list[Literal["jambase", "ticketmaster"]] = []
+    if (await get_jambase_api_key(db, settings))[0]:
+        out.append("jambase")
+    if (await get_ticketmaster_api_key(db, settings))[0]:
+        out.append("ticketmaster")
+    return out
+
+
+async def _out(db: DbDep, settings: Settings, user: User) -> LiveSettingsOut:
     live = await db.get(LiveSettings, user.id)
-    listened = len(await listened_artists(db, user.id))
+    months = live.period_months if live else None
+    listened = len(await listened_artists(db, user.id, period_start(months)))
     percent = live.top_percent if live else 10
-    key, _ = await get_jambase_api_key(db, settings)
+    sources = await _sources(db, settings)
+    stale = live is not None and _stale(live)
     return LiveSettingsOut(
         place_name=live.place_name if live else None,
         latitude=live.latitude if live else None,
         longitude=live.longitude if live else None,
         radius_km=live.radius_km if live else 100,
         top_percent=percent,
+        period_months=months,
         listened_artists=listened,
         followed_artists=follow_count(listened, percent),
-        max_artists=MAX_ARTISTS,
-        refresh_status=("failed" if _stale(live) else live.refresh_status) if live else None,
-        refresh_error=(
-            "The last lookup didn't finish; refresh to try again."
-            if _stale(live)
-            else live.refresh_error
-        )
-        if live
-        else None,
+        refresh_status=("failed" if stale else live.refresh_status) if live else None,
+        refresh_error=(LOST if stale else live.refresh_error) if live else None,
         refreshed_at=live.refreshed_at if live else None,
         refresh_available_at=_available_at(live),
-        source_ready=key is not None,
+        source_ready=bool(sources),
+        sources=sources,
     )
 
 
 @router.get("/settings", response_model=LiveSettingsOut)
 async def get_live_settings(db: DbDep, settings: SettingsDep, user: UserDep) -> LiveSettingsOut:
     return await _out(db, settings, user)
+
+
+@router.get("/listened", response_model=LiveListenedOut)
+async def listened(
+    db: DbDep,
+    user: UserDep,
+    period_months: Annotated[int | None, Query(ge=1, le=600)] = None,
+) -> LiveListenedOut:
+    """How many artists the user played in a period (for the settings form's preview)."""
+    found = await listened_artists(db, user.id, period_start(period_months))
+    return LiveListenedOut(listened_artists=len(found))
 
 
 @router.put("/settings", response_model=LiveSettingsOut)
@@ -97,17 +124,19 @@ async def put_live_settings(
     if live is None:
         live = LiveSettings(user_id=user.id)
         db.add(live)
-    changed = (live.latitude, live.longitude, live.radius_km, live.top_percent) != (
-        body.latitude, body.longitude, body.radius_km, body.top_percent,
-    )  # fmt: skip
+    before = (live.latitude, live.longitude, live.radius_km, live.top_percent, live.period_months)
+    after = (body.latitude, body.longitude, body.radius_km, body.top_percent, body.period_months)
     live.place_name = body.place_name.strip()
     live.latitude, live.longitude = body.latitude, body.longitude
     live.radius_km, live.top_percent = body.radius_km, body.top_percent
+    live.period_months = body.period_months
     await db.commit()
-    if changed:
+    if before != after:
         if live.refreshed_at is not None:
-            # The old list was for another place or other artists.
-            await db.execute(delete(LiveShow).where(LiveShow.user_id == user.id))
+            # The old list was for another place or other artists (starred shows stay).
+            await db.execute(
+                delete(LiveShow).where(LiveShow.user_id == user.id, LiveShow.starred_at.is_(None))
+            )
             live.refreshed_at = None
             await db.commit()
         await enqueue_live_refresh(db, user.id, delay_seconds=SETTLE_SECONDS)
@@ -116,7 +145,7 @@ async def put_live_settings(
 
 @router.delete("/settings", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_live_settings(db: DbDep, user: UserDep) -> Response:
-    """Forget the place and the shows."""
+    """Forget the place, the shows (starred too) and the calendar address."""
     await db.execute(delete(LiveShow).where(LiveShow.user_id == user.id))
     await db.execute(delete(LiveSettings).where(LiveSettings.user_id == user.id))
     await db.commit()
@@ -151,8 +180,10 @@ async def places(
         found = await geocode.search(http, settings.geocoding_api_url, q.strip())
     except geocode.GeocodeError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
-    return [PlaceOut(name=p.name, latitude=p.latitude, longitude=p.longitude, country=p.country)
-            for p in found]  # fmt: skip
+    return [
+        PlaceOut(name=p.name, latitude=p.latitude, longitude=p.longitude, country=p.country)
+        for p in found
+    ]
 
 
 @router.get("/shows", response_model=LiveShowsOut)
@@ -162,8 +193,10 @@ async def shows(
     artist: Annotated[str | None, Query(max_length=200)] = None,
     date_from: Annotated[dt.date | None, Query(alias="from")] = None,
     date_to: Annotated[dt.date | None, Query(alias="to")] = None,
+    starred: bool = False,
 ) -> LiveShowsOut:
-    """Upcoming shows, soonest first; `artist` narrows to one of the user's artists."""
+    """Upcoming shows, soonest first, each once however many sources found it; `artist`
+    narrows to one of the user's artists, `starred` to starred shows."""
     today = dt.datetime.now(dt.UTC).date() - dt.timedelta(days=1)  # time zones: keep tonight
     start = max(date_from or today, today)
     query = (
@@ -176,15 +209,17 @@ async def shows(
     )
     if date_to:
         query = query.where(LiveShow.start_date <= date_to)
-    rows = list(await db.scalars(query))
+    groups = [_show(group) for group in merge(list(await db.scalars(query)))]
+    if starred:
+        groups = [g for g in groups if g.starred]
     counts: Counter[str] = Counter()
-    for row in rows:
-        for name in dict.fromkeys(a["name"] for a in row.artists):
-            counts[name] += 1
+    for show in groups:
+        for a in show.artists:
+            counts[a.name] += 1
     if artist:
-        rows = [r for r in rows if any(a["name"] == artist for a in r.artists)]
+        groups = [g for g in groups if any(a.name == artist for a in g.artists)]
     return LiveShowsOut(
-        shows=[_show(r) for r in rows],
+        shows=groups,
         artists=[
             LiveArtistCount(name=n, shows=c)
             for n, c in sorted(counts.items(), key=lambda x: (-x[1], x[0].lower()))
@@ -192,26 +227,173 @@ async def shows(
     )
 
 
-def _show(row: LiveShow) -> LiveShowOut:
-    # One entry per artist (an artist on several servers is listed once).
-    artists = {a["name"]: LiveArtistOut.model_validate(a) for a in row.artists}
+def _show(group: list[LiveShow]) -> LiveShowOut:
+    """One show from its sources' rows (the first is preferred for the details)."""
+    row = group[0]
+    artists: dict[str, LiveArtistOut] = {}
+    for r in group:
+        for a in r.artists:  # one entry per artist (on several servers / sources: once)
+            artists.setdefault(a["name"], LiveArtistOut.model_validate(a))
+    tickets: dict[str, LiveTicketOut] = {}
+    for r in group:
+        if url := (r.ticket_url or r.page_url):
+            tickets.setdefault(url, LiveTicketOut(source=r.source, url=url, seller=r.seller))
+    performers = max((r.performers for r in group), key=len)
+    located = next((r for r in group if r.latitude is not None), row)
     return LiveShowOut(
         id=row.id,
+        ids=[r.id for r in group],
         source=row.source,
+        sources=[r.source for r in group],
+        starred=any(r.starred_at for r in group),
+        tickets=list(tickets.values()),
         name=row.name,
-        festival=row.festival,
+        festival=any(r.festival for r in group),
         start_date=row.start_date,
-        start_time=row.start_time,
+        start_time=row.start_time or next((r.start_time for r in group if r.start_time), None),
         end_date=row.end_date,
         status=row.status,
         venue=row.venue,
         city=row.city,
         region=row.region,
         country=row.country,
-        distance_km=row.distance_km,
+        distance_km=located.distance_km,
         ticket_url=row.ticket_url,
         seller=row.seller,
         page_url=row.page_url,
         artists=sorted(artists.values(), key=lambda a: not a.headliner),
-        performers=[LiveArtistOut.model_validate(p) for p in row.performers],
+        performers=[LiveArtistOut.model_validate(p) for p in performers],
+    )
+
+
+@router.put("/stars", status_code=status.HTTP_204_NO_CONTENT)
+async def star(body: LiveStarIn, db: DbDep, user: UserDep) -> Response:
+    """Star (or unstar) a show: all its sources' rows, so it stays starred whichever is
+    listed first."""
+    await db.execute(
+        update(LiveShow)
+        .where(LiveShow.user_id == user.id, LiveShow.id.in_(body.ids))
+        .values(starred_at=dt.datetime.now(dt.UTC) if body.starred else None)
+    )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- the calendar of starred shows ---------------------------------------------------------
+
+
+def _calendar_url(settings: Settings, token: str) -> str:
+    return f"{settings.app_url}/api/live/calendar/{token}.ics"
+
+
+@router.get("/calendar", response_model=LiveCalendarOut)
+async def calendar_address(db: DbDep, settings: SettingsDep, user: UserDep) -> LiveCalendarOut:
+    """The private address of the user's calendar of starred shows (made on first use)."""
+    live = await db.get(LiveSettings, user.id)
+    if live is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Choose a place first.")
+    if not live.calendar_token:
+        live.calendar_token = secrets.token_urlsafe(24)
+        await db.commit()
+    return LiveCalendarOut(url=_calendar_url(settings, live.calendar_token))
+
+
+@router.post("/calendar/reset", response_model=LiveCalendarOut)
+async def reset_calendar(db: DbDep, settings: SettingsDep, user: UserDep) -> LiveCalendarOut:
+    """A new address: the old one stops working (if it was shared by mistake)."""
+    live = await db.get(LiveSettings, user.id)
+    if live is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Choose a place first.")
+    live.calendar_token = secrets.token_urlsafe(24)
+    await db.commit()
+    return LiveCalendarOut(url=_calendar_url(settings, live.calendar_token))
+
+
+def _calendar_shows(groups: list[list[LiveShow]]) -> list[ical.CalendarShow]:
+    out = []
+    for group in groups:
+        show = _show(group)
+        names = [a.name for a in show.artists]
+        title = show.name if show.festival else " + ".join(names) or show.name
+        others = [p.name for p in show.performers if p.name not in names]
+        where = ", ".join(x for x in (show.venue, show.city) if x)
+        lines = []
+        if others:
+            lines.append("With " + ", ".join(others[:10]))
+        lines += [f"Tickets ({t.seller or t.source}): {t.url}" for t in show.tickets]
+        out.append(
+            ical.CalendarShow(
+                uid=f"{group[0].source_id}@plekstender",
+                title=title,
+                start_date=show.start_date,
+                start_time=show.start_time,
+                end_date=show.end_date,
+                status=show.status,
+                location=where or None,
+                url=show.tickets[0].url if show.tickets else None,
+                description="\n".join(lines),
+                updated=max(r.fetched_at for r in group),
+            )
+        )
+    return out
+
+
+async def _starred(db: DbDep, user_id: int) -> list[list[LiveShow]]:
+    since = dt.datetime.now(dt.UTC).date() - CALENDAR_PAST
+    rows = list(
+        await db.scalars(
+            select(LiveShow)
+            .where(
+                LiveShow.user_id == user_id,
+                func.coalesce(LiveShow.end_date, LiveShow.start_date) >= since,
+            )
+            .order_by(LiveShow.start_date, LiveShow.id)
+        )
+    )
+    # Merge first, so a show starred under one source is one event.
+    return [g for g in merge(rows) if any(r.starred_at for r in g)]
+
+
+@router.get(
+    "/calendar/{token}.ics",
+    response_class=Response,
+    dependencies=[rate_limit("live-calendar", 120, 60)],
+    responses={200: {"content": {"text/calendar": {}}}},
+)
+async def calendar_feed(token: str, db: DbDep) -> Response:
+    """The starred shows (no sign-in: calendar apps fetch it; the address is the secret)."""
+    live = await db.scalar(select(LiveSettings).where(LiveSettings.calendar_token == token))
+    if live is None or len(token) < 20:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown calendar")
+    body = ical.calendar(_calendar_shows(await _starred(db, live.user_id)), "Plekstender: shows")
+    return Response(
+        body,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Cache-Control": "private, max-age=900"},
+    )
+
+
+@router.get(
+    "/shows/{show_id}.ics",
+    response_class=Response,
+    responses={200: {"content": {"text/calendar": {}}}},
+)
+async def show_file(show_id: int, db: DbDep, user: UserDep) -> Response:
+    """One show as a calendar file, to add it to a calendar by hand."""
+    row = await db.get(LiveShow, show_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Show not found")
+    same = list(
+        await db.scalars(
+            select(LiveShow).where(
+                LiveShow.user_id == user.id, LiveShow.start_date == row.start_date
+            )
+        )
+    )
+    group = next((g for g in merge(same) if row in g), [row])
+    body = ical.calendar(_calendar_shows([group]), row.name)
+    return Response(
+        body,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="show-{show_id}.ics"'},
     )

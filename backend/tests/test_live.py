@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import replace
 from typing import Any
 
 import httpx
@@ -127,7 +128,7 @@ def test_matching_and_batches() -> None:
     assert match("Sigur Ros", batch) is batch[1]
     assert match("Beatles Tribute Band", batch) is None
 
-    assert [follow_count(n, 10) for n in (0, 1, 9, 10, 25, 5000)] == [0, 1, 1, 1, 3, 150]
+    assert [follow_count(n, 10) for n in (0, 1, 9, 10, 25, 5000)] == [0, 1, 1, 1, 3, 500]
     artists = [Followed(f"A{i}", f"{i:08d}-0000-0000-0000-000000000000", 1) for i in range(25)]
     artists += [Followed(f"B{i}", None, 1) for i in range(3)]
     assert [len(b) for b in batches(artists)] == [20, 5, 3]
@@ -450,3 +451,219 @@ def test_unknown_id_answers() -> None:
     assert jambase._unknown_ids(documented) == (True, ["jambase:87121"])
     other = httpx.Response(400, json={"errors": [{"code": "parameter_invalid", "message": "x"}]})
     assert jambase._unknown_ids(other) == (False, [])
+
+
+# --- Ticketmaster, merging, the period, stars and the calendar ------------------------------
+
+TM_API = "https://app.ticketmaster.com/discovery/v2"
+TM_KEY = "TmKey0123456789abcdef"
+
+
+def tm_event(event_id: str, day: str, attractions: list[str], venue: str, **extra: Any) -> dict:
+    return {
+        "id": event_id,
+        "name": f"{attractions[0]} live",
+        "url": f"https://www.ticketmaster.co.uk/event/{event_id}",
+        "dates": {
+            "start": {"localDate": day, "localTime": "19:00:00"},
+            "status": {"code": extra.get("status", "onsale")},
+        },
+        "_embedded": {
+            "venues": [{
+                "name": venue,
+                "city": {"name": "Stockholm"},
+                "country": {"countryCode": "SE"},
+                "location": {"latitude": extra.get("lat", "59.2937"), "longitude": "18.0833"},
+            }],
+            "attractions": [{"name": n} for n in attractions],
+        },
+    }  # fmt: skip
+
+
+@pytest.fixture(autouse=True)
+def no_ticketmaster_pause(monkeypatch: pytest.MonkeyPatch) -> None:
+    from plekstender.live import ticketmaster
+
+    monkeypatch.setattr(ticketmaster, "INTERVAL", 0.0)
+
+
+class FakeTicketmaster:
+    def __init__(self, plex: FakePlex) -> None:
+        self.requests: list[httpx.Request] = []
+        self.events = [
+            # The same show JamBase has (Radiohead at Avicii Arena on 4 March).
+            tm_event("A1", "2027-03-04", ["Radiohead", "Support Act"], "Avicii Arena Stockholm"),
+            # Only here: Portishead, and someone the user doesn't follow.
+            tm_event("B2", "2027-02-01", ["Portishead"], "Annexet", status="postponed"),
+            tm_event("C3", "2027-02-02", ["Somebody Else"], "Debaser"),
+        ]
+        self.crowded: set[str] = set()  # window starts that claim >1,000 events
+        plex.router.get(f"{TM_API}/events.json").mock(side_effect=self._events)
+
+    def _events(self, request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("apikey") != TM_KEY:
+            return httpx.Response(401, json={"fault": {"faultstring": "Invalid ApiKey"}})
+        self.requests.append(request)
+        params = request.url.params
+        start = params.get("startDateTime", "")[:10]
+        end = params.get("endDateTime", "9999-12-31")[:10]
+        found = [e for e in self.events if start <= e["dates"]["start"]["localDate"] <= end]
+        long = bool(start) and (
+            dt.date.fromisoformat(end) - dt.date.fromisoformat(start) > dt.timedelta(days=20)
+        )
+        total = 1500 if start in self.crowded and long else len(found)
+        return httpx.Response(200, json={
+            "_embedded": {"events": found} if found else {},
+            "page": {"size": 200, "totalElements": total, "totalPages": max(1, -(-total // 200)),
+                     "number": int(params.get("page", 0))},
+        })  # fmt: skip
+
+
+def test_geohash_and_calendar_lines() -> None:
+    from plekstender.live import ical, ticketmaster
+
+    assert ticketmaster.geohash(57.64911, 10.40744, 11) == "u4pruydqqvj"
+    show = ical.CalendarShow(
+        uid="x@plekstender",
+        title="Radiohead, with friends; live",
+        start_date=dt.date(2027, 3, 4),
+        start_time="19:30",
+        end_date=None,
+        status="scheduled",
+        location="Avicii Arena",
+        url="https://example.com/t",
+        description="A" * 200,
+        updated=dt.datetime(2026, 11, 19, tzinfo=dt.UTC),
+    )
+    text_ = ical.calendar([show], "Shows")
+    assert "SUMMARY:Radiohead\\, with friends\\; live\r\n" in text_
+    assert "DTSTART:20270304T193000\r\n" in text_ and "DTEND:20270304T223000\r\n" in text_
+    assert all(len(line.encode()) <= 75 for line in text_.split("\r\n"))
+    festival = replace(show, start_time=None, end_date=dt.date(2027, 3, 6))
+    all_day = ical.calendar([festival], "Shows")
+    assert "DTSTART;VALUE=DATE:20270304" in all_day and "DTEND;VALUE=DATE:20270307" in all_day
+
+
+@pytest.mark.db
+async def test_ticketmaster_merging_stars_and_calendar(app: FastAPI, plex: FakePlex) -> None:
+    FakeJamBase(plex)
+    tm = FakeTicketmaster(plex)
+    owner, user_id = await owner_listening(app, plex)
+    await owner.put("/api/admin/jambase", json={"api_key": KEY}, headers=CSRF)
+    bad = await owner.put(
+        "/api/admin/ticketmaster", json={"api_key": "WrongKey0123456789"}, headers=CSRF
+    )
+    assert bad.status_code == 400 and "Invalid ApiKey" in bad.json()["detail"]
+    saved = await owner.put("/api/admin/ticketmaster", json={"api_key": TM_KEY}, headers=CSRF)
+    assert saved.status_code == 200 and saved.json()["calls"] == 0  # the check isn't counted
+    await owner.put("/api/live/settings", json={**STOCKHOLM, "top_percent": 100}, headers=CSRF)
+    assert (await owner.get("/api/live/settings")).json()["sources"] == ["jambase", "ticketmaster"]
+
+    tm.requests.clear()  # the key check
+    tm.crowded = {dt.datetime.now(dt.UTC).date().isoformat()}  # the first month is split
+    result = await refresh(user_id)
+    assert result.complete, result.error
+    params = [r.url.params for r in tm.requests]
+    assert {p["unit"] for p in params} == {"km"} and {p["classificationName"] for p in params} == {
+        "music"
+    }
+    assert params[0]["geoPoint"].startswith("u6sce")  # Stockholm's geohash
+    starts = [p["startDateTime"][:10] for p in params]
+    assert starts[0] == starts[1]  # the crowded window, then its first half
+    assert len(starts) == 8  # 6 windows of 30 days, one split in two (+1 for the split)
+
+    shows = (await owner.get("/api/live/shows")).json()["shows"]
+    assert [(s["name"], s["sources"]) for s in shows] == [
+        ("Portishead live", ["ticketmaster"]),
+        ("Radiohead at Avicii Arena", ["jambase", "ticketmaster"]),
+        ("Way Out West 2027", ["jambase"]),
+    ]
+    merged = shows[1]
+    assert [t["seller"] for t in merged["tickets"]] == ["Ticketmaster", "Ticketmaster"]
+    assert merged["tickets"][1]["url"] == "https://www.ticketmaster.co.uk/event/A1"
+    assert shows[0]["status"] == "postponed" and shows[0]["start_time"] == "19:00"
+
+    # Star the merged show (both rows), then lose it from both sources: it stays.
+    star = await owner.put(
+        "/api/live/stars", json={"ids": merged["ids"], "starred": True}, headers=CSRF
+    )
+    assert star.status_code == 204
+    starred = (await owner.get("/api/live/shows", params={"starred": True})).json()["shows"]
+    assert [s["name"] for s in starred] == ["Radiohead at Avicii Arena"]
+    tm.events = tm.events[1:]
+    CONCERT_BACKUP = dict(CONCERT)
+    CONCERT.clear()
+    CONCERT.update(TRIBUTE)  # JamBase no longer has it either
+    try:
+        assert (await refresh(user_id)).complete
+    finally:
+        CONCERT.clear()
+        CONCERT.update(CONCERT_BACKUP)
+    names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
+    assert "Radiohead at Avicii Arena" in names
+
+    # The calendar: a private address, the starred show once, no sign-in needed.
+    address = (await owner.get("/api/live/calendar")).json()["url"]
+    path = address.removeprefix(get_settings().app_url)
+    feed = await httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ).get(path)
+    assert feed.status_code == 200 and feed.headers["content-type"].startswith("text/calendar")
+    body = feed.text
+    assert body.count("BEGIN:VEVENT") == 1
+    assert "SUMMARY:Radiohead\r\n" in body and "DTSTART:20270304T193000" in body
+    assert "LOCATION:Avicii Arena\\, Stockholm" in body
+    assert (await owner.get("/api/live/calendar")).json()["url"] == address
+    new = (await owner.post("/api/live/calendar/reset", headers=CSRF)).json()["url"]
+    assert new != address
+    gone = await httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ).get(path)
+    assert gone.status_code == 404
+    one = await owner.get(f"/api/live/shows/{merged['id']}.ics")
+    assert one.status_code == 200 and "attachment" in one.headers["content-disposition"]
+
+    # Unstarring lets the next refresh drop it.
+    await owner.put("/api/live/stars", json={"ids": merged["ids"], "starred": False}, headers=CSRF)
+    async with get_sessionmaker()() as db:
+        await db.execute(text("UPDATE live_shows SET fetched_at = fetched_at - interval '1 day'"))
+        await db.commit()
+    CONCERT.clear()
+    CONCERT.update(TRIBUTE)
+    try:
+        await refresh(user_id)
+    finally:
+        CONCERT.clear()
+        CONCERT.update(CONCERT_BACKUP)
+    names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
+    assert "Radiohead at Avicii Arena" not in names
+
+
+@pytest.mark.db
+async def test_listening_period(app: FastAPI, plex: FakePlex) -> None:
+    """ "Top artists of the past N months" ranks by the listens in that time."""
+    from plekstender.db.models import Listen
+
+    owner, user_id = await owner_listening(app, plex)
+    now = dt.datetime.now(dt.UTC)
+    async with get_sessionmaker()() as db:
+        for days_ago, artist in ((10, "Portishead"), (12, "Portishead"), (400, "Radiohead")):
+            db.add(Listen(
+                user_id=user_id, listened_at=now - dt.timedelta(days=days_ago), source="lastfm",
+                artist_name=artist, track_name="Song", artist_key=artist.lower(), track_key="song",
+            ))  # fmt: skip
+        await db.commit()
+    base = {**STOCKHOLM, "top_percent": 100}
+    all_time = (await owner.put("/api/live/settings", json=base, headers=CSRF)).json()
+    assert (all_time["period_months"], all_time["listened_artists"]) == (None, 2)
+    recent = (
+        await owner.put("/api/live/settings", json={**base, "period_months": 6}, headers=CSRF)
+    ).json()
+    assert (recent["period_months"], recent["listened_artists"]) == (6, 1)
+    preview = await owner.get("/api/live/listened", params={"period_months": 24})
+    assert preview.json() == {"listened_artists": 2}  # Radiohead's listen 400 days ago counts
+    async with get_sessionmaker()() as db:
+        from plekstender.live.refresh import followed_artists, period_start
+
+        artists, _ = await followed_artists(db, user_id, 100, period_start(6))
+        assert [(a.name, a.plays) for a in artists] == [("Portishead", 2)]

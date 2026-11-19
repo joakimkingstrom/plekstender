@@ -1,6 +1,7 @@
 import { useMe } from '../api/hooks'
 import { AcoustIdKeyCard } from '../components/AcoustIdKeyCard'
 import { JamBaseKeyCard } from '../components/JamBaseKeyCard'
+import { TicketmasterKeyCard } from '../components/TicketmasterKeyCard'
 import { Spinner } from '../components/ui'
 import { LastFmKeyCard, ListenBrainzCard } from './ListeningSettingsPage'
 import { FanartKeyCard } from './SettingsPage'
@@ -21,6 +22,7 @@ export function ConnectionsPage() {
           <FanartKeyCard />
           <AcoustIdKeyCard />
           <JamBaseKeyCard />
+          <TicketmasterKeyCard />
         </div>
       )}
     </div>

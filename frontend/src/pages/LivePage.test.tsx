@@ -11,14 +11,15 @@ const base = {
   longitude: null as number | null,
   radius_km: 100,
   top_percent: 10,
+  period_months: null as number | null,
   listened_artists: 40,
   followed_artists: 4,
-  max_artists: 150,
   refresh_status: null as string | null,
   refresh_error: null,
   refreshed_at: null as string | null,
   refresh_available_at: null,
   source_ready: true,
+  sources: ['jambase', 'ticketmaster'],
 }
 const placed = {
   ...base,
@@ -30,7 +31,14 @@ const placed = {
 }
 const concert = {
   id: 1,
+  ids: [1, 3],
   source: 'jambase',
+  sources: ['jambase', 'ticketmaster'],
+  starred: false,
+  tickets: [
+    { source: 'jambase', url: 'https://www.ticketmaster.se/event/radiohead', seller: 'Ticketmaster' },
+    { source: 'ticketmaster', url: 'https://www.ticketmaster.se/event/A1', seller: 'Ticketmaster' },
+  ],
   name: 'Radiohead at Avicii Arena',
   festival: false,
   start_date: '2027-03-04',
@@ -54,6 +62,10 @@ const concert = {
 const festival = {
   ...concert,
   id: 2,
+  ids: [2],
+  sources: ['jambase'],
+  starred: true,
+  tickets: [{ source: 'jambase', url: 'https://www.jambase.com/show/radiohead', seller: null }],
   name: 'Way Out West 2027',
   festival: true,
   start_date: '2027-08-12',
@@ -86,6 +98,12 @@ beforeEach(() => {
           return json({ ...placed, ...body, refresh_status: 'queued', refreshed_at: null })
         }
         return json(settings)
+      case '/api/live/listened':
+        return json({ listened_artists: url.searchParams.get('period_months') ? 12 : 40 })
+      case '/api/live/stars':
+        return new Response(null, { status: 204 })
+      case '/api/live/calendar':
+        return json({ url: 'https://plek.example/api/live/calendar/secret-token-1234567890.ics' })
       case '/api/live/places':
         return json([{ name: 'Stockholm, Stockholm County, Sweden', latitude: 59.33, longitude: 18.07, country: 'SE' }])
       case '/api/live/shows': {
@@ -123,16 +141,23 @@ function requestsTo(path: string) {
 
 describe('LivePage', () => {
   it('counts the artists to follow like the server', () => {
-    expect([0, 1, 9, 25, 5000].map((n) => followCount(n, 10, 150))).toEqual([0, 1, 1, 3, 150])
+    expect([0, 1, 9, 25, 5000].map((n) => followCount(n, 10))).toEqual([0, 1, 1, 3, 500])
   })
 
   it('sets up a place, a distance and the artists to follow', async () => {
     renderPage()
-    expect(await screen.findByText('Your 4 most played of 40 artists.')).toBeInTheDocument()
+    expect(await screen.findByText("Your 4 most played of the 40 artists you've played in all time.")).toBeInTheDocument()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search for a city' }), { target: { value: 'Stock' } })
     fireEvent.click(await screen.findByRole('button', { name: 'Stockholm, Stockholm County, Sweden' }))
     fireEvent.change(screen.getByRole('slider'), { target: { value: '25' } })
-    expect(screen.getByText('Your 10 most played of 40 artists.')).toBeInTheDocument()
+    expect(screen.getByText("Your 10 most played of the 40 artists you've played in all time.")).toBeInTheDocument()
+    // The past 6 months instead of all time.
+    fireEvent.click(screen.getByRole('button', { name: /^Most played over/ }))
+    fireEvent.click(screen.getByRole('option', { name: 'The past…' }))
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'How many' }), { target: { value: '6' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Months or years/ }))
+    fireEvent.click(screen.getByRole('option', { name: 'months' }))
+    expect(await screen.findByText("Your 3 most played of the 12 artists you've played in the past 6 months.")).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await vi.waitFor(async () => {
       const [put] = requestsTo('/api/live/settings').filter((r) => r.method === 'PUT')
@@ -142,6 +167,7 @@ describe('LivePage', () => {
         longitude: 18.07,
         radius_km: 100,
         top_percent: 25,
+        period_months: 6,
       })
     })
     expect(await screen.findByText('Looking up shows…', { selector: 'p[aria-live]' })).toBeInTheDocument()
@@ -162,6 +188,17 @@ describe('LivePage', () => {
     expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('href', 'https://www.jambase.com/show/radiohead')
     expect(screen.getByText('Postponed')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Powered by JamBase' })).toHaveAttribute('href', 'https://www.jambase.com')
+    expect(screen.getByRole('link', { name: 'Shows also from Ticketmaster' })).toBeInTheDocument()
+    // Found by both sources: Ticketmaster's own link too.
+    expect(within(row).getByRole('link', { name: 'Also on Ticketmaster' })).toHaveAttribute('href', 'https://www.ticketmaster.se/event/A1')
+    // A starred show can be added to a calendar by hand.
+    expect(screen.getByRole('link', { name: 'Add to calendar' })).toHaveAttribute('href', '/api/live/shows/2.ics')
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Star' }))
+    await vi.waitFor(async () => {
+      const put = requestsTo('/api/live/stars').at(-1)
+      expect(put && (await put.clone().json())).toEqual({ ids: [1, 3], starred: true })
+    })
 
     fireEvent.click(screen.getByRole('button', { name: /^Artist/ }))
     fireEvent.click(screen.getByRole('option', { name: 'Portishead (1)' }))
@@ -169,10 +206,23 @@ describe('LivePage', () => {
     expect(requestsTo('/api/live/shows').at(-1)!.url).toContain('artist=Portishead')
   })
 
-  it('says when JamBase has no key yet', async () => {
-    settings = { ...placed, source_ready: false }
+  it('shows the private calendar address to subscribe to', async () => {
+    settings = placed
     renderPage()
-    expect(await screen.findByText(/Live needs a JamBase API key/)).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Show calendar address' }))
+    expect(await screen.findByRole('textbox', { name: 'Calendar address' })).toHaveValue(
+      'https://plek.example/api/live/calendar/secret-token-1234567890.ics',
+    )
+    expect(screen.getByRole('link', { name: 'Subscribe' })).toHaveAttribute(
+      'href',
+      'webcal://plek.example/api/live/calendar/secret-token-1234567890.ics',
+    )
+  })
+
+  it('says when JamBase has no key yet', async () => {
+    settings = { ...placed, source_ready: false, sources: [] }
+    renderPage()
+    expect(await screen.findByText(/Live needs a JamBase or Ticketmaster API key/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled()
   })
 })

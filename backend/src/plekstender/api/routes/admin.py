@@ -31,6 +31,8 @@ from plekstender.api.schemas import (
     LastFmKeyIn,
     LastFmKeyOut,
     PopularityPreviewItem,
+    TicketmasterKeyIn,
+    TicketmasterKeyOut,
 )
 from plekstender.artwork.catalogue import catalogue, find
 from plekstender.artwork.sources import SourceError, fanart_logos
@@ -45,6 +47,8 @@ from plekstender.db.instance import (
     get_jambase_usage,
     get_lastfm_api_key,
     get_library_settings,
+    get_ticketmaster_api_key,
+    get_ticketmaster_usage,
     save_jambase_quota,
     set_access_settings,
     set_acoustid_api_key,
@@ -53,10 +57,11 @@ from plekstender.db.instance import (
     set_jambase_api_key,
     set_lastfm_api_key,
     set_library_settings,
+    set_ticketmaster_api_key,
 )
 from plekstender.db.models import PlexServer, User, UserServer
 from plekstender.history.lastfm import LastFmClient, LastFmError
-from plekstender.live import jambase
+from plekstender.live import jambase, ticketmaster
 from plekstender.sync.popularity import preview_artist_ranking
 from plekstender.worker import enqueue_popularity_recompute
 
@@ -319,6 +324,35 @@ async def put_jambase(
     await set_jambase_api_key(db, settings, body.api_key)
     await db.commit()
     return await get_jambase(db, admin, settings, http)
+
+
+@router.get("/ticketmaster", response_model=TicketmasterKeyOut)
+async def get_ticketmaster(db: DbDep, _: AdminDep, settings: SettingsDep) -> TicketmasterKeyOut:
+    """The Ticketmaster key and today's requests."""
+    key, source = await get_ticketmaster_api_key(db, settings)
+    usage = await get_ticketmaster_usage(db)
+    return TicketmasterKeyOut(
+        configured=key is not None,
+        source=source,
+        day=usage.day,
+        calls=usage.calls,
+        cap=settings.ticketmaster_daily_cap,
+    )
+
+
+@router.put("/ticketmaster", response_model=TicketmasterKeyOut)
+async def put_ticketmaster(
+    body: TicketmasterKeyIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
+) -> TicketmasterKeyOut:
+    """Set (after checking it with one small search) or clear the Ticketmaster key."""
+    if body.api_key:
+        try:
+            await ticketmaster.check_key(http, settings.ticketmaster_api_url, body.api_key)
+        except ticketmaster.TicketmasterError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await set_ticketmaster_api_key(db, settings, body.api_key)
+    await db.commit()
+    return await get_ticketmaster(db, admin, settings)
 
 
 # --- text logo fonts -----------------------------------------------------------------------

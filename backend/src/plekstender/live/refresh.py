@@ -1,8 +1,9 @@
 """Looking up a user's upcoming shows: their most-listened artists, near their place.
 
-Runs in the worker. Every JamBase request is counted before it's sent and stops at the
-instance's monthly cap (JAMBASE_MONTHLY_CAP); shows are replaced only after a complete run,
-so a run cut short keeps the last list.
+Runs in the worker, one source after the other (JamBase, then Ticketmaster), each with its
+own budget: every request is counted before it's sent and stops at the instance's cap
+(JAMBASE_MONTHLY_CAP a month, TICKETMASTER_DAILY_CAP a day). A source's shows are replaced
+only after a complete run of that source, so a run cut short keeps its last list.
 """
 
 from __future__ import annotations
@@ -12,9 +13,10 @@ import difflib
 import logging
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
+from functools import partial
 
 import httpx
 from sqlalchemy import delete, func, select
@@ -28,24 +30,37 @@ from plekstender.db.instance import (
     get_jambase_api_key,
     get_jambase_unknown_ids,
     get_jambase_usage,
+    get_ticketmaster_api_key,
     reserve_jambase_call,
+    reserve_ticketmaster_call,
     save_jambase_quota,
 )
-from plekstender.db.models import Artist, ArtistArtwork, LiveSettings, LiveShow, UserServer
-from plekstender.live import jambase
+from plekstender.db.models import (
+    Artist,
+    ArtistArtwork,
+    Listen,
+    LiveSettings,
+    LiveShow,
+    UserServer,
+)
+from plekstender.live import jambase, ticketmaster
+from plekstender.live.events import Event
 from plekstender.live.geocode import distance_km
 from plekstender.sync.parse import normalise_artist
 
 log = logging.getLogger(__name__)
 
-MAX_ARTISTS = 150
-# Pages per batch at most (100 shows a page): a safety net against runaway paging.
+# Pages per JamBase batch at most (100 shows a page): a safety net against runaway paging.
 MAX_PAGES = 3
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 SKIP_NAMES = {"various artists", "various", "unknown artist", "[unknown]"}
 FUZZY = 0.88
 # Retries of a batch without an ID JamBase didn't know, before searching the rest by name.
 ID_RETRIES = 3
+# Ticketmaster: windows of this many days (split when one has more than 1,000 shows), and
+# at most this many requests a refresh.
+TM_WINDOW_DAYS = 30
+TM_MAX_REQUESTS = 80
 
 
 @dataclass
@@ -59,22 +74,47 @@ class Followed:
 
 
 def follow_count(listened: int, percent: int) -> int:
-    """How many artists the top `percent`% of `listened` is (at least one, at most 150)."""
+    """How many artists the top `percent`% of `listened` is (at least one)."""
     if listened <= 0:
         return 0
-    return max(1, min(MAX_ARTISTS, math.ceil(listened * percent / 100)))
+    return max(1, math.ceil(listened * percent / 100))
 
 
-async def listened_artists(db: AsyncSession, user_id: int) -> list[Followed]:
-    """Every artist the user has played, most played first (merged across servers by
-    MusicBrainz ID, else by name)."""
+def period_start(months: int | None, now: dt.datetime | None = None) -> dt.datetime | None:
+    """The start of "the past `months` months" (None: all time)."""
+    if not months:
+        return None
+    now = now or dt.datetime.now(dt.UTC)
+    year, month = divmod(now.year * 12 + now.month - 1 - months, 12)
+    day = min(now.day, 28)
+    return now.replace(year=year, month=month + 1, day=day)
+
+
+async def listened_artists(
+    db: AsyncSession, user_id: int, since: dt.datetime | None = None
+) -> list[Followed]:
+    """Every artist in the user's libraries they've played, most played first (merged across
+    servers by MusicBrainz ID, else by name). All time counts Plex's plays or the listen
+    history, whichever is higher; a period (`since`) counts the listens in it."""
     servers = list(await db.scalars(select(UserServer).where(UserServer.user_id == user_id)))
+    recent = None
+    if since is not None:
+        recent = (
+            select(Listen.artist_key, func.count().label("n"))
+            .where(
+                Listen.user_id == user_id,
+                Listen.duplicate_of.is_(None),
+                Listen.listened_at >= since,
+            )
+            .group_by(Listen.artist_key)
+            .subquery()
+        )
     merged: dict[str, Followed] = {}
     for us in servers:
         state, cond, where = visible(Artist, user_id, us)
-        plays = plays_of(state)
         work = ArtistArtwork
-        rows = await db.execute(
+        plays = recent.c.n if recent is not None else plays_of(state)
+        query = (
             select(
                 Artist.title,
                 func.coalesce(Artist.mbid, work.mbid),
@@ -87,8 +127,10 @@ async def listened_artists(db: AsyncSession, user_id: int) -> list[Followed]:
                 work,
                 (work.server_id == Artist.server_id) & (work.rating_key == Artist.rating_key),
             )
-            .where(*where, plays > 0)
         )
+        if recent is not None:
+            query = query.join(recent, recent.c.artist_key == Artist.name_key)
+        rows = await db.execute(query.where(*where, plays > 0))
         for title, raw_mbid, count, server_id, rating_key in rows.all():
             name = (title or "").strip()
             if not name or name.lower() in SKIP_NAMES:
@@ -104,17 +146,17 @@ async def listened_artists(db: AsyncSession, user_id: int) -> list[Followed]:
 
 
 async def followed_artists(
-    db: AsyncSession, user_id: int, percent: int
+    db: AsyncSession, user_id: int, percent: int, since: dt.datetime | None = None
 ) -> tuple[list[Followed], int]:
     """The artists to look up (the top `percent`%) and how many the user has played."""
-    listened = await listened_artists(db, user_id)
+    listened = await listened_artists(db, user_id, since)
     return listened[: follow_count(len(listened), percent)], len(listened)
 
 
 def batches(
     artists: list[Followed], unknown: AbstractSet[str] = frozenset()
 ) -> list[list[Followed]]:
-    """Requests to make: artists with a MusicBrainz ID by ID, the rest (and those whose ID
+    """JamBase requests: artists with a MusicBrainz ID by ID, the rest (and those whose ID
     JamBase didn't know) by name."""
     with_id = [a for a in artists if a.mbid and a.mbid not in unknown]
     by_name = [replace(a, mbid=None) for a in artists if a not in with_id]
@@ -124,18 +166,62 @@ def batches(
     ]
 
 
+class Matcher:
+    """Finds which of the user's artists a performer is: by MusicBrainz ID when the source
+    gives one, else by name (normalised; optionally a close match too)."""
+
+    def __init__(self, artists: list[Followed], fuzzy: bool = True) -> None:
+        self.by_mbid = {a.mbid: a for a in artists if a.mbid}
+        self.by_key: dict[str, Followed] = {}
+        for a in artists:
+            self.by_key.setdefault(normalise_artist(a.name), a)
+        self.fuzzy = fuzzy
+
+    def __call__(self, name: str, mbid: str | None = None) -> Followed | None:
+        if mbid and (found := self.by_mbid.get(mbid.lower())):
+            return found
+        key = normalise_artist(name)
+        if found := self.by_key.get(key):
+            return found
+        if not self.fuzzy:
+            return None
+        close = difflib.get_close_matches(key, list(self.by_key), n=1, cutoff=FUZZY)
+        return self.by_key[close[0]] if close else None
+
+
 def match(performer: str, batch: list[Followed]) -> Followed | None:
-    """The batch's artist this performer is: same name (normalised), else a close one."""
-    key = normalise_artist(performer)
-    keys = {normalise_artist(a.name): a for a in batch}
-    if found := keys.get(key):
-        return found
-    close = difflib.get_close_matches(key, list(keys), n=1, cutoff=FUZZY)
-    return keys[close[0]] if close else None
+    return Matcher(batch)(performer)
 
 
 class Stop(Exception):
-    """The run can't go on (no budget left, key refused, quota used up)."""
+    """A source can't go on (no budget left, key refused, quota used up)."""
+
+
+Found = dict[str, tuple[Event, dict[tuple[int, int], dict[str, object]]]]
+
+
+@dataclass
+class Context:
+    sessions: async_sessionmaker[AsyncSession]
+    http: httpx.AsyncClient
+    settings: Settings
+    now: Callable[[], dt.datetime]
+    started: dt.datetime
+    latitude: float
+    longitude: float
+    radius_km: int
+    artists: list[Followed]
+
+    @property
+    def today(self) -> dt.date:
+        return self.started.date()
+
+
+@dataclass
+class SourceRun:
+    found: Found = field(default_factory=dict)
+    requests: int = 0
+    error: str | None = None
 
 
 @dataclass
@@ -155,64 +241,121 @@ async def refresh_user(
     *,
     now: Callable[[], dt.datetime] = lambda: dt.datetime.now(dt.UTC),
 ) -> Result:
-    """Look up the user's shows and store them. Records the outcome on their settings."""
+    """Look up the user's shows from every source that has a key, and store them. Records
+    the outcome on their settings."""
     started = now()
     async with sessions() as db:
         live = await db.get(LiveSettings, user_id)
         if live is None or live.latitude is None or live.longitude is None:
             return Result(0, 0, 0, complete=False, error="No place is set.")
-        lat, lon, radius, percent = live.latitude, live.longitude, live.radius_km, live.top_percent
         live.refresh_status, live.refresh_error = "running", None
         await db.commit()
-        api_key, _ = await get_jambase_api_key(db, settings)
-        artists, _ = await followed_artists(db, user_id, percent)
+        since = period_start(live.period_months, started)
+        artists, _ = await followed_artists(db, user_id, live.top_percent, since)
+        ctx = Context(
+            sessions, http, settings, now, started,
+            live.latitude, live.longitude, live.radius_km, artists,
+        )  # fmt: skip
+        jambase_key, _ = await get_jambase_api_key(db, settings)
+        tm_key, _ = await get_ticketmaster_api_key(db, settings)
 
-    requests = 0
-    newly_unknown: set[str] = set()
-    found: dict[str, tuple[jambase.Event, dict[tuple[int, int], dict[str, object]]]] = {}
-    error: str | None = None
-    try:
-        if not api_key:
-            raise Stop(
-                "JamBase isn't set up: an admin can add an API key in Settings → Connections."
-            )
-        async with sessions() as db:
-            unknown = await get_jambase_unknown_ids(db, started)
-        todo = batches(artists, unknown)
-        await _check_quota(sessions, http, settings, api_key, len(todo))
-        today = started.date()
-        until = today + dt.timedelta(days=jambase.DAYS_AHEAD)
+    runs: dict[str, SourceRun] = {}
+    if jambase_key:
+        runs["jambase"] = await _run(partial(_jambase, ctx, jambase_key))
+    if tm_key:
+        runs["ticketmaster"] = await _run(partial(_ticketmaster, ctx, tm_key))
+    errors = [run.error for run in runs.values() if run.error]
+    if not runs:
+        errors = ["No source for shows is set up: an admin can add a JamBase or Ticketmaster "
+                  "key in Settings → Connections."]  # fmt: skip
+    complete = not errors
 
-        async def fetch(batch: list[Followed]) -> None:
-            nonlocal requests
-            page, pages = 1, 1
-            while page <= min(pages, MAX_PAGES):
-                async with sessions() as db:
-                    if not await reserve_jambase_call(db, settings.jambase_monthly_cap, now()):
-                        raise Stop(
-                            f"This month's JamBase requests ({settings.jambase_monthly_cap}) are "
-                            "used up; shows are looked up again next month."
-                        )
-                requests += 1
-                events, pages = await jambase.events(
-                    http,
-                    settings.jambase_api_url,
-                    api_key,
-                    latitude=lat,
-                    longitude=lon,
-                    radius_km=radius,
-                    date_from=today,
-                    date_to=until,
-                    artist_ids=[f"musicbrainz:{a.mbid}" for a in batch if a.mbid] or None,
-                    artist_names=[a.name for a in batch if not a.mbid] or None,
-                    page=page,
+    async with sessions() as db:
+        for source, run in runs.items():
+            if run.found:
+                await _store(db, user_id, source, run.found, ctx, now())
+            if not run.error:
+                # Shows not seen in a complete run are gone (cancelled, moved, out of range).
+                await db.execute(
+                    delete(LiveShow).where(
+                        LiveShow.user_id == user_id,
+                        LiveShow.source == source,
+                        LiveShow.fetched_at < started,
+                        LiveShow.starred_at.is_(None),
+                    )
                 )
-                for event in events:
-                    _collect(found, event, batch)
-                page += 1
+        live = await db.get(LiveSettings, user_id)
+        if live is not None:
+            live.refresh_status = "done" if complete else "failed"
+            live.refresh_error = " ".join(errors) or None
+            # The JamBase requests a refresh takes (the daily schedule budgets with it).
+            live.request_count = runs["jambase"].requests if "jambase" in runs else 0
+            live.artist_count = len(artists)
+            if complete or any(not run.error for run in runs.values()):
+                live.refreshed_at = now()
+        await db.commit()
+    for message in errors:
+        log.warning("Live refresh for user %s: %s", user_id, message)
+    return Result(
+        sum(len(run.found) for run in runs.values()),
+        len(artists),
+        sum(run.requests for run in runs.values()),
+        complete,
+        " ".join(errors) or None,
+    )
 
-        # JamBase refuses a whole request when it doesn't know one of the IDs in it: try
-        # again without the one it names (a few times), then look the rest up by name.
+
+async def _run(work: Callable[[SourceRun], Awaitable[None]]) -> SourceRun:
+    run = SourceRun()
+    try:
+        await work(run)
+    except Stop as exc:
+        run.error = str(exc)
+    except (jambase.JamBaseError, ticketmaster.TicketmasterError) as exc:
+        run.error = str(exc)
+    return run
+
+
+async def _jambase(ctx: Context, api_key: str, run: SourceRun) -> None:
+    """The user's artists, 20 a request (by MusicBrainz ID, else by name)."""
+    async with ctx.sessions() as db:
+        unknown = await get_jambase_unknown_ids(db, ctx.started)
+    todo = batches(ctx.artists, unknown)
+    await _check_quota(ctx, api_key, len(todo))
+    until = ctx.today + dt.timedelta(days=jambase.DAYS_AHEAD)
+    newly_unknown: set[str] = set()
+
+    async def fetch(batch: list[Followed]) -> None:
+        match = Matcher(batch)
+        page, pages = 1, 1
+        while page <= min(pages, MAX_PAGES):
+            async with ctx.sessions() as db:
+                if not await reserve_jambase_call(db, ctx.settings.jambase_monthly_cap, ctx.now()):
+                    raise Stop(
+                        f"This month's JamBase requests ({ctx.settings.jambase_monthly_cap}) "
+                        "are used up; shows are looked up again next month."
+                    )
+            run.requests += 1
+            events, pages = await jambase.events(
+                ctx.http,
+                ctx.settings.jambase_api_url,
+                api_key,
+                latitude=ctx.latitude,
+                longitude=ctx.longitude,
+                radius_km=ctx.radius_km,
+                date_from=ctx.today,
+                date_to=until,
+                artist_ids=[f"musicbrainz:{a.mbid}" for a in batch if a.mbid] or None,
+                artist_names=[a.name for a in batch if not a.mbid] or None,
+                page=page,
+            )
+            for event in events:
+                _collect(run.found, event, match)
+            page += 1
+
+    try:
+        # JamBase refuses a whole request when it doesn't know an ID in it, naming each
+        # one: leave those out and try again, and look those artists up by name.
         by_name: list[Followed] = []
         queue = [(batch, 0) for batch in todo]
         while queue:
@@ -241,7 +384,6 @@ async def refresh_user(
                     log.warning("JamBase refused artist IDs (%s); searching by name", exc)
                     by_name.extend(batch)
                     continue
-                # JamBase names every unknown ID: leave them all out and try again once.
                 newly_unknown.update(a.mbid for a in culprits if a.mbid)
                 by_name.extend(culprits)
                 rest = [a for a in batch if a not in culprits]
@@ -249,54 +391,74 @@ async def refresh_user(
                     queue.insert(0, (rest, retries + 1))
         for batch in batches([replace(a, mbid=None) for a in by_name]):
             await fetch(batch)
-    except Stop as exc:
-        error = str(exc)
-    except jambase.JamBaseError as exc:
-        error = str(exc)
+    finally:
+        async with ctx.sessions() as db:
+            await add_jambase_unknown_ids(db, newly_unknown, ctx.started)
+            await db.commit()
 
-    complete = error is None
-    async with sessions() as db:
-        await add_jambase_unknown_ids(db, newly_unknown, started)
-        if found:
-            await _store(db, user_id, found, lat, lon, now())
-        if complete:
-            # Shows not seen in a complete run are gone (cancelled, moved, or out of range).
-            await db.execute(
-                delete(LiveShow).where(
-                    LiveShow.user_id == user_id,
-                    LiveShow.source == "jambase",
-                    LiveShow.fetched_at < started,
-                )
+
+async def _ticketmaster(ctx: Context, api_key: str, run: SourceRun) -> None:
+    """All music events near the user, a month at a time, matched against their artists."""
+    if not ctx.artists:
+        return
+    match = Matcher(ctx.artists, fuzzy=False)  # many unrelated shows: exact names only
+    end = ctx.today + dt.timedelta(days=jambase.DAYS_AHEAD)
+    windows: list[tuple[dt.date, dt.date]] = []
+    day = ctx.today
+    while day <= end:
+        last = min(end, day + dt.timedelta(days=TM_WINDOW_DAYS - 1))
+        windows.append((day, last))
+        day = last + dt.timedelta(days=1)
+
+    while windows:
+        start, last = windows.pop(0)
+        page, pages = 0, 1
+        while page < pages:
+            await _tm_reserve(ctx, run)
+            events, total, pages = await ticketmaster.events(
+                ctx.http,
+                ctx.settings.ticketmaster_api_url,
+                api_key,
+                latitude=ctx.latitude,
+                longitude=ctx.longitude,
+                radius_km=ctx.radius_km,
+                start=start,
+                end=last,
+                page=page,
             )
-        live = await db.get(LiveSettings, user_id)
-        if live is not None:
-            live.refresh_status = "done" if complete else "failed"
-            live.refresh_error = error
-            live.request_count = requests
-            live.artist_count = len(artists)
-            if complete:
-                live.refreshed_at = now()
-        await db.commit()
-    if error:
-        log.warning("Live refresh for user %s stopped: %s", user_id, error)
-    return Result(len(found), len(artists), requests, complete, error)
+            if page == 0 and total > ticketmaster.MAX_ITEMS and last > start:
+                # More than can be paged through: read the halves instead.
+                middle = start + (last - start) // 2
+                windows[:0] = [(start, middle), (middle + dt.timedelta(days=1), last)]
+                break
+            for event in events:
+                _collect(run.found, event, match)
+            page += 1
+            if (page + 1) * ticketmaster.PAGE_SIZE > ticketmaster.MAX_ITEMS:
+                break
 
 
-async def _check_quota(
-    sessions: async_sessionmaker[AsyncSession],
-    http: httpx.AsyncClient,
-    settings: Settings,
-    api_key: str,
-    needed: int,
-) -> None:
+async def _tm_reserve(ctx: Context, run: SourceRun) -> None:
+    if run.requests >= TM_MAX_REQUESTS:
+        raise Stop(
+            "There are too many shows near you to read them all from Ticketmaster; "
+            "a smaller distance helps."
+        )
+    async with ctx.sessions() as db:
+        if not await reserve_ticketmaster_call(db, ctx.settings.ticketmaster_daily_cap, ctx.now()):
+            raise Stop("Today's Ticketmaster requests are used up; it's tried again tomorrow.")
+    run.requests += 1
+
+
+async def _check_quota(ctx: Context, api_key: str, needed: int) -> None:
     """Ask JamBase (free) how much is left, and stop before going over its quota."""
     try:
-        quota = await jambase.quota(http, settings.jambase_api_url, api_key)
+        quota = await jambase.quota(ctx.http, ctx.settings.jambase_api_url, api_key)
     except jambase.JamBaseKeyError as exc:
         raise Stop(str(exc)) from exc
     except jambase.JamBaseError:
         return  # the counter and the cap still apply
-    async with sessions() as db:
+    async with ctx.sessions() as db:
         await save_jambase_quota(db, quota)
         await db.commit()
     remaining = quota.get("remainingCalls")
@@ -309,14 +471,10 @@ async def _check_quota(
         )
 
 
-def _collect(
-    found: dict[str, tuple[jambase.Event, dict[tuple[int, int], dict[str, object]]]],
-    event: jambase.Event,
-    batch: list[Followed],
-) -> None:
+def _collect(found: Found, event: Event, match: Matcher) -> None:
     matched: dict[tuple[int, int], dict[str, object]] = {}
     for performer in event.performers:
-        if artist := match(performer.name, batch):
+        if artist := match(performer.name, performer.mbid):
             for server_id, rating_key in artist.refs:
                 matched[(server_id, rating_key)] = {
                     "name": artist.name,
@@ -325,7 +483,7 @@ def _collect(
                     "rating_key": rating_key,
                 }
     if not matched:
-        return  # a name search found someone else of a similar name
+        return  # nobody the user follows (or a name search's look-alike)
     if event.id in found:
         found[event.id][1].update(matched)
     else:
@@ -335,22 +493,22 @@ def _collect(
 async def _store(
     db: AsyncSession,
     user_id: int,
-    found: dict[str, tuple[jambase.Event, dict[tuple[int, int], dict[str, object]]]],
-    lat: float,
-    lon: float,
+    source: str,
+    found: Found,
+    ctx: Context,
     fetched_at: dt.datetime,
 ) -> None:
     rows = []
     for event, matched in found.values():
         distance = (
-            round(distance_km(lat, lon, event.latitude, event.longitude), 1)
+            round(distance_km(ctx.latitude, ctx.longitude, event.latitude, event.longitude), 1)
             if event.latitude is not None and event.longitude is not None
             else None
         )
         rows.append(
             {
                 "user_id": user_id,
-                "source": "jambase",
+                "source": source,
                 "source_id": event.id,
                 "name": event.name,
                 "festival": event.festival,
@@ -387,7 +545,8 @@ async def due_users(
     db: AsyncSession, settings: Settings, now: dt.datetime, min_age: dt.timedelta
 ) -> list[int]:
     """Users whose shows to refresh today, oldest first, within today's share of what's
-    left of the month's requests (so the budget lasts the month)."""
+    left of the month's JamBase requests (so the budget lasts the month). Someone who
+    follows many artists costs more, so they're refreshed less often when it's tight."""
     rows = (
         await db.execute(
             select(LiveSettings.user_id, LiveSettings.artist_count, LiveSettings.request_count)
@@ -406,7 +565,7 @@ async def due_users(
     chosen: list[int] = []
     spent = 0
     for user_id, artist_count, request_count in rows:
-        cost = request_count or max(1, math.ceil((artist_count or MAX_ARTISTS) / jambase.BATCH))
+        cost = request_count or max(1, math.ceil((artist_count or 150) / jambase.BATCH))
         # The first refresh of the day always goes, if the month has room for it.
         if (chosen and spent + cost > allowance) or cost > left:
             continue

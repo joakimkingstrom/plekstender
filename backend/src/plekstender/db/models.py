@@ -819,6 +819,10 @@ class LiveSettings(Base):
     radius_km: Mapped[int] = mapped_column(default=100, server_default="100")
     # Follow the top N% of the artists the user has listened to (at most MAX_ARTISTS).
     top_percent: Mapped[int] = mapped_column(SmallInteger, default=10, server_default="10")
+    # Rank artists by the listens of the past N months (None: all time).
+    period_months: Mapped[int | None] = mapped_column(SmallInteger)
+    # Secret part of the address of the user's calendar of starred shows (iCal).
+    calendar_token: Mapped[str | None] = mapped_column(String(64), unique=True)
     # Last refresh: queued | running | done | failed; when; how many artists and requests.
     refresh_status: Mapped[str | None] = mapped_column(String(8))
     refresh_error: Mapped[str | None] = mapped_column(Text)
@@ -864,3 +868,5 @@ class LiveShow(Base):
     performers: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     artists: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     fetched_at: Mapped[dt.datetime]
+    # Starred by the user: kept (and in their calendar) even when no longer found.
+    starred_at: Mapped[dt.datetime | None]

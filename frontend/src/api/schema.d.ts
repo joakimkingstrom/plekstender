@@ -1915,9 +1915,29 @@ export interface paths {
         post?: never;
         /**
          * Delete Live Settings
-         * @description Forget the place and the shows.
+         * @description Forget the place, the shows (starred too) and the calendar address.
          */
         delete: operations["delete_live_settings_api_live_settings_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/listened": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listened
+         * @description How many artists the user played in a period (for the settings form's preview).
+         */
+        get: operations["listened_api_live_listened_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1969,9 +1989,111 @@ export interface paths {
         };
         /**
          * Shows
-         * @description Upcoming shows, soonest first; `artist` narrows to one of the user's artists.
+         * @description Upcoming shows, soonest first, each once however many sources found it; `artist`
+         *     narrows to one of the user's artists, `starred` to starred shows.
          */
         get: operations["shows_api_live_shows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/stars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Star
+         * @description Star (or unstar) a show: all its sources' rows, so it stays starred whichever is
+         *     listed first.
+         */
+        put: operations["star_api_live_stars_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calendar Address
+         * @description The private address of the user's calendar of starred shows (made on first use).
+         */
+        get: operations["calendar_address_api_live_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/calendar/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Calendar
+         * @description A new address: the old one stops working (if it was shared by mistake).
+         */
+        post: operations["reset_calendar_api_live_calendar_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/calendar/{token}.ics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calendar Feed
+         * @description The starred shows (no sign-in: calendar apps fetch it; the address is the secret).
+         */
+        get: operations["calendar_feed_api_live_calendar__token__ics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/shows/{show_id}.ics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show File
+         * @description One show as a calendar file, to add it to a calendar by hand.
+         */
+        get: operations["show_file_api_live_shows__show_id__ics_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2189,6 +2311,30 @@ export interface paths {
          * @description Set (after checking it with JamBase's free quota request) or clear the JamBase key.
          */
         put: operations["put_jambase_api_admin_jambase_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ticketmaster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ticketmaster
+         * @description The Ticketmaster key and today's requests.
+         */
+        get: operations["get_ticketmaster_api_admin_ticketmaster_get"];
+        /**
+         * Put Ticketmaster
+         * @description Set (after checking it with one small search) or clear the Ticketmaster key.
+         */
+        put: operations["put_ticketmaster_api_admin_ticketmaster_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3794,6 +3940,22 @@ export interface components {
             /** Rating Key */
             rating_key?: number | null;
         };
+        /** LiveCalendarOut */
+        LiveCalendarOut: {
+            /**
+             * Url
+             * @description Private address of the starred shows' calendar (iCal).
+             */
+            url: string;
+        };
+        /** LiveListenedOut */
+        LiveListenedOut: {
+            /**
+             * Listened Artists
+             * @description Artists played in the period (all time: None).
+             */
+            listened_artists: number;
+        };
         /** LiveSettingsIn */
         LiveSettingsIn: {
             /** Place Name */
@@ -3812,6 +3974,11 @@ export interface components {
              * @default 10
              */
             top_percent: number;
+            /**
+             * Period Months
+             * @description Rank by the past N months' listens (None: all time).
+             */
+            period_months?: number | null;
         };
         /** LiveSettingsOut */
         LiveSettingsOut: {
@@ -3825,6 +3992,8 @@ export interface components {
             radius_km: number;
             /** Top Percent */
             top_percent: number;
+            /** Period Months */
+            period_months: number | null;
             /**
              * Listened Artists
              * @description Artists the user has played (what % is of).
@@ -3835,8 +4004,6 @@ export interface components {
              * @description Artists looked up with the current %.
              */
             followed_artists: number;
-            /** Max Artists */
-            max_artists: number;
             /** Refresh Status */
             refresh_status: ("queued" | "running" | "done" | "failed") | null;
             /** Refresh Error */
@@ -3850,16 +4017,38 @@ export interface components {
             refresh_available_at: string | null;
             /**
              * Source Ready
-             * @description JamBase has a key.
+             * @description At least one source has a key.
              */
             source_ready: boolean;
+            /**
+             * Sources
+             * @description Sources with a key.
+             */
+            sources: ("jambase" | "ticketmaster")[];
         };
         /** LiveShowOut */
         LiveShowOut: {
-            /** Id */
+            /**
+             * Id
+             * @description The first source's row.
+             */
             id: number;
+            /**
+             * Ids
+             * @description Every source's row for this show (to star them).
+             */
+            ids: number[];
             /** Source */
             source: string;
+            /** Sources */
+            sources: string[];
+            /** Starred */
+            starred: boolean;
+            /**
+             * Tickets
+             * @description Ticket links, the first source's first.
+             */
+            tickets: components["schemas"]["LiveTicketOut"][];
             /** Name */
             name: string;
             /** Festival */
@@ -3911,6 +4100,22 @@ export interface components {
              * @description Artists with shows, for the filter.
              */
             artists: components["schemas"]["LiveArtistCount"][];
+        };
+        /** LiveStarIn */
+        LiveStarIn: {
+            /** Ids */
+            ids: number[];
+            /** Starred */
+            starred: boolean;
+        };
+        /** LiveTicketOut */
+        LiveTicketOut: {
+            /** Source */
+            source: string;
+            /** Url */
+            url: string;
+            /** Seller */
+            seller: string | null;
         };
         /** MbApplyIn */
         MbApplyIn: {
@@ -5115,6 +5320,30 @@ export interface components {
              * @enum {string}
              */
             case: "none" | "upper" | "lower";
+        };
+        /** TicketmasterKeyIn */
+        TicketmasterKeyIn: {
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /** TicketmasterKeyOut */
+        TicketmasterKeyOut: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source: ("settings" | "environment") | null;
+            /** Day */
+            day: string;
+            /**
+             * Calls
+             * @description Requests Plekstender sent today (UTC).
+             */
+            calls: number;
+            /**
+             * Cap
+             * @description Plekstender stops at this many requests a day.
+             */
+            cap: number;
         };
         /** TopItemOut */
         TopItemOut: {
@@ -8987,6 +9216,37 @@ export interface operations {
             };
         };
     };
+    listened_api_live_listened_get: {
+        parameters: {
+            query?: {
+                period_months?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveListenedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     refresh_api_live_refresh_post: {
         parameters: {
             query?: never;
@@ -9044,6 +9304,7 @@ export interface operations {
                 artist?: string | null;
                 from?: string | null;
                 to?: string | null;
+                starred?: boolean;
             };
             header?: never;
             path?: never;
@@ -9058,6 +9319,139 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LiveShowsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    star_api_live_stars_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveStarIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calendar_address_api_live_calendar_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveCalendarOut"];
+                };
+            };
+        };
+    };
+    reset_calendar_api_live_calendar_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveCalendarOut"];
+                };
+            };
+        };
+    };
+    calendar_feed_api_live_calendar__token__ics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/calendar": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    show_file_api_live_shows__show_id__ics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                show_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/calendar": unknown;
                 };
             };
             /** @description Validation Error */
@@ -9559,6 +9953,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JamBaseKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ticketmaster_api_admin_ticketmaster_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketmasterKeyOut"];
+                };
+            };
+        };
+    };
+    put_ticketmaster_api_admin_ticketmaster_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketmasterKeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketmasterKeyOut"];
                 };
             };
             /** @description Validation Error */

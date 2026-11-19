@@ -1333,6 +1333,12 @@ class LiveSettingsIn(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     radius_km: int = Field(default=100, ge=5, le=1000)
     top_percent: int = Field(default=10, ge=1, le=100)
+    period_months: int | None = Field(
+        default=None,
+        ge=1,
+        le=600,
+        description="Rank by the past N months' listens (None: all time).",
+    )
 
 
 class LiveSettingsOut(BaseModel):
@@ -1341,16 +1347,17 @@ class LiveSettingsOut(BaseModel):
     longitude: float | None
     radius_km: int
     top_percent: int
+    period_months: int | None
     listened_artists: int = Field(description="Artists the user has played (what % is of).")
     followed_artists: int = Field(description="Artists looked up with the current %.")
-    max_artists: int
     refresh_status: Literal["queued", "running", "done", "failed"] | None
     refresh_error: str | None
     refreshed_at: dt.datetime | None
     refresh_available_at: dt.datetime | None = Field(
         description="When a refresh can be asked for again (None: now)."
     )
-    source_ready: bool = Field(description="JamBase has a key.")
+    source_ready: bool = Field(description="At least one source has a key.")
+    sources: list[Literal["jambase", "ticketmaster"]] = Field(description="Sources with a key.")
 
 
 class PlaceOut(BaseModel):
@@ -1367,9 +1374,19 @@ class LiveArtistOut(BaseModel):
     rating_key: int | None = None
 
 
-class LiveShowOut(BaseModel):
-    id: int
+class LiveTicketOut(BaseModel):
     source: str
+    url: str
+    seller: str | None
+
+
+class LiveShowOut(BaseModel):
+    id: int = Field(description="The first source's row.")
+    ids: list[int] = Field(description="Every source's row for this show (to star them).")
+    source: str
+    sources: list[str]
+    starred: bool
+    tickets: list[LiveTicketOut] = Field(description="Ticket links, the first source's first.")
     name: str
     festival: bool
     start_date: dt.date
@@ -1410,3 +1427,28 @@ class JamBaseKeyOut(BaseModel):
     cap: int = Field(description="Plekstender stops at this many requests a month.")
     quota: dict[str, Any] | None = Field(description="JamBase's own count, when last checked.")
     quota_checked_at: dt.datetime | None
+
+
+class LiveStarIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=20)
+    starred: bool
+
+
+class LiveCalendarOut(BaseModel):
+    url: str = Field(description="Private address of the starred shows' calendar (iCal).")
+
+
+class TicketmasterKeyIn(BaseModel):
+    api_key: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{16,64}$")
+
+
+class TicketmasterKeyOut(BaseModel):
+    configured: bool
+    source: Literal["settings", "environment"] | None
+    day: str
+    calls: int = Field(description="Requests Plekstender sent today (UTC).")
+    cap: int = Field(description="Plekstender stops at this many requests a day.")
+
+
+class LiveListenedOut(BaseModel):
+    listened_artists: int = Field(description="Artists played in the period (all time: None).")
