@@ -39,13 +39,15 @@ from plekstender.db.models import (
     Artist,
     ArtistArtwork,
     Listen,
+    LiveFeed,
     LiveSettings,
     LiveShow,
     UserServer,
 )
-from plekstender.live import jambase, ticketmaster
+from plekstender.live import feeds, jambase, ticketmaster
 from plekstender.live.events import Event
 from plekstender.live.geocode import distance_km
+from plekstender.security.crypto import DecryptionError, TokenCipher
 from plekstender.sync.parse import normalise_artist
 
 log = logging.getLogger(__name__)
@@ -222,6 +224,9 @@ class SourceRun:
     found: Found = field(default_factory=dict)
     requests: int = 0
     error: str | None = None
+    # Shows whose `source_id` starts with one of these aren't cleaned up (a calendar link
+    # that couldn't be read keeps its last shows).
+    keep: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -258,16 +263,20 @@ async def refresh_user(
         )  # fmt: skip
         jambase_key, _ = await get_jambase_api_key(db, settings)
         tm_key, _ = await get_ticketmaster_api_key(db, settings)
+        feed_ids = list(await db.scalars(select(LiveFeed.id).where(LiveFeed.user_id == user_id)))
+        everyone = await listened_artists(db, user_id) if feed_ids else []
 
     runs: dict[str, SourceRun] = {}
     if jambase_key:
         runs["jambase"] = await _run(partial(_jambase, ctx, jambase_key))
     if tm_key:
         runs["ticketmaster"] = await _run(partial(_ticketmaster, ctx, tm_key))
+    if feed_ids:
+        runs["calendar"] = await _run(partial(_calendars, ctx, feed_ids, everyone))
     errors = [run.error for run in runs.values() if run.error]
     if not runs:
         errors = ["No source for shows is set up: an admin can add a JamBase or Ticketmaster "
-                  "key in Settings → Connections."]  # fmt: skip
+                  "key in Settings → Connections, or add a calendar link."]  # fmt: skip
     complete = not errors
 
     async with sessions() as db:
@@ -282,6 +291,7 @@ async def refresh_user(
                         LiveShow.source == source,
                         LiveShow.fetched_at < started,
                         LiveShow.starred_at.is_(None),
+                        *(~LiveShow.source_id.startswith(prefix) for prefix in run.keep),
                     )
                 )
         live = await db.get(LiveSettings, user_id)
@@ -450,6 +460,43 @@ async def _tm_reserve(ctx: Context, run: SourceRun) -> None:
     run.requests += 1
 
 
+async def _calendars(
+    ctx: Context, feed_ids: list[int], everyone: list[Followed], run: SourceRun
+) -> None:
+    """The user's calendar links: every upcoming event in them (it's their own calendar),
+    linked to their artists where the billing names them."""
+    cipher = TokenCipher(ctx.settings.derive_key("token-encryption"))
+    match = Matcher(everyone, fuzzy=False)
+    for feed_id in feed_ids:
+        async with ctx.sessions() as db:
+            feed = await db.get(LiveFeed, feed_id)
+            if feed is None:
+                continue
+            try:
+                url = cipher.decrypt(feed.url_enc, purpose=feeds.PURPOSE)
+            except DecryptionError:
+                feed.error = "This link can't be read any more; remove it and add it again."
+                await db.commit()
+                run.keep.append(f"{feed_id}:")
+                continue
+        try:
+            text = await feeds.read(ctx.http, url)
+            found = feeds.events(text, feed_id, ctx.today)
+            error = None
+        except feeds.FeedError as exc:
+            found, error = [], str(exc)
+            run.keep.append(f"{feed_id}:")
+        for event in found:
+            _collect(run.found, event, match, keep_unmatched=True, whole=feeds.acts(event.name)[0])
+        async with ctx.sessions() as db:
+            feed = await db.get(LiveFeed, feed_id)
+            if feed is not None:
+                feed.error = error
+                if error is None:
+                    feed.fetched_at, feed.show_count = ctx.now(), len(found)
+                await db.commit()
+
+
 async def _check_quota(ctx: Context, api_key: str, needed: int) -> None:
     """Ask JamBase (free) how much is left, and stop before going over its quota."""
     try:
@@ -471,8 +518,19 @@ async def _check_quota(ctx: Context, api_key: str, needed: int) -> None:
         )
 
 
-def _collect(found: Found, event: Event, match: Matcher) -> None:
+def _collect(
+    found: Found,
+    event: Event,
+    match: Matcher,
+    *,
+    keep_unmatched: bool = False,
+    whole: str | None = None,
+) -> None:
     matched: dict[tuple[int, int], dict[str, object]] = {}
+    # A calendar event's whole billing may be one name ("Florence and the Machine").
+    if whole and (artist := match(whole)):
+        performers = [replace(event.performers[0], name=whole)] if event.performers else []
+        event = replace(event, performers=performers)
     for performer in event.performers:
         if artist := match(performer.name, performer.mbid):
             for server_id, rating_key in artist.refs:
@@ -482,7 +540,7 @@ def _collect(found: Found, event: Event, match: Matcher) -> None:
                     "server_id": server_id,
                     "rating_key": rating_key,
                 }
-    if not matched:
+    if not matched and not keep_unmatched:
         return  # nobody the user follows (or a name search's look-alike)
     if event.id in found:
         found[event.id][1].update(matched)

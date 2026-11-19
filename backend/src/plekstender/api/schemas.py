@@ -1356,7 +1356,7 @@ class LiveSettingsOut(BaseModel):
     refresh_available_at: dt.datetime | None = Field(
         description="When a refresh can be asked for again (None: now)."
     )
-    source_ready: bool = Field(description="At least one source has a key.")
+    source_ready: bool = Field(description="A source has a key, or the user has calendar links.")
     sources: list[Literal["jambase", "ticketmaster"]] = Field(description="Sources with a key.")
 
 
@@ -1378,6 +1378,7 @@ class LiveTicketOut(BaseModel):
     source: str
     url: str
     seller: str | None
+    is_ticket: bool = Field(description="A ticket link (else the show's page).")
 
 
 class LiveShowOut(BaseModel):
@@ -1458,3 +1459,16 @@ class TicketmasterKeyOut(BaseModel):
 
 class LiveListenedOut(BaseModel):
     listened_artists: int = Field(description="Artists played in the period (all time: None).")
+
+
+class LiveFeedIn(BaseModel):
+    url: str = Field(min_length=10, max_length=2000)
+
+
+class LiveFeedOut(BaseModel):
+    id: int
+    host: str = Field(description="The site (the address itself may be private).")
+    name: str | None
+    fetched_at: dt.datetime | None
+    error: str | None
+    show_count: int | None

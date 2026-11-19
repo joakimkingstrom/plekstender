@@ -689,3 +689,130 @@ async def test_listening_period(app: FastAPI, plex: FakePlex) -> None:
 
         artists, _ = await followed_artists(db, user_id, 100, period_start(6))
         assert [(a.name, a.plays) for a in artists] == [("Portishead", 2)]
+
+
+# --- calendar links ---------------------------------------------------------------------
+
+FEED_URL = "https://www.songkick.com/users/someone/calendars.ics?filter=tracked_artist"
+FEED = "\r\n".join([
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "X-WR-CALNAME:Songkick: tracked artists",
+    "X-WR-TIMEZONE:Europe/Stockholm",
+    "BEGIN:VEVENT",
+    "UID:sk-1",
+    "SUMMARY:Radiohead with Support Act at Avicii Arena (04 Mar 27)",
+    "LOCATION:Avicii Arena\\, Stockholm\\, Sweden",
+    "DTSTART:20270304T183000Z",
+    "URL:https://www.songkick.com/concerts/1-radiohead",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:sk-2",
+    "SUMMARY:Florence and the Machine at Gröna Lund",
+    "LOCATION:Gröna Lund\\, Stockholm",
+    "DTSTART;VALUE=DATE:20270610",
+    "DTEND;VALUE=DATE:20270611",
+    "GEO:59.3233;18.0966",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:sk-3",
+    "SUMMARY:Somebody at Debaser",
+    "DTSTART;VALUE=DATE:20270201",
+    "STATUS:CANCELLED",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:sk-old",
+    "SUMMARY:Long Ago at Somewhere",
+    "DTSTART;VALUE=DATE:20200101",
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+])  # fmt: skip
+
+
+def test_reading_a_calendar_link() -> None:
+    from plekstender.live import feeds
+
+    assert feeds.normalise_url("webcal://example.com/a.ics") == "https://example.com/a.ics"
+    with pytest.raises(feeds.FeedError):
+        feeds.normalise_url("file:///etc/passwd")
+    assert feeds.calendar_name(FEED) == "Songkick: tracked artists"
+    found = feeds.events(FEED, 7, dt.date(2026, 11, 19))
+    assert [(e.name[:20], e.start_date, e.start_time, e.venue, e.city) for e in found] == [
+        ("Radiohead with Suppo", dt.date(2027, 3, 4), "19:30", "Avicii Arena", "Stockholm"),
+        ("Florence and the Mac", dt.date(2027, 6, 10), None, "Gröna Lund", "Stockholm"),
+        ("Somebody at Debaser", dt.date(2027, 2, 1), None, "Debaser", None),
+    ]  # the old one is left out; UTC times in the calendar's own zone
+    radiohead, florence, cancelled = found
+    assert [p.name for p in radiohead.performers] == ["Radiohead", "Support Act"]
+    assert radiohead.page_url == "https://www.songkick.com/concerts/1-radiohead"
+    assert florence.end_date is None and (florence.latitude, florence.longitude) == (
+        59.3233,
+        18.0966,
+    )
+    assert cancelled.status == "cancelled" and radiohead.id.startswith("7:")
+    assert feeds.acts("Florence and the Machine")[0] == "Florence and the Machine"
+
+
+@pytest.mark.db
+async def test_calendar_links(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from plekstender.artwork import fetch as fetch_mod
+
+    async def resolve(host: str) -> list[str]:
+        return ["10.0.0.9"] if host == "intranet.example" else ["151.101.1.1"]
+
+    monkeypatch.setattr(fetch_mod, "resolver", resolve)
+    feed = plex.router.get(FEED_URL).mock(
+        return_value=httpx.Response(200, text=FEED, headers={"content-type": "text/calendar"})
+    )
+    FakeJamBase(plex)
+    owner, user_id = await owner_listening(app, plex)
+    await owner.put("/api/admin/jambase", json={"api_key": KEY}, headers=CSRF)
+    await owner.put("/api/live/settings", json={**STOCKHOLM, "top_percent": 100}, headers=CSRF)
+
+    private = await owner.post(
+        "/api/live/feeds", json={"url": "https://intranet.example/c.ics"}, headers=CSRF
+    )
+    assert private.status_code == 422
+    added = await owner.post(
+        "/api/live/feeds", json={"url": FEED_URL.replace("https://", "webcal://")}, headers=CSRF
+    )
+    assert added.status_code == 201, added.text
+    assert (added.json()["host"], added.json()["name"]) == (
+        "songkick.com",
+        "Songkick: tracked artists",
+    )
+    async with get_sessionmaker()() as db:
+        stored = await db.scalar(text("SELECT url_enc FROM live_feeds"))
+        assert "songkick" not in stored  # encrypted
+
+    assert (await refresh(user_id)).complete
+    shows = (await owner.get("/api/live/shows")).json()["shows"]
+    by_name = {s["name"]: s for s in shows}
+    # The same Radiohead show as JamBase's: once, with Songkick's page as another link.
+    radiohead = by_name["Radiohead at Avicii Arena"]
+    assert radiohead["sources"] == ["jambase", "calendar"]
+    assert [(t["source"], t["is_ticket"]) for t in radiohead["tickets"]] == [
+        ("jambase", True), ("calendar", False),
+    ]  # fmt: skip
+    # Not in the library, but it's the user's own calendar: listed.
+    assert by_name["Somebody at Debaser"]["artists"] == []
+    assert by_name["Somebody at Debaser"]["status"] == "cancelled"
+    listed = (await owner.get("/api/live/feeds")).json()
+    assert [(f["show_count"], f["error"]) for f in listed] == [(3, None)]
+
+    # A link that can't be read keeps its shows and says why.
+    feed.mock(return_value=httpx.Response(200, text="<html>gone</html>"))
+    assert (await refresh(user_id)).complete
+    assert "isn't a calendar" in (await owner.get("/api/live/feeds")).json()[0]["error"]
+    assert "Somebody at Debaser" in [
+        s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]
+    ]
+
+    # Removing it removes its shows.
+    feed_id = listed[0]["id"]
+    assert (await owner.delete(f"/api/live/feeds/{feed_id}", headers=CSRF)).status_code == 204
+    names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
+    assert "Somebody at Debaser" not in names and "Radiohead at Avicii Arena" in names

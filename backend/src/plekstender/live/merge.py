@@ -15,7 +15,7 @@ from plekstender.live.geocode import distance_km
 from plekstender.sync.parse import fold, normalise_artist
 
 # The source listed first when a show has several (JamBase's data is credited).
-PRIORITY = {"jambase": 0, "ticketmaster": 1}
+PRIORITY = {"jambase": 0, "ticketmaster": 1, "calendar": 2}
 NEARBY_KM = 1.5
 _WORD = re.compile(r"[a-z0-9]+")
 _FILLER = {"the", "at", "and", "of", "live", "venue"}
@@ -40,7 +40,9 @@ def same_venue(a: LiveShow, b: LiveShow) -> bool:
 
 
 def _artists(show: LiveShow) -> set[str]:
-    return {normalise_artist(a["name"]) for a in show.artists}
+    """Everyone on the bill (the user's artists and the rest)."""
+    names = [a["name"] for a in show.artists] + [p["name"] for p in show.performers]
+    return {normalise_artist(n) for n in names if n}
 
 
 def same_show(a: LiveShow, b: LiveShow) -> bool:

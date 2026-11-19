@@ -1915,7 +1915,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Live Settings
-         * @description Forget the place, the shows (starred too) and the calendar address.
+         * @description Forget the place, the shows (starred too), the calendar links and address.
          */
         delete: operations["delete_live_settings_api_live_settings_delete"];
         options?: never;
@@ -2037,6 +2037,47 @@ export interface paths {
         put: operations["got_ticket_api_live_tickets_put"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/feeds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Feeds */
+        get: operations["list_feeds_api_live_feeds_get"];
+        put?: never;
+        /**
+         * Add Feed
+         * @description Add a calendar link (checked by reading it once); its shows are looked up next.
+         */
+        post: operations["add_feed_api_live_feeds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/feeds/{feed_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Feed
+         * @description Remove a calendar link and its shows (starred ones stay).
+         */
+        delete: operations["remove_feed_api_live_feeds__feed_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3968,6 +4009,29 @@ export interface components {
              */
             url: string;
         };
+        /** LiveFeedIn */
+        LiveFeedIn: {
+            /** Url */
+            url: string;
+        };
+        /** LiveFeedOut */
+        LiveFeedOut: {
+            /** Id */
+            id: number;
+            /**
+             * Host
+             * @description The site (the address itself may be private).
+             */
+            host: string;
+            /** Name */
+            name: string | null;
+            /** Fetched At */
+            fetched_at: string | null;
+            /** Error */
+            error: string | null;
+            /** Show Count */
+            show_count: number | null;
+        };
         /** LiveListenedOut */
         LiveListenedOut: {
             /**
@@ -4037,7 +4101,7 @@ export interface components {
             refresh_available_at: string | null;
             /**
              * Source Ready
-             * @description At least one source has a key.
+             * @description A source has a key, or the user has calendar links.
              */
             source_ready: boolean;
             /**
@@ -4148,6 +4212,11 @@ export interface components {
             url: string;
             /** Seller */
             seller: string | null;
+            /**
+             * Is Ticket
+             * @description A ticket link (else the show's page).
+             */
+            is_ticket: boolean;
         };
         /** MbApplyIn */
         MbApplyIn: {
@@ -9407,6 +9476,88 @@ export interface operations {
                 "application/json": components["schemas"]["LiveTicketIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_feeds_api_live_feeds_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveFeedOut"][];
+                };
+            };
+        };
+    };
+    add_feed_api_live_feeds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveFeedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveFeedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_feed_api_live_feeds__feed_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feed_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {

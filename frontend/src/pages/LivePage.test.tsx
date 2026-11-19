@@ -37,8 +37,8 @@ const concert = {
   starred: false,
   got_ticket: false,
   tickets: [
-    { source: 'jambase', url: 'https://www.ticketmaster.se/event/radiohead', seller: 'Ticketmaster' },
-    { source: 'ticketmaster', url: 'https://www.ticketmaster.se/event/A1', seller: 'Ticketmaster' },
+    { source: 'jambase', url: 'https://www.ticketmaster.se/event/radiohead', seller: 'Ticketmaster', is_ticket: true },
+    { source: 'ticketmaster', url: 'https://www.ticketmaster.se/event/A1', seller: 'Ticketmaster', is_ticket: true },
   ],
   name: 'Radiohead at Avicii Arena',
   festival: false,
@@ -67,7 +67,7 @@ const festival = {
   sources: ['jambase'],
   starred: true,
   got_ticket: false,
-  tickets: [{ source: 'jambase', url: 'https://www.jambase.com/show/radiohead', seller: null }],
+  tickets: [{ source: 'jambase', url: 'https://www.jambase.com/show/radiohead', seller: null, is_ticket: false }],
   name: 'Way Out West 2027',
   festival: true,
   start_date: '2027-08-12',
@@ -80,10 +80,12 @@ const festival = {
 }
 
 let settings: typeof base = base
+let feeds: Record<string, unknown>[] = []
 let fetchMock: ReturnType<typeof vi.fn<(input: Request | string, init?: RequestInit) => Promise<Response>>>
 
 beforeEach(() => {
   settings = base
+  feeds = []
   festival.got_ticket = false
   fetchMock = vi.fn<(input: Request | string, init?: RequestInit) => Promise<Response>>(async (input) => {
     const request = typeof input === 'string' ? null : input
@@ -110,6 +112,14 @@ beforeEach(() => {
         return new Response(null, { status: 204 })
       case '/api/live/calendar':
         return json({ url: 'https://plek.example/api/live/calendar/secret-token-1234567890.ics' })
+      case '/api/live/feeds':
+        if (request?.method === 'POST') {
+          const { url: added } = await request.clone().json()
+          if (!added.startsWith('webcal://www.songkick.com')) return json({ detail: "That address isn't a calendar (iCal) file." }, 422)
+          feeds.push({ id: 9, host: 'songkick.com', name: 'Songkick: tracked artists', fetched_at: null, error: null, show_count: null })
+          return json(feeds.at(-1), 201)
+        }
+        return json(feeds)
       case '/api/live/places':
         return json([{ name: 'Stockholm, Stockholm County, Sweden', latitude: 59.33, longitude: 18.07, country: 'SE' }])
       case '/api/live/shows': {
@@ -231,6 +241,19 @@ describe('LivePage', () => {
       'href',
       'webcal://plek.example/api/live/calendar/secret-token-1234567890.ics',
     )
+  })
+
+  it('adds a calendar link', async () => {
+    settings = placed
+    renderPage()
+    const input = await screen.findByRole('textbox', { name: 'Calendar link' })
+    fireEvent.change(input, { target: { value: 'https://example.com/not-a-calendar' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }))
+    expect(await screen.findByText("That address isn't a calendar (iCal) file.")).toBeInTheDocument()
+    fireEvent.change(input, { target: { value: 'webcal://www.songkick.com/users/someone/calendars.ics' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }))
+    expect(await screen.findByText('Songkick: tracked artists')).toBeInTheDocument()
+    expect(screen.getByText('Not read yet')).toBeInTheDocument()
   })
 
   it('says when JamBase has no key yet', async () => {

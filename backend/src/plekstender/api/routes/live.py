@@ -12,16 +12,19 @@ import datetime as dt
 import secrets
 from collections import Counter
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import delete, func, select, update
 
-from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
+from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.schemas import (
     LiveArtistCount,
     LiveArtistOut,
     LiveCalendarOut,
+    LiveFeedIn,
+    LiveFeedOut,
     LiveListenedOut,
     LiveSettingsIn,
     LiveSettingsOut,
@@ -34,8 +37,8 @@ from plekstender.api.schemas import (
 )
 from plekstender.config import Settings
 from plekstender.db.instance import get_jambase_api_key, get_ticketmaster_api_key
-from plekstender.db.models import LiveSettings, LiveShow, User
-from plekstender.live import geocode, ical
+from plekstender.db.models import LiveFeed, LiveSettings, LiveShow, User
+from plekstender.live import feeds, geocode, ical
 from plekstender.live.merge import merge
 from plekstender.live.refresh import follow_count, listened_artists, period_start
 from plekstender.worker import LIVE_MANUAL_GAP, enqueue_live_refresh
@@ -81,6 +84,11 @@ async def _out(db: DbDep, settings: Settings, user: User) -> LiveSettingsOut:
     listened = len(await listened_artists(db, user.id, period_start(months)))
     percent = live.top_percent if live else 10
     sources = await _sources(db, settings)
+    has_feeds = bool(
+        await db.scalar(
+            select(func.count()).select_from(LiveFeed).where(LiveFeed.user_id == user.id)
+        )
+    )
     stale = live is not None and _stale(live)
     return LiveSettingsOut(
         place_name=live.place_name if live else None,
@@ -95,7 +103,7 @@ async def _out(db: DbDep, settings: Settings, user: User) -> LiveSettingsOut:
         refresh_error=(LOST if stale else live.refresh_error) if live else None,
         refreshed_at=live.refreshed_at if live else None,
         refresh_available_at=_available_at(live),
-        source_ready=bool(sources),
+        source_ready=bool(sources) or has_feeds,
         sources=sources,
     )
 
@@ -146,8 +154,9 @@ async def put_live_settings(
 
 @router.delete("/settings", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_live_settings(db: DbDep, user: UserDep) -> Response:
-    """Forget the place, the shows (starred too) and the calendar address."""
+    """Forget the place, the shows (starred too), the calendar links and address."""
     await db.execute(delete(LiveShow).where(LiveShow.user_id == user.id))
+    await db.execute(delete(LiveFeed).where(LiveFeed.user_id == user.id))
     await db.execute(delete(LiveSettings).where(LiveSettings.user_id == user.id))
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -238,7 +247,12 @@ def _show(group: list[LiveShow]) -> LiveShowOut:
     tickets: dict[str, LiveTicketOut] = {}
     for r in group:
         if url := (r.ticket_url or r.page_url):
-            tickets.setdefault(url, LiveTicketOut(source=r.source, url=url, seller=r.seller))
+            tickets.setdefault(
+                url,
+                LiveTicketOut(
+                    source=r.source, url=url, seller=r.seller, is_ticket=bool(r.ticket_url)
+                ),
+            )
     performers = max((r.performers for r in group), key=len)
     located = next((r for r in group if r.latitude is not None), row)
     return LiveShowOut(
@@ -295,6 +309,85 @@ async def got_ticket(body: LiveTicketIn, db: DbDep, user: UserDep) -> Response:
     else:
         rows = rows.values(ticket_at=None)
     await db.execute(rows)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- calendar links (iCal) as a source ---------------------------------------------------
+
+MAX_FEEDS = 5
+
+
+def _feed_out(feed: LiveFeed) -> LiveFeedOut:
+    return LiveFeedOut(
+        id=feed.id,
+        host=feed.host,
+        name=feed.name,
+        fetched_at=feed.fetched_at,
+        error=feed.error,
+        show_count=feed.show_count,
+    )
+
+
+@router.get("/feeds", response_model=list[LiveFeedOut])
+async def list_feeds(db: DbDep, user: UserDep) -> list[LiveFeedOut]:
+    rows = await db.scalars(
+        select(LiveFeed).where(LiveFeed.user_id == user.id).order_by(LiveFeed.id)
+    )
+    return [_feed_out(f) for f in rows]
+
+
+@router.post(
+    "/feeds",
+    response_model=LiveFeedOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[rate_limit("live-feeds", 20, 60)],
+)
+async def add_feed(
+    body: LiveFeedIn, db: DbDep, http: HttpDep, cipher: CipherDep, user: UserDep
+) -> LiveFeedOut:
+    """Add a calendar link (checked by reading it once); its shows are looked up next."""
+    live = await db.get(LiveSettings, user.id)
+    if live is None or live.latitude is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Choose a place first.")
+    count = await db.scalar(
+        select(func.count()).select_from(LiveFeed).where(LiveFeed.user_id == user.id)
+    )
+    if (count or 0) >= MAX_FEEDS:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"At most {MAX_FEEDS} calendar links.")
+    try:
+        url = feeds.normalise_url(body.url)
+        text = await feeds.read(http, url)
+    except feeds.FeedError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    feed = LiveFeed(
+        user_id=user.id,
+        url_enc=cipher.encrypt(url, purpose=feeds.PURPOSE),
+        host=(urlsplit(url).hostname or "").removeprefix("www."),
+        name=feeds.calendar_name(text),
+    )
+    db.add(feed)
+    await db.commit()
+    await enqueue_live_refresh(db, user.id, delay_seconds=SETTLE_SECONDS)
+    await db.refresh(feed)
+    return _feed_out(feed)
+
+
+@router.delete("/feeds/{feed_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_feed(feed_id: int, db: DbDep, user: UserDep) -> Response:
+    """Remove a calendar link and its shows (starred ones stay)."""
+    feed = await db.get(LiveFeed, feed_id)
+    if feed is None or feed.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Calendar link not found")
+    await db.execute(
+        delete(LiveShow).where(
+            LiveShow.user_id == user.id,
+            LiveShow.source == "calendar",
+            LiveShow.source_id.startswith(f"{feed_id}:"),
+            LiveShow.starred_at.is_(None),
+        )
+    )
+    await db.delete(feed)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

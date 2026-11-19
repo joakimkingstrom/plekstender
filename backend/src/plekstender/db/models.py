@@ -872,3 +872,20 @@ class LiveShow(Base):
     starred_at: Mapped[dt.datetime | None]
     # The user has a ticket (only for starred shows).
     ticket_at: Mapped[dt.datetime | None]
+
+
+class LiveFeed(Base):
+    """A calendar link (iCal) a user added as a source of shows, e.g. their Songkick one."""
+
+    __tablename__ = "live_feeds"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # The address, encrypted (purpose "live_feed.url": it may hold a private token).
+    url_enc: Mapped[str] = mapped_column(Text)
+    host: Mapped[str] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text)  # the calendar's own name, if it has one
+    added_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    fetched_at: Mapped[dt.datetime | None]
+    error: Mapped[str | None] = mapped_column(Text)
+    show_count: Mapped[int | None]

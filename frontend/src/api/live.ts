@@ -159,3 +159,32 @@ export function useGotTicket() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [...liveKeys.all, 'shows'] }),
   })
 }
+
+export type LiveFeed = Schemas['LiveFeedOut']
+
+export function useLiveFeeds() {
+  return useQuery({
+    queryKey: [...liveKeys.all, 'feeds'],
+    queryFn: () => unwrap(api.GET('/api/live/feeds')),
+  })
+}
+
+export function useAddLiveFeed() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (url: string) => unwrap(api.POST('/api/live/feeds', { body: { url } })),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...liveKeys.all, 'feeds'] })
+      qc.invalidateQueries({ queryKey: liveKeys.settings() })
+    },
+  })
+}
+
+export function useRemoveLiveFeed() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      unwrap(api.DELETE('/api/live/feeds/{feed_id}', { params: { path: { feed_id: id } } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: liveKeys.all }),
+  })
+}

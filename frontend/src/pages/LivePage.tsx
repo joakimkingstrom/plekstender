@@ -5,13 +5,16 @@ import { useMe } from '../api/hooks'
 import { useActiveServer } from '../api/library'
 import {
   useCalendarAddress,
+  useAddLiveFeed,
   useForgetLiveSettings,
   useGotTicket,
   useListenedCount,
   useLiveSettings,
   useLiveShows,
   usePlaces,
+  useLiveFeeds,
   useRefreshLive,
+  useRemoveLiveFeed,
   useResetCalendar,
   useSaveLiveSettings,
   useStarShow,
@@ -34,7 +37,7 @@ const RANGES: [Range, string][] = [
   ['90', 'Next 3 months'],
   ['starred', '★ Starred'],
 ]
-const SOURCE_NAMES: Record<string, string> = { jambase: 'JamBase', ticketmaster: 'Ticketmaster' }
+const SOURCE_NAMES: Record<string, string> = { jambase: 'JamBase', ticketmaster: 'Ticketmaster', calendar: 'your calendar link' }
 
 /** "2027-03-04" as a local date (no time zone shift). */
 function localDate(iso: string): Date {
@@ -66,6 +69,7 @@ export function LivePage() {
           <div className="order-first space-y-4 lg:order-none">
             <Summary settings={settings.data} onEdit={() => setEditing(true)} />
             <CalendarCard />
+            <FeedsCard />
           </div>
         </div>
       )}
@@ -77,7 +81,7 @@ function SourceMissing() {
   const me = useMe()
   return (
     <Notice tone="warn">
-      Live needs a JamBase or Ticketmaster API key.{' '}
+      Live needs a JamBase or Ticketmaster API key (or a calendar link of yours).{' '}
       {me.data?.is_admin ? (
         <>
           Add one in{' '}
@@ -483,6 +487,7 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
       </div>
       <div className="min-w-0 flex-1 space-y-0.5 text-sm">
         <p className="font-medium">
+          {show.artists.length === 0 && <span>{show.name}</span>}
           {show.artists.map((a, i) => (
             <span key={a.name}>
               {i > 0 && ', '}
@@ -518,7 +523,7 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
           {show.distance_km != null && <span>{Math.round(show.distance_km)} km away</span>}
           {extra.map((t) => (
             <a key={t.url} href={t.url} target="_blank" rel="nofollow noopener noreferrer" className="underline hover:text-accent">
-              Also on {SOURCE_NAMES[t.source] ?? t.source}
+              {t.source === 'calendar' ? 'In your calendar link' : `Also on ${SOURCE_NAMES[t.source] ?? t.source}`}
             </a>
           ))}
           {starred && (
@@ -557,7 +562,7 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
             className="rounded-lg bg-surface-2 px-3 py-1.5 text-sm font-medium hover:text-accent"
             title={first.seller ? `Tickets from ${first.seller}` : undefined}
           >
-            {show.ticket_url || first.source !== 'jambase' ? 'Tickets' : 'Details'}
+            {first.is_ticket ? 'Tickets' : 'Details'}
           </a>
         )}
       </div>
@@ -623,6 +628,77 @@ function CalendarCard() {
             </div>
           )
         )}
+      </div>
+    </Card>
+  )
+}
+
+/** Calendar links (iCal) whose shows are listed too: Songkick's calendar export, or any. */
+function FeedsCard() {
+  const feeds = useLiveFeeds()
+  const add = useAddLiveFeed()
+  const remove = useRemoveLiveFeed()
+  const [url, setUrl] = useState('')
+  const valid = /^(https?|webcal):\/\/\S+$/i.test(url.trim())
+  return (
+    <Card title="Calendar links">
+      <div className="space-y-3 text-sm">
+        <p className="text-muted">
+          Add a calendar link to list its shows here too, such as your Songkick calendar (its export link, for the artists
+          you track or your plans). It's read along with the other sources.
+        </p>
+        {feeds.isPending ? (
+          <Spinner small />
+        ) : feeds.isError ? (
+          <Notice tone="error">{errorMessage(feeds.error)}</Notice>
+        ) : (
+          feeds.data.length > 0 && (
+            <ul className="space-y-2" aria-label="Calendar links">
+              {feeds.data.map((f) => (
+                <li key={f.id} className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{f.name ?? f.host}</p>
+                    <p className="text-xs text-muted">
+                      {f.error
+                        ? f.error
+                        : f.fetched_at
+                          ? `${f.show_count ?? 0} upcoming · read ${formatRelative(f.fetched_at)}`
+                          : 'Not read yet'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    busy={remove.isPending && remove.variables === f.id}
+                    onClick={() => remove.mutate(f.id)}
+                    aria-label={`Remove ${f.name ?? f.host}`}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+        <form
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (valid) add.mutate(url.trim(), { onSuccess: () => setUrl('') })
+          }}
+        >
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="webcal://… or https://….ics"
+            aria-label="Calendar link"
+            className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+          />
+          <Button type="submit" disabled={!valid} busy={add.isPending}>
+            Add link
+          </Button>
+        </form>
+        {add.isError && <Notice tone="error">{errorMessage(add.error)}</Notice>}
       </div>
     </Card>
   )
