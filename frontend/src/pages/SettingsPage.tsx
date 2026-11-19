@@ -7,13 +7,16 @@ import { errorMessage, type Schemas } from '../api/client'
 import { useLibrarySettings, useMe, usePopularityPreview, useSetPreferences, useUpdateLibrarySettings } from '../api/hooks'
 import { useActiveServer } from '../api/library'
 import { useEditFonts, useFanartKey, useFonts, useSetFanartKey, type FontGroupName } from '../api/artwork'
+import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
+import { FolderSettings } from '../components/FolderSettings'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
 /** Settings shell: personal tabs for everyone; Library and Admin for admins. */
 export function SettingsLayout() {
   const { data: me } = useMe()
+  const { active } = useActiveServer()
   const tab = ({ isActive }: { isActive: boolean }) =>
     `border-b-2 px-1 pb-2 text-sm font-medium ${
       isActive ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'
@@ -37,6 +40,11 @@ export function SettingsLayout() {
         <NavLink to="/settings/appearance" className={tab}>
           Appearance
         </NavLink>
+        {(me?.is_admin || active?.is_owner) && (
+          <NavLink to="/settings/artwork" className={tab}>
+            Artwork
+          </NavLink>
+        )}
         {me?.is_admin && (
           <>
             <NavLink to="/settings/library" className={tab}>
@@ -105,14 +113,13 @@ export function LibrarySettingsPage() {
   return (
     <div className="space-y-4">
       <LibrarySettingsForm initial={settings.data} />
-      <FontsCard />
     </div>
   )
 }
 
 const FONT_GROUPS: FontGroupName[] = ['Sans serif', 'Serif', 'Display', 'Handwriting', 'Monospace']
 
-function FontsCard() {
+export function FontsCard() {
   const fonts = useFonts()
   const { add, remove, reset } = useEditFonts()
   const [name, setName] = useState('')
@@ -174,9 +181,9 @@ function FontsCard() {
         ) : fonts.isError ? (
           <Notice tone="error">{errorMessage(fonts.error)}</Notice>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="gap-6 sm:columns-2 lg:columns-3">
             {fonts.data.map((g) => (
-              <div key={g.name}>
+              <div key={g.name} className="mb-5 break-inside-avoid">
                 <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
                   {g.name} <span className="font-normal">({g.fonts.length})</span>
                 </h3>
@@ -434,7 +441,7 @@ export function AppearancePage() {
   if (me.isPending) return <Spinner />
   const current = me.data?.preferences?.accent ?? BRAND
   const set = (hex: string) =>
-    save.mutate({ skip_threshold: 80, ...me.data?.preferences, accent: hex === BRAND ? null : hex })
+    save.mutate({ accent: hex === BRAND ? null : hex })
   const isPreset = PRESETS.some(([, hex]) => hex === current)
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -473,6 +480,47 @@ export function AppearancePage() {
           <span className="text-accent" aria-hidden>★★★★☆</span>
         </div>
       </Card>
+      <Card title="On your phone">
+        <div className="space-y-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-medium">
+              Open on
+            </span>
+            <Segmented
+              label="Open on"
+              value={me.data?.preferences?.phone_start ?? 'rate'}
+              options={[
+                ['rate', 'Rate'],
+                ['home', 'Home'],
+              ]}
+              onChange={(phone_start) => save.mutate({ phone_start })}
+            />
+          </div>
+          <p className="text-muted">
+            For the full-screen app: in Safari, tap Share → Add to Home Screen (Chrome: ⋮ → Add to Home screen), then
+            open Plekstender from its icon.
+          </p>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+/** Text logo fonts (admins) and saving images to artist folders (server owners). */
+export function ArtworkSettingsPage() {
+  const me = useMe()
+  const { active, servers } = useActiveServer()
+  if (me.isPending || servers.isPending) return <Spinner />
+  const isAdmin = Boolean(me.data?.is_admin)
+  if (!isAdmin && !active?.is_owner) return <Navigate to="/settings" replace />
+  return (
+    <div className="space-y-4">
+      {active?.is_owner && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <FolderSettings serverId={active.id} />
+        </div>
+      )}
+      {isAdmin && <FontsCard />}
     </div>
   )
 }

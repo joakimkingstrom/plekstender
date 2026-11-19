@@ -201,14 +201,23 @@ export function usePopularityPreview(serverId: number | null, artistTopN: number
   })
 }
 
+const DEFAULT_PREFERENCES: Schemas['Preferences'] = { accent: null, skip_threshold: 80, phone_start: 'rate' }
+
+/** Change some preferences (the rest stay as saved). */
 export function useSetPreferences() {
   const qc = useQueryClient()
+  const merged = (patch: Partial<Schemas['Preferences']>): Schemas['Preferences'] => ({
+    ...DEFAULT_PREFERENCES,
+    ...qc.getQueryData<Schemas['UserOut'] | null>(keys.me)?.preferences,
+    ...patch,
+  })
   return useMutation({
-    mutationFn: (body: Schemas['Preferences']) => unwrap(api.PUT('/api/auth/me/preferences', { body })),
-    onMutate: (body) => {
+    mutationFn: (patch: Partial<Schemas['Preferences']>) =>
+      unwrap(api.PUT('/api/auth/me/preferences', { body: merged(patch) })),
+    onMutate: (patch) => {
       // Show the change straight away; the server's answer replaces it.
       const previous = qc.getQueryData<Schemas['UserOut'] | null>(keys.me)
-      if (previous) qc.setQueryData(keys.me, { ...previous, preferences: body })
+      if (previous) qc.setQueryData(keys.me, { ...previous, preferences: merged(patch) })
       return { previous }
     },
     onError: (_e, _body, context) => {

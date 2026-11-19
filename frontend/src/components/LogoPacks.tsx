@@ -18,25 +18,13 @@ function JobProgress({ job, label }: { job: Schemas['ArtworkJobOut']; label: str
   )
 }
 
-/** Export finished artist images as a zip, or import a pack (server owners only). */
-export function LogoPacks({ serverId }: { serverId: number }) {
+/** Export the images of artists marked Done or Custom as a zip (server owners only). */
+export function LogoPackExport({ serverId }: { serverId: number }) {
   const jobs = useArtworkJobs(serverId)
   const exportJob = useStartExport(serverId)
-  const upload = useUploadPack(serverId)
-  const applyPack = useApplyPack(serverId)
-  const [chosen, setChosen] = useState<Set<number>>(new Set())
   const latestExport = jobs.data?.find((j) => j.kind === 'export')
-  const latestImport = jobs.data?.find((j) => j.kind === 'import')
-  const active = (j?: Schemas['ArtworkJobOut']) => j && (j.status === 'queued' || j.status === 'running')
-  const preview = upload.data
-
-  const onFile = (file: File) =>
-    upload.mutate(file, {
-      onSuccess: (data) => setChosen(new Set(data.entries.filter((x) => x.match).map((x) => x.index))),
-    })
-
   return (
-    <Card title="Artist logo packs">
+    <Card title="Export artist logos">
       <div className="space-y-4 text-sm">
         <div className="space-y-2">
           <p className="text-xs text-muted">
@@ -60,7 +48,33 @@ export function LogoPacks({ serverId }: { serverId: number }) {
           {exportJob.isError && <Notice tone="error">{errorMessage(exportJob.error)}</Notice>}
         </div>
 
-        <div className="space-y-2 border-t border-border pt-3">
+      </div>
+    </Card>
+  )
+}
+
+/** Import a logo pack: preview the matches, then apply the chosen ones (server owners only). */
+export function LogoPackImport({ serverId }: { serverId: number }) {
+  const jobs = useArtworkJobs(serverId)
+  const upload = useUploadPack(serverId)
+  const applyPack = useApplyPack(serverId)
+  const [chosen, setChosen] = useState<Set<number>>(new Set())
+  const latestImport = jobs.data?.find((j) => j.kind === 'import')
+  const preview = upload.data
+
+  const onFile = (file: File) =>
+    upload.mutate(file, {
+      onSuccess: (data) => setChosen(new Set(data.entries.filter((x) => x.match).map((x) => x.index))),
+    })
+
+  return (
+    <Card title="Import artist logos">
+      <div className="space-y-4 text-sm">
+        <p className="text-xs text-muted">
+          A pack exported from Plekstender (here or on another server). Artists are matched by MusicBrainz ID, then
+          by name; you choose which to apply.
+        </p>
+        <div className="space-y-2">
           <FilePicker label="Import a pack (.zip)" accept=".zip,application/zip" onFile={onFile} />
           {upload.isPending && <Spinner small />}
           {upload.isError && <Notice tone="error">{errorMessage(upload.error)}</Notice>}
@@ -122,4 +136,8 @@ export function LogoPacks({ serverId }: { serverId: number }) {
       </div>
     </Card>
   )
+}
+
+function active(j?: Schemas['ArtworkJobOut']) {
+  return Boolean(j && (j.status === 'queued' || j.status === 'running'))
 }

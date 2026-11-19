@@ -476,6 +476,14 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Clicking the logo spins the pick once (skipped with reduced motion).
 
 ### Phase 8 — Polish
+
+**Feedback round 3 (19 Nov 2026)**
+- [x] Segmented buttons (Songs / Albums / Artists, Cards / Lists) the same height as the dropdowns.
+- [x] "Save to artist folders" and the text logo fonts on a new Settings -> Artwork tab; font groups flow in columns (no gaps).
+- [x] Listening tab: the Last.fm / ListenBrainz imports move to Export / import (imports left, exports right); the rest uses both columns.
+- [x] Phones open on Rate (Settings -> Appearance; per account), and the app can be added to the home screen to run full screen (web app manifest). On phones the Rate page drops its title, folds the filters into "Options", sizes the card to the screen and shows the swipe hint only until the first swipe.
+- [x] The rating shown while swiping stays put instead of moving with the card.
+- [x] The lightbox blurs what's behind it.
 - [ ] PWA install, offline shell
 - [ ] M3U playlist exports
 - [ ] Docs, screenshots, published images (GHCR)

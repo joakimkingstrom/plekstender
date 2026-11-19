@@ -2409,6 +2409,13 @@ export interface components {
              * @default 80
              */
             skip_threshold: number;
+            /**
+             * Phone Start
+             * @description The page the app opens on, on a phone.
+             * @default rate
+             * @enum {string}
+             */
+            phone_start: "rate" | "home";
         };
         /** ProbeOut */
         ProbeOut: {

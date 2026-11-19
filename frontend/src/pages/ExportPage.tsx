@@ -1,7 +1,7 @@
-import { Link } from 'react-router'
-import { useServers } from '../api/hooks'
+import { useMe, useServers } from '../api/hooks'
 import { useActiveServer } from '../api/library'
-import { LogoPacks } from '../components/LogoPacks'
+import { LogoPackExport, LogoPackImport } from '../components/LogoPacks'
+import { LastFmImportCard, ListenBrainzImportCard } from './ListeningSettingsPage'
 import { Card, Spinner } from '../components/ui'
 
 const linkButton =
@@ -10,12 +10,21 @@ const linkButton =
 /** Everything you can take out of Plekstender (and bring back in). */
 export function ExportPage() {
   const servers = useServers()
+  const me = useMe()
   const { active } = useActiveServer()
-  if (servers.isPending) return <Spinner />
+  if (servers.isPending || me.isPending) return <Spinner />
   const withLibrary = (servers.data ?? []).filter((s) => s.music_section_keys.length > 0)
+  const owner = active?.is_owner ? active : null
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid items-start gap-4 lg:grid-cols-2">
       <div className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Import</h2>
+        <LastFmImportCard isAdmin={Boolean(me.data?.is_admin)} />
+        <ListenBrainzImportCard />
+        {owner && <LogoPackImport serverId={owner.id} />}
+      </div>
+      <div className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Export</h2>
         <Card title="Library, with your ratings and plays">
           <div className="space-y-3 text-sm">
             <p className="text-muted">
@@ -49,26 +58,11 @@ export function ExportPage() {
               Download all listens
             </a>
             <p className="text-xs text-muted">
-              One file in ListenBrainz's format (JSON lines), oldest first, with each play once. To import history from
-              Last.fm or ListenBrainz, see{' '}
-              <Link to="/settings/listening" className="text-accent underline">
-                Listening
-              </Link>
-              .
+              One file in ListenBrainz's format (JSON lines), oldest first, with each play once.
             </p>
           </div>
         </Card>
-      </div>
-      <div className="space-y-4">
-        {active?.is_owner ? (
-          <LogoPacks serverId={active.id} />
-        ) : (
-          <Card title="Artist logo packs">
-            <p className="text-sm text-muted">
-              Logo packs export and import the artist images on a server you own.
-            </p>
-          </Card>
-        )}
+        {owner && <LogoPackExport serverId={owner.id} />}
       </div>
     </div>
   )

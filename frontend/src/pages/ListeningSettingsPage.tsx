@@ -29,40 +29,12 @@ const BEFORE_LASTFM_PRO = Date.now() < Date.UTC(2026, 11, 1)
 const inputClass = 'w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm'
 
 export function ListeningSettingsPage() {
-  const me = useMe()
-  if (me.isPending) return <Spinner />
-  const isAdmin = Boolean(me.data?.is_admin)
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="space-y-4">
-        <PlexPlaysCard />
-        <SkipsCard />
-        <LastFmImportCard isAdmin={isAdmin} />
-        <ListenBrainzImportCard />
-        <DeleteHistoryCard />
-      </div>
-      <div className="space-y-4">
-        <ConnectionsNote />
-      </div>
+    <div className="grid items-start gap-4 lg:grid-cols-2">
+      <PlexPlaysCard />
+      <SkipsCard />
+      <DeleteHistoryCard />
     </div>
-  )
-}
-
-function ConnectionsNote() {
-  return (
-    <Card title="Scrobbling and accounts">
-      <p className="text-sm text-muted">
-        Sending plays to ListenBrainz, and the Last.fm and fanart.tv keys, are on the{' '}
-        <Link to="/settings/connections" className="text-accent underline">
-          Connections
-        </Link>{' '}
-        tab. To download your history, see{' '}
-        <Link to="/settings/export" className="text-accent underline">
-          Export / import
-        </Link>
-        .
-      </p>
-    </Card>
   )
 }
 
@@ -171,7 +143,7 @@ function LastImport({ job }: { job: Schemas['ListenImportOut'] }) {
   )
 }
 
-function LastFmImportCard({ isAdmin }: { isAdmin: boolean }) {
+export function LastFmImportCard({ isAdmin }: { isAdmin: boolean }) {
   const status = useLastFmStatus()
   const start = useStartLastFmImport()
   const [username, setUsername] = useState<string | null>(null)
@@ -239,7 +211,7 @@ function LastFmImportCard({ isAdmin }: { isAdmin: boolean }) {
   )
 }
 
-function ListenBrainzImportCard() {
+export function ListenBrainzImportCard() {
   const status = useListenBrainzImport()
   const start = useStartListenBrainzImport()
   const [username, setUsername] = useState<string | null>(null)
@@ -609,7 +581,7 @@ function SkipsCard() {
             disabled={!valid || current === saved}
             busy={save.isPending}
             onClick={() =>
-              save.mutate({ ...me.data!.preferences, skip_threshold: current }, { onSuccess: () => setValue(null) })
+              save.mutate({ skip_threshold: current }, { onSuccess: () => setValue(null) })
             }
           >
             Save

@@ -21,7 +21,7 @@ import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
-import { AppearancePage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
+import { AppearancePage, ArtworkSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
 
 const queryClient = new QueryClient({
@@ -74,6 +74,7 @@ const router = createBrowserRouter([
           { path: 'connections', element: <ConnectionsPage /> },
           { path: 'export', element: <ExportPage /> },
           { path: 'appearance', element: <AppearancePage /> },
+          { path: 'artwork', element: <ArtworkSettingsPage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
           { path: 'admin', element: <AdminPage /> },
         ],

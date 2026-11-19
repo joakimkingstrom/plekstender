@@ -87,6 +87,16 @@ export function Layout() {
     return <PageLoader />
   }
   if (!me) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  // On a phone the app opens on Rate (a preference). Only the page the app was opened on
+  // (React Router's "default" location) is redirected, so Home stays reachable.
+  if (
+    location.key === 'default' &&
+    location.pathname === '/' &&
+    (me.preferences?.phone_start ?? 'rate') === 'rate' &&
+    window.matchMedia?.('(max-width: 767px)').matches
+  ) {
+    return <Navigate to="/rate" replace />
+  }
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
@@ -95,7 +105,7 @@ export function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-10 border-b border-border bg-bg/90 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-border bg-bg/90 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <NavLink to="/" aria-label="Plekstender home" onClick={(e) => spinPick(e.currentTarget)}>
             <Wordmark />

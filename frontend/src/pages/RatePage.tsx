@@ -35,6 +35,10 @@ const POOLS: [RatePool, string][] = [
   ['unrated', 'Unrated'],
   ['all', 'Everything'],
 ]
+const LAYOUTS: [Layout, string][] = [
+  ['swipe', 'Cards'],
+  ['desktop', 'Lists'],
+]
 const ORDERS: [RateOrder, string][] = [
   ['weighted', 'Shuffle (favours what you play)'],
   ['plays', 'Most played first'],
@@ -60,7 +64,10 @@ export function RatePage() {
   const { active, blocker } = useLibraryServer()
   return (
     <>
-      <PageTitle subtitle="Ratings are saved to Plex with your own account.">Rate</PageTitle>
+      {/* On a phone, the cards get the space: no page title. */}
+      <div className="hidden md:block">
+        <PageTitle subtitle="Ratings are saved to Plex with your own account.">Rate</PageTitle>
+      </div>
       {blocker ?? <Rater serverId={active!.id} />}
     </>
   )
@@ -86,6 +93,8 @@ function Rater({ serverId }: { serverId: number }) {
   const [overrides, setOverrides] = useState<Overrides>({})
   const [error, setError] = useState<string | null>(null)
   const [canUndo, setCanUndo] = useState(false)
+  // Phones: genre, pool, order and layout fold away so the card fits the screen.
+  const [optionsOpen, setOptionsOpen] = useState(false)
   // Items swiped away, so an undo can bring the card back.
   const swiped = useRef<RateItem[]>([])
 
@@ -138,43 +147,63 @@ function Rater({ serverId }: { serverId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Segmented label="What to rate" value={settings.kind} options={KINDS} onChange={(kind) => update({ kind })} />
-        <Select
-          label="Genre"
-          value={settings.tag ?? 0}
-          onChange={(tag) => update({ tag: tag || null })}
-          options={[
-            { value: 0, label: 'All genres' },
-            ...(genres.data ?? []).map((g) => ({ value: g.id, label: g.name })),
-          ]}
+        <Segmented
+          label="What to rate"
+          value={settings.kind}
+          options={KINDS}
+          onChange={(kind) => update({ kind })}
+          className="max-md:flex-1"
         />
-        <Select
-          label="Which ones"
-          value={settings.pool}
-          onChange={(pool) => update({ pool })}
-          options={POOLS.map(([value, label]) => ({ value, label }))}
-        />
-        <Select
-          label="Order"
-          value={settings.order}
-          onChange={(order) => update({ order })}
-          options={ORDERS.map(([value, label]) => ({ value, label }))}
-        />
-        <div className="ml-auto flex items-center gap-2">
+        <Button
+          variant="secondary"
+          className="border border-border px-3 py-[7px] md:hidden"
+          aria-expanded={optionsOpen}
+          aria-controls="rate-options"
+          onClick={() => setOptionsOpen((o) => !o)}
+        >
+          Options
+          <svg viewBox="0 0 12 12" className={`size-3 text-muted transition-transform ${optionsOpen ? 'rotate-180' : ''}`} aria-hidden>
+            <path d="M2 4.5l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </Button>
+        <div
+          id="rate-options"
+          className={`${optionsOpen ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2 md:flex md:w-auto`}
+        >
+          <Select
+            label="Genre"
+            value={settings.tag ?? 0}
+            onChange={(tag) => update({ tag: tag || null })}
+            options={[
+              { value: 0, label: 'All genres' },
+              ...(genres.data ?? []).map((g) => ({ value: g.id, label: g.name })),
+            ]}
+          />
+          <Select
+            label="Which ones"
+            value={settings.pool}
+            onChange={(pool) => update({ pool })}
+            options={POOLS.map(([value, label]) => ({ value, label }))}
+          />
+          <Select
+            label="Order"
+            value={settings.order}
+            onChange={(order) => update({ order })}
+            options={ORDERS.map(([value, label]) => ({ value, label }))}
+          />
+          <div className="md:hidden">
+            <Segmented label="Layout" value={settings.layout} options={LAYOUTS} onChange={(layout) => update({ layout })} />
+          </div>
+        </div>
+        <div className="flex items-center gap-2 md:ml-auto">
           <Tooltip content="Undo your last rating (repeat to go further back)">
-            <Button variant="ghost" onClick={undo} disabled={!canUndo} busy={undoMutation.isPending}>
-              ↶ Undo
+            <Button variant="ghost" onClick={undo} disabled={!canUndo} busy={undoMutation.isPending} aria-label="Undo">
+              ↶<span className="max-md:hidden">Undo</span>
             </Button>
           </Tooltip>
-          <Segmented
-            label="Layout"
-            value={settings.layout}
-            options={[
-              ['swipe', 'Cards'],
-              ['desktop', 'Lists'],
-            ]}
-            onChange={(layout) => update({ layout })}
-          />
+          <div className="hidden md:block">
+            <Segmented label="Layout" value={settings.layout} options={LAYOUTS} onChange={(layout) => update({ layout })} />
+          </div>
         </div>
       </div>
       {error && <Notice tone="error">{error}</Notice>}
@@ -237,6 +266,24 @@ function details(item: RateItem): string {
 
 // --- swipe cards ---------------------------------------------------------------------
 
+const HINT_KEY = 'plekstender.rate.swiped'
+
+function readFlag(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeFlag(key: string) {
+  try {
+    localStorage.setItem(key, '1')
+  } catch {
+    // storage unavailable: the hint shows again next time
+  }
+}
+
 function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & { onSwiped: (item: RateItem) => void }) {
   const item = queue.items[0]
   const next = queue.items[1]
@@ -247,9 +294,14 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
   const [dragging, setDragging] = useState(false)
   const [width, setWidth] = useState(360)
   const [leaving, setLeaving] = useState<'left' | 'right' | 'down' | null>(null)
+  const [hint, setHint] = useState(() => readFlag(HINT_KEY) === null)
   const result = swipeResult(drag.dx, drag.dy, width)
 
   const finish = (action: 'rate' | 'skip', rating?: number) => {
+    if (hint) {
+      setHint(false)
+      writeFlag(HINT_KEY)
+    }
     setLeaving(action === 'skip' ? 'down' : drag.dx > 0 ? 'right' : 'left')
     window.setTimeout(() => {
       if (action === 'rate' && rating !== undefined) {
@@ -301,11 +353,14 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
     result.kind === 'rate' ? (result.rating >= 5 ? 'ring-accent' : 'ring-danger') : result.kind === 'skip' ? 'ring-muted' : 'ring-transparent'
 
   return (
-    <div className="mx-auto max-w-sm space-y-4">
-      <p className="text-center text-xs text-muted">
-        Swipe right for 2½–5 stars, left for 2–½, down to skip. The further you swipe, the higher or lower.
-      </p>
-      <div className="relative" style={{ minHeight: '28rem' }}>
+    // As wide as fits the screen's height too, so the card and the stars need no scrolling.
+    <div className="mx-auto space-y-3" style={{ maxWidth: 'min(24rem, max(15rem, calc(100dvh - 25rem)))' }}>
+      {hint && (
+        <p className="text-center text-xs text-muted">
+          Swipe right for 2½–5 stars, left for 2–½, down to skip. The further you swipe, the higher or lower.
+        </p>
+      )}
+      <div className="relative">
         {next && (
           <div className="absolute inset-x-3 top-3 rounded-2xl border border-border bg-surface p-4 opacity-60" aria-hidden>
             <Artwork serverId={serverId} path={next.thumb} title={next.title} size={400} round={next.kind === 'artist'} className="w-full" />
@@ -332,18 +387,6 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
             round={item.kind === 'artist'}
             className="pointer-events-none w-full"
           />
-          {result.kind !== 'none' && (
-            <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-col items-center rounded-xl bg-bg/85 py-4" aria-live="polite">
-              {result.kind === 'rate' ? (
-                <>
-                  <Stars rating={result.rating} className="[&_svg]:size-8" />
-                  <span className="mt-1 font-display text-2xl font-bold">{starsText(result.rating)} ★</span>
-                </>
-              ) : (
-                <span className="font-display text-2xl font-bold">Skip</span>
-              )}
-            </div>
-          )}
           <div className="mt-4 space-y-1">
             <h2 className="text-xl font-bold leading-tight">{item.title}</h2>
             <p className="text-sm text-muted">{details(item)}</p>
@@ -354,6 +397,21 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
             </div>
           </div>
         </div>
+        {/* Stays put while the card moves, so the rating is always readable. */}
+        {result.kind !== 'none' && (
+          <div className="pointer-events-none absolute inset-x-0 top-[28%] z-20 flex justify-center" aria-live="polite">
+            <div className="flex flex-col items-center rounded-2xl border border-border bg-bg/90 px-6 py-4 shadow-2xl backdrop-blur-sm">
+              {result.kind === 'rate' ? (
+                <>
+                  <Stars rating={result.rating} className="[&_svg]:size-8" />
+                  <span className="mt-1 font-display text-2xl font-bold">{starsText(result.rating)} ★</span>
+                </>
+              ) : (
+                <span className="font-display text-2xl font-bold">Skip</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <div className="flex items-center justify-between gap-3">
         <StarRating

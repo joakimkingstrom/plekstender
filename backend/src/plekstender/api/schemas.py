@@ -25,6 +25,9 @@ class Preferences(BaseModel):
         le=95,
         description="A play counts as skipped when less than this % of the track was heard.",
     )
+    phone_start: Literal["rate", "home"] = Field(
+        default="rate", description="The page the app opens on, on a phone."
+    )
 
 
 class UserOut(BaseModel):

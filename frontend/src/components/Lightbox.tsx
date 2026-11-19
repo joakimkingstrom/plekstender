@@ -52,7 +52,7 @@ export function Lightbox({
       role="dialog"
       aria-modal="true"
       aria-label={image.alt}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/85 p-4"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/75 p-4 backdrop-blur-md"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <button
