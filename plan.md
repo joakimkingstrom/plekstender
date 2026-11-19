@@ -485,7 +485,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] The rating shown while swiping stays put instead of moving with the card.
 - [x] The lightbox blurs what's behind it.
 - [ ] PWA install, offline shell
-- [x] M3U playlist exports (each playlist's last build: Plex's file paths or relative to the music folder)
+- [x] M3U8 playlist exports (each playlist's last build: Plex's file paths or relative to the music folder)
 - [ ] Docs, screenshots, published images (GHCR)
 
 ## Later

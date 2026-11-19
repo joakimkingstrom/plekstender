@@ -789,7 +789,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/servers/{server_id}/playlists/{playlist_id}/export.m3u": {
+    "/api/servers/{server_id}/playlists/{playlist_id}/export.m3u8": {
         parameters: {
             query?: never;
             header?: never;
@@ -798,10 +798,10 @@ export interface paths {
         };
         /**
          * Export M3U
-         * @description The songs of the last build as an M3U file, for other players. Paths are as Plex
+         * @description The songs of the last build as an M3U8 (UTF-8) file, for other players. Paths are as Plex
          *     sees them, or relative to the music library's root folder.
          */
-        get: operations["export_m3u_api_servers__server_id__playlists__playlist_id__export_m3u_get"];
+        get: operations["export_m3u_api_servers__server_id__playlists__playlist_id__export_m3u8_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4625,7 +4625,7 @@ export interface operations {
             };
         };
     };
-    export_m3u_api_servers__server_id__playlists__playlist_id__export_m3u_get: {
+    export_m3u_api_servers__server_id__playlists__playlist_id__export_m3u8_get: {
         parameters: {
             query?: {
                 paths?: "plex" | "relative";

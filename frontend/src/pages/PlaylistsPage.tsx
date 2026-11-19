@@ -147,9 +147,9 @@ function PlaylistList({ serverId }: { serverId: number }) {
                     </p>
                     {p.exportable && (
                       <p className="text-xs text-muted">
-                        Download as M3U:{' '}
+                        Download as M3U8:{' '}
                         <a
-                          href={`/api/servers/${serverId}/playlists/${p.id}/export.m3u`}
+                          href={`/api/servers/${serverId}/playlists/${p.id}/export.m3u8`}
                           download
                           className="text-accent underline"
                         >
@@ -158,7 +158,7 @@ function PlaylistList({ serverId }: { serverId: number }) {
                         {' · '}
                         <Tooltip content="Paths relative to your music folder: save the file in that folder.">
                           <a
-                            href={`/api/servers/${serverId}/playlists/${p.id}/export.m3u?paths=relative`}
+                            href={`/api/servers/${serverId}/playlists/${p.id}/export.m3u8?paths=relative`}
                             download
                             className="text-accent underline"
                           >

@@ -277,7 +277,7 @@ async def rebuild_playlist(
 
 
 @router.get(
-    "/{playlist_id}/export.m3u",
+    "/{playlist_id}/export.m3u8",
     response_class=PlainTextResponse,
     responses={200: {"content": {"audio/x-mpegurl": {}}}},
 )
@@ -288,7 +288,7 @@ async def export_m3u(
     user: UserDep,
     paths: Annotated[Literal["plex", "relative"], Query()] = "plex",
 ) -> PlainTextResponse:
-    """The songs of the last build as an M3U file, for other players. Paths are as Plex
+    """The songs of the last build as an M3U8 (UTF-8) file, for other players. Paths are as Plex
     sees them, or relative to the music library's root folder."""
     us = await get_user_server(db, user, server_id)
     playlist = await _get(db, us, playlist_id)
@@ -299,7 +299,7 @@ async def export_m3u(
     return PlainTextResponse(
         body,
         media_type="audio/x-mpegurl",
-        headers={"Content-Disposition": f'attachment; filename="{name}.m3u"'},
+        headers={"Content-Disposition": f'attachment; filename="{name}.m3u8"'},
     )
 
 
