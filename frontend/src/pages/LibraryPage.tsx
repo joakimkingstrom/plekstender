@@ -1,4 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { Select } from '../components/Select'
+import { Tooltip } from '../components/Tooltip'
 import { Link, useParams } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import {
@@ -33,18 +35,7 @@ function ServerPicker({
 }) {
   if (servers.length < 2) return null
   return (
-    <select
-      value={active.id}
-      onChange={(e) => choose(Number(e.target.value))}
-      className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-      aria-label="Server"
-    >
-      {servers.map((s) => (
-        <option key={s.id} value={s.id}>
-          {s.name}
-        </option>
-      ))}
-    </select>
+    <Select label="Server" value={active.id} onChange={choose} options={servers.map((s) => ({ value: s.id, label: s.name }))} />
   )
 }
 
@@ -72,18 +63,7 @@ export function LibraryPage() {
               className="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
               aria-label="Search artists"
             />
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as ArtistSort)}
-              className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-              aria-label="Sort by"
-            >
-              {SORTS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
           </div>
           <GenreChips serverId={active!.id} selected={tag} onSelect={setTag} />
           <ArtistGrid serverId={active!.id} q={deferredQuery} sort={sort} tag={tag} />
@@ -220,13 +200,13 @@ function TrackList({
               </span>
             )}
           </span>
-          <span className="hidden w-14 text-right text-xs text-muted tabular-nums sm:block" title="Last.fm listeners">
-            {formatCompact(t.popularity)}
-          </span>
+          <Tooltip content="Last.fm listeners" className="hidden w-14 justify-end sm:inline-flex">
+            <span className="text-xs text-muted tabular-nums">{formatCompact(t.popularity)}</span>
+          </Tooltip>
           {showListens && (
-            <span className="w-10 text-right text-xs text-muted tabular-nums" title="Your listens">
-              {t.listens ? `${formatCount(t.listens)}×` : ''}
-            </span>
+            <Tooltip content="Your listens of this song" className="w-10 justify-end">
+              <span className="text-xs text-muted tabular-nums">{t.listens ? `${formatCount(t.listens)}×` : ''}</span>
+            </Tooltip>
           )}
           <Stars rating={t.user_rating} className="w-20 justify-end" />
           <span className="w-10 text-right text-xs text-muted tabular-nums">{formatDuration(t.duration_ms)}</span>
@@ -341,8 +321,8 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
           <h1 className="text-3xl font-bold tracking-tight">{a.title}</h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             <Stars rating={a.user_rating} />
-            <span title="Plex plays or listens in your history, whichever is higher">{formatCount(a.plays)} plays</span>
-            {a.popularity !== null && <span title="Sum of top-song Last.fm listeners">Popularity {formatCompact(a.popularity)}</span>}
+            <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(a.plays)} plays</span></Tooltip>
+            {a.popularity !== null && <Tooltip content="Sum of the Last.fm listeners of the artist's top songs"><span>Popularity {formatCompact(a.popularity)}</span></Tooltip>}
           </div>
           <TagBadges tags={a.tags} />
           <Summary text={a.summary} />
@@ -386,8 +366,10 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
                     </Link>
                   </li>
                 ) : (
-                  <li key={s.name} className="rounded-full bg-surface-2 px-3 py-1 text-sm text-muted" title="Not in your library">
-                    {s.name}
+                  <li key={s.name}>
+                    <Tooltip content="Not in your library">
+                      <span className="block rounded-full bg-surface-2 px-3 py-1 text-sm text-muted">{s.name}</span>
+                    </Tooltip>
                   </li>
                 ),
               )}
@@ -431,7 +413,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             <Stars rating={al.user_rating} />
             {al.critic_rating !== null && <span>Critics {al.critic_rating.toFixed(1)}/10</span>}
-            <span title="Plex plays or listens in your history, whichever is higher">{formatCount(al.plays)} plays</span>
+            <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(al.plays)} plays</span></Tooltip>
           </div>
           <TagBadges tags={al.tags} />
           <Summary text={al.summary} />

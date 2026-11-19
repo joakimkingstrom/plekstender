@@ -69,7 +69,10 @@ describe('StatsPage', () => {
     expect(screen.getByRole('link', { name: 'Radiohead' })).toHaveAttribute('href', '/library/artists/100')
     expect(screen.getByText('Unknown Band')).toBeInTheDocument() // not in the library: no link
     expect(screen.getByText('New')).toBeInTheDocument()
-    expect(screen.getByTitle('Previously #3')).toHaveTextContent('▲ 2')
+    const moved = screen.getByText('▲ 2')
+    fireEvent.mouseEnter(moved)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Previously #3')
+    fireEvent.mouseLeave(moved)
     expect(screen.getByRole('button', { name: '2019' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'All time' }))

@@ -1,4 +1,6 @@
-import { useDeferredValue, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useDeferredValue, useId, useState, type ChangeEvent, type ReactNode } from 'react'
+import { Select } from '../components/Select'
+import { Tooltip } from '../components/Tooltip'
 import { Link } from 'react-router'
 import {
   useApplyArtwork,
@@ -295,9 +297,11 @@ function ArtistEditor({
               >
                 Save to Plex
               </Button>
-              <Button variant="ghost" onClick={() => choose({ kind: 'current' })} title="Adjust the image Plex has now">
-                Edit current
-              </Button>
+              <Tooltip content="Adjust the image Plex has now">
+                <Button variant="ghost" onClick={() => choose({ kind: 'current' })}>
+                  Edit current
+                </Button>
+              </Tooltip>
             </div>
             {apply.isError && <div className="mt-3"><Notice tone="error">{errorMessage(apply.error)}</Notice></div>}
             {notice && <p className="mt-3 text-sm text-ok">{notice}</p>}
@@ -403,6 +407,7 @@ function UploadTab({ serverId, onUploaded }: { serverId: number; onUploaded: (id
 
 function TextTab({ artist, onChange }: { artist: Artist; onChange: (text: Schemas['TextLogo']) => void }) {
   const fonts = useFonts()
+  const ids = useId()
   const [spec, setSpec] = useState<Schemas['TextLogo']>({
     text: artist.title,
     font: 'Anton',
@@ -422,38 +427,40 @@ function TextTab({ artist, onChange }: { artist: Artist; onChange: (text: Schema
         <span className="mb-1 block text-sm font-medium">Text</span>
         <input value={spec.text} maxLength={120} onChange={(e) => update({ text: e.target.value })} className={field} />
       </label>
-      <label>
-        <span className="mb-1 block text-sm font-medium">Font</span>
-        <select value={spec.font} onChange={(e) => update({ font: e.target.value })} className={field}>
-          {fonts.data?.map((g) => (
-            <optgroup key={g.name} label={g.name}>
-              {g.fonts.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </label>
-      <label>
-        <span className="mb-1 block text-sm font-medium">Lines</span>
-        <select value={spec.rows ?? 1} onChange={(e) => update({ rows: Number(e.target.value) })} className={field}>
-          {[1, 2, 3, 4].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        <span className="mb-1 block text-sm font-medium">Case</span>
-        <select value={spec.case ?? 'none'} onChange={(e) => update({ case: e.target.value as Schemas['TextLogo']['case'] })} className={field}>
-          <option value="none">As written</option>
-          <option value="upper">UPPER CASE</option>
-          <option value="lower">lower case</option>
-        </select>
-      </label>
+      <div>
+        <span id={`${ids}-font`} className="mb-1 block text-sm font-medium">Font</span>
+        <Select
+          labelledBy={`${ids}-font`}
+          className="w-full"
+          value={spec.font}
+          onChange={(font) => update({ font })}
+          options={(fonts.data ?? []).flatMap((g) => g.fonts.map((f) => ({ value: f, label: f, group: g.name })))}
+        />
+      </div>
+      <div>
+        <span id={`${ids}-rows`} className="mb-1 block text-sm font-medium">Lines</span>
+        <Select
+          labelledBy={`${ids}-rows`}
+          className="w-full"
+          value={spec.rows ?? 1}
+          onChange={(rows) => update({ rows })}
+          options={[1, 2, 3, 4].map((n) => ({ value: n, label: String(n) }))}
+        />
+      </div>
+      <div>
+        <span id={`${ids}-case`} className="mb-1 block text-sm font-medium">Case</span>
+        <Select
+          labelledBy={`${ids}-case`}
+          className="w-full"
+          value={spec.case ?? 'none'}
+          onChange={(c) => update({ case: c })}
+          options={[
+            { value: 'none' as const, label: 'As written' },
+            { value: 'upper' as const, label: 'UPPER CASE' },
+            { value: 'lower' as const, label: 'lower case' },
+          ]}
+        />
+      </div>
       <label>
         <span className="mb-1 block text-sm font-medium">Colour</span>
         <input type="color" value={spec.color ?? '#ffffff'} onChange={(e) => update({ color: e.target.value })} className="h-9 w-16 rounded border border-border bg-surface-2" />

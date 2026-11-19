@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react'
+import { Tooltip } from './Tooltip'
 import type { Schemas } from '../api/client'
 import { imageUrl, useStartSync, useSyncStatus } from '../api/library'
 import { errorMessage } from '../api/client'
@@ -163,14 +164,15 @@ export function SyncPanel({ serverId, compact = false }: { serverId: number; com
           <Button busy={start.isPending && start.variables === 'incremental'} onClick={() => start.mutate('incremental')}>
             Sync changes
           </Button>
-          <Button
-            variant="ghost"
-            busy={start.isPending && start.variables === 'full'}
-            onClick={() => start.mutate('full')}
-            title="Re-read the whole library, including removals"
-          >
-            Full resync
-          </Button>
+          <Tooltip content="Re-read the whole library, including removals">
+            <Button
+              variant="ghost"
+              busy={start.isPending && start.variables === 'full'}
+              onClick={() => start.mutate('full')}
+            >
+              Full resync
+            </Button>
+          </Tooltip>
         </div>
       )}
       {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}

@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet } from 'react-router'
+import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import { useDeleteListen, useListens, useListenSummary } from '../api/listens'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
@@ -111,16 +112,17 @@ export function ListensPage() {
                       </div>
                       {listen.duplicate && <Badge>Duplicate</Badge>}
                       <Badge>{SOURCES[listen.source]}</Badge>
-                      <button
-                        type="button"
-                        onClick={() => remove.mutate(listen.id)}
-                        disabled={remove.isPending}
-                        className="rounded px-1.5 text-muted opacity-60 hover:bg-surface-2 hover:text-danger group-hover:opacity-100"
-                        aria-label={`Delete listen: ${listen.track_name} at ${formatTime(listen.listened_at)}`}
-                        title="Delete this listen"
-                      >
-                        ×
-                      </button>
+                      <Tooltip content="Delete this listen">
+                        <button
+                          type="button"
+                          onClick={() => remove.mutate(listen.id)}
+                          disabled={remove.isPending}
+                          className="rounded px-1.5 text-muted opacity-60 hover:bg-surface-2 hover:text-danger group-hover:opacity-100"
+                          aria-label={`Delete listen: ${listen.track_name} at ${formatTime(listen.listened_at)}`}
+                        >
+                          ×
+                        </button>
+                      </Tooltip>
                     </li>
                   ))}
                 </ol>

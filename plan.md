@@ -394,9 +394,9 @@ Ordered by the Last.fm deadline (1 Dec 2026):
 Requests after using Phases 1–4 on the real library. Notes in italics are how they'd be done, or what needs checking first.
 
 **General**
-- [ ] Site-native tooltips instead of the browser's `title` tooltips.
+- [x] Site-native tooltips instead of the browser's `title` tooltips.
   *A small Tooltip component (shown on hover and keyboard focus, positioned to stay on screen); replace every `title=` in the UI.*
-- [ ] Site-native dropdowns instead of the browser's `<select>`.
+- [x] Site-native dropdowns instead of the browser's `<select>`.
   *A Select / listbox component with full keyboard support (arrows, type-ahead, Esc) and grouped options (fonts); replace every `<select>`.*
 - [ ] Everything else that still looks like a browser default: checkboxes, range sliders, file pickers, colour pickers, number inputs, scrollbars.
   *Styled replacements sharing the same tokens; file pickers become a button with drag-and-drop.*

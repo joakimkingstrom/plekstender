@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import {
   useAvailableServers,
@@ -68,14 +69,11 @@ function ConnectedServer({ server }: { server: Schemas['ServerOut'] }) {
       }
       action={
         <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            busy={connect.isPending}
-            onClick={() => connect.mutate(server.machine_identifier)}
-            title="Find the best address for this server again"
-          >
-            Reconnect
-          </Button>
+          <Tooltip content="Find the best address for this server again">
+            <Button variant="ghost" busy={connect.isPending} onClick={() => connect.mutate(server.machine_identifier)}>
+              Reconnect
+            </Button>
+          </Tooltip>
           <Button
             variant="danger"
             busy={disconnect.isPending}

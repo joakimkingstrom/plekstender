@@ -1,4 +1,5 @@
 import { Link, useSearchParams } from 'react-router'
+import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import { useActiveServer } from '../api/library'
 import { useStatsActivity, useStatsOverview } from '../api/stats'
@@ -66,9 +67,11 @@ function RankChange({ rank, previous, compared }: { rank: number; previous: numb
   const delta = previous - rank
   if (delta === 0) return <span className="text-xs text-muted" aria-label="Same rank">–</span>
   return (
-    <span className={`text-xs tabular-nums ${delta > 0 ? 'text-ok' : 'text-danger'}`} title={`Previously #${previous}`}>
-      {delta > 0 ? '▲' : '▼'} {Math.abs(delta)}
-    </span>
+    <Tooltip content={`Previously #${previous}`}>
+      <span className={`text-xs tabular-nums ${delta > 0 ? 'text-ok' : 'text-danger'}`}>
+        {delta > 0 ? '▲' : '▼'} {Math.abs(delta)}
+      </span>
+    </Tooltip>
   )
 }
 

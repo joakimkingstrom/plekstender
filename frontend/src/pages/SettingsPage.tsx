@@ -1,4 +1,5 @@
 import { useDeferredValue, useState } from 'react'
+import { Tooltip } from '../components/Tooltip'
 import { Navigate, NavLink, Outlet } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useLibrarySettings, useMe, usePopularityPreview, useUpdateLibrarySettings } from '../api/hooks'
@@ -307,12 +308,13 @@ function RankingPreview({ artistTopN, changed }: { artistTopN: number; changed: 
                 <span className="w-6 text-right text-xs text-muted tabular-nums">{rank}</span>
                 <span className="min-w-0 flex-1 truncate">{row.title}</span>
                 {changed && delta !== 0 && (
+<Tooltip content={`Currently #${row.current_rank}`}>
                   <span
                     className={`text-xs tabular-nums ${delta > 0 ? 'text-ok' : 'text-danger'}`}
-                    title={`Currently #${row.current_rank}`}
                   >
                     {delta > 0 ? '▲' : '▼'} {Math.abs(delta)}
                   </span>
+                  </Tooltip>
                 )}
                 <span className="w-14 text-right text-xs text-muted tabular-nums">{formatCompact(row.popularity)}</span>
               </li>

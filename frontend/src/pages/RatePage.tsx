@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { Select } from '../components/Select'
+import { Tooltip } from '../components/Tooltip'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useAlbum, useArtist } from '../api/library'
@@ -165,34 +167,24 @@ function Rater({ serverId }: { serverId: number }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Segmented label="What to rate" value={settings.kind} options={KINDS} onChange={(kind) => update({ kind })} />
-        <select
-          aria-label="Which ones"
+        <Select
+          label="Which ones"
           value={settings.pool}
-          onChange={(e) => update({ pool: e.target.value as RatePool })}
-          className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-        >
-          {POOLS.map(([key, text]) => (
-            <option key={key} value={key}>
-              {text}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Order"
+          onChange={(pool) => update({ pool })}
+          options={POOLS.map(([value, label]) => ({ value, label }))}
+        />
+        <Select
+          label="Order"
           value={settings.order}
-          onChange={(e) => update({ order: e.target.value as RateOrder })}
-          className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-        >
-          {ORDERS.map(([key, text]) => (
-            <option key={key} value={key}>
-              {text}
-            </option>
-          ))}
-        </select>
+          onChange={(order) => update({ order })}
+          options={ORDERS.map(([value, label]) => ({ value, label }))}
+        />
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" onClick={undo} disabled={!canUndo} busy={undoMutation.isPending} title="Undo the last rating">
-            ↶ Undo
-          </Button>
+          <Tooltip content="Undo your last rating (repeat to go further back)">
+            <Button variant="ghost" onClick={undo} disabled={!canUndo} busy={undoMutation.isPending}>
+              ↶ Undo
+            </Button>
+          </Tooltip>
           <Segmented
             label="Layout"
             value={settings.layout}
@@ -490,9 +482,9 @@ function SongsGrid({ serverId, queue, overrides, rate }: ViewProps) {
                 <p className="truncate text-sm font-medium">{item.title}</p>
                 <p className="truncate text-xs text-muted">{details(item)}</p>
               </div>
-              <span className="hidden w-16 text-right text-xs text-muted tabular-nums sm:block" title="Plays">
-                {formatCount(item.plays)} ▶
-              </span>
+              <Tooltip content="Plays (Plex or your listening history, whichever is higher)" className="hidden w-16 justify-end sm:inline-flex">
+                <span className="text-xs text-muted tabular-nums">{formatCount(item.plays)} ▶</span>
+              </Tooltip>
               <span className="hidden w-10 text-right text-xs text-muted tabular-nums md:block">{formatDuration(item.duration_ms)}</span>
               <StarRating label={`Rate ${item.title}`} value={value} onChange={(rating) => rate(item.rating_key, rating)} />
               <button
@@ -543,7 +535,8 @@ function CoverRating({
   return (
     <div
       className="group relative cursor-pointer"
-      title={label}
+      role="group"
+      aria-label={label}
       onMouseMove={(e) => setHover(ratingAt(e))}
       onMouseLeave={() => setHover(null)}
       onClick={(e) => onChange(ratingAt(e))}
