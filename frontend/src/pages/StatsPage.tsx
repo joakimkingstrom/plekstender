@@ -24,7 +24,7 @@ function rangeOptions(firstListen: string | null | undefined): [string, string][
   const firstYear = firstListen ? new Date(firstListen).getFullYear() : thisYear
   const years: [string, string][] = []
   for (let y = thisYear; y >= firstYear; y--) years.push([`y${y}`, String(y)])
-  return [...FIXED_RANGES, ...years, ['all', 'All time']]
+  return [['all', 'All time'], ...FIXED_RANGES, ...years]
 }
 
 function listens(n: number) {
@@ -169,7 +169,7 @@ export function StatsPage() {
 
   return (
     <div className={`space-y-4 ${overview.isPlaceholderData ? 'opacity-70' : ''}`}>
-      <div className="-mx-4 overflow-x-auto px-4">
+      <div className="no-scrollbar -mx-4 overflow-x-auto px-4">
         <div className="flex w-max gap-1.5" role="group" aria-label="Period">
           {rangeOptions(o.first_listen_at).map(([key, label]) => (
             <button

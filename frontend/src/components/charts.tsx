@@ -171,7 +171,7 @@ export function Heatmap({
     : 'Hover a square for details.'
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <div
         className="grid gap-[2px]"
         style={{ gridTemplateColumns: '2.5rem repeat(24, minmax(0, 1fr))' }}
@@ -191,7 +191,7 @@ export function Heatmap({
             {row.map((value, h) => (
               <span
                 key={h}
-                className="aspect-square rounded-[3px]"
+                className="h-6 rounded-[3px] sm:h-7"
                 style={{
                   background: cellColor(value, max),
                   outline: hover?.[0] === d && hover?.[1] === h ? '2px solid var(--color-text)' : undefined,

@@ -90,9 +90,10 @@ describe('RatePage', () => {
     const second = await screen.findByRole('slider', { name: 'Rate Paranoid Android' })
     fireEvent.keyDown(second, { key: '3', shiftKey: true }) // 2½ stars
     await vi.waitFor(async () => expect(await ratingsPosted()).toEqual([{ rating_key: 2, rating: 5 }]))
-    expect(screen.getByText(/1 of 2 rated/)).toBeInTheDocument()
+    expect(screen.getByText(/1 of 2 done/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next 2 songs' }))
+    // Skipping the other one finishes the page: the next songs load by themselves.
+    fireEvent.click(screen.getByRole('button', { name: 'Skip Airbag' }))
     expect(await screen.findByText(/Nothing left to rate here/)).toBeInTheDocument()
   })
 

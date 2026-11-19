@@ -105,7 +105,7 @@ function GenreChips({
   const tags = useTags(serverId, 'genre')
   if (!tags.data?.length) return null
   return (
-    <div className="mb-5 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by genre">
+    <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by genre">
       {tags.data.slice(0, 24).map((t) => {
         const on = t.id === selected
         return (

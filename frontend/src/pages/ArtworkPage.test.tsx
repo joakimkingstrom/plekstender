@@ -31,6 +31,8 @@ beforeEach(() => {
         })
       case '/api/servers/1/artwork/artists/100/preview':
         return new Response(new Blob(['jpeg']), { headers: { 'content-type': 'image/jpeg' } })
+      case '/api/servers/1/artwork/artists/100/status':
+        return new Response(null, { status: 204 })
       case '/api/servers/1/artwork/jobs':
         return json([])
       case '/api/servers/1/artwork/imports':
@@ -80,7 +82,7 @@ function bodiesFor(path: string) {
 describe('ArtworkPage', () => {
   it('picks a fanart.tv logo, previews it and saves it to Plex', async () => {
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: /Radiohead/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Radiohead' }))
     fireEvent.click(await screen.findByRole('button', { name: /HD logo · 30 likes/ }))
     expect(await screen.findByAltText('New image for Radiohead')).toHaveAttribute('src', 'blob:preview')
     expect(bodiesFor('/api/servers/1/artwork/artists/100/preview')[0]).toEqual({
@@ -109,6 +111,15 @@ describe('ArtworkPage', () => {
       const call = fetchMock.mock.calls.find(([input]) => typeof input !== 'string' && input.url.endsWith('/imports/abc/apply'))
       expect(call).toBeTruthy()
       expect(await (call![0] as Request).clone().json()).toEqual({ items: [{ index: 0, rating_key: 100 }] })
+    })
+  })
+
+  it('cycles an artist’s status from its dot', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Radiohead: To do. Change to Custom' }))
+    await vi.waitFor(async () => {
+      const call = fetchMock.mock.calls.find(([input]) => typeof input !== 'string' && input.url.endsWith('/artists/100/status'))
+      expect(await (call![0] as Request).clone().json()).toEqual({ status: 'custom' })
     })
   })
 

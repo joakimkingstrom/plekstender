@@ -126,18 +126,19 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
         ) : (
           <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto rounded-2xl border border-border bg-surface">
             {items.map((a) => (
-              <li key={a.rating_key}>
+              <li
+                key={a.rating_key}
+                className={`flex items-center hover:bg-surface-2 ${current?.rating_key === a.rating_key ? 'bg-surface-2' : ''}`}
+              >
                 <button
                   type="button"
                   onClick={() => setSelected(a)}
-                  className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-surface-2 ${
-                    current?.rating_key === a.rating_key ? 'bg-surface-2' : ''
-                  }`}
+                  className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3 text-left text-sm"
                 >
                   <Artwork serverId={serverId} path={a.thumb} title={a.title} size={96} round className="size-9 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{a.title}</span>
-                  <span className={`size-2 shrink-0 rounded-full ${STATUS_DOT[a.status]}`} title={STATUSES.find(([k]) => k === a.status)?.[1]} />
                 </button>
+                <StatusDot serverId={serverId} artist={a} />
               </li>
             ))}
             {artists.hasNextPage && (
@@ -795,5 +796,25 @@ function LogoPacks({ serverId }: { serverId: number }) {
         </div>
       </div>
     </details>
+  )
+}
+
+const NEXT_STATUS: Record<ArtworkStatus, ArtworkStatus> = { none: 'custom', custom: 'done', done: 'none' }
+
+/** The list's status dot: click to cycle To do → Custom → Done. */
+function StatusDot({ serverId, artist }: { serverId: number; artist: Artist }) {
+  const setStatus = useSetArtworkStatus(serverId)
+  const label = (status: ArtworkStatus) => STATUSES.find(([k]) => k === status)?.[1] ?? status
+  const pending = setStatus.isPending ? setStatus.variables?.status : undefined
+  const shown = pending ?? artist.status
+  return (
+    <button
+      type="button"
+      onClick={() => setStatus.mutate({ key: artist.rating_key, status: NEXT_STATUS[shown] })}
+      aria-label={`${artist.title}: ${label(shown)}. Change to ${label(NEXT_STATUS[shown])}`}
+      className="flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-border"
+    >
+      <span className={`size-2.5 rounded-full ${STATUS_DOT[shown]}`} />
+    </button>
   )
 }

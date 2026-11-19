@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { Schemas } from '../api/client'
 import { imageUrl, useStartSync, useSyncStatus } from '../api/library'
 import { errorMessage } from '../api/client'
@@ -13,6 +13,7 @@ export function Artwork({
   size = 256,
   round = false,
   className = '',
+  style,
 }: {
   serverId: number
   path: string | null | undefined
@@ -20,6 +21,7 @@ export function Artwork({
   size?: number
   round?: boolean
   className?: string
+  style?: CSSProperties
 }) {
   const [failed, setFailed] = useState(false)
   const src = imageUrl(serverId, path, size)
@@ -28,6 +30,7 @@ export function Artwork({
     return (
       <div
         className={`flex aspect-square items-center justify-center bg-surface-2 font-display text-2xl font-bold text-muted ${shape} ${className}`}
+        style={style}
         aria-hidden
       >
         {title.slice(0, 1).toUpperCase()}
@@ -42,6 +45,7 @@ export function Artwork({
       decoding="async"
       onError={() => setFailed(true)}
       className={`aspect-square bg-surface-2 object-cover ${shape} ${className}`}
+      style={style}
     />
   )
 }

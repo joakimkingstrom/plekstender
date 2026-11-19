@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useAlbum, useArtist } from '../api/library'
@@ -104,7 +104,9 @@ function Rater({ serverId }: { serverId: number }) {
       // storage unavailable: the choice lasts for this visit
     }
   }
-  const queue = useRateQueue(serverId, settings.kind, settings.pool, settings.order)
+  // The Lists layout shows 15 songs at a time: keep two pages in hand.
+  const keep = settings.layout === 'desktop' && settings.kind === 'track' ? SONGS_PER_PAGE * 2 : 6
+  const queue = useRateQueue(serverId, settings.kind, settings.pool, settings.order, keep)
   const rateMutation = useRate(serverId)
   const undoMutation = useUndoRating(serverId)
   const [overrides, setOverrides] = useState<Overrides>({})
@@ -403,26 +405,48 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped }: ViewProps & {
 
 // --- desktop: songs ----------------------------------------------------------------------
 
-const ROW = 56
+/** Songs per page in the Lists layout. */
+const SONGS_PER_PAGE = 15
+const ROW_MIN = 40
+const ROW_MAX = 60
 
 function SongsGrid({ serverId, queue, overrides, rate }: ViewProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const [rows, setRows] = useState(8)
+  const [rowHeight, setRowHeight] = useState(ROW_MAX)
+  const [skipped, setSkipped] = useState<Set<number>>(new Set())
 
-  // Fit the list to the window: no scrolling, as many songs as there's room for.
+  // Always 15 songs; the rows get shorter to fit the window (down to a minimum, below which
+  // the page scrolls on very small screens).
   useLayoutEffect(() => {
     const measure = () => {
       const top = ref.current?.getBoundingClientRect().top ?? 200
       const footer = 72 + (window.innerWidth < 768 ? 64 : 0)
-      setRows(Math.max(3, Math.floor((window.innerHeight - top - footer) / ROW)))
+      const fit = Math.floor((window.innerHeight - top - footer) / SONGS_PER_PAGE)
+      setRowHeight(Math.max(ROW_MIN, Math.min(ROW_MAX, fit)))
     }
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
   }, [])
 
-  const page = queue.items.slice(0, rows)
-  const done = page.filter((i) => current(i, overrides) !== null && current(i, overrides) !== undefined).length
+  const page = queue.items.slice(0, SONGS_PER_PAGE)
+  const handled = (key: number) => key in overrides || skipped.has(key)
+  const done = page.filter((i) => handled(i.rating_key)).length
+  const pageKey = page.map((i) => i.rating_key).join(',')
+
+  const next = useCallback(() => {
+    queue.advance(page.length)
+    setSkipped(new Set())
+  }, [queue, page.length])
+
+  // Everything on the page rated or skipped: move on to the next songs.
+  useEffect(() => {
+    if (page.length === 0 || done < page.length) return
+    const timer = window.setTimeout(next, 700)
+    return () => window.clearTimeout(timer)
+  }, [done, page.length, pageKey, next])
+
+  const skip = (key: number) => setSkipped((s) => new Set(s).add(key))
 
   const focusRow = (index: number) => {
     const target = ref.current?.querySelectorAll<HTMLElement>('[role="slider"]')[index]
@@ -434,11 +458,12 @@ function SongsGrid({ serverId, queue, overrides, rate }: ViewProps) {
       <ol className="divide-y divide-border rounded-2xl border border-border bg-surface">
         {page.map((item, index) => {
           const value = current(item, overrides)
+          const isSkipped = skipped.has(item.rating_key) && !(item.rating_key in overrides)
           return (
             <li
               key={item.rating_key}
-              className={`flex items-center gap-3 px-3 ${value ? 'bg-accent/5' : ''}`}
-              style={{ height: ROW }}
+              className={`flex items-center gap-3 px-3 ${item.rating_key in overrides ? 'bg-accent/5' : ''} ${isSkipped ? 'opacity-40' : ''}`}
+              style={{ height: rowHeight }}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault()
@@ -446,10 +471,21 @@ function SongsGrid({ serverId, queue, overrides, rate }: ViewProps) {
                 } else if (e.key === 'ArrowUp') {
                   e.preventDefault()
                   focusRow(Math.max(0, index - 1))
+                } else if (e.key === 's' || e.key === 'S') {
+                  e.preventDefault()
+                  skip(item.rating_key)
+                  focusRow(Math.min(page.length - 1, index + 1))
                 }
               }}
             >
-              <Artwork serverId={serverId} path={item.thumb} title={item.title} size={96} className="size-10 shrink-0" />
+              <Artwork
+                serverId={serverId}
+                path={item.thumb}
+                title={item.title}
+                size={96}
+                className="shrink-0"
+                style={{ width: rowHeight - 16, height: rowHeight - 16 }}
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{item.title}</p>
                 <p className="truncate text-xs text-muted">{details(item)}</p>
@@ -459,16 +495,25 @@ function SongsGrid({ serverId, queue, overrides, rate }: ViewProps) {
               </span>
               <span className="hidden w-10 text-right text-xs text-muted tabular-nums md:block">{formatDuration(item.duration_ms)}</span>
               <StarRating label={`Rate ${item.title}`} value={value} onChange={(rating) => rate(item.rating_key, rating)} />
+              <button
+                type="button"
+                onClick={() => skip(item.rating_key)}
+                disabled={isSkipped}
+                aria-label={`Skip ${item.title}`}
+                className="rounded px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text disabled:invisible"
+              >
+                Skip
+              </button>
             </li>
           )
         })}
       </ol>
       <div className="mt-3 flex items-center justify-between gap-3 text-sm text-muted">
         <span>
-          {done} of {page.length} rated · keys 1–5 (Shift for halves), ↑↓ to move
+          {done} of {page.length} done · keys 1–5 (Shift for halves), S to skip, ↑↓ to move
         </span>
-        <Button variant={done === page.length ? 'primary' : 'secondary'} onClick={() => queue.advance(page.length)}>
-          Next {page.length} songs
+        <Button variant={done === page.length ? 'primary' : 'secondary'} onClick={next}>
+          Next {SONGS_PER_PAGE} songs
         </Button>
       </div>
     </div>

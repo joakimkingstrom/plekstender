@@ -408,19 +408,19 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 **History**
 - [ ] Top artists / albums / songs by time spent listening as well as by number of listens (long songs in some genres).
   *Listening time = listens × track length. Last.fm and ListenBrainz listens have no length, so take it from the matched library track (or the song's median Plex length), falling back to 3:35 and marking those as estimates. A "By listens / By time" switch on each top list.*
-- [ ] Make the "When you listen" heatmap fill the whole width of its card.
+- [x] Make the "When you listen" heatmap fill the whole width of its card.
 - [ ] Most skipped songs / albums / artists: plays where less than a set share of the track was heard (default 80%, adjustable per user).
   *Check first: Plex's history only records finished plays (Plex counts a play at ~90%), so stopped plays need a session watcher that polls `/status/sessions` every ~10–15 s and records how far each track got. That watcher would also give "playing now" for ListenBrainz and the client details below. Until then, Plex's own `skipCount` (already in the mirror) can power a first version.*
 - [ ] Clicking a chart opens the details behind it, e.g. the 2025 bar on an artist page lists those listens.
   *A drill-down panel (site-native popup) showing the listens for that period plus the item; for the overview charts the same panel filtered by day, week or month, or by weekday and hour for the heatmap.*
-- [ ] Period buttons: hide the horizontal scrollbar, and put "All time" first.
+- [x] Period buttons: hide the horizontal scrollbar, and put "All time" first.
 - [ ] Listens tab: show the client and IP / location for each listen.
   *Check first: Plex history only has a `deviceID` (the client name comes from `/devices`), not an IP address. The IP and LAN/WAN come from live sessions (`Player.address`, `Session.location`), i.e. the session watcher above, so only plays captured live would have them. Imported scrobbles have neither. Decided (19 Nov): add a location using a local IP database, so IP addresses never leave the server: DB-IP's free "IP to City Lite" (`.mmdb`, CC BY 4.0, no account or key; credit "IP geolocation by DB-IP" where locations are shown), downloaded monthly by the worker into `DATA_DIR/geoip` and read with `maxminddb`. LAN addresses show as "Local network".*
 
 **Rate**
-- [ ] Skip a song in the Lists view.
-- [ ] When every song on the page is rated or skipped, show the next page automatically.
-- [ ] Lists view: always 15 songs per page (it sometimes shows 10, sometimes 15).
+- [x] Skip a song in the Lists view.
+- [x] When every song on the page is rated or skipped, show the next page automatically.
+- [x] Lists view: always 15 songs per page (it sometimes shows 10, sometimes 15).
   *Cause: the row count is worked out from the window height when the page first renders, so it depends on screen size and on what had loaded by then. Fix it at 15 and fit the row height to the window instead (with a minimum, scrolling only on very small screens).*
 - [ ] Genre filter under Songs / Albums / Artists.
   *Songs inherit genres from their album, falling back to the artist (see the Phase 0 spike). The queue query gets an optional tag filter; the picker lists the genres present in the chosen pool.*
@@ -428,12 +428,12 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 **Library**
 - [ ] Rate artists, albums and songs in the library views too (artist list, artist page, album page, track lists).
   *Reuse StarRating and the ratings API (same undo log).*
-- [ ] Hide the horizontal scrollbar of the genre chips under the artist search.
+- [x] Hide the horizontal scrollbar of the genre chips under the artist search.
 - [ ] Artist page: group releases by type (albums, compilations, singles and EPs, live, …) instead of one list.
   *Spike (19 Nov): album details have a `Format` tag array (artists also have `Location`). `plex_probe.py --formats` counts the `Format` / `Subformat` values across albums to see which release types Plex uses. Store them as tags (kinds `format` / `subformat`) during the detail sync, and fall back to "Albums" when Plex doesn't say.*
 
 **Artwork**
-- [ ] Change an artist's status by clicking its status dot in the list (cycles To do → Custom → Done).
+- [x] Change an artist's status by clicking its status dot in the list (cycles To do → Custom → Done).
 
 ### Phase 6 — Smart playlists
 - [ ] Definition schema + builder service + preview endpoint

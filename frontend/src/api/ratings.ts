@@ -23,7 +23,14 @@ type QueueState = {
  * A client-side queue of items to rate. Pages are fetched as it runs low; everything
  * already shown is sent back as `exclude`, so nothing repeats within a session.
  */
-export function useRateQueue(serverId: number, kind: RateKind, pool: RatePool, order: RateOrder) {
+export function useRateQueue(
+  serverId: number,
+  kind: RateKind,
+  pool: RatePool,
+  order: RateOrder,
+  /** Fetch more while fewer than this many items are in hand. */
+  keep = REFILL_BELOW,
+) {
   const key = `${serverId}|${kind}|${pool}|${order}`
   const [state, setState] = useState<QueueState>({ key: '', items: [], exhausted: false, error: null })
   // Bumped when a request finishes without changing the queue (e.g. settings changed while
@@ -70,10 +77,10 @@ export function useRateQueue(serverId: number, kind: RateKind, pool: RatePool, o
 
   // First page for new settings, then keep a few items in hand.
   useEffect(() => {
-    if (!current.exhausted && !current.error && current.items.length < REFILL_BELOW) {
+    if (!current.exhausted && !current.error && current.items.length < keep) {
       void fetchPage()
     }
-  }, [current.items.length, current.exhausted, current.error, fetchPage, tick])
+  }, [current.items.length, current.exhausted, current.error, fetchPage, tick, keep])
 
   /** Take the first `n` items off the queue (rated or skipped). */
   const advance = useCallback(
