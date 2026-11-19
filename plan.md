@@ -437,10 +437,16 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 **Artwork**
 - [x] Change an artist's status by clicking its status dot in the list (cycles To do → Custom → Done).
 
-### Phase 6 — Smart playlists
-- [ ] Definition schema + builder service + preview endpoint
-- [ ] Builder UI
-- [ ] Scheduled refresh
+### Phase 6 — Smart playlists ✓
+- [x] Definition schema + builder service + preview endpoint (artists, always-included
+      songs, min rating ± unrated, each artist's top N% by popularity, AND/OR, limit,
+      shuffled or most popular; songs released more than once count once)
+- [x] Builder helpers: library search, a genre's / mood's top 10 artists, similar artists
+      (Plex's list, matched to the library) and sonic similarity (`/nearest`, best effort)
+- [x] Builder UI (live preview) and playlists page (status, rebuild, delete ± in Plex)
+- [x] Written to Plex as a regular playlist under the user's own account; rebuilds replace
+      the songs in place (same key), or recreate it if it was deleted in Plex
+- [x] Scheduled refresh (daily / weekly / monthly; checked every 10 minutes)
 
 ### Phase 7 — Feedback round 2 (from `.todo.md`, 19 Nov 2026)
 

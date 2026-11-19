@@ -589,6 +589,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/playlists/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search */
+        get: operations["search_api_servers__server_id__playlists_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/playlists/tag-artists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tag Artists
+         * @description A genre's or mood's top 10 artists, to start a playlist from.
+         */
+        get: operations["tag_artists_api_servers__server_id__playlists_tag_artists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/playlists/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggestions
+         * @description Artists similar to the chosen ones, and sonically similar artists and songs.
+         */
+        get: operations["suggestions_api_servers__server_id__playlists_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/playlists/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_servers__server_id__playlists_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Playlists */
+        get: operations["list_playlists_api_servers__server_id__playlists_get"];
+        put?: never;
+        /**
+         * Create Playlist
+         * @description Save a playlist and build it in Plex (in the background).
+         */
+        post: operations["create_playlist_api_servers__server_id__playlists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/playlists/{playlist_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Playlist */
+        get: operations["get_playlist_api_servers__server_id__playlists__playlist_id__get"];
+        /**
+         * Update Playlist
+         * @description Change a playlist and rebuild it (its songs are replaced in place in Plex).
+         */
+        put: operations["update_playlist_api_servers__server_id__playlists__playlist_id__put"];
+        post?: never;
+        /**
+         * Delete Playlist
+         * @description Delete the playlist here, and (by default) in Plex too.
+         */
+        delete: operations["delete_playlist_api_servers__server_id__playlists__playlist_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/playlists/{playlist_id}/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rebuild Playlist */
+        post: operations["rebuild_playlist_api_servers__server_id__playlists__playlist_id__build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -649,7 +786,8 @@ export interface paths {
         };
         /**
          * Candidate Image
-         * @description A candidate's thumbnail, fetched by the server (only signed references).
+         * @description A candidate's thumbnail, fetched by the server (only signed references). Search
+         *     engines' thumbnail hosts sometimes refuse; then the full image is used instead.
          */
         get: operations["candidate_image_api_servers__server_id__artwork_image_get"];
         put?: never;
@@ -1450,6 +1588,28 @@ export interface components {
             /** Probes */
             probes: components["schemas"]["ProbeOut"][];
         };
+        /** Definition */
+        Definition: {
+            /** Artists */
+            artists?: number[];
+            /**
+             * Tracks
+             * @description Always included, rules or not.
+             */
+            tracks?: number[];
+            rules?: components["schemas"]["Rules"];
+            /**
+             * Limit
+             * @default 500
+             */
+            limit: number | null;
+            /**
+             * Order
+             * @default random
+             * @enum {string}
+             */
+            order: "random" | "popular";
+        };
         /** DeletedOut */
         DeletedOut: {
             /** Deleted */
@@ -1846,6 +2006,178 @@ export interface components {
             /** Auth Url */
             auth_url: string;
         };
+        /** PlaylistDetail */
+        PlaylistDetail: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Display */
+            display: {
+                [key: string]: unknown;
+            };
+            /**
+             * Schedule
+             * @enum {string}
+             */
+            schedule: "manual" | "daily" | "weekly" | "monthly";
+            /** Plex Playlist Key */
+            plex_playlist_key: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "queued" | "running" | "ok" | "error";
+            /** Error */
+            error: string | null;
+            /** Last Result */
+            last_result: {
+                [key: string]: unknown;
+            };
+            /** Last Built At */
+            last_built_at: string | null;
+            /** Next Run At */
+            next_run_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Seed Artists */
+            seed_artists: components["schemas"]["SeedArtist"][];
+            /** Seed Tracks */
+            seed_tracks: components["schemas"]["SeedTrack"][];
+        };
+        /** PlaylistIn */
+        PlaylistIn: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            definition: components["schemas"]["Definition"];
+            /** Display */
+            display?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Schedule
+             * @default manual
+             * @enum {string}
+             */
+            schedule: "manual" | "daily" | "weekly" | "monthly";
+        };
+        /** PlaylistOut */
+        PlaylistOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Display */
+            display: {
+                [key: string]: unknown;
+            };
+            /**
+             * Schedule
+             * @enum {string}
+             */
+            schedule: "manual" | "daily" | "weekly" | "monthly";
+            /** Plex Playlist Key */
+            plex_playlist_key: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "queued" | "running" | "ok" | "error";
+            /** Error */
+            error: string | null;
+            /** Last Result */
+            last_result: {
+                [key: string]: unknown;
+            };
+            /** Last Built At */
+            last_built_at: string | null;
+            /** Next Run At */
+            next_run_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** PlaylistPreviewOut */
+        PlaylistPreviewOut: {
+            /**
+             * Matched
+             * @description Songs matching, before the limit.
+             */
+            matched: number;
+            /** Count */
+            count: number;
+            /** Duration Ms */
+            duration_ms: number;
+            /** Artists */
+            artists: number;
+            /** Top Artists */
+            top_artists: string[];
+            /**
+             * Songs
+             * @description Up to 100 of the songs, in playlist order.
+             */
+            songs: components["schemas"]["PlaylistSong"][];
+        };
+        /** PlaylistSearchOut */
+        PlaylistSearchOut: {
+            /** Artists */
+            artists: components["schemas"]["SeedArtist"][];
+            /** Tracks */
+            tracks: components["schemas"]["SeedTrack"][];
+        };
+        /** PlaylistSong */
+        PlaylistSong: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string | null;
+            /** Artist Key */
+            artist_key: number | null;
+            /** Album */
+            album: string | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Rating */
+            rating: number | null;
+        };
+        /** PlaylistSuggestionsOut */
+        PlaylistSuggestionsOut: {
+            /**
+             * Similar
+             * @description Plex's similar artists, in your library.
+             */
+            similar: components["schemas"]["SeedArtist"][];
+            /**
+             * Sonic Artists
+             * @description Sonically similar (Plex Pass analysis).
+             */
+            sonic_artists: components["schemas"]["SeedArtist"][];
+            /** Sonic Tracks */
+            sonic_tracks: components["schemas"]["SeedTrack"][];
+        };
         /** PlexCaptureOut */
         PlexCaptureOut: {
             /**
@@ -2030,6 +2362,35 @@ export interface components {
              */
             transform: components["schemas"]["Transform"];
         };
+        /**
+         * Rules
+         * @description Which of the chosen artists' songs make it in.
+         */
+        Rules: {
+            /**
+             * Op
+             * @description How the two rules combine.
+             * @default AND
+             * @enum {string}
+             */
+            op: "AND" | "OR";
+            /**
+             * Min Rating
+             * @description Your rating, 0-10 (half stars = 1).
+             */
+            min_rating?: number | null;
+            /**
+             * Include Unrated
+             * @description Unrated songs pass the rating rule.
+             * @default true
+             */
+            include_unrated: boolean;
+            /**
+             * Top Percent
+             * @description Only each artist's most popular N% of songs.
+             */
+            top_percent?: number | null;
+        };
         /** SectionOut */
         SectionOut: {
             /** Key */
@@ -2038,6 +2399,26 @@ export interface components {
             title: string;
             /** Selected */
             selected: boolean;
+        };
+        /** SeedArtist */
+        SeedArtist: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+        };
+        /** SeedTrack */
+        SeedTrack: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string | null;
+            /** Thumb */
+            thumb: string | null;
         };
         /** SelectSectionsIn */
         SelectSectionsIn: {
@@ -3585,6 +3966,339 @@ export interface operations {
             };
         };
     };
+    search_api_servers__server_id__playlists_search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistSearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tag_artists_api_servers__server_id__playlists_tag_artists_get: {
+        parameters: {
+            query: {
+                tag_id: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedArtist"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggestions_api_servers__server_id__playlists_suggestions_get: {
+        parameters: {
+            query?: {
+                artists?: number[];
+                tracks?: number[];
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistSuggestionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_servers__server_id__playlists_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Definition"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_playlists_api_servers__server_id__playlists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_playlist_api_servers__server_id__playlists_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaylistIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_playlist_api_servers__server_id__playlists__playlist_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                playlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_playlist_api_servers__server_id__playlists__playlist_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                playlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaylistIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_playlist_api_servers__server_id__playlists__playlist_id__delete: {
+        parameters: {
+            query?: {
+                from_plex?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                playlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rebuild_playlist_api_servers__server_id__playlists__playlist_id__build_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                playlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_artists_api_servers__server_id__artwork_artists_get: {
         parameters: {
             query?: {
@@ -3694,6 +4408,8 @@ export interface operations {
             query: {
                 t: string;
                 size?: number;
+                /** @description Full image, if `t` fails. */
+                f?: string | null;
             };
             header?: never;
             path: {

@@ -11,9 +11,10 @@ import './index.css'
 import { AdminPage } from './pages/AdminPage'
 import { ArtworkPage } from './pages/ArtworkPage'
 import { HistoryLayout, ListensPage } from './pages/HistoryPage'
-import { ComingSoonPage, HomePage, NotFoundPage } from './pages/HomePage'
+import { HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
+import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
@@ -57,10 +58,9 @@ const router = createBrowserRouter([
         path: 'artwork',
         element: <ArtworkPage />,
       },
-      {
-        path: 'playlists',
-        element: <ComingSoonPage title="Playlists" text="The playlist builder arrives in a later phase." />,
-      },
+      { path: 'playlists', element: <PlaylistsPage /> },
+      { path: 'playlists/new', element: <PlaylistEditorPage /> },
+      { path: 'playlists/:id', element: <PlaylistEditorPage /> },
       {
         path: 'settings',
         element: <SettingsLayout />,
