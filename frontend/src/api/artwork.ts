@@ -118,6 +118,21 @@ export function useSetArtworkStatus(serverId: number) {
   })
 }
 
+/** Mark every "To do" artist as done or custom. */
+export function useBulkArtworkStatus(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (status: Schemas['ArtworkBulkStatusIn']['status']) =>
+      unwrap(
+        api.POST('/api/servers/{server_id}/artwork/artists/bulk-status', {
+          params: { path: { server_id: serverId } },
+          body: { status },
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: artworkKeys.all(serverId) }),
+  })
+}
+
 /** POST a raw body (for file uploads), throwing ApiError like the typed client. */
 async function postRaw<T>(path: string, body: BodyInit, contentType: string): Promise<T> {
   const res = await fetch(path, {

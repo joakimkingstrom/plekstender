@@ -1573,6 +1573,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/artists/bulk-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Status
+         * @description Mark every "To do" artist (status none) as done or custom in one go.
+         */
+        post: operations["bulk_status_api_servers__server_id__artwork_artists_bulk_status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists/{rating_key}/status": {
         parameters: {
             query?: never;
@@ -2552,6 +2572,23 @@ export interface components {
             counts: {
                 [key: string]: number;
             };
+        };
+        /** ArtworkBulkStatusIn */
+        ArtworkBulkStatusIn: {
+            /**
+             * Status
+             * @description New status for every To do artist.
+             * @enum {string}
+             */
+            status: "custom" | "done";
+        };
+        /** ArtworkBulkStatusOut */
+        ArtworkBulkStatusOut: {
+            /**
+             * Changed
+             * @description Artists whose status changed.
+             */
+            changed: number;
         };
         /** ArtworkJobOut */
         ArtworkJobOut: {
@@ -7972,6 +8009,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtworkArtistPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_status_api_servers__server_id__artwork_artists_bulk_status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtworkBulkStatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkBulkStatusOut"];
                 };
             };
             /** @description Validation Error */

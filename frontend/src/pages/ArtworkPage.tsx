@@ -11,6 +11,7 @@ import {
   useApplyArtwork,
   useArtworkArtists,
   useArtworkJobs,
+  useBulkArtworkStatus,
   useCandidates,
   useFonts,
   usePreview,
@@ -121,6 +122,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
             ),
           )}
         </div>
+        <BulkStatus serverId={serverId} todo={counts.none ?? 0} />
         {artists.isPending ? (
           <Spinner small />
         ) : artists.isError ? (
@@ -616,6 +618,61 @@ function BulkFanart({ serverId, todo }: { serverId: number; todo: number }) {
         </div>
       )}
       {start.isError && <div className="mt-2"><Notice tone="error">{errorMessage(start.error)}</Notice></div>}
+    </div>
+  )
+}
+
+/** Mark every "To do" artist as Done or Custom at once. Images are left as they are. */
+function BulkStatus({ serverId, todo }: { serverId: number; todo: number }) {
+  const mark = useBulkArtworkStatus(serverId)
+  const [confirming, setConfirming] = useState<'done' | 'custom' | null>(null)
+  const label = (status: ArtworkStatus) => STATUSES.find(([k]) => k === status)?.[1] ?? status
+  const marked = mark.isSuccess && !confirming ? mark.data : null
+
+  if (todo === 0 && !marked && !mark.isError) return null
+  return (
+    <div className="space-y-1.5 text-xs">
+      {confirming ? (
+        <div className="space-y-2 rounded-2xl border border-border bg-surface p-3 text-sm">
+          <p>
+            Mark all {todo} "To do" artists as {label(confirming)}? Their images stay as they are.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              busy={mark.isPending}
+              onClick={() => mark.mutate(confirming, { onSettled: () => setConfirming(null) })}
+            >
+              Mark {todo} as {label(confirming)}
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        todo > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-muted">
+            <span>Mark all "To do" as</span>
+            {(['done', 'custom'] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setConfirming(key)}
+                className="rounded-full bg-surface-2 px-2.5 py-0.5 font-medium hover:text-text"
+              >
+                {label(key)}
+              </button>
+            ))}
+          </div>
+        )
+      )}
+      {marked && (
+        <p className="text-muted" aria-live="polite">
+          Marked {marked.changed} {marked.changed === 1 ? 'artist' : 'artists'} as {label(mark.variables!)}.
+        </p>
+      )}
+      {mark.isError && <Notice tone="error">{errorMessage(mark.error)}</Notice>}
     </div>
   )
 }

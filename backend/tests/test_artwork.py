@@ -326,6 +326,17 @@ async def test_artwork_editor_flow(app: FastAPI, plex: FakePlex, web: respx.Mock
     assert [a["title"] for a in custom["items"]] == ["Secret Band"]
     assert custom["counts"] == {"none": 1, "done": 1, "custom": 1}
 
+    # Everything still to do, in one go: only "none" changes.
+    bulk = await owner.post(f"{base}/artists/bulk-status", json={"status": "done"}, headers=CSRF)
+    assert bulk.status_code == 200, bulk.text
+    assert bulk.json() == {"changed": 1}
+    after = (await owner.get(f"{base}/artists")).json()
+    assert after["counts"] == {"done": 2, "custom": 1}
+    again = await owner.post(f"{base}/artists/bulk-status", json={"status": "custom"}, headers=CSRF)
+    assert again.json() == {"changed": 0}
+    refused = await owner.post(f"{base}/artists/bulk-status", json={"status": "none"}, headers=CSRF)
+    assert refused.status_code == 422
+
 
 @pytest.mark.db
 async def test_text_logo_preview(
@@ -472,6 +483,10 @@ async def test_only_the_owner_edits_artwork(
         headers=CSRF,
     )
     assert resp.status_code == 403
+    bulk = await friend.post(
+        f"/api/servers/{fsid}/artwork/artists/bulk-status", json={"status": "done"}, headers=CSRF
+    )
+    assert bulk.status_code == 403
     assert (
         await friend.put("/api/admin/fanart", json={"api_key": FANART_KEY}, headers=CSRF)
     ).status_code == 403

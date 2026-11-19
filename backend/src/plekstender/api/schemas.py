@@ -553,6 +553,14 @@ class ArtworkStatusIn(BaseModel):
     status: ArtworkStatus
 
 
+class ArtworkBulkStatusIn(BaseModel):
+    status: Literal["custom", "done"] = Field(description="New status for every To do artist.")
+
+
+class ArtworkBulkStatusOut(BaseModel):
+    changed: int = Field(description="Artists whose status changed.")
+
+
 class CandidateOut(BaseModel):
     token: str = Field(description="Signed reference: pass it back to preview or apply.")
     thumb: str = Field(description="Proxied thumbnail URL for <img>.")

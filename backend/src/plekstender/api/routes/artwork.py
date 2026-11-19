@@ -18,7 +18,8 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from fastapi.responses import Response as RawResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
@@ -28,6 +29,8 @@ from plekstender.api.routes.servers import get_user_server, server_client
 from plekstender.api.schemas import (
     ArtworkArtistOut,
     ArtworkArtistPage,
+    ArtworkBulkStatusIn,
+    ArtworkBulkStatusOut,
     ArtworkJobOut,
     ArtworkStatus,
     ArtworkStatusIn,
@@ -224,6 +227,42 @@ async def list_artists(
         total=total,
         counts={k: int(v) for k, v in counts.items()},
     )
+
+
+@router.post("/artists/bulk-status", response_model=ArtworkBulkStatusOut)
+async def bulk_status(
+    server_id: int, body: ArtworkBulkStatusIn, db: DbDep, user: UserDep
+) -> ArtworkBulkStatusOut:
+    """Mark every "To do" artist (status none) as done or custom in one go."""
+    us = await owner_server(db, user, server_id)
+    state, cond, where = visible(Artist, user.id, us)
+    work = ArtistArtwork
+    todo = (
+        select(
+            Artist.server_id,
+            Artist.rating_key,
+            literal(body.status).label("status"),
+            literal(user.id).label("updated_by"),
+        )
+        .join(state, cond)
+        .outerjoin(
+            work,
+            (work.server_id == Artist.server_id) & (work.rating_key == Artist.rating_key),
+        )
+        .where(*where, func.coalesce(work.status, "none") == "none")
+    )
+    stmt = insert(work).from_select(["server_id", "rating_key", "status", "updated_by"], todo)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[work.server_id, work.rating_key],
+        set_={
+            "status": stmt.excluded.status,
+            "updated_by": stmt.excluded.updated_by,
+            "updated_at": func.now(),
+        },
+    )
+    changed = len((await db.execute(stmt.returning(work.rating_key))).all())
+    await db.commit()
+    return ArtworkBulkStatusOut(changed=changed)
 
 
 @router.put("/artists/{rating_key}/status", status_code=status.HTTP_204_NO_CONTENT)

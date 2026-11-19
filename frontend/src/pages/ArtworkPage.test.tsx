@@ -33,6 +33,8 @@ beforeEach(() => {
         })
       case '/api/servers/1/artwork/artists/100/preview':
         return new Response(new Blob(['jpeg']), { headers: { 'content-type': 'image/jpeg' } })
+      case '/api/servers/1/artwork/artists/bulk-status':
+        return json({ changed: 1 })
       case '/api/servers/1/artwork/artists/100/status':
         return new Response(null, { status: 204 })
       case '/api/servers/1/artwork/jobs':
@@ -125,6 +127,16 @@ describe('ArtworkPage', () => {
       const call = fetchMock.mock.calls.find(([input]) => typeof input !== 'string' && input.url.endsWith('/artists/100/status'))
       expect(await (call![0] as Request).clone().json()).toEqual({ status: 'done' })
     })
+  })
+
+  it('marks every “To do” artist as Custom after asking', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Custom' }))
+    expect(screen.getByText(/Mark all 1 "To do" artists as Custom\?/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Mark 1 as Custom' }))
+    expect(await screen.findByText('Marked 1 artist as Custom.')).toBeInTheDocument()
+    const call = fetchMock.mock.calls.find(([input]) => typeof input !== 'string' && input.url.endsWith('/artists/bulk-status'))
+    expect(await (call![0] as Request).clone().json()).toEqual({ status: 'custom' })
   })
 
   it('tells people who don’t own the server', async () => {
