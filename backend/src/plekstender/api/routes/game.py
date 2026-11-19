@@ -6,6 +6,7 @@ from __future__ import annotations
 import random
 from typing import Annotated, Any
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -13,6 +14,7 @@ from sqlalchemy.orm import aliased
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
+from plekstender.api.routes.auth import load_preferences
 from plekstender.api.routes.library import _like, visible
 from plekstender.api.routes.previews import preview_out, visible_track
 from plekstender.api.routes.servers import get_user_server, server_client
@@ -20,12 +22,15 @@ from plekstender.api.schemas import (
     GameCheckIn,
     GameCheckOut,
     GameMode,
+    GamePlaylistIn,
+    GamePlaylistOut,
     GameResultIn,
     GameRoundOut,
     GameSearchItem,
     GameStatsOut,
 )
-from plekstender.db.models import Album, Artist, GameStats, Track, UserServer
+from plekstender.db.models import Album, Artist, GameStats, PlexServer, Track, UserServer
+from plekstender.plex.tv import PlexError
 from plekstender.previews import PreviewError, get_clip
 from plekstender.sync.parse import fold
 
@@ -42,6 +47,19 @@ MAX_TRIES = 3
 VARIOUS = ("various artists", "various", "va")
 
 
+# Album / artist rounds by game setting: how deep into their songs to go.
+POPULARITY_POOLS = {"popular": (0, TOP_SONGS), "mixed": (0, 10), "deep": (10, 60)}
+
+
+def by_popularity(songs: list[Track], popularity: str) -> list[Track]:
+    """The songs to choose from: the top 3, the top 10, or the rest (deep cuts; the
+    least popular half when there are 10 or fewer)."""
+    start, end = POPULARITY_POOLS.get(popularity, POPULARITY_POOLS["popular"])
+    if popularity == "deep" and len(songs) <= start:
+        return songs[len(songs) // 2 :] or songs
+    return songs[start:end] or songs[:TOP_SONGS]
+
+
 def title_ok(title: str) -> bool:
     return sum(c.isalnum() for c in fold(title)) >= MIN_TITLE
 
@@ -56,7 +74,7 @@ async def _top_tracks(
     *,
     short_titles: bool = False,
 ) -> list[Track]:
-    """Most popular songs of an album or artist (one release per song)."""
+    """An album's or artist's songs, most popular first (one release per song)."""
     state, cond, where = visible(Track, user_id, us)
     rows = list(
         await db.scalars(
@@ -64,7 +82,7 @@ async def _top_tracks(
             .join(state, cond)
             .where(*where, column == key, Track.part_key.is_not(None))
             .order_by(Track.popularity.desc().nulls_last(), Track.rating_key)
-            .limit(limit * 4)
+            .limit(limit * 3)
         )
     )
     seen: set[str] = set()
@@ -88,6 +106,7 @@ async def pick_song(
     rating_key: int,
     *,
     for_game: bool,
+    popularity: str = "popular",
 ) -> GameRoundOut:
     """The song to play for a card: the song itself, or one of an album's or artist's most
     popular songs, avoiding silent intros. For the game, songs with very short titles or a
@@ -99,9 +118,10 @@ async def pick_song(
         candidates = [track]
     else:
         column = Track.album_rating_key if mode == "album" else Track.artist_rating_key
-        candidates = await _top_tracks(
-            db, user.id, us, column, rating_key, TOP_SONGS, short_titles=not for_game
+        songs = await _top_tracks(
+            db, user.id, us, column, rating_key, 60, short_titles=not for_game
         )
+        candidates = by_popularity(songs, popularity) if for_game else songs[:TOP_SONGS]
         random.shuffle(candidates)
     if not candidates:
         return GameRoundOut(playable=False, reason="no-file", preview=None)
@@ -117,6 +137,7 @@ async def pick_song(
             playable=True,
             reason=None,
             preview=preview_out(us.id, track.rating_key, clip),
+            song_title=track.title,
         )
         if not clip.quiet_intro:
             return found
@@ -144,7 +165,10 @@ async def game_round(
 ) -> GameRoundOut:
     """The song to play for a game round (not played: very short titles, silent intros)."""
     us = await get_user_server(db, user, server_id)
-    return await pick_song(db, user, us, settings, http, cipher, mode, rating_key, for_game=True)
+    popularity = load_preferences(user).game.popularity
+    return await pick_song(
+        db, user, us, settings, http, cipher, mode, rating_key, for_game=True, popularity=popularity
+    )
 
 
 @sample_router.get(
@@ -272,34 +296,143 @@ async def game_search(
     return out
 
 
+async def _artist_of(db: DbDep, server_id: int, item: Track | Album | Artist) -> Artist | None:
+    if isinstance(item, Artist):
+        return item
+    if item.artist_rating_key is None:
+        return None
+    return await db.get(Artist, (server_id, item.artist_rating_key))
+
+
+def _same_artist(a: Artist | None, b: Artist | None) -> bool:
+    if a is None or b is None:
+        return False
+    return a.rating_key == b.rating_key or (bool(a.name_key) and a.name_key == b.name_key)
+
+
+MODELS: dict[str, Any] = {  # song, album or artist model by game mode
+    "track": Track,
+    "album": Album,
+    "artist": Artist,
+}
+
+
 @router.post("/check", response_model=GameCheckOut)
 async def game_check(server_id: int, body: GameCheckIn, db: DbDep, user: UserDep) -> GameCheckOut:
     """Whether a guess is right: the same song on any release, the same album (or a release
-    of it with the same title), or the same artist."""
+    of it with the same title), or the same artist. In song and album modes, also whether
+    the guess (or the artist picked) is by the right artist."""
     us = await get_user_server(db, user, server_id)
-    if body.target == body.guess:
-        return GameCheckOut(correct=True)
-    model = {"track": Track, "album": Album, "artist": Artist}[body.mode]
-    target = await db.get(model, (us.server_id, body.target))
-    guess = await db.get(model, (us.server_id, body.guess))
+    guess_kind = body.guess_kind or body.mode
+    target = await db.get(MODELS[body.mode], (us.server_id, body.target))
+    guess = await db.get(MODELS[guess_kind], (us.server_id, body.guess))
     if target is None or guess is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
     if isinstance(target, Artist) and isinstance(guess, Artist):
-        correct = bool(target.name_key) and target.name_key == guess.name_key
-    elif isinstance(target, Track) and isinstance(guess, Track):
-        correct = (
+        return GameCheckOut(correct=_same_artist(target, guess), artist_correct=None)
+    artist_correct = _same_artist(
+        await _artist_of(db, us.server_id, target), await _artist_of(db, us.server_id, guess)
+    )
+    if isinstance(target, Track) and isinstance(guess, Track):
+        correct = target.rating_key == guess.rating_key or (
             target.artist_rating_key == guess.artist_rating_key
             and target.title_norm == guess.title_norm
         )
     elif isinstance(target, Album) and isinstance(guess, Album):
-        correct = (
+        correct = target.rating_key == guess.rating_key or (
             target.artist_rating_key == guess.artist_rating_key
             and bool(target.title_norm)
             and target.title_norm == guess.title_norm
         )
     else:
-        correct = False
-    return GameCheckOut(correct=correct)
+        correct = False  # an artist picked while guessing a song or album
+    return GameCheckOut(correct=correct, artist_correct=artist_correct or correct)
+
+
+PLAYLIST_SONGS = 5
+
+
+@router.get("/playlists", response_model=list[str])
+async def game_playlists(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+    cipher: CipherDep,
+) -> list[str]:
+    """Names of your regular audio playlists in Plex (for the game's settings)."""
+    us = await get_user_server(db, user, server_id)
+    try:
+        found = await server_client(us, cipher, settings, http).audio_playlists()
+    except (PlexError, httpx.HTTPError) as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Plex couldn't be reached.") from exc
+    return sorted({str(p.get("title")) for p in found if p.get("title") and not p.get("smart")})
+
+
+@router.post("/playlist", response_model=GamePlaylistOut)
+async def add_to_game_playlist(
+    server_id: int,
+    body: GamePlaylistIn,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+    cipher: CipherDep,
+) -> GamePlaylistOut:
+    """Add the card's artist's five most popular songs to your game playlist in Plex (made
+    when it doesn't exist yet). Songs already in it are left out."""
+    us = await get_user_server(db, user, server_id)
+    target = await db.get(MODELS[body.mode], (us.server_id, body.target))
+    artist = await _artist_of(db, us.server_id, target) if target is not None else None
+    if artist is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Artist not found")
+    songs = await _top_tracks(
+        db,
+        user.id,
+        us,
+        Track.artist_rating_key,
+        artist.rating_key,
+        PLAYLIST_SONGS,
+        short_titles=True,
+    )
+    songs = songs[:PLAYLIST_SONGS]
+    if not songs:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"No songs by {artist.title} to add.")
+    name = load_preferences(user).game.playlist.strip()
+    server = await db.get(PlexServer, us.server_id)
+    assert server is not None
+    client = server_client(us, cipher, settings, http)
+    try:
+        existing = next(
+            (
+                p
+                for p in await client.audio_playlists()
+                if not p.get("smart") and str(p.get("title", "")).casefold() == name.casefold()
+            ),
+            None,
+        )
+        if existing is None:
+            await client.create_playlist(
+                name, server.machine_identifier, [s.rating_key for s in songs]
+            )
+            return GamePlaylistOut(playlist=name, added=[s.title for s in songs], already=0)
+        key = int(existing["ratingKey"])
+        have = set(await client.playlist_rating_keys(key))
+        new = [s for s in songs if s.rating_key not in have]
+        if new:
+            await client.add_to_playlist(
+                key, server.machine_identifier, [s.rating_key for s in new]
+            )
+        return GamePlaylistOut(
+            playlist=str(existing.get("title") or name),
+            added=[s.title for s in new],
+            already=len(songs) - len(new),
+        )
+    except (PlexError, httpx.HTTPError) as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Plex couldn't update the playlist."
+        ) from exc
 
 
 def _stats_out(row: GameStats) -> GameStatsOut:
@@ -326,7 +459,7 @@ async def game_result(body: GameResultIn, db: DbDep, user: UserDep) -> GameStats
         mode=body.mode,
         rounds=1,
         correct=int(body.correct),
-        points=body.points if body.correct else 0,
+        points=body.points,
         best_streak=body.streak,
     )
     await db.execute(
@@ -335,7 +468,7 @@ async def game_result(body: GameResultIn, db: DbDep, user: UserDep) -> GameStats
             set_={
                 "rounds": GameStats.rounds + 1,
                 "correct": GameStats.correct + int(body.correct),
-                "points": GameStats.points + (body.points if body.correct else 0),
+                "points": GameStats.points + body.points,
                 "best_streak": func.greatest(GameStats.best_streak, body.streak),
                 "updated_at": func.now(),
             },

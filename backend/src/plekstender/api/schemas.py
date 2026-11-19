@@ -11,6 +11,25 @@ from plekstender.config import AccessMode
 from plekstender.playlists.definition import Definition
 
 
+class GameSettings(BaseModel):
+    """Guess the intro, per account."""
+
+    round_seconds: Literal[15, 20, 25, 30] = Field(default=30, description="Length of a round.")
+    max_guesses: int = Field(default=3, ge=0, le=10, description="Guesses per round; 0 = any.")
+    artist_feedback: bool = Field(
+        default=True, description="Song and album modes: say whether the artist guessed is right."
+    )
+    playlist: str = Field(
+        default="Guess the intro",
+        min_length=1,
+        max_length=100,
+        description="The Plex playlist songs are added to (created when missing).",
+    )
+    popularity: Literal["popular", "mixed", "deep"] = Field(
+        default="popular", description="Well-known songs, any, or deep cuts."
+    )
+
+
 class Preferences(BaseModel):
     """Per-user settings, stored on the account so they follow the user across devices."""
 
@@ -28,6 +47,7 @@ class Preferences(BaseModel):
     phone_start: Literal["rate", "home"] = Field(
         default="rate", description="The page the app opens on, on a phone."
     )
+    game: GameSettings = Field(default_factory=GameSettings)
 
 
 class UserOut(BaseModel):
@@ -467,7 +487,7 @@ RateKind = Literal["track", "album", "artist"]
 class RateQueueIn(BaseModel):
     kind: RateKind
     pool: Literal["listened", "unrated", "all"] = "listened"
-    order: Literal["weighted", "plays", "popular"] = "weighted"
+    order: Literal["weighted", "plays", "popular", "obscure"] = "weighted"
     exclude: list[int] = Field(default_factory=list, max_length=5000)
     limit: int = Field(default=20, ge=1, le=50)
     tag_id: int | None = Field(default=None, description="Only items with this genre (tag).")
@@ -778,6 +798,7 @@ class GameRoundOut(BaseModel):
     playable: bool
     reason: str | None = Field(description="Why not: short-title, quiet-intro, no-file.")
     preview: PreviewOut | None = Field(description="The song to play for this round.")
+    song_title: str | None = Field(default=None, description="Its title (a hint, late in a round).")
 
 
 class GameSearchItem(BaseModel):
@@ -792,16 +813,33 @@ class GameCheckIn(BaseModel):
     mode: GameMode
     target: int = Field(description="The item being guessed (song, album or artist).")
     guess: int
+    guess_kind: GameMode | None = Field(
+        default=None, description="What `guess` is, when not the mode's kind (an artist)."
+    )
 
 
 class GameCheckOut(BaseModel):
     correct: bool
+    artist_correct: bool | None = Field(
+        description="Song and album modes: whether the guess is by the right artist."
+    )
+
+
+class GamePlaylistIn(BaseModel):
+    mode: GameMode
+    target: int = Field(description="The card: its artist's most popular songs are added.")
+
+
+class GamePlaylistOut(BaseModel):
+    playlist: str
+    added: list[str] = Field(description="Titles of the songs added.")
+    already: int = Field(description="Songs that were in the playlist already.")
 
 
 class GameResultIn(BaseModel):
     mode: GameMode
     correct: bool
-    points: int = Field(ge=0, le=30)
+    points: int = Field(ge=0, le=100)
     streak: int = Field(ge=0, le=100_000)
 
 
@@ -811,3 +849,22 @@ class GameStatsOut(BaseModel):
     correct: int
     points: int
     best_streak: int
+
+
+# --- your ratings ------------------------------------------------------------------------
+
+
+class RatedItemOut(BaseModel):
+    rating_key: int
+    kind: Literal["track", "album", "artist"]
+    title: str
+    subtitle: str | None = Field(description="Songs: artist · album; albums: artist.")
+    thumb: str | None
+    user_rating: float
+    rated_at: dt.datetime | None = Field(description="When it was last rated (Plex or here).")
+    link_key: int | None = Field(description="The album (songs, albums) or artist to link to.")
+
+
+class RatedPage(BaseModel):
+    items: list[RatedItemOut]
+    total: int

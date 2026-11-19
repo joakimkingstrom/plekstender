@@ -47,13 +47,31 @@ export function useGameSearch(serverId: number, kind: GameMode, q: string, artis
   })
 }
 
-export function checkGuess(serverId: number, mode: GameMode, target: number, guess: number) {
+export function checkGuess(serverId: number, mode: GameMode, target: number, guess: number, guessKind?: GameMode) {
   return unwrap(
     api.POST('/api/servers/{server_id}/game/check', {
       params: { path: { server_id: serverId } },
-      body: { mode, target, guess },
+      body: { mode, target, guess, guess_kind: guessKind ?? null },
     }),
   )
+}
+
+/** Add the card's artist's five most popular songs to the game playlist in Plex. */
+export function useAddToGamePlaylist(serverId: number) {
+  return useMutation({
+    mutationFn: (body: { mode: GameMode; target: number }) =>
+      unwrap(api.POST('/api/servers/{server_id}/game/playlist', { params: { path: { server_id: serverId } }, body })),
+  })
+}
+
+export function useGamePlaylists(serverId: number | null) {
+  return useQuery({
+    queryKey: ['game', serverId, 'playlists'],
+    enabled: serverId !== null,
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/game/playlists', { params: { path: { server_id: serverId! } } })),
+    staleTime: 60_000,
+  })
 }
 
 export function useGameStats() {

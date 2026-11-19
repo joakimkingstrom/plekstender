@@ -279,3 +279,37 @@ async def test_queue_genre_filter(app: FastAPI, plex: FakePlex) -> None:
         100,
         102,
     ]
+
+
+@pytest.mark.db
+async def test_your_ratings_newest_first(app: FastAPI, plex: FakePlex) -> None:
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/ratings"
+
+    def summary(page: dict) -> list[tuple]:
+        return [(i["kind"], i["title"], i["subtitle"], i["user_rating"]) for i in page["items"]]
+
+    # Rated in Plex before: Radiohead (8) and Paranoid Android (10), at the same time.
+    page = (await owner.get(base)).json()
+    assert page["total"] == 2
+    assert sorted(summary(page)) == [
+        ("artist", "Radiohead", None, 8.0),
+        ("track", "Paranoid Android", "Radiohead · OK Computer", 10.0),
+    ]
+
+    # Rated here just now: on top.
+    resp = await owner.post(base, json={"rating_key": 303, "rating": 6}, headers=CSRF)
+    assert resp.status_code == 200, resp.text
+    resp = await owner.post(base, json={"rating_key": 202, "rating": 9}, headers=CSRF)
+    assert resp.status_code == 200, resp.text
+    page = (await owner.get(base)).json()
+    assert [i["title"] for i in page["items"]][:2] == ["Dummy", "Lucky"]
+    first = page["items"][0]
+    assert (first["kind"], first["subtitle"], first["link_key"]) == ("album", "Portishead", 202)
+    assert page["items"][1]["link_key"] == 201  # a song links to its album
+    assert page["items"][0]["rated_at"] is not None
+
+    songs = (await owner.get(base, params={"kind": "track"})).json()
+    assert [i["title"] for i in songs["items"]] == ["Lucky", "Paranoid Android"]
+    paged = (await owner.get(base, params={"offset": 1, "limit": 2})).json()
+    assert paged["total"] == 4 and len(paged["items"]) == 2

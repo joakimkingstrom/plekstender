@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 Kind = Literal["track", "album", "artist"]
 Pool = Literal["listened", "unrated", "all"]
-Order = Literal["weighted", "plays", "popular"]
+Order = Literal["weighted", "plays", "popular", "obscure"]
 
 # Weighted random: weight = (plays + 1)^ALPHA x (1 + ln(1 + popularity / 1000)).
 ALPHA = 0.7
@@ -48,6 +48,8 @@ _ORDER_SQL = {
     ),
     "plays": "plays DESC, coalesce(popularity, 0) DESC, rating_key",
     "popular": "coalesce(popularity, 0) DESC, plays DESC, rating_key",
+    # Deep cuts (the game): least popular first, but only items with known popularity.
+    "obscure": "(coalesce(popularity, 0) = 0), popularity ASC NULLS LAST, rating_key",
 }
 
 # One row per song (earliest release); rating and plays from the song's best release.
@@ -215,4 +217,6 @@ async def build_queue(
         return items
     if order == "plays":
         return interleave(items, lambda i: float(i.plays), limit, rng)
+    if order == "obscure":
+        return interleave(items, lambda i: 0.0, limit, rng)  # every artist equally likely
     return interleave(items, lambda i: float(i.popularity or 0), limit, rng)

@@ -396,6 +396,17 @@ class FakeLibrary:
         }
         return httpx.Response(200, json={"MediaContainer": {"Metadata": [{"ratingKey": str(key)}]}})
 
+    def playlists_list(self, request: httpx.Request) -> httpx.Response:
+        token = request.headers.get("X-Plex-Token", "")
+        if token not in SERVER_TOKENS:
+            return httpx.Response(401)
+        mine = [
+            {"ratingKey": str(k), "title": p["title"], "smart": False}
+            for k, p in self.playlists.items()
+            if p["token"] == token
+        ]
+        return httpx.Response(200, json={"MediaContainer": {"Metadata": mine}})
+
     def playlist_request(self, request: httpx.Request) -> httpx.Response:
         token = request.headers.get("X-Plex-Token", "")
         if token not in SERVER_TOKENS:
@@ -493,6 +504,7 @@ class FakePlex:
             side_effect=self.library.part_request
         )
         router.post(f"{SERVER_URI}/playlists").mock(side_effect=self.library.playlists_create)
+        router.get(f"{SERVER_URI}/playlists").mock(side_effect=self.library.playlists_list)
         router.route(url__regex=rf"{re.escape(SERVER_URI)}/playlists/\d+").mock(
             side_effect=self.library.playlist_request
         )

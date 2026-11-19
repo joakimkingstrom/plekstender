@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, unwrap, type Schemas } from './client'
 import { libraryKeys } from './library'
@@ -127,5 +127,28 @@ export function useUndoRating(serverId: number) {
     mutationFn: () =>
       unwrap(api.POST('/api/servers/{server_id}/ratings/undo', { params: { path: { server_id: serverId } } })),
     onSuccess: () => qc.invalidateQueries({ queryKey: libraryKeys.library(serverId) }),
+  })
+}
+
+export type RatedKind = 'track' | 'album' | 'artist'
+export type RatedItem = Schemas['RatedItemOut']
+const RATED_PAGE = 60
+
+/** Everything you've rated, most recently rated first. (Under the library key, so a new
+ * rating refreshes it.) */
+export function useRated(serverId: number, kind: RatedKind | null) {
+  return useInfiniteQuery({
+    queryKey: [...libraryKeys.library(serverId), 'rated', kind] as const,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/ratings', {
+          params: { path: { server_id: serverId }, query: { kind: kind ?? undefined, offset: pageParam, limit: RATED_PAGE } },
+        }),
+      ),
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((n, p) => n + p.items.length, 0)
+      return loaded < last.total ? loaded : undefined
+    },
   })
 }

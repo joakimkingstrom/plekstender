@@ -17,9 +17,11 @@ import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
+import { GameSettingsPage } from './pages/GameSettingsPage'
 import { MapPage } from './pages/MapPage'
 import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
+import { RatingsPage } from './pages/RatingsPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { AppearancePage, ArtworkSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
@@ -53,6 +55,7 @@ const router = createBrowserRouter([
           { index: true, element: <StatsPage /> },
           { path: 'listens', element: <ListensPage /> },
           { path: 'map', element: <MapPage /> },
+          { path: 'ratings', element: <RatingsPage /> },
         ],
       },
       {
@@ -76,6 +79,7 @@ const router = createBrowserRouter([
           { path: 'export', element: <ExportPage /> },
           { path: 'appearance', element: <AppearancePage /> },
           { path: 'artwork', element: <ArtworkSettingsPage /> },
+          { path: 'game', element: <GameSettingsPage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
           { path: 'admin', element: <AdminPage /> },
         ],

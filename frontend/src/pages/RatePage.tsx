@@ -18,8 +18,8 @@ import { Artwork, Stars } from '../components/library'
 import { Mark } from '../components/Layout'
 import { PlayButton } from '../components/PlayButton'
 import { GuessBox, RoundClock } from '../components/IntroGame'
-import { useIntroRound } from '../game'
-import { fetchSample, useGameStats } from '../api/game'
+import { useGameSettings, useIntroRound } from '../game'
+import { fetchSample, useAddToGamePlaylist, useGameStats } from '../api/game'
 import { playSample, stopAudio, unlockAudio } from '../audio'
 import { StarRating } from '../components/StarRating'
 import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
@@ -86,7 +86,18 @@ export function RatePage() {
         </Link>
       </div>
       <div className="hidden md:block">
-        <PageTitle subtitle="Ratings are saved to Plex with your own account.">Rate</PageTitle>
+        <PageTitle
+          subtitle={
+            <>
+              Ratings are saved to Plex with your own account.{' '}
+              <Link to="/history/ratings" className="text-accent underline">
+                Everything you've rated
+              </Link>
+            </>
+          }
+        >
+          Rate
+        </PageTitle>
       </div>
       {blocker ?? <Rater serverId={active!.id} />}
     </>
@@ -106,7 +117,16 @@ function Rater({ serverId }: { serverId: number }) {
   }
   // The Lists layout shows 15 songs at a time: keep two pages in hand.
   const keep = settings.layout === 'desktop' && settings.kind === 'track' ? SONGS_PER_PAGE * 2 : 6
-  const queue = useRateQueue(serverId, settings.kind, settings.pool, settings.order, keep, settings.tag)
+  // In Guess the intro, the popularity setting picks the order: well-known first, deep cuts
+  // (least popular first), or your own order ("mixed").
+  const gameSettings = useGameSettings()
+  const order: RateOrder =
+    settings.game && settings.layout === 'swipe' && gameSettings.popularity !== 'mixed'
+      ? gameSettings.popularity === 'deep'
+        ? 'obscure'
+        : 'popular'
+      : settings.order
+  const queue = useRateQueue(serverId, settings.kind, settings.pool, order, keep, settings.tag)
   const genres = useTags(serverId, 'genre')
   const rateMutation = useRate(serverId)
   const undoMutation = useUndoRating(serverId)
@@ -349,7 +369,10 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
   // not forever: after a run of them, say so instead.
   const [unplayable, setUnplayable] = useState(0)
   const skippedInARow = useRef(0)
+  const gameSettings = useGameSettings()
+  const playlistAdd = useAddToGamePlaylist(serverId)
   const round = useIntroRound({
+    settings: gameSettings,
     active: game,
     serverId,
     mode: settings.kind,
@@ -478,7 +501,7 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
         </Notice>
       )}
       {round.error && game && <Notice tone="error">{round.error}</Notice>}
-      {guessing && <RoundClock elapsed={round.elapsed} loading={round.phase === 'loading'} />}
+      {guessing && <RoundClock elapsed={round.elapsed} length={round.length} loading={round.phase === 'loading'} />}
       {hint && !game && (
         <p className="text-center text-xs text-muted">
           Swipe right for 2½–5 stars, left for 2–½, down to skip. The further you swipe, the higher or lower.
@@ -521,12 +544,20 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
               }`}
               role="status"
             >
-              {round.phase === 'won' ? `Correct! +${round.points}` : "Time's up"}
+              {round.phase === 'won'
+                ? `Correct! +${round.points}`
+                : `${round.feedback?.text.endsWith('No guesses left.') ? 'Out of guesses' : "Time's up"}${round.points ? ` · +${round.points} for the artist` : ''}`}
             </div>
           )}
           <div className="mt-4 space-y-1">
             <h2 className="text-xl font-bold leading-tight">{!game || round.reveal.title ? item.title : '? ? ?'}</h2>
             <p className="text-sm text-muted">{!game || round.reveal.artist ? details(item) || '\u00a0' : '\u00a0'}</p>
+            {game && round.reveal.song && (
+              <p className="text-sm">
+                <span className="text-muted">Playing: </span>
+                {round.reveal.song}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted">
               {value !== null && value !== undefined && <Badge tone="accent">Rated {starsText(value)} ★</Badge>}
               {!guessing && <span>{formatCount(item.plays)} plays</span>}
@@ -537,6 +568,29 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
                 </span>
               )}
             </div>
+            {game && (round.phase === 'won' || round.phase === 'lost') && (
+              <div className="pt-2" onPointerDown={(e) => e.stopPropagation()}>
+                {playlistAdd.isSuccess && playlistAdd.variables?.target === item.rating_key ? (
+                  <p className="text-xs text-ok" role="status">
+                    {playlistAdd.data.added.length
+                      ? `Added ${playlistAdd.data.added.length} songs to “${playlistAdd.data.playlist}”.`
+                      : `Already in “${playlistAdd.data.playlist}”.`}
+                  </p>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    className="w-full px-3 py-1.5 text-xs"
+                    busy={playlistAdd.isPending}
+                    onClick={() => playlistAdd.mutate({ mode: settings.kind, target: item.rating_key })}
+                  >
+                    ＋ Top 5 songs by {item.kind === 'artist' ? item.title : item.subtitle ?? 'this artist'} to “{gameSettings.playlist}”
+                  </Button>
+                )}
+                {playlistAdd.isError && playlistAdd.variables?.target === item.rating_key && (
+                  <p className="pt-1 text-xs text-danger">{errorMessage(playlistAdd.error)}</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {/* Stays put while the card moves, so the rating is always readable. */}
@@ -561,6 +615,9 @@ function SwipeView({ serverId, queue, overrides, rate, onSwiped, settings }: Vie
           serverId={serverId}
           mode={settings.kind}
           targetTitle={item.title}
+          feedback={round.feedback}
+          guessesLeft={round.guessesLeft}
+          artistFeedback={gameSettings.artist_feedback}
           onGuess={round.guess}
           onGiveUp={round.giveUp}
         />

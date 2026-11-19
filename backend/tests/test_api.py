@@ -139,17 +139,32 @@ async def test_unauthenticated_and_health(app: FastAPI) -> None:
     assert health.headers["x-content-type-options"] == "nosniff"
 
 
+GAME = {
+    "round_seconds": 30,
+    "max_guesses": 3,
+    "artist_feedback": True,
+    "playlist": "Guess the intro",
+    "popularity": "popular",
+}
+
+
 @pytest.mark.db
 async def test_preferences_follow_the_account(app: FastAPI, plex: FakePlex) -> None:
     owner, _ = await sign_in(app, plex, "owner-token")
     me = (await owner.get("/api/auth/me")).json()
-    assert me["preferences"] == {"accent": None, "skip_threshold": 80, "phone_start": "rate"}
+    assert me["preferences"] == {
+        "accent": None,
+        "skip_threshold": 80,
+        "phone_start": "rate",
+        "game": GAME,
+    }
     saved = await owner.put("/api/auth/me/preferences", json={"accent": "#3e63dd"}, headers=CSRF)
     assert saved.status_code == 200
     assert saved.json()["preferences"] == {
         "accent": "#3e63dd",
         "skip_threshold": 80,
         "phone_start": "rate",
+        "game": GAME,
     }
     # Another browser: a new session for the same account sees it.
     again, _ = await sign_in(app, plex, "owner-token")

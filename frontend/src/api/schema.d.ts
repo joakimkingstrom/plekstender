@@ -619,7 +619,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Rated
+         * @description Everything you've rated, the most recently rated first (in Plex or here). Items
+         *     rated before Plex kept rating times come last.
+         */
+        get: operations["rated_api_servers__server_id__ratings_get"];
         put?: never;
         /**
          * Rate
@@ -904,9 +909,51 @@ export interface paths {
         /**
          * Game Check
          * @description Whether a guess is right: the same song on any release, the same album (or a release
-         *     of it with the same title), or the same artist.
+         *     of it with the same title), or the same artist. In song and album modes, also whether
+         *     the guess (or the artist picked) is by the right artist.
          */
         post: operations["game_check_api_servers__server_id__game_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/game/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Game Playlists
+         * @description Names of your regular audio playlists in Plex (for the game's settings).
+         */
+        get: operations["game_playlists_api_servers__server_id__game_playlists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/game/playlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add To Game Playlist
+         * @description Add the card's artist's five most popular songs to your game playlist in Plex (made
+         *     when it doesn't exist yet). Songs already in it are left out.
+         */
+        post: operations["add_to_game_playlist_api_servers__server_id__game_playlist_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2021,11 +2068,49 @@ export interface components {
             target: number;
             /** Guess */
             guess: number;
+            /**
+             * Guess Kind
+             * @description What `guess` is, when not the mode's kind (an artist).
+             */
+            guess_kind?: ("track" | "album" | "artist") | null;
         };
         /** GameCheckOut */
         GameCheckOut: {
             /** Correct */
             correct: boolean;
+            /**
+             * Artist Correct
+             * @description Song and album modes: whether the guess is by the right artist.
+             */
+            artist_correct: boolean | null;
+        };
+        /** GamePlaylistIn */
+        GamePlaylistIn: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "track" | "album" | "artist";
+            /**
+             * Target
+             * @description The card: its artist's most popular songs are added.
+             */
+            target: number;
+        };
+        /** GamePlaylistOut */
+        GamePlaylistOut: {
+            /** Playlist */
+            playlist: string;
+            /**
+             * Added
+             * @description Titles of the songs added.
+             */
+            added: string[];
+            /**
+             * Already
+             * @description Songs that were in the playlist already.
+             */
+            already: number;
         };
         /** GameResultIn */
         GameResultIn: {
@@ -2052,6 +2137,11 @@ export interface components {
             reason: string | null;
             /** @description The song to play for this round. */
             preview: components["schemas"]["PreviewOut"] | null;
+            /**
+             * Song Title
+             * @description Its title (a hint, late in a round).
+             */
+            song_title?: string | null;
         };
         /** GameSearchItem */
         GameSearchItem: {
@@ -2071,6 +2161,44 @@ export interface components {
             subtitle: string | null;
             /** Thumb */
             thumb: string | null;
+        };
+        /**
+         * GameSettings
+         * @description Guess the intro, per account.
+         */
+        GameSettings: {
+            /**
+             * Round Seconds
+             * @description Length of a round.
+             * @default 30
+             * @enum {integer}
+             */
+            round_seconds: 15 | 20 | 25 | 30;
+            /**
+             * Max Guesses
+             * @description Guesses per round; 0 = any.
+             * @default 3
+             */
+            max_guesses: number;
+            /**
+             * Artist Feedback
+             * @description Song and album modes: say whether the artist guessed is right.
+             * @default true
+             */
+            artist_feedback: boolean;
+            /**
+             * Playlist
+             * @description The Plex playlist songs are added to (created when missing).
+             * @default Guess the intro
+             */
+            playlist: string;
+            /**
+             * Popularity
+             * @description Well-known songs, any, or deep cuts.
+             * @default popular
+             * @enum {string}
+             */
+            popularity: "popular" | "mixed" | "deep";
         };
         /** GameStatsOut */
         GameStatsOut: {
@@ -2689,6 +2817,7 @@ export interface components {
              * @enum {string}
              */
             phone_start: "rate" | "home";
+            game?: components["schemas"]["GameSettings"];
         };
         /** PreviewOut */
         PreviewOut: {
@@ -2788,7 +2917,7 @@ export interface components {
              * @default weighted
              * @enum {string}
              */
-            order: "weighted" | "plays" | "popular";
+            order: "weighted" | "plays" | "popular" | "obscure";
             /** Exclude */
             exclude?: number[];
             /**
@@ -2801,6 +2930,44 @@ export interface components {
              * @description Only items with this genre (tag).
              */
             tag_id?: number | null;
+        };
+        /** RatedItemOut */
+        RatedItemOut: {
+            /** Rating Key */
+            rating_key: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "track" | "album" | "artist";
+            /** Title */
+            title: string;
+            /**
+             * Subtitle
+             * @description Songs: artist · album; albums: artist.
+             */
+            subtitle: string | null;
+            /** Thumb */
+            thumb: string | null;
+            /** User Rating */
+            user_rating: number;
+            /**
+             * Rated At
+             * @description When it was last rated (Plex or here).
+             */
+            rated_at: string | null;
+            /**
+             * Link Key
+             * @description The album (songs, albums) or artist to link to.
+             */
+            link_key: number | null;
+        };
+        /** RatedPage */
+        RatedPage: {
+            /** Items */
+            items: components["schemas"]["RatedItemOut"][];
+            /** Total */
+            total: number;
         };
         /** RatingIn */
         RatingIn: {
@@ -4488,6 +4655,41 @@ export interface operations {
             };
         };
     };
+    rated_api_servers__server_id__ratings_get: {
+        parameters: {
+            query?: {
+                kind?: ("track" | "album" | "artist") | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatedPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rate_api_servers__server_id__ratings_post: {
         parameters: {
             query?: never;
@@ -5078,6 +5280,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    game_playlists_api_servers__server_id__game_playlists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_to_game_playlist_api_servers__server_id__game_playlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GamePlaylistIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GamePlaylistOut"];
                 };
             };
             /** @description Validation Error */

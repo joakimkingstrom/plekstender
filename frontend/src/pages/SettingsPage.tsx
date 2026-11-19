@@ -40,6 +40,9 @@ export function SettingsLayout() {
         <NavLink to="/settings/appearance" className={tab}>
           Appearance
         </NavLink>
+        <NavLink to="/settings/game" className={tab}>
+          Guess the intro
+        </NavLink>
         {(me?.is_admin || active?.is_owner) && (
           <NavLink to="/settings/artwork" className={tab}>
             Artwork

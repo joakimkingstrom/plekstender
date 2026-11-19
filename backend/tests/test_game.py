@@ -127,6 +127,7 @@ async def test_guess_the_intro(app: FastAPI, plex: FakePlex, songs: dict[str, by
         "playable": False,
         "reason": "quiet-intro",
         "preview": None,
+        "song_title": None,
     }
     # OK Computer: Karma Police is its most popular song but has a silent intro, so Paranoid
     # Android plays.
@@ -215,3 +216,72 @@ async def test_songs_to_rate_by(app: FastAPI, plex: FakePlex, songs: dict[str, b
     assert (await sample("album", 200))["preview"]["rating_key"] == 300
     assert (await sample("artist", 100))["preview"]["rating_key"] == 300
     assert (await sample("artist", 101))["reason"] == "no-file"
+
+
+@pytest.mark.db
+async def test_game_extras(app: FastAPI, plex: FakePlex, songs: dict[str, bytes]) -> None:
+    """Right-artist feedback, the song title as a hint, settings, and the game playlist."""
+    lib = plex.library
+    lib.part_files = {300: songs["starts_soon"], 303: songs["starts_soon"]}
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/game"
+
+    album = (await owner.get(f"{base}/round", params={"mode": "album", "rating_key": 200})).json()
+    assert album["song_title"] == "Paranoid Android"
+
+    async def check(mode: str, target: int, guess: int, kind: str | None = None) -> dict:
+        body = {"mode": mode, "target": target, "guess": guess, "guess_kind": kind}
+        resp = await owner.post(f"{base}/check", json=body, headers=CSRF)
+        assert resp.status_code == 200, resp.text
+        result: dict = resp.json()
+        return result
+
+    # Song mode: Lucky is by the right artist (Radiohead) but the wrong song.
+    assert await check("track", 301, 303) == {"correct": False, "artist_correct": True}
+    assert await check("track", 301, 304) == {"correct": False, "artist_correct": False}
+    # Picking the artist on the way to the song.
+    assert await check("track", 301, 100, "artist") == {"correct": False, "artist_correct": True}
+    assert await check("track", 301, 101, "artist") == {"correct": False, "artist_correct": False}
+    assert await check("album", 200, 201) == {"correct": False, "artist_correct": True}
+    assert await check("artist", 100, 100) == {"correct": True, "artist_correct": None}
+
+    # Game settings live in the account's preferences.
+    settings = {
+        "round_seconds": 20,
+        "max_guesses": 0,
+        "artist_feedback": False,
+        "playlist": "Intro finds",
+        "popularity": "deep",
+    }
+    resp = await owner.put("/api/auth/me/preferences", json={"game": settings}, headers=CSRF)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["preferences"]["game"] == settings
+    bad = await owner.put(
+        "/api/auth/me/preferences", json={"game": {**settings, "round_seconds": 7}}, headers=CSRF
+    )
+    assert bad.status_code == 422
+    # Deep cuts: Radiohead's least popular songs (Lucky, of Paranoid Android and Lucky).
+    deep = (await owner.get(f"{base}/round", params={"mode": "artist", "rating_key": 100})).json()
+    assert deep["song_title"] == "Lucky"
+
+    # The playlist: made when missing, then only new songs added.
+    resp = await owner.post(f"{base}/playlist", json={"mode": "track", "target": 301}, headers=CSRF)
+    assert resp.status_code == 200, resp.text
+    first = resp.json()
+    assert first["playlist"] == "Intro finds" and first["already"] == 0
+    assert first["added"] == ["Karma Police", "Paranoid Android", "Lucky"]
+    [made] = lib.playlists.values()
+    assert made["title"] == "Intro finds" and made["items"] == [301, 300, 303]
+    again = (
+        await owner.post(f"{base}/playlist", json={"mode": "album", "target": 200}, headers=CSRF)
+    ).json()
+    assert (again["added"], again["already"]) == ([], 3)
+    assert (await owner.get(f"{base}/playlists")).json() == ["Intro finds"]
+
+    # Points count for lost rounds too (the right-artist bonus).
+    resp = await owner.post(
+        "/api/game/results",
+        json={"mode": "album", "correct": False, "points": 3, "streak": 0},
+        headers=CSRF,
+    )
+    assert resp.json()["points"] == 3

@@ -40,6 +40,7 @@ const preview = (key: number) => ({ rating_key: key, url: `/clip/${key}.m4a`, st
 const radiohead = { rating_key: 100, kind: 'artist', title: 'Radiohead', subtitle: null, thumb: null }
 const trackHit = (key: number, title: string) => ({ rating_key: key, kind: 'track', title, subtitle: 'Radiohead', thumb: null })
 
+let game: Record<string, unknown> = {}
 let fetchMock: ReturnType<typeof vi.fn<(input: Request) => Promise<Response>>>
 
 beforeAll(() => {
@@ -47,12 +48,15 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  game = {}
   localStorage.setItem('plekstender.rate', JSON.stringify({ layout: 'swipe', game: true, kind: 'track' }))
   localStorage.setItem('plekstender.rate.swiped', '1')
   fetchMock = vi.fn<(input: Request) => Promise<Response>>(async (input: Request) => {
     const url = new URL(input.url)
     const path = url.pathname
     const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
+    if (path === '/api/auth/me')
+      return json({ id: 1, username: 'joakim', email: null, thumb_url: null, is_admin: false, preferences: { accent: null, skip_threshold: 80, phone_start: 'rate', game: { round_seconds: 30, max_guesses: 3, artist_feedback: true, playlist: 'Guess the intro', popularity: 'mixed', ...game } } })
     if (path === '/api/servers')
       return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
     if (path === '/api/servers/1/sync')
@@ -70,8 +74,10 @@ beforeEach(() => {
       return json([])
     }
     if (path === '/api/servers/1/game/check') {
+      // The answer is Airbag (1) by Radiohead (100); Lucky (3) is Radiohead too.
       const body = await input.clone().json()
-      return json({ correct: body.guess === body.target })
+      if (body.guess_kind === 'artist') return json({ correct: false, artist_correct: body.guess === 100 })
+      return json({ correct: body.guess === body.target, artist_correct: [1, 3].includes(body.guess) })
     }
     if (path === '/api/servers/1/rate/sample') {
       const key = Number(url.searchParams.get('rating_key'))
@@ -117,8 +123,11 @@ describe('Guess the intro', () => {
     const box = screen.getByRole('searchbox', { name: 'Your guess' })
     fireEvent.change(box, { target: { value: 'rad' } })
     fireEvent.click(await screen.findByRole('button', { name: /Radiohead/ }))
+    expect(await screen.findByText('Right artist! +3')).toBeInTheDocument()
+    expect(screen.getByText('3 guesses left')).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: /Lucky/ }))
-    expect(await screen.findByText('Not “Lucky”: −3 s')).toBeInTheDocument()
+    expect(await screen.findByText('Right artist, but not “Lucky”: −3 s')).toBeInTheDocument()
+    expect(screen.getByText('2 guesses left')).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: /Airbag/ }))
 
     expect(await screen.findByText(/Correct! \+\d+/)).toBeInTheDocument()
@@ -127,7 +136,7 @@ describe('Guess the intro', () => {
     await vi.waitFor(async () => {
       const [result] = await posted('/api/game/results')
       expect(result).toMatchObject({ mode: 'track', correct: true, streak: 1 })
-      expect(result.points).toBeGreaterThan(20)
+      expect(result.points).toBeGreaterThan(20) // the seconds left, plus 3 for the artist
     })
     // The next card's song was prepared while this one played.
     const rounds = fetchMock.mock.calls.map(([r]) => new URL(r.url)).filter((u) => u.pathname === '/api/servers/1/game/round')
@@ -138,6 +147,29 @@ describe('Guess the intro', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     })
     expect(await screen.findByRole('heading', { name: '? ? ?' })).toBeInTheDocument()
+  })
+})
+
+describe('Guess the intro settings', () => {
+  it('ends the round when the guesses run out, and says nothing about the artist when asked not to', async () => {
+    game = { max_guesses: 1, artist_feedback: false }
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <RatePage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByRole('heading', { name: '? ? ?' })).toBeInTheDocument()
+    expect(await screen.findByText('1 guess left')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Your guess' }), { target: { value: 'rad' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Radiohead/ }))
+    // No feedback on the artist: it just narrows the search.
+    fireEvent.click(await screen.findByRole('button', { name: /Lucky/ }))
+    expect(await screen.findByText(/Out of guesses · \+3 for the artist/)).toBeInTheDocument()
+    expect(screen.queryByText(/Right artist/)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Airbag' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Top 5 songs by Radiohead to “Guess the intro”/ })).toBeInTheDocument()
   })
 })
 

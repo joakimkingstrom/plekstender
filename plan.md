@@ -507,6 +507,16 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Avoided: songs with very short titles (under 4 letters), and songs whose intro is silent or near-silent for more than 8 seconds (known after their first clip; skipped automatically in game mode).
 - [x] The next round's clip is prepared while the current one plays.
 
+**Guess the intro, round 2 (feedback, 19 Nov 2026)**
+- [x] Song and album modes: naming the right artist (picking them, or a wrong song or album of theirs) earns 3 points, even when the round is lost; with feedback on, a wrong artist is said (and costs 3 s).
+- [x] Suggestions close on a tap elsewhere (the artwork stays visible); no pictures in album and artist modes.
+- [x] The answer's title only shows when the round is over; album and artist modes show the playing song's title two thirds in.
+- [x] After a round: add the artist's top 5 songs to the game playlist in Plex (made when missing; songs already in it skipped).
+- [x] Settings → Guess the intro (per account): guesses per round (default 3), round length, right-artist feedback, the playlist, and well-known / mixed / deep cuts (the cards' order, and which songs play for albums and artists).
+
+**Your ratings**
+- [x] History → Ratings: everything you've rated (here or in Plex), the most recently rated first, by day; filter by songs, albums and artists; change a rating in place.
+
 ### Phase 10 — Music files and the tag editor (from `.todo.md`; needs the music folder)
 
 **Music folder on the worker only**

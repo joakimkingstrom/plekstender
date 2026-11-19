@@ -276,6 +276,17 @@ class PlexServerClient:
             params={"uri": self.library_uri(machine_id, rating_keys)},
         )
 
+    async def audio_playlists(self) -> list[dict[str, Any]]:
+        """The token owner's audio playlists (regular and smart)."""
+        data = await self._get("/playlists", params={"playlistType": "audio"})
+        items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Metadata", [])
+        return items
+
+    async def playlist_rating_keys(self, key: int) -> list[int]:
+        data = await self._get(f"/playlists/{key}/items")
+        items = data.get("MediaContainer", {}).get("Metadata", [])
+        return [int(i["ratingKey"]) for i in items if "ratingKey" in i]
+
     async def playlist_item_ids(self, key: int) -> list[int]:
         """The playlistItemIDs of a playlist's entries (404 when it's been deleted)."""
         data = await self._get(f"/playlists/{key}/items")
