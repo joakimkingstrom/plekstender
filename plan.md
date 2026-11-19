@@ -565,45 +565,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 
 *Open questions.* Undo for files Plekstender didn't create the snapshot for (scan first, always). Large libraries: scan incrementally by mtime. Ratings are written into files only when asked for.
 
-### Phase 11 — More services (from `.todo.md`)
-- [ ] More scrobble services: any ListenBrainz-compatible server (Maloja, Koito, Multi-Scrobbler) with a custom address, and Libre.fm (Last.fm-style API).
-- [ ] Import playlists from Spotify, Apple Music, Tidal and others: first from files (CSV exports such as Exportify / TuneMyMusic, M3U, JSPF), then Spotify's API for public playlist links. Songs are matched to the library (artist + title, then duration); unmatched ones are listed; the result is saved as a Plex playlist.
-
-### Phase 12 — Genres, styles and moods; tag editing in bulk (from `.todo.md`, 19 Nov 2026)
-Plex gives albums one or two broad genres (often "Pop/Rock") but many **styles** ("Art Rock", "Prog-Rock") and **moods** ("Witty", "Laid-Back/Mellow") from its own metadata. Plekstender already mirrors them (`tags`, kinds genre / style / mood / country); they just aren't used yet.
-- [ ] Every genre, style and mood chip is a link to a page for it: the artists and albums with it (sortable by your plays, rating, year), with related styles (often found together) and a "make a playlist" shortcut. Chips show their kind (genre in amber as now; styles and moods told apart).
-- [ ] Library: filter by style and mood as well as genre.
-- [ ] Playlists: styles and moods as sources and filters, like genres.
-- [ ] Rate: choose songs by style or mood too.
-- [ ] Tag editor: more fields when editing an album's tags. *The note in `.todo.md` breaks off ("It'd be great …"): which fields? Likely candidates: composer, original date, release country, label / catalogue number, disc count, comments, the MusicBrainz IDs.*
-- [ ] Library → **Tag editing** tab: browse artists and albums with what's off about their files (differs from Plex, no MusicBrainz ID, missing tags, not in Plex), select several, and act on all of them: look up MusicBrainz releases album by album (a queue: each album's best match proposed, confirmed one by one or accepted together when it's a clear match), write Plex's metadata, rename. Each album is its own edit in the history.
-
-### Phase 13 — Library stats (from `.todo.md`)
-The Library page gets tabs (Browse, Stats, Tag editing).
-- [ ] Where artists are from: a world map (like the listens map), from Plex's artist country, else MusicBrainz (the artist's area, looked up once per artist at 1 request a second and kept). Click a country for its artists.
-- [ ] The library over time: total tracks (and albums, artists) by when they were added to Plex (`addedAt`), as a growing line.
-- [ ] Music by decade: albums released per decade; click a decade for its years, a year for its months (from the release date; albums with only a year are counted as "month unknown").
-- [ ] Cover colours: each album cover's main colour (worker, from a small thumbnail: a few minutes for ~7k albums, then only new albums), shown as a colour spectrum with the covers behind each colour.
-- [ ] Word clouds of the most common words in artist, album and song names (common words like "the" and "and" left out, several languages).
-
-### Phase 14 — A fuller Home page (from `.todo.md`)
-- [ ] Remove "Coming up".
-- [ ] Your stats at a glance: listening this week / month, top artists and albums with charts, streaks, latest ratings.
-- [ ] Recently added albums and artists.
-- [ ] Upcoming live shows (once Phase 16 exists).
-
-### Phase 15 — Rewind (from `.todo.md`)
-A "wrapped"-style story for any period you choose (a year, a month, a custom range), opened as a full-screen popup within the site, far more colourful than the rest of Plekstender: each card takes its colours from the album covers on it.
-- [ ] Top artists, albums and songs; minutes listened; days listened.
-- [ ] New obsessions: artists and albums first played in the period that you played a lot.
-- [ ] New releases you played most (released in the period).
-- [ ] When you listen: the busiest day of the week and hour; genres (and styles) by day of the week and by hour of the day.
-- [ ] On repeat: songs played two or more times in a row, and the longest run.
-- [ ] Guess the intro: best streaks, records and score in the period.
-- [ ] Time spent in Plekstender (rating, playing, browsing): needs Plekstender to record app time, from when this is built.
-- [ ] Shareable cards: each story card as an image (generated graphics in the style of the period's covers), to save or share.
-
-### Phase 16 — Live (from `.todo.md`)
+### Phase 11 — Live (from `.todo.md`)
 A **Live** tab: upcoming shows near you by the artists you listen to most.
 - [ ] Your location (a city, or "use my location"), a distance, and a dial for how many artists to follow: your top X% by listening (default: top 10%, at most ~150 artists), so it never looks up thousands.
 - [ ] Shows looked up in the background (a daily refresh, cached), listed by date with venue, distance and ticket link; filter by artist and date.
@@ -618,6 +580,44 @@ A **Live** tab: upcoming shows near you by the artists you listen to most.
   - Tokens: the admin pastes the access token and the refresh token from their Data Thistle account page (Settings → Connections; checked with `GET https://api.datathistle.com/v1/ping`). The access token (a JWT, sent as `Authorization: Bearer`) lasts 30 days; the refresh token works for up to a month after that. Both are stored encrypted; expiry dates are read from the JWTs (`exp`). A few days before the access token runs out, the worker calls `POST https://auth.datathistle.com/v1/refresh` with the *refresh* token as the Bearer token and stores both new tokens it gets back (each refresh replaces both), so the key keeps working indefinitely while Plekstender runs. If renewing fails or both tokens have run out, Settings → Connections and the Live tab say so, with the dates, and the admin pastes new tokens. Refreshing by hand on the Data Thistle page would replace the tokens Plekstender holds, so the page says to paste the new ones in that case. (Data Thistle's email-and-password login isn't used: no password is stored.)
 - [ ] Bandsintown optionally, if they approve an app ID.
 
+### Phase 12 — More services (from `.todo.md`)
+- [ ] More scrobble services: any ListenBrainz-compatible server (Maloja, Koito, Multi-Scrobbler) with a custom address, and Libre.fm (Last.fm-style API).
+- [ ] Import playlists from Spotify, Apple Music, Tidal and others: first from files (CSV exports such as Exportify / TuneMyMusic, M3U, JSPF), then Spotify's API for public playlist links. Songs are matched to the library (artist + title, then duration); unmatched ones are listed; the result is saved as a Plex playlist.
+
+### Phase 13 — Genres, styles and moods; tag editing in bulk (from `.todo.md`, 19 Nov 2026)
+Plex gives albums one or two broad genres (often "Pop/Rock") but many **styles** ("Art Rock", "Prog-Rock") and **moods** ("Witty", "Laid-Back/Mellow") from its own metadata. Plekstender already mirrors them (`tags`, kinds genre / style / mood / country); they just aren't used yet.
+- [ ] Every genre, style and mood chip is a link to a page for it: the artists and albums with it (sortable by your plays, rating, year), with related styles (often found together) and a "make a playlist" shortcut. Chips show their kind (genre in amber as now; styles and moods told apart).
+- [ ] Library: filter by style and mood as well as genre.
+- [ ] Playlists: styles and moods as sources and filters, like genres.
+- [ ] Rate: choose songs by style or mood too.
+- [ ] Tag editor: more fields when editing an album's tags. *The note in `.todo.md` breaks off ("It'd be great …"): which fields? Likely candidates: composer, original date, release country, label / catalogue number, disc count, comments, the MusicBrainz IDs.*
+- [ ] Library → **Tag editing** tab: browse artists and albums with what's off about their files (differs from Plex, no MusicBrainz ID, missing tags, not in Plex), select several, and act on all of them: look up MusicBrainz releases album by album (a queue: each album's best match proposed, confirmed one by one or accepted together when it's a clear match), write Plex's metadata, rename. Each album is its own edit in the history.
+
+### Phase 14 — Library stats (from `.todo.md`)
+The Library page gets tabs (Browse, Stats, Tag editing).
+- [ ] Where artists are from: a world map (like the listens map), from Plex's artist country, else MusicBrainz (the artist's area, looked up once per artist at 1 request a second and kept). Click a country for its artists.
+- [ ] The library over time: total tracks (and albums, artists) by when they were added to Plex (`addedAt`), as a growing line.
+- [ ] Music by decade: albums released per decade; click a decade for its years, a year for its months (from the release date; albums with only a year are counted as "month unknown").
+- [ ] Cover colours: each album cover's main colour (worker, from a small thumbnail: a few minutes for ~7k albums, then only new albums), shown as a colour spectrum with the covers behind each colour.
+- [ ] Word clouds of the most common words in artist, album and song names (common words like "the" and "and" left out, several languages).
+
+### Phase 15 — A fuller Home page (from `.todo.md`)
+- [ ] Remove "Coming up".
+- [ ] Your stats at a glance: listening this week / month, top artists and albums with charts, streaks, latest ratings.
+- [ ] Recently added albums and artists.
+- [ ] Upcoming live shows (Phase 11).
+
+### Phase 16 — Rewind (from `.todo.md`)
+A "wrapped"-style story for any period you choose (a year, a month, a custom range), opened as a full-screen popup within the site, far more colourful than the rest of Plekstender: each card takes its colours from the album covers on it.
+- [ ] Top artists, albums and songs; minutes listened; days listened.
+- [ ] New obsessions: artists and albums first played in the period that you played a lot.
+- [ ] New releases you played most (released in the period).
+- [ ] When you listen: the busiest day of the week and hour; genres (and styles) by day of the week and by hour of the day.
+- [ ] On repeat: songs played two or more times in a row, and the longest run.
+- [ ] Guess the intro: best streaks, records and score in the period.
+- [ ] Time spent in Plekstender (rating, playing, browsing): needs Plekstender to record app time, from when this is built.
+- [ ] Shareable cards: each story card as an image (generated graphics in the style of the period's covers), to save or share.
+
 ## Later
 
 ### Writing imported plays back to Plex
@@ -627,8 +627,8 @@ Plekstender's own history makes this optional: the ratings queues and stats alre
 - Either way, skip plays Plex already has (matched listens with `source = plex` are the overlap).
 
 ## Open questions
-- Live shows (Phase 16): JamBase as the main source (free non-commercial plan, searches many artists by MusicBrainz ID in one request, includes DICE; to confirm: whether the free plan needs a payment card, given that overage is billed); Ticketmaster's Discovery API (free key, 5,000 requests a day) as a second source; Songkick through your own calendar link (iCal; confirm the link's form when building); DICE linked to only (no public API; scraping it is against its protections and likely its terms). Not used: Integuru's unofficial Songkick API (scrapes songkick.com with your login cookies, only your tracked-artists calendar, no licence, paid hosting). Data Thistle: yes (you're in the UK; good for small venues, but no performer field and a tight quota); tokens renewed through its Auth API (`/v1/refresh`). Bandsintown needs an approved app ID; setlist.fm only has past shows (could show what an artist played recently).
-- Tag editor fields (Phase 12): the `.todo.md` note is cut off; which extra fields?
+- Live shows (Phase 11): JamBase as the main source (free non-commercial plan, searches many artists by MusicBrainz ID in one request, includes DICE; to confirm: whether the free plan needs a payment card, given that overage is billed); Ticketmaster's Discovery API (free key, 5,000 requests a day) as a second source; Songkick through your own calendar link (iCal; confirm the link's form when building); DICE through JamBase (DICE has no public API; scraping it is against its protections and likely its terms). Not used: Integuru's unofficial Songkick API (scrapes songkick.com with your login cookies, only your tracked-artists calendar, no licence, paid hosting). Data Thistle: yes (you're in the UK; good for small venues, but no performer field and a tight quota); tokens renewed through its Auth API (`/v1/refresh`). Bandsintown needs an approved app ID; setlist.fm only has past shows (could show what an artist played recently).
+- Tag editor fields (Phase 13): the `.todo.md` note is cut off; which extra fields?
 - Does the derived popularity (top 3 tracks per album, top 10 songs per artist) rank artists sensibly on the real library? Tune it on Settings → Library using the preview.
 - Plex history timestamps: is `viewedAt` really the end of the track, and does the account mapping hold for shared users? (`plex_probe.py --history`)
 - Should playlists be shareable between users of the same server (e.g. "copy definition")?
