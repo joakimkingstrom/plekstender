@@ -7,9 +7,11 @@ may use these endpoints.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
@@ -58,6 +60,7 @@ from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import epoch
 from plekstender.worker import ACTIVE, enqueue_artwork_job
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/servers/{server_id}/artwork", tags=["artwork"])
 fonts_router = APIRouter(prefix="/api/artwork", tags=["artwork"])
 
@@ -193,10 +196,12 @@ async def get_candidates(
     for c in found:
         token = art.sign_ref(settings, c.url)
         thumb_ref = art.sign_ref(settings, c.thumb_url) if c.thumb_url else token
+        # Image URLs contain "&" and "%": the references must be escaped in a link.
+        thumb_query = urlencode({"t": thumb_ref, **({"f": token} if c.thumb_url else {})})
         out.append(
             CandidateOut(
                 token=token,
-                thumb=f"/api/servers/{server_id}/artwork/image?t={thumb_ref}",
+                thumb=f"/api/servers/{server_id}/artwork/image?{thumb_query}",
                 label=c.label,
                 likes=c.likes,
                 width=c.width,
@@ -220,18 +225,30 @@ async def candidate_image(
     http: HttpDep,
     cipher: CipherDep,
     size: int = 320,
+    f: Annotated[
+        str | None, Query(max_length=4096, description="Full image, if `t` fails.")
+    ] = None,
 ) -> RawResponse:
-    """A candidate's thumbnail, fetched by the server (only signed references)."""
+    """A candidate's thumbnail, fetched by the server (only signed references). Search
+    engines' thumbnail hosts sometimes refuse; then the full image is used instead."""
     us = await owner_server(db, user, server_id)
     snapped = min(THUMB_SIZES, key=lambda s: abs(s - size))
-    try:
-        ref = art.unsign_ref(settings, t)
-        data = await art.ref_bytes(http, server_client(us, cipher, settings, http), ref, snapped)
-        body, content_type = images.thumbnail(data, snapped)
-    except art.ArtworkError as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
-    except ImageError as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Not an image.") from exc
+    client = server_client(us, cipher, settings, http)
+    error: Exception | None = None
+    for token in (t, f):
+        if not token:
+            continue
+        try:
+            ref = art.unsign_ref(settings, token)
+            data = await art.ref_bytes(http, client, ref, snapped)
+            body, content_type = images.thumbnail(data, snapped)
+            break
+        except (art.ArtworkError, ImageError) as exc:
+            log.info("candidate image failed: %s", exc)
+            error = exc
+    else:
+        message = str(error) if isinstance(error, art.ArtworkError) else "Not an image."
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, message)
     return RawResponse(
         body, media_type=content_type, headers={"Cache-Control": "private, max-age=3600"}
     )

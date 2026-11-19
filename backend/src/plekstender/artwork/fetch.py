@@ -80,7 +80,11 @@ async def fetch(
                 url,
                 follow_redirects=False,
                 timeout=TIMEOUT,
-                headers={"User-Agent": USER_AGENT, "Accept": "image/*"},
+                headers={
+                    "User-Agent": USER_AGENT,
+                    # Formats Pillow reads everywhere first (some hosts default to AVIF).
+                    "Accept": "image/png,image/jpeg,image/webp,image/gif;q=0.9,image/*;q=0.5",
+                },
             ) as resp:
                 if resp.is_redirect:
                     location = resp.headers.get("location")

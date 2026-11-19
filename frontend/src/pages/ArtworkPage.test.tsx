@@ -116,10 +116,10 @@ describe('ArtworkPage', () => {
 
   it('cycles an artist’s status from its dot', async () => {
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Radiohead: To do. Change to Custom' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Radiohead: To do. Change to Done' }))
     await vi.waitFor(async () => {
       const call = fetchMock.mock.calls.find(([input]) => typeof input !== 'string' && input.url.endsWith('/artists/100/status'))
-      expect(await (call![0] as Request).clone().json()).toEqual({ status: 'custom' })
+      expect(await (call![0] as Request).clone().json()).toEqual({ status: 'done' })
     })
   })
 

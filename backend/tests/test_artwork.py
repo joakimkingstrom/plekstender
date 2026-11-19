@@ -600,3 +600,47 @@ async def test_export_and_import_logo_packs(
     assert bad.status_code == 422
     gone = await owner.post(f"{base}/imports/{'0' * 32}/apply", json={"items": items}, headers=CSRF)
     assert gone.status_code == 404
+
+
+@pytest.mark.db
+async def test_search_thumbnails_with_query_strings(
+    app: FastAPI, plex: FakePlex, web: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Search thumbnails have "&" in their URLs; their links must survive that, and a
+    thumbnail host that refuses falls back to the full image."""
+    from plekstender.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "searxng_url", "http://searxng:8080")
+    results = [
+        {
+            "img_src": "https://logos.example.org/radiohead.png?w=800&h=400",
+            "thumbnail_src": "https://tse1.mm.bing.net/th?id=OIP.abc&pid=Api",
+            "url": "https://logos.example.org",
+            "title": "Radiohead logo",
+        },
+        {
+            "img_src": "https://logos.example.org/other.png",
+            "thumbnail_src": "https://blocked.example.net/th?id=1&x=2",
+            "url": "https://logos.example.org",
+            "title": "Radiohead logo 2",
+        },
+    ]
+    web.get("http://searxng:8080/search").mock(
+        return_value=httpx.Response(200, json={"results": results})
+    )
+    png = httpx.Response(200, content=sample_image("PNG"), headers={"content-type": "image/png"})
+    web.get("https://tse1.mm.bing.net/th?id=OIP.abc&pid=Api").mock(return_value=png)
+    web.get("https://blocked.example.net/th?id=1&x=2").mock(return_value=httpx.Response(403))
+    web.get("https://logos.example.org/other.png").mock(return_value=png)
+
+    owner, sid = await setup(app, plex)
+    found = (
+        await owner.get(
+            f"/api/servers/{sid}/artwork/artists/100/candidates", params={"source": "search"}
+        )
+    ).json()
+    assert len(found["candidates"]) == 2
+    for candidate in found["candidates"]:
+        thumb = await owner.get(candidate["thumb"])
+        assert thumb.status_code == 200, (candidate["label"], thumb.text)
+        assert thumb.headers["content-type"] == "image/png"

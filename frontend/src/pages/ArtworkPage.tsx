@@ -37,8 +37,8 @@ type Tab = CandidateSource | 'upload' | 'text'
 
 const STATUSES: [ArtworkStatus, string][] = [
   ['none', 'To do'],
-  ['custom', 'Custom'],
   ['done', 'Done'],
+  ['custom', 'Custom'],
 ]
 const STATUS_DOT: Record<ArtworkStatus, string> = {
   none: 'bg-border',
@@ -770,9 +770,9 @@ function LogoPacks({ serverId }: { serverId: number }) {
   )
 }
 
-const NEXT_STATUS: Record<ArtworkStatus, ArtworkStatus> = { none: 'custom', custom: 'done', done: 'none' }
+const NEXT_STATUS: Record<ArtworkStatus, ArtworkStatus> = { none: 'done', done: 'custom', custom: 'none' }
 
-/** The list's status dot: click to cycle To do → Custom → Done. */
+/** The list's status dot: click to cycle To do → Done → Custom. */
 function StatusDot({ serverId, artist }: { serverId: number; artist: Artist }) {
   const setStatus = useSetArtworkStatus(serverId)
   const label = (status: ArtworkStatus) => STATUSES.find(([k]) => k === status)?.[1] ?? status

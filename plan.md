@@ -442,7 +442,27 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [ ] Builder UI
 - [ ] Scheduled refresh
 
-### Phase 7 — Polish
+### Phase 7 — Feedback round 2 (from `.todo.md`, 19 Nov 2026)
+
+**General**
+- [ ] Send all listens to ListenBrainz, not just new Plex plays.
+  *A "Send my whole history" action on Settings → Listening: every listen (all sources, duplicates left out) in `import` batches of up to 1,000 as a resumable job, with progress. Check first: whether ListenBrainz ignores listens it already has (same time and song). If it doesn't, compare against the user's listens on ListenBrainz for each time range before sending, so history copied there by ListenBrainz's own Last.fm importer isn't doubled.*
+
+**History**
+- [ ] A map of where you listen: listens and top artists / songs per country, with three zoom levels (world, continent, country).
+  *Only plays seen live by the session watcher have a location (imported scrobbles don't), so the map starts from when the watcher was added. Store the country and continent codes per listen (from the same DB-IP lookup) next to the "City, Country" text. Draw an SVG choropleth from Natural Earth's public-domain country shapes (TopoJSON, ~100 KB) with d3-geo; clicking a continent zooms in, then a country; a side panel lists that area's listens and top artists / songs. LAN plays count towards the server's own location (set once in Settings, or taken from the server's public IP).*
+
+**Artwork**
+- [x] Status order To do → Done → Custom (dot, filter chips, editor).
+- [ ] Choose which fonts the text logo offers (Settings).
+  *An admin list of Google Fonts names, starting from today's curated 44; adding a name checks it exists by asking Google Fonts for it; the font picker shows the instance's list.*
+- [x] Search results showed broken images. Cause: the signed image references weren't escaped in the thumbnail links, so a `&` in a search thumbnail's URL (e.g. Bing's) cut the reference short and its signature failed. They're escaped now, image hosts are asked for PNG / JPEG / WebP / GIF first (AVIF is read too), and a thumbnail host that refuses falls back to the full image.
+
+**Settings**
+- [ ] Move the Last.fm, ListenBrainz and fanart.tv keys and accounts to a "Connections" tab.
+- [ ] An "Export / import" tab: the library export (with ratings and plays: tracks.csv, library.json), the listening history download, and the logo pack export / import.
+
+### Phase 8 — Polish
 - [ ] PWA install, offline shell
 - [ ] M3U playlist exports
 - [ ] Docs, screenshots, published images (GHCR)

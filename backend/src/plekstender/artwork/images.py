@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 CANVAS = 1000  # artist posters are square
 FIT_SHARE = 0.8  # "default size": the logo fills 80% of the canvas
 MAX_PIXELS = 40_000_000
-ALLOWED_FORMATS = {"PNG", "JPEG", "WEBP", "GIF", "BMP"}
+ALLOWED_FORMATS = {"PNG", "JPEG", "WEBP", "GIF", "BMP", "AVIF"}
 HEX = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
