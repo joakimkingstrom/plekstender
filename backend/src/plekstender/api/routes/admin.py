@@ -7,11 +7,14 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
+from plekstender import acoustid
 from plekstender.api.deps import AdminDep, DbDep, HttpDep, SettingsDep
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
     AccessSettingsIn,
     AccessSettingsOut,
+    AcoustIdKeyIn,
+    AcoustIdKeyOut,
     AdminServerIn,
     AdminServerOut,
     AdminUserIn,
@@ -33,11 +36,13 @@ from plekstender.artwork.text import FontError, check_font
 from plekstender.db.instance import (
     LibrarySettings,
     get_access_settings,
+    get_acoustid_api_key,
     get_fanart_api_key,
     get_fonts,
     get_lastfm_api_key,
     get_library_settings,
     set_access_settings,
+    set_acoustid_api_key,
     set_fanart_api_key,
     set_fonts,
     set_lastfm_api_key,
@@ -245,6 +250,27 @@ async def put_fanart(
     await set_fanart_api_key(db, settings, body.api_key)
     await db.commit()
     return await get_fanart(db, admin, settings)
+
+
+@router.get("/acoustid", response_model=AcoustIdKeyOut)
+async def get_acoustid(db: DbDep, _: AdminDep, settings: SettingsDep) -> AcoustIdKeyOut:
+    key, source = await get_acoustid_api_key(db, settings)
+    return AcoustIdKeyOut(configured=key is not None, source=source)
+
+
+@router.put("/acoustid", response_model=AcoustIdKeyOut)
+async def put_acoustid(
+    body: AcoustIdKeyIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
+) -> AcoustIdKeyOut:
+    """Set (after checking it with AcoustID) or clear the instance's AcoustID application key."""
+    if body.api_key:
+        try:
+            await acoustid.check_key(http, settings.acoustid_api_url, body.api_key)
+        except acoustid.AcoustIdError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await set_acoustid_api_key(db, settings, body.api_key)
+    await db.commit()
+    return await get_acoustid(db, admin, settings)
 
 
 # --- text logo fonts -----------------------------------------------------------------------

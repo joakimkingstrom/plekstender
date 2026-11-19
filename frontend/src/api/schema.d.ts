@@ -1240,6 +1240,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/unknown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unknown Files
+         * @description Files missing tags, not in Plex, or without a MusicBrainz ID, with what identifying them
+         *     by sound found.
+         */
+        get: operations["unknown_files_api_servers__server_id__files_unknown_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/identify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Identify Status */
+        get: operations["identify_status_api_servers__server_id__files_identify_get"];
+        put?: never;
+        /**
+         * Start Identify
+         * @description Identify files by sound (in the worker): a kind of unknown file, picked files, or an
+         *     album's. Files identified before are only looked up again when asked.
+         */
+        post: operations["start_identify_api_servers__server_id__files_identify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/identify/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Identify Preview
+         * @description The tags the chosen matches would change (nothing is written).
+         */
+        post: operations["identify_preview_api_servers__server_id__files_identify_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/identify/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Identify Apply
+         * @description Write the chosen matches' tags, as one edit (undo it from the history).
+         */
+        post: operations["identify_apply_api_servers__server_id__files_identify_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/{album_key}/musicbrainz/suggested": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggested Releases
+         * @description The releases the album's files were identified on (by sound), most files first.
+         */
+        get: operations["suggested_releases_api_servers__server_id__files_albums__album_key__musicbrainz_suggested_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -1732,6 +1835,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/acoustid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Acoustid */
+        get: operations["get_acoustid_api_admin_acoustid_get"];
+        /**
+         * Put Acoustid
+         * @description Set (after checking it with AcoustID) or clear the instance's AcoustID application key.
+         */
+        put: operations["put_acoustid_api_admin_acoustid_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/fonts/catalogue": {
         parameters: {
             query?: never;
@@ -1937,6 +2061,18 @@ export interface components {
             allowlist: string[];
             /** Initial Admin Configured */
             initial_admin_configured: boolean;
+        };
+        /** AcoustIdKeyIn */
+        AcoustIdKeyIn: {
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /** AcoustIdKeyOut */
+        AcoustIdKeyOut: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source: ("settings" | "environment") | null;
         };
         /** ActivityPoint */
         ActivityPoint: {
@@ -2686,6 +2822,125 @@ export interface components {
             /** Database */
             database: boolean;
             worker: components["schemas"]["WorkerHealth"];
+        };
+        /** IdentifyApplyIn */
+        IdentifyApplyIn: {
+            /** Choices */
+            choices: components["schemas"]["IdentityChoice"][];
+            /** Fields */
+            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
+        };
+        /** IdentifyFileChanges */
+        IdentifyFileChanges: {
+            /** File Id */
+            file_id: number;
+            /** Path */
+            path: string;
+            /** Changes */
+            changes: components["schemas"]["MbFieldChange"][];
+        };
+        /** IdentifyIn */
+        IdentifyIn: {
+            /**
+             * Kind
+             * @description Every file of this kind...
+             */
+            kind?: ("missing" | "unmatched" | "no_mbid") | null;
+            /**
+             * File Ids
+             * @description ...or these.
+             */
+            file_ids?: number[];
+            /**
+             * Album Key
+             * @description ...or an album's files.
+             */
+            album_key?: number | null;
+            /**
+             * Again
+             * @description Look up files identified before again.
+             * @default false
+             */
+            again: boolean;
+        };
+        /** IdentifyPreviewOut */
+        IdentifyPreviewOut: {
+            /** Files */
+            files: components["schemas"]["IdentifyFileChanges"][];
+            /** Changes */
+            changes: number;
+        };
+        /** IdentifyStatusOut */
+        IdentifyStatusOut: {
+            /**
+             * Configured
+             * @description An AcoustID key is set.
+             */
+            configured: boolean;
+            active: components["schemas"]["FileScanOut"] | null;
+            last: components["schemas"]["FileScanOut"] | null;
+        };
+        /** IdentityChoice */
+        IdentityChoice: {
+            /** File Id */
+            file_id: number;
+            /** Recording Id */
+            recording_id: string;
+            /**
+             * Track Id
+             * @description A release track; none: song only.
+             */
+            track_id?: string | null;
+        };
+        /** IdentityRecording */
+        IdentityRecording: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string;
+            /** Duration */
+            duration: number | null;
+            /** Releases */
+            releases: components["schemas"]["IdentityRelease"][];
+        };
+        /** IdentityRelease */
+        IdentityRelease: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string;
+            /** Date */
+            date: string | null;
+            /** Country */
+            country: string | null;
+            /** Format */
+            format: string | null;
+            /** Disc */
+            disc: number;
+            /** Discs */
+            discs: number;
+            /** Track Count */
+            track_count: number;
+            /** Position */
+            position: number;
+            /** Track Id */
+            track_id: string | null;
+        };
+        /** IdentityResult */
+        IdentityResult: {
+            /** Acoustid */
+            acoustid: string | null;
+            /**
+             * Score
+             * @description How alike it sounds, 0-1.
+             */
+            score: number;
+            /** Recordings */
+            recordings: components["schemas"]["IdentityRecording"][];
         };
         /** ImportApplyIn */
         ImportApplyIn: {
@@ -4249,6 +4504,41 @@ export interface components {
              * @default #000000
              */
             background: string;
+        };
+        /** UnknownFileOut */
+        UnknownFileOut: {
+            /** File Id */
+            file_id: number;
+            /** Path */
+            path: string;
+            /** In Plex */
+            in_plex: boolean;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Tags */
+            tags: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "identified" | "no_match" | "error";
+            /** Error */
+            error: string | null;
+            /** Results */
+            results: components["schemas"]["IdentityResult"][];
+            suggestion: components["schemas"]["IdentityChoice"] | null;
+        };
+        /** UnknownFilesOut */
+        UnknownFilesOut: {
+            /** Total */
+            total: number;
+            /**
+             * Files
+             * @description The first 200.
+             */
+            files: components["schemas"]["UnknownFileOut"][];
         };
         /** UploadOut */
         UploadOut: {
@@ -6651,6 +6941,207 @@ export interface operations {
             };
         };
     };
+    unknown_files_api_servers__server_id__files_unknown_get: {
+        parameters: {
+            query?: {
+                kind?: "missing" | "unmatched" | "no_mbid";
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnknownFilesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    identify_status_api_servers__server_id__files_identify_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentifyStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_identify_api_servers__server_id__files_identify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentifyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    identify_preview_api_servers__server_id__files_identify_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentifyApplyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentifyPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    identify_apply_api_servers__server_id__files_identify_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentifyApplyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggested_releases_api_servers__server_id__files_albums__album_key__musicbrainz_suggested_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MbReleaseSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_artists_api_servers__server_id__artwork_artists_get: {
         parameters: {
             query?: {
@@ -7630,6 +8121,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FanartKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_acoustid_api_admin_acoustid_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcoustIdKeyOut"];
+                };
+            };
+        };
+    };
+    put_acoustid_api_admin_acoustid_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcoustIdKeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcoustIdKeyOut"];
                 };
             };
             /** @description Validation Error */

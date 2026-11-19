@@ -1,6 +1,17 @@
 import { useState, type FormEvent } from 'react'
 import { errorMessage } from '../api/client'
-import { mbCoverUrl, useMbApply, useMbPreview, useMbSearch, type MbApply, type MbPreview, type MbRelease } from '../api/files'
+import {
+  mbCoverUrl,
+  useIdentifyStatus,
+  useMbApply,
+  useMbPreview,
+  useMbSearch,
+  useMbSuggested,
+  useStartIdentify,
+  type MbApply,
+  type MbPreview,
+  type MbRelease,
+} from '../api/files'
 import { formatCount, formatDuration } from '../format'
 import { fieldLabel, showValue } from '../tags'
 import { Dialog } from './Dialog'
@@ -66,7 +77,14 @@ export function MusicBrainzLookup({
           onWritten={onClose}
         />
       ) : (
-        <ReleaseSearch serverId={serverId} search={search} onSearch={setSearch} fileCount={fileCount} onPick={setRelease} />
+        <ReleaseSearch
+          serverId={serverId}
+          albumKey={albumKey}
+          search={search}
+          onSearch={setSearch}
+          fileCount={fileCount}
+          onPick={setRelease}
+        />
       )}
     </Dialog>
   )
@@ -93,14 +111,91 @@ function releaseFacts(r: MbRelease): string {
     .join(' · ')
 }
 
+function ReleaseRow({
+  serverId,
+  release: r,
+  badge,
+  onPick,
+}: {
+  serverId: number
+  release: MbRelease
+  badge?: string
+  onPick: (release: MbRelease) => void
+}) {
+  return (
+    <li>
+      <button type="button" onClick={() => onPick(r)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-surface-2">
+        <Cover serverId={serverId} id={r.id} className="size-14" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">
+            {r.title}
+            {r.disambiguation && <span className="font-normal text-muted"> ({r.disambiguation})</span>}
+          </span>
+          <span className="block truncate text-xs text-muted">{r.artist}</span>
+          <span className="block text-xs text-muted">{releaseFacts(r)}</span>
+        </span>
+        {badge && <Badge tone="ok">{badge}</Badge>}
+      </button>
+    </li>
+  )
+}
+
+/** Releases the album's files sound like (identified by AcoustID), or a way to find out. */
+function SoundsLike({
+  serverId,
+  albumKey,
+  onPick,
+}: {
+  serverId: number
+  albumKey: number
+  onPick: (release: MbRelease) => void
+}) {
+  const suggested = useMbSuggested(serverId, albumKey)
+  const status = useIdentifyStatus(serverId)
+  const start = useStartIdentify(serverId)
+  if (suggested.data?.length)
+    return (
+      <section className="space-y-1">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Sounds like</h3>
+        <ul className="space-y-1" aria-label="Releases these files sound like">
+          {suggested.data.map((r) => (
+            <ReleaseRow key={r.id} serverId={serverId} release={r} badge={`${r.score}% of your files`} onPick={onPick} />
+          ))}
+        </ul>
+      </section>
+    )
+  if (!status.data?.configured || suggested.isPending) return null
+  if (status.data.active)
+    return (
+      <p className="flex items-center gap-2 text-muted">
+        <Spinner small /> Identifying files by sound…
+      </p>
+    )
+  return (
+    <div className="space-y-2">
+      <Button
+        variant="ghost"
+        className="px-3 py-1.5 text-xs"
+        busy={start.isPending}
+        onClick={() => start.mutate({ album_key: albumKey, again: false })}
+      >
+        Identify these files by sound
+      </Button>
+      {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}
+    </div>
+  )
+}
+
 function ReleaseSearch({
   serverId,
+  albumKey,
   search,
   onSearch,
   fileCount,
   onPick,
 }: {
   serverId: number
+  albumKey: number
   search: { album: string; artist: string }
   onSearch: (search: { album: string; artist: string }) => void
   fileCount: number
@@ -135,6 +230,7 @@ function ReleaseSearch({
           </Button>
         </div>
       </form>
+      <SoundsLike serverId={serverId} albumKey={albumKey} onPick={onPick} />
       {results.isError && <Notice tone="error">{errorMessage(results.error)}</Notice>}
       {results.isFetching && !results.data && (
         <div className="flex justify-center py-6">
@@ -145,24 +241,13 @@ function ReleaseSearch({
       {results.data && results.data.length > 0 && (
         <ul className="space-y-1" aria-label="Releases">
           {results.data.map((r) => (
-            <li key={r.id}>
-              <button
-                type="button"
-                onClick={() => onPick(r)}
-                className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-surface-2"
-              >
-                <Cover serverId={serverId} id={r.id} className="size-14" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">
-                    {r.title}
-                    {r.disambiguation && <span className="font-normal text-muted"> ({r.disambiguation})</span>}
-                  </span>
-                  <span className="block truncate text-xs text-muted">{r.artist}</span>
-                  <span className="block text-xs text-muted">{releaseFacts(r)}</span>
-                </span>
-                {r.track_count === fileCount && <Badge tone="ok">{fileCount} tracks, like your files</Badge>}
-              </button>
-            </li>
+            <ReleaseRow
+              key={r.id}
+              serverId={serverId}
+              release={r}
+              badge={r.track_count === fileCount ? `${fileCount} tracks, like your files` : undefined}
+              onPick={onPick}
+            />
           ))}
         </ul>
       )}

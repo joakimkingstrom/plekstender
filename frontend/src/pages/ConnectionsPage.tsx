@@ -1,4 +1,5 @@
 import { useMe } from '../api/hooks'
+import { AcoustIdKeyCard } from '../components/AcoustIdKeyCard'
 import { Spinner } from '../components/ui'
 import { LastFmKeyCard, ListenBrainzCard } from './ListeningSettingsPage'
 import { FanartKeyCard } from './SettingsPage'
@@ -17,6 +18,7 @@ export function ConnectionsPage() {
         <div className="space-y-4">
           <LastFmKeyCard />
           <FanartKeyCard />
+          <AcoustIdKeyCard />
         </div>
       )}
     </div>

@@ -661,3 +661,176 @@ async def test_writing_your_ratings_to_files(app: FastAPI, plex: FakePlex, music
     assert FLAC(music / "300.flac")["rating"] == ["100"]
     again = (await owner.post(f"{base}/plex-sync/preview", json=body, headers=CSRF)).json()
     assert again["changes"] == 0
+
+
+# --- Identifying files by sound --------------------------------------------------------------
+
+ACOUSTID_KEY = "goodkey123"
+
+
+def acoustid_recording(n: int, title: str) -> dict[str, Any]:
+    artists = [{"id": RADIOHEAD_ID, "name": "Radiohead"}]
+    return {
+        "id": f"10000000-0000-4000-8000-0000000000{n:02d}",
+        "title": title,
+        "duration": 280,
+        "artists": artists,
+        "releases": [
+            {
+                "id": RELEASE_ID,
+                "title": "OK Computer",
+                "artists": artists,
+                "country": "GB",
+                "date": {"year": 1997, "month": 5, "day": 21},
+                "medium_count": 1,
+                "mediums": [
+                    {
+                        "position": 1,
+                        "format": "CD",
+                        "track_count": 12,
+                        "tracks": [
+                            {"id": f"00000000-0000-4000-8000-0000000000{n:02d}", "position": n}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+class FakeAcoustId:
+    """AcoustID: knows demo.mp3 (it's Airbag) and 300.flac (Paranoid Android)."""
+
+    def __init__(self, router: Any) -> None:
+        import httpx
+
+        known = {
+            "FP-demo.mp3": acoustid_recording(1, "Airbag"),
+            "FP-300.flac": acoustid_recording(2, "Paranoid Android"),
+        }
+        self.lookups: list[dict[str, str]] = []
+
+        def lookup(request: httpx.Request) -> httpx.Response:
+            from urllib.parse import parse_qsl
+
+            form = dict(parse_qsl(request.content.decode()))
+            if form["client"] != ACOUSTID_KEY:
+                return httpx.Response(
+                    400,
+                    json={"status": "error", "error": {"code": 4, "message": "invalid API key"}},
+                )
+            if "trackid" in form:
+                return httpx.Response(200, json={"status": "ok", "results": []})
+            self.lookups.append(form)
+            recording = known.get(form["fingerprint"])
+            results = (
+                [{"id": "acoustid-1", "score": 0.93, "recordings": [recording]}]
+                if recording
+                else []
+            )
+            return httpx.Response(200, json={"status": "ok", "results": results})
+
+        router.post("https://api.acoustid.org/v2/lookup").mock(side_effect=lookup)
+
+
+@pytest.fixture
+def fpcalc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A stand-in for fpcalc: the fingerprint is "FP-" and the file's name."""
+    from plekstender import acoustid
+
+    stub = tmp_path / "fpcalc"
+    stub.write_text(
+        '#!/bin/sh\necho "{\\"duration\\": 61.4, \\"fingerprint\\": \\"FP-$(basename "$4")\\"}"\n'
+    )
+    stub.chmod(0o755)
+    monkeypatch.setattr(get_settings(), "fpcalc_path", str(stub))
+    monkeypatch.setattr(acoustid, "INTERVAL", 0.0)
+    return stub
+
+
+@pytest.mark.db
+async def test_identifying_files_by_sound(
+    app: FastAPI, plex: FakePlex, music: Path, fpcalc: Path, mb: FakeMusicBrainz
+) -> None:
+    from mutagen.easyid3 import EasyID3
+
+    from plekstender.worker import apply_tag_changes, identify_music_files, scan_music_files
+
+    acoustid = FakeAcoustId(plex.router)
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    # The key first: checked with AcoustID.
+    assert (await owner.get(f"{base}/identify")).json()["configured"] is False
+    assert (
+        await owner.post(f"{base}/identify", json={"kind": "missing"}, headers=CSRF)
+    ).status_code == 400
+    bad = await owner.put("/api/admin/acoustid", json={"api_key": "wrongkey1"}, headers=CSRF)
+    assert bad.status_code == 400 and "application key" in bad.json()["detail"]
+    good = await owner.put("/api/admin/acoustid", json={"api_key": ACOUSTID_KEY}, headers=CSRF)
+    assert good.json() == {"configured": True, "source": "settings"}
+
+    # The demo has no artist or album; nothing's known about it yet.
+    unknown = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()
+    assert unknown["total"] == 1
+    [demo] = unknown["files"]
+    assert (demo["path"], demo["status"], demo["in_plex"]) == ("extra/demo.mp3", "new", False)
+    assert (await owner.get(f"{base}/unknown", params={"kind": "no_mbid"})).json()["total"] == 3
+
+    job = (await owner.post(f"{base}/identify", json={"kind": "missing"}, headers=CSRF)).json()
+    assert job["status"] == "queued"
+    await identify_music_files.func(job_id=job["id"])
+    status = (await owner.get(f"{base}/identify")).json()
+    assert status["last"]["status"] == "succeeded", status
+    assert status["last"]["stats"] == {
+        "files": 1,
+        "identified": 1,
+        "no_match": 0,
+        "errors": 0,
+        "known": 0,
+    }
+    assert acoustid.lookups[0]["duration"] == "61"  # length and fingerprint only
+
+    [demo] = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()["files"]
+    assert demo["status"] == "identified"
+    assert demo["results"][0]["recordings"][0]["releases"][0]["date"] == "1997-05-21"
+    suggestion = demo["suggestion"]
+    assert suggestion["track_id"].endswith("01")
+    again = await owner.post(f"{base}/identify", json={"kind": "missing"}, headers=CSRF)
+    assert again.status_code == 400  # known already (unless asked to look again)
+
+    # Preview, then write (with tag editing on).
+    body = {"choices": [suggestion]}
+    preview = (await owner.post(f"{base}/identify/preview", json=body, headers=CSRF)).json()
+    changes = {c["field"]: c["new_value"] for c in preview["files"][0]["changes"]}
+    assert changes["title"] == "Airbag" and changes["album"] == "OK Computer"
+    assert changes["tracknumber"] == "1/12" and changes["musicbrainz_albumid"] == RELEASE_ID
+    assert "discnumber" not in changes
+    wrong = {"choices": [{**suggestion, "track_id": "nope"}]}
+    assert (
+        await owner.post(f"{base}/identify/preview", json=wrong, headers=CSRF)
+    ).status_code == 422
+    assert (await owner.post(f"{base}/identify/apply", json=body, headers=CSRF)).status_code == 403
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    resp = await owner.post(f"{base}/identify/apply", json=body, headers=CSRF)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["description"] == "Identified by sound: 1 file"
+    await apply_tag_changes.func(set_id=resp.json()["id"])
+    tags = EasyID3(music / "extra" / "demo.mp3")
+    assert tags["title"] == ["Airbag"] and tags["artist"] == ["Radiohead"]
+    assert tags["musicbrainz_albumid"] == [RELEASE_ID]
+    assert (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()["total"] == 0
+
+    # An album's files: the releases they sound like are suggested for it.
+    job = (await owner.post(f"{base}/identify", json={"album_key": 200}, headers=CSRF)).json()
+    await identify_music_files.func(job_id=job["id"])
+    suggested = (await owner.get(f"{base}/albums/200/musicbrainz/suggested")).json()
+    assert [(r["id"], r["score"], r["formats"]) for r in suggested] == [(RELEASE_ID, 50, "CD")]
+    assert (await owner.get(f"{base}/summary")).json()["last"]["id"] == scan["id"]  # scans only

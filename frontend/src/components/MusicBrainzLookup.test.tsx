@@ -45,6 +45,8 @@ describe('MusicBrainz lookup', () => {
         })
       }
       if (url.pathname.endsWith('/albums/200/musicbrainz')) return json({ id: 9, status: 'queued' }, 201)
+      if (url.pathname.endsWith('/musicbrainz/suggested')) return json([])
+      if (url.pathname.endsWith('/files/identify')) return json({ configured: false, active: null, last: null })
       return json({ detail: 'Not found' }, 404)
     })
     vi.stubGlobal('fetch', fetch)
@@ -56,7 +58,7 @@ describe('MusicBrainz lookup', () => {
     )
     // Searched straight away with the album and artist.
     const releases = await screen.findByRole('list', { name: 'Releases' })
-    const search = new URL(fetch.mock.calls[0][0].url)
+    const search = new URL(fetch.mock.calls.find(([r]) => r.url.includes('/musicbrainz/search'))![0].url)
     expect([search.searchParams.get('album'), search.searchParams.get('artist')]).toEqual(['OK Computer', 'Radiohead'])
     expect(within(releases).getByText('2 tracks, like your files')).toBeInTheDocument()
     expect(within(releases).getByText(/1997-05-21 · GB · CD · 2 tracks · Parlophone NODATA 02 · Album/)).toBeInTheDocument()
@@ -82,5 +84,31 @@ describe('MusicBrainz lookup', () => {
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled())
     const write = fetch.mock.calls.find(([r]) => new URL(r.url).pathname.endsWith('/albums/200/musicbrainz'))
     expect(await write![0].clone().json()).toMatchObject({ release_id: RELEASE.id, mapping: { '11': 't1' } })
+  })
+
+  it('suggests the releases the files sound like, or offers to identify them', async () => {
+    let suggested: unknown[] = []
+    const fetch = vi.fn(async (input: Request) => {
+      const url = new URL(input.url)
+      if (url.pathname.endsWith('/musicbrainz/search')) return json([])
+      if (url.pathname.endsWith('/musicbrainz/suggested')) return json(suggested)
+      if (url.pathname.endsWith('/files/identify') && input.method === 'POST') {
+        suggested = [{ ...RELEASE, score: 100 }]
+        return json({ id: 3, status: 'queued', progress: {}, stats: {}, error: null, created_at: '', finished_at: null }, 201)
+      }
+      if (url.pathname.endsWith('/files/identify')) return json({ configured: true, active: null, last: null })
+      return json({ detail: 'Not found' }, 404)
+    })
+    vi.stubGlobal('fetch', fetch)
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MusicBrainzLookup serverId={1} albumKey={200} album="OK Computer" artist="Radiohead" fileCount={2} canWrite onClose={() => {}} />
+      </QueryClientProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Identify these files by sound' }))
+    await vi.waitFor(async () => {
+      const post = fetch.mock.calls.find(([r]) => r.method === 'POST')
+      expect(await post![0].clone().json()).toEqual({ album_key: 200, again: false })
+    })
   })
 })

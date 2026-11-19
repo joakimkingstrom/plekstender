@@ -670,6 +670,9 @@ class MediaFile(Base):
     has_cover: Mapped[bool] = mapped_column(default=False)
     # The tag reader's version when the file was read (older: re-read on the next scan).
     reader: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
+    # Identified by sound: {"key": "size:mtime", "fingerprint", "duration", "results": [...],
+    # "error", "at"} (AcoustID's matches, condensed; see tags/identify.py).
+    identity: Mapped[dict[str, Any] | None]
     # The Plex track this file is (matched by its path), if any.
     rating_key: Mapped[int | None] = mapped_column(BigInteger)
     error: Mapped[str | None] = mapped_column(Text)
@@ -677,13 +680,18 @@ class MediaFile(Base):
 
 
 class FileScan(Base):
-    """A scan of a server's music folder (worker job)."""
+    """A worker job over a server's music folder: a scan, or identifying files by sound."""
 
     __tablename__ = "file_scans"
     __table_args__ = (Index("ix_file_scans_server", "server_id", "id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(
+        String(8), default="scan", server_default="scan"
+    )  # | identify
+    # What an identify job covers: {"file_ids": [...], "again": bool}.
+    params: Mapped[dict[str, Any]] = mapped_column(default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(
         String(16), default="queued"
     )  # queued|running|succeeded|failed

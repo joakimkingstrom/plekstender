@@ -85,6 +85,7 @@ export function useTagHistory(serverId: number, filter: { album?: number; artist
       if (busy(qc.getQueryData<TagChangeSet[]>(key)) && !busy(data)) {
         // The worker finished: the files' tags changed.
         void qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'album'] })
+        void qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'unknown'] })
       }
       return data
     },
@@ -189,4 +190,115 @@ export function useMbApply(serverId: number, albumKey: number) {
 
 export function mbCoverUrl(serverId: number, releaseId: string) {
   return `/api/servers/${serverId}/files/musicbrainz/cover/${releaseId}`
+}
+
+// --- identifying files by sound ---------------------------------------------------------------
+
+export type UnknownKind = Schemas['IdentifyIn']['kind'] & string
+export type UnknownFile = Schemas['UnknownFileOut']
+export type IdentityChoice = Schemas['IdentityChoice']
+export type IdentifyStatus = Schemas['IdentifyStatusOut']
+
+const identifyKeys = {
+  status: (serverId: number) => [...filesKeys.all(serverId), 'identify'] as const,
+  unknown: (serverId: number, kind: string) => [...filesKeys.all(serverId), 'unknown', kind] as const,
+}
+
+/** Whether an AcoustID key is set, and the latest identify job (polled while one runs). When
+ * a job finishes, the lists of files and the album suggestions are fetched again. */
+export function useIdentifyStatus(serverId: number) {
+  const qc = useQueryClient()
+  return useQuery({
+    queryKey: identifyKeys.status(serverId),
+    queryFn: async () => {
+      const before = qc.getQueryData<IdentifyStatus>(identifyKeys.status(serverId))
+      const data = await unwrap(
+        api.GET('/api/servers/{server_id}/files/identify', { params: { path: { server_id: serverId } } }),
+      )
+      if (before?.active && !data.active) {
+        qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'unknown'] })
+        qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'suggested'] })
+      }
+      return data
+    },
+    refetchInterval: (query) => (query.state.data?.active ? 1500 : false),
+  })
+}
+
+export function useStartIdentify(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['IdentifyIn']) =>
+      unwrap(api.POST('/api/servers/{server_id}/files/identify', { params: { path: { server_id: serverId } }, body })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: identifyKeys.status(serverId) }),
+  })
+}
+
+export function useUnknownFiles(serverId: number, kind: UnknownKind) {
+  return useQuery({
+    queryKey: identifyKeys.unknown(serverId, kind),
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/unknown', { params: { path: { server_id: serverId }, query: { kind } } }),
+      ),
+  })
+}
+
+/** The tags the chosen matches would change (nothing written). */
+export function useIdentifyPreview(serverId: number, choices: IdentityChoice[]) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'identify-preview', choices],
+    gcTime: 0,
+    retry: false,
+    queryFn: () =>
+      unwrap(
+        api.POST('/api/servers/{server_id}/files/identify/preview', {
+          params: { path: { server_id: serverId } },
+          body: { choices },
+        }),
+      ),
+  })
+}
+
+export function useIdentifyApply(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (choices: IdentityChoice[]) =>
+      unwrap(
+        api.POST('/api/servers/{server_id}/files/identify/apply', {
+          params: { path: { server_id: serverId } },
+          body: { choices },
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...filesKeys.all(serverId), 'history'] }),
+  })
+}
+
+/** Releases an album's files sound like (once identified). */
+export function useMbSuggested(serverId: number, albumKey: number) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'suggested', albumKey],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/albums/{album_key}/musicbrainz/suggested', {
+          params: { path: { server_id: serverId, album_key: albumKey } },
+        }),
+      ),
+  })
+}
+
+export function useAcoustIdKey(enabled: boolean) {
+  return useQuery({ queryKey: ['admin', 'acoustid'], enabled, queryFn: () => unwrap(api.GET('/api/admin/acoustid')) })
+}
+
+export function useSetAcoustIdKey() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (apiKey: string | null) => unwrap(api.PUT('/api/admin/acoustid', { body: { api_key: apiKey } })),
+    onSuccess: (data) => {
+      qc.setQueryData(['admin', 'acoustid'], data)
+      qc.invalidateQueries({ queryKey: ['servers'] })
+    },
+  })
 }

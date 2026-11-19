@@ -169,6 +169,36 @@ async def set_fanart_api_key(db: AsyncSession, settings: Settings, api_key: str 
     await _put(db, FANART_KEY, value)
 
 
+# --- AcoustID application key --------------------------------------------------------------
+
+ACOUSTID_KEY = "acoustid"
+ACOUSTID_PURPOSE = "instance.acoustid_api_key"
+
+
+async def get_acoustid_api_key(
+    db: AsyncSession, settings: Settings
+) -> tuple[str | None, Literal["settings", "environment"] | None]:
+    """The AcoustID key and where it came from: Settings page first, then ACOUSTID_API_KEY."""
+    stored = await _get(db, ACOUSTID_KEY) or {}
+    if encrypted := stored.get("api_key_enc"):
+        try:
+            return _cipher(settings).decrypt(encrypted, purpose=ACOUSTID_PURPOSE), "settings"
+        except DecryptionError:
+            pass
+    if settings.acoustid_api_key and (env := settings.acoustid_api_key.get_secret_value().strip()):
+        return env, "environment"
+    return None, None
+
+
+async def set_acoustid_api_key(db: AsyncSession, settings: Settings, api_key: str | None) -> None:
+    value = (
+        {"api_key_enc": _cipher(settings).encrypt(api_key, purpose=ACOUSTID_PURPOSE)}
+        if api_key
+        else {}
+    )
+    await _put(db, ACOUSTID_KEY, value)
+
+
 # --- text logo fonts ------------------------------------------------------------------------
 
 FONTS_KEY = "fonts"

@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+ARG TARGETARCH
 
 # --- frontend build ---------------------------------------------------------------
 # Static files, the same for every CPU: built natively even for multi-arch images.
@@ -8,6 +9,16 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
+
+# --- fpcalc (Chromaprint) for identifying files by sound ----------------------------
+# The official static builds (a couple of MB), checked against their published digests.
+FROM scratch AS fpcalc-amd64
+ADD --checksum=sha256:c968ad4a0821592a79b158fb2e1f46cbe0a22a0a1dbc0743c67d68e75d15d2bb \
+    https://github.com/acoustid/chromaprint/releases/download/v1.6.2/chromaprint-fpcalc-1.6.2-linux-x86_64.tar.gz /fpcalc.tar.gz
+FROM scratch AS fpcalc-arm64
+ADD --checksum=sha256:3aa1498126ed272d805bc9d081c77965c9e1e1a0891bb112c13b56ef2ad47bad \
+    https://github.com/acoustid/chromaprint/releases/download/v1.6.2/chromaprint-fpcalc-1.6.2-linux-arm64.tar.gz /fpcalc.tar.gz
+FROM fpcalc-${TARGETARCH} AS fpcalc
 
 # --- python runtime ---------------------------------------------------------------
 FROM python:3.14-slim AS app
@@ -27,6 +38,9 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
 # ffmpeg for song previews comes with the imageio-ffmpeg wheel: fail the build if it can't run.
 RUN /app/.venv/bin/python -c "import imageio_ffmpeg, subprocess; \
 subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True, capture_output=True)"
+RUN --mount=from=fpcalc,source=/fpcalc.tar.gz,target=/tmp/fpcalc.tar.gz \
+    tar -xzf /tmp/fpcalc.tar.gz -C /usr/local/bin --strip-components=1 --wildcards '*/fpcalc' \
+    && fpcalc -version
 
 COPY --from=web /web/dist /app/static
 

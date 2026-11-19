@@ -512,6 +512,27 @@ async def enqueue_file_scan(scan: FileScan) -> None:
 
 
 @app.task(queue="files")
+async def identify_music_files(job_id: int) -> None:
+    from plekstender.tags.identify import run_identify
+
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_identify(db, http, get_settings(), job_id)
+
+
+async def enqueue_identify(job: FileScan) -> None:
+    """Identify files by sound. Reads files only, so it may run beside scans and edits."""
+    try:
+        await identify_music_files.configure(
+            lock=f"identify-{job.server_id}", queueing_lock=f"identify-{job.id}"
+        ).defer_async(job_id=job.id)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.task(queue="files")
 async def apply_tag_changes(set_id: int) -> None:
     async with (
         httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
@@ -569,7 +590,7 @@ async def cleanup_sessions(timestamp: int) -> None:
                 FileScan.status == "running",
                 FileScan.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
             )
-            .values(status="failed", error="Interrupted (the worker stopped). Scan again.")
+            .values(status="failed", error="Interrupted (the worker stopped). Start it again.")
         )
         await db.execute(
             update(Playlist)

@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     # ffmpeg for song previews; by default the one bundled with the imageio-ffmpeg package.
     ffmpeg_path: str | None = None
+    # Identifying music files by sound: Chromaprint's fpcalc (in the Docker image) and an
+    # AcoustID application key (or set on Settings → Connections by an admin; that wins).
+    fpcalc_path: str = "fpcalc"
+    acoustid_api_key: SecretStr | None = None
+    acoustid_api_url: str = "https://api.acoustid.org/v2"
 
     @field_validator("app_url")
     @classmethod

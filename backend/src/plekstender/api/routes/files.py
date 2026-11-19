@@ -78,7 +78,7 @@ async def files_summary(server_id: int, db: DbDep, user: UserDep) -> FilesSummar
     recent = list(
         await db.scalars(
             select(FileScan)
-            .where(FileScan.server_id == us.server_id)
+            .where(FileScan.server_id == us.server_id, FileScan.kind == "scan")
             .order_by(FileScan.id.desc())
             .limit(5)
         )
@@ -103,7 +103,11 @@ async def start_scan(server_id: int, db: DbDep, user: UserDep) -> FileScanOut:
     if not (server.plex_path_prefix and server.local_path_prefix):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Set up the music folder first.")
     active = await db.scalar(
-        select(FileScan).where(FileScan.server_id == us.server_id, FileScan.status.in_(ACTIVE))
+        select(FileScan).where(
+            FileScan.server_id == us.server_id,
+            FileScan.kind == "scan",
+            FileScan.status.in_(ACTIVE),
+        )
     )
     if active is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "A scan is already running.")
@@ -219,7 +223,11 @@ async def album_files(server_id: int, album_key: int, db: DbDep, user: UserDep) 
                 differences=differences(plex, tags) if media and not media.error else [],
             )
         )
-    scanned = bool(await db.scalar(select(func.count()).where(FileScan.server_id == us.server_id)))
+    scanned = bool(
+        await db.scalar(
+            select(func.count()).where(FileScan.server_id == us.server_id, FileScan.kind == "scan")
+        )
+    )
     return AlbumFilesOut(scanned=scanned, tracks=tracks)
 
 
@@ -635,7 +643,20 @@ async def _album_files(db: DbDep, server_id: int, album_key: int) -> list[AlbumF
         )
         .order_by(MediaFile.path)
     )
-    return [AlbumFile(m.id, m.path, m.rating_key, m.tags or {}, m.duration_ms) for m in rows]
+    return [
+        AlbumFile(m.id, m.path, m.rating_key, m.tags or {}, m.duration_ms, _recordings(m))
+        for m in rows
+    ]
+
+
+def _recordings(media: MediaFile) -> frozenset[str]:
+    """The recordings a file sounds like (identified by sound, while the file is unchanged)."""
+    identity = media.identity or {}
+    if identity.get("key") != f"{media.size}:{media.mtime}":
+        return frozenset()
+    return frozenset(
+        rec["id"] for result in identity.get("results") or [] for rec in result["recordings"]
+    )
 
 
 async def _mb_plan(

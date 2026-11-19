@@ -34,6 +34,7 @@ class AlbumFile:
     rating_key: int | None
     tags: dict[str, Any]
     duration_ms: int | None
+    recordings: frozenset[str] = frozenset()  # identified by sound (MusicBrainz recordings)
 
 
 def _norm(text: Any) -> str:
@@ -43,8 +44,8 @@ def _norm(text: Any) -> str:
 
 
 def score(f: AlbumFile, t: ReleaseTrack, one_disc: bool) -> float:
-    """How likely a file is a release track: numbers, title and length."""
-    s = 0.0
+    """How likely a file is a release track: what it sounds like, numbers, title and length."""
+    s = 4.0 if t.recording_id in f.recordings else 0.0
     if f.tags.get("track") == t.position:
         s += 2 if one_disc or (f.tags.get("disc") or 1) == t.disc else 1
     a, b = _norm(f.tags.get("title")), _norm(t.title)

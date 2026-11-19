@@ -11,6 +11,8 @@ import { Segmented } from '../components/Segmented'
 import { FolderSettings } from '../components/FolderSettings'
 import { ScanCard } from '../components/MusicFiles'
 import { PlexSync } from '../components/PlexSync'
+import { TagHistory } from '../components/TagEditor'
+import { UnknownFiles } from '../components/UnknownFiles'
 import { useFilesSummary } from '../api/files'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
@@ -685,6 +687,13 @@ function PlexSyncCard({ serverId }: { serverId: number }) {
   )
 }
 
+function UnknownFilesCard({ serverId }: { serverId: number }) {
+  const summary = useFilesSummary(serverId)
+  const me = useMe()
+  if (!summary.data?.mapped || !summary.data.files) return null
+  return <UnknownFiles serverId={serverId} canWrite={summary.data.tag_editing} isAdmin={Boolean(me.data?.is_admin)} />
+}
+
 /** The music folder and tag scans (server owners). */
 export function FilesSettingsPage() {
   const { active, servers } = useActiveServer()
@@ -692,10 +701,14 @@ export function FilesSettingsPage() {
   if (!active?.is_owner) return <Navigate to="/settings" replace />
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
-      <FolderSettings serverId={active.id} />
+      <div className="space-y-4">
+        <FolderSettings serverId={active.id} />
+        <UnknownFilesCard serverId={active.id} />
+      </div>
       <div className="space-y-4">
         <ScanCard serverId={active.id} />
         <PlexSyncCard serverId={active.id} />
+        <TagHistory serverId={active.id} />
       </div>
     </div>
   )

@@ -611,6 +611,15 @@ class FanartKeyIn(BaseModel):
     api_key: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{32}$")
 
 
+class AcoustIdKeyOut(BaseModel):
+    configured: bool
+    source: Literal["settings", "environment"] | None
+
+
+class AcoustIdKeyIn(BaseModel):
+    api_key: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{6,64}$")
+
+
 class ArtworkJobOut(BaseModel):
     id: int
     kind: Literal["fanart", "export", "import"]
@@ -1113,6 +1122,89 @@ class MbPreviewOut(BaseModel):
     release: MbReleaseSummary
     tracks: list[MbTrackOut]
     files: list[MbFileOut]
+    changes: int
+
+
+UnknownKind = Literal["missing", "unmatched", "no_mbid"]
+
+
+class IdentifyIn(BaseModel):
+    kind: UnknownKind | None = Field(default=None, description="Every file of this kind...")
+    file_ids: list[int] = Field(default_factory=list, max_length=5000, description="...or these.")
+    album_key: int | None = Field(default=None, description="...or an album's files.")
+    again: bool = Field(default=False, description="Look up files identified before again.")
+
+
+class IdentifyStatusOut(BaseModel):
+    configured: bool = Field(description="An AcoustID key is set.")
+    active: FileScanOut | None
+    last: FileScanOut | None
+
+
+class IdentityRelease(BaseModel):
+    id: str
+    title: str
+    artist: str
+    date: str | None
+    country: str | None
+    format: str | None
+    disc: int
+    discs: int
+    track_count: int
+    position: int
+    track_id: str | None
+
+
+class IdentityRecording(BaseModel):
+    id: str
+    title: str
+    artist: str
+    duration: int | None
+    releases: list[IdentityRelease]
+
+
+class IdentityResult(BaseModel):
+    acoustid: str | None
+    score: float = Field(description="How alike it sounds, 0-1.")
+    recordings: list[IdentityRecording]
+
+
+class IdentityChoice(BaseModel):
+    file_id: int
+    recording_id: str
+    track_id: str | None = Field(default=None, description="A release track; none: song only.")
+
+
+class UnknownFileOut(BaseModel):
+    file_id: int
+    path: str
+    in_plex: bool
+    duration_ms: int | None
+    tags: dict[str, Any]
+    status: Literal["new", "identified", "no_match", "error"]
+    error: str | None
+    results: list[IdentityResult]
+    suggestion: IdentityChoice | None
+
+
+class UnknownFilesOut(BaseModel):
+    total: int
+    files: list[UnknownFileOut] = Field(description="The first 200.")
+
+
+class IdentifyApplyIn(BaseModel):
+    choices: list[IdentityChoice] = Field(min_length=1, max_length=5000)
+    fields: list[MbField] = Field(default_factory=lambda: list(get_args(MbField)), min_length=1)
+
+
+class IdentifyFileChanges(BaseModel):
+    file_id: int
+    path: str
+    changes: list[MbFieldChange]
+
+
+class IdentifyPreviewOut(BaseModel):
+    files: list[IdentifyFileChanges]
     changes: int
 
 
