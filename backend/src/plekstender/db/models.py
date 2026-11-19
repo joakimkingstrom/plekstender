@@ -100,6 +100,9 @@ class PlexServer(TimestampMixin, Base):
     folder_save: Mapped[bool] = mapped_column(default=False, server_default="false")
     plex_path_prefix: Mapped[str | None] = mapped_column(Text)
     local_path_prefix: Mapped[str | None] = mapped_column(Text)
+    # The server's public IP (from plex.tv), and where that is: home-network plays are
+    # placed here on the listens map.
+    public_address: Mapped[str | None] = mapped_column(String(64))
 
     users: Mapped[list[UserServer]] = relationship(back_populates="server")
 
@@ -402,6 +405,9 @@ class Listen(Base):
     address: Mapped[str | None] = mapped_column(String(64))
     network: Mapped[str | None] = mapped_column(String(8))  # lan | wan
     location: Mapped[str | None] = mapped_column(Text)  # "Oslo, Norway" (from the IP database)
+    # ISO country and continent codes of `location` (home-network plays: the server's).
+    country_code: Mapped[str | None] = mapped_column(String(2))
+    continent_code: Mapped[str | None] = mapped_column(String(2))
     # Same play recorded by another source (e.g. a Plexamp play also scrobbled to Last.fm).
     duplicate_of: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("listens.id", ondelete="SET NULL")
@@ -544,6 +550,8 @@ class PlaySession(Base):
     address: Mapped[str | None] = mapped_column(String(64))
     network: Mapped[str | None] = mapped_column(String(8))
     location: Mapped[str | None] = mapped_column(Text)
+    country_code: Mapped[str | None] = mapped_column(String(2))
+    continent_code: Mapped[str | None] = mapped_column(String(2))
 
 
 class Playlist(Base):

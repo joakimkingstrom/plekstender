@@ -62,6 +62,7 @@ class Resource(BaseModel):
     owned: bool = False
     access_token: str | None = Field(default=None, alias="accessToken")
     presence: bool = False
+    public_address: str | None = Field(default=None, alias="publicAddress")
     connections: list[Connection] = []
 
     @property

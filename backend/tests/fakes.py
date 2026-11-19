@@ -37,6 +37,7 @@ def home_server(owned: bool, token: str) -> dict[str, Any]:
         "accessToken": token,
         "presence": True,
         "productVersion": "1.42.0",
+        "publicAddress": "81.2.69.200",
         "connections": [
             {
                 "protocol": "https",

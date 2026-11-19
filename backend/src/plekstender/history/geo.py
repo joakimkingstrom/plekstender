@@ -12,6 +12,7 @@ import gzip
 import ipaddress
 import logging
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,18 @@ async def update_database(
     return False
 
 
+@dataclass(frozen=True)
+class Place:
+    city: str | None
+    country: str | None
+    country_code: str | None  # ISO 3166-1 alpha-2
+    continent_code: str | None  # AF AN AS EU NA OC SA
+
+    @property
+    def text(self) -> str | None:
+        return ", ".join(p for p in (self.city, self.country) if p) or None
+
+
 class GeoLookup:
     """City and country for public IP addresses (None when unknown)."""
 
@@ -104,7 +117,11 @@ class GeoLookup:
             self._mtime = mtime
         return self._reader
 
-    def lookup(self, address: str | None) -> str | None:
+    def available(self) -> bool:
+        return self._open() is not None
+
+    def place(self, address: str | None) -> Place | None:
+        """Where a public address is (None for private ones, or when unknown)."""
         if not address:
             return None
         try:
@@ -112,14 +129,36 @@ class GeoLookup:
         except ValueError:
             return None
         if not ip.is_global:
-            return "Local network"
+            return None
         reader = self._open()
         if reader is None:
             return None
         record = reader.get(str(ip)) or {}
         city = ((record.get("city") or {}).get("names") or {}).get("en")
-        country = ((record.get("country") or {}).get("names") or {}).get("en")
-        return ", ".join(p for p in (city, country) if p) or None
+        country = record.get("country") or {}
+        continent = record.get("continent") or {}
+        place = Place(
+            city=city,
+            country=(country.get("names") or {}).get("en"),
+            country_code=_code(country.get("iso_code")),
+            continent_code=_code(continent.get("code")),
+        )
+        return place if place.text or place.country_code else None
+
+    def lookup(self, address: str | None) -> str | None:
+        if not address:
+            return None
+        try:
+            if not ipaddress.ip_address(address).is_global:
+                return "Local network"
+        except ValueError:
+            return None
+        place = self.place(address)
+        return place.text if place else None
+
+
+def _code(value: Any) -> str | None:
+    return value.upper() if isinstance(value, str) and len(value) == 2 else None
 
 
 _lookups: dict[Path, GeoLookup] = {}

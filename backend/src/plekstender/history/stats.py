@@ -64,7 +64,9 @@ def resolve_period(key: str, tz: ZoneInfo, now: dt.datetime | None = None) -> Pe
     raise StatsError(f"Unknown range {key!r}.")
 
 
-def _in(user_id: int, start: dt.datetime | None, end: dt.datetime) -> list[ColumnElement[bool]]:
+def in_period(
+    user_id: int, start: dt.datetime | None, end: dt.datetime
+) -> list[ColumnElement[bool]]:
     conditions = [
         Listen.user_id == user_id,
         Listen.duplicate_of.is_(None),
@@ -85,7 +87,7 @@ async def totals(
                 func.coalesce(func.sum(func.coalesce(Listen.duration_ms, ASSUMED_DURATION_MS)), 0),
                 func.count(func.distinct(Listen.artist_key)),
                 func.count(func.distinct(tuple_(Listen.artist_key, Listen.track_key))),
-            ).where(*_in(user_id, start, end))
+            ).where(*in_period(user_id, start, end))
         )
     ).one()
     return {"listens": row[0], "listening_ms": int(row[1]), "artists": row[2], "tracks": row[3]}
@@ -130,7 +132,7 @@ _NAMES = {"artist": Listen.artist_name, "album": Listen.album_name, "track": Lis
 TopBy = Literal["listens", "time"]
 
 
-def _time() -> Any:
+def listening_time() -> Any:
     """Listening time of a group of listens (unknown lengths count as a typical song)."""
     return func.sum(func.coalesce(Listen.duration_ms, ASSUMED_DURATION_MS))
 
@@ -143,15 +145,16 @@ async def top(
     end: dt.datetime,
     limit: int,
     by: TopBy = "listens",
+    where: list[ColumnElement[bool]] | None = None,
 ) -> list[Top]:
     """Most-played artists, albums or tracks (by listens or by time spent listening),
     named by their most common spelling."""
     group = _GROUPS[kind]
-    conditions = _in(user_id, start, end)
+    conditions = [*in_period(user_id, start, end), *(where or [])]
     if kind == "album":
         conditions.append(Listen.album_key.is_not(None))
     listens = func.count().label("listens")
-    time = _time().label("time")
+    time = listening_time().label("time")
     first, second = (listens, time) if by == "listens" else (time, listens)
     rows = await db.execute(
         select(
@@ -187,10 +190,10 @@ async def previous_ranks(
     if not items:
         return
     group = _GROUPS[kind]
-    metric = func.count() if by == "listens" else _time()
+    metric = func.count() if by == "listens" else listening_time()
     counts = (
         select(*group, metric.label("n"))
-        .where(*_in(user_id, start, end))
+        .where(*in_period(user_id, start, end))
         .group_by(*group)
         .subquery()
     )
@@ -320,7 +323,7 @@ async def activity(
     """Listens per bucket (zeros included) and a weekday x hour grid (Monday first)."""
     local = func.timezone(tz.key, Listen.listened_at)
     bucket = func.date_trunc(period.bucket, local)
-    conditions = _in(user_id, period.start, period.end)
+    conditions = in_period(user_id, period.start, period.end)
     rows = await db.execute(
         select(bucket, func.count()).where(*conditions).group_by(bucket).order_by(bucket)
     )

@@ -36,6 +36,7 @@ from plekstender.history.listen_counts import refresh_listen_counts
 from plekstender.history.listenbrainz import submit_pending
 from plekstender.history.listenbrainz_import import run_listenbrainz_import
 from plekstender.history.listenbrainz_send import run_listenbrainz_send
+from plekstender.history.places import fill_places, refresh_public_addresses
 from plekstender.history.plex_capture import capture_plays
 from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
 from plekstender.playlists.service import build as build_playlist_in_plex
@@ -362,8 +363,16 @@ async def watch_sessions(timestamp: int) -> None:
 async def update_geoip(timestamp: int) -> None:
     """Hourly check (a no-op while the copy is fresh): fetch the IP location database when
     it's missing or a month old, so a new install has locations within the hour."""
-    async with httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http:
-        await update_geoip_database(http, get_settings())
+    settings = get_settings()
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await update_geoip_database(http, settings)
+        # Places for the listens map: the servers' own locations (for home-network plays),
+        # then any plays not placed yet.
+        await refresh_public_addresses(db, http, settings)
+        await fill_places(db, settings)
 
 
 @app.periodic(cron="*/5 * * * *", periodic_id="capture-plays")

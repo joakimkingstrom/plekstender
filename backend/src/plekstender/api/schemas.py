@@ -725,3 +725,33 @@ class PlaylistOut(BaseModel):
 class PlaylistDetail(PlaylistOut):
     seed_artists: list[SeedArtist]
     seed_tracks: list[SeedTrack]
+
+
+# --- listens map -------------------------------------------------------------------------
+
+
+class CountryListensOut(BaseModel):
+    country_code: str = Field(description="ISO 3166-1 alpha-2")
+    continent_code: str | None = Field(description="AF AN AS EU NA OC SA")
+    listens: int
+    listening_ms: int
+
+
+class PlacesOut(BaseModel):
+    countries: list[CountryListensOut]
+    located: int = Field(description="Listens in the period with a known place.")
+    total: int = Field(description="All listens in the period.")
+    attribution: str
+
+
+class CityListensOut(BaseModel):
+    name: str
+    listens: int
+
+
+class PlaceDetailOut(BaseModel):
+    listens: int
+    listening_ms: int
+    top_artists: list[TopItemOut]
+    top_tracks: list[TopItemOut]
+    cities: list[CityListensOut] = Field(description="For a country: its towns and cities.")

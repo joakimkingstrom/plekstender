@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from plekstender.config import Settings
 from plekstender.db.models import PlaySession, UserServer
 from plekstender.history.geo import geo_lookup
+from plekstender.history.places import Placer
 from plekstender.history.plex_capture import account_map
 from plekstender.plex.server import PlexServerClient
 from plekstender.plex.tv import PlexError
@@ -65,6 +66,7 @@ async def poll_once(
         log.debug("sessions on server %s unavailable: %s", us.server_id, exc)
         return 0
     geo = geo_lookup(settings)
+    placer = Placer(db, geo)
     seen: set[int] = set()
     for item in playing:
         user_id = accounts.get(_int((item.get("User") or {}).get("id")) or -1)
@@ -100,6 +102,10 @@ async def poll_once(
                 network=str(network)[:8] if network else None,
                 location="Local network" if network == "lan" else geo.lookup(address),
             )
+            place = await placer.place(us.server_id, row.address, row.network)
+            if place is not None:
+                row.country_code = place.country_code
+                row.continent_code = place.continent_code
             db.add(row)
             await db.flush()
         else:
@@ -146,8 +152,9 @@ async def watch(
 # Give captured Plex listens the player and place of the matching session.
 _ATTACH = text(
     """
-    UPDATE listens l SET (client, address, network, location) = (
-        SELECT ps.client, ps.address, ps.network, ps.location
+    UPDATE listens l SET (client, address, network, location, country_code, continent_code) = (
+        SELECT ps.client, ps.address, ps.network, ps.location, ps.country_code,
+               ps.continent_code
         FROM play_sessions ps
         WHERE ps.user_id = l.user_id AND ps.server_id = l.server_id
           AND ps.rating_key = l.rating_key

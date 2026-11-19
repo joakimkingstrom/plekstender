@@ -171,6 +171,8 @@ async def connect_server(
         server = PlexServer(machine_identifier=resource.client_identifier, name=resource.name)
         db.add(server)
     server.name = resource.name
+    if resource.public_address and resource.owned:
+        server.public_address = resource.public_address[:64]
     # An admin connecting a server they own approves it for their users automatically.
     if user.is_admin and resource.owned:
         server.approved = True

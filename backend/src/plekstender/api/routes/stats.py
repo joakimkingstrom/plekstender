@@ -14,6 +14,10 @@ from plekstender.api.routes.auth import load_preferences
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
     ActivityPoint,
+    CityListensOut,
+    CountryListensOut,
+    PlaceDetailOut,
+    PlacesOut,
     SkippedItemOut,
     SkipsOut,
     StatsActivityOut,
@@ -23,7 +27,8 @@ from plekstender.api.schemas import (
     TopItemOut,
 )
 from plekstender.db.models import Listen
-from plekstender.history import stats
+from plekstender.history import places, stats
+from plekstender.history.geo import ATTRIBUTION
 from plekstender.history.stats import RANGE_PATTERN, Period, StatsError
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
@@ -143,4 +148,56 @@ async def skips(
         threshold=threshold,
         watching=await stats.has_sessions(db, user.id),
         items=[SkippedItemOut(**s.__dict__) for s in found],
+    )
+
+
+# --- listens map -------------------------------------------------------------------------
+
+AreaCode = Annotated[str | None, Query(pattern=r"^[A-Za-z]{2}$")]
+
+
+@router.get("/places", response_model=PlacesOut)
+async def places_overview(
+    db: DbDep, user: UserDep, range: RangeQuery = "30d", tz: TzQuery = "UTC"
+) -> PlacesOut:
+    """Listens per country (only plays seen live by the session watcher have a place)."""
+    period, _ = _period(range, tz)
+    found = await places.countries(db, user.id, period.start, period.end)
+    return PlacesOut(
+        countries=[
+            CountryListensOut(
+                country_code=c.country_code,
+                continent_code=c.continent_code,
+                listens=c.listens,
+                listening_ms=c.listening_ms,
+            )
+            for c in found.countries
+        ],
+        located=found.located,
+        total=found.total,
+        attribution=ATTRIBUTION,
+    )
+
+
+@router.get("/places/detail", response_model=PlaceDetailOut)
+async def place_detail(
+    db: DbDep,
+    user: UserDep,
+    range: RangeQuery = "30d",
+    tz: TzQuery = "UTC",
+    continent: AreaCode = None,
+    country: AreaCode = None,
+) -> PlaceDetailOut:
+    """Listens, top artists and songs (and, for a country, its cities) for an area: the
+    whole world, a continent or a country."""
+    period, _ = _period(range, tz)
+    found = await places.area_detail(
+        db, user.id, period.start, period.end, continent=continent, country=country
+    )
+    return PlaceDetailOut(
+        listens=found.listens,
+        listening_ms=found.listening_ms,
+        top_artists=[_top_out(i) for i in found.artists],
+        top_tracks=[_top_out(i) for i in found.tracks],
+        cities=[CityListensOut(name=c.name, listens=c.listens) for c in found.cities],
     )
