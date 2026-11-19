@@ -1343,6 +1343,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/renames": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan Renames
+         * @description Work out (in the worker) where an album's or an artist's files would go. Nothing moves.
+         */
+        post: operations["plan_renames_api_servers__server_id__files_renames_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/renames/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rename Plan */
+        get: operations["rename_plan_api_servers__server_id__files_renames__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/renames/{job_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Renames
+         * @description Make the dry run's moves, as one edit (undo it from the history to move them back).
+         */
+        post: operations["apply_renames_api_servers__server_id__files_renames__job_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -3912,6 +3969,65 @@ export interface components {
             item_type: "track" | "album" | "artist";
             /** User Rating */
             user_rating: number | null;
+        };
+        /** RenameIn */
+        RenameIn: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "album" | "artist";
+            /** Key */
+            key: number;
+            /** Template */
+            template: string;
+        };
+        /** RenameMove */
+        RenameMove: {
+            /**
+             * Kind
+             * @description A song, a file named like a song (lyrics), or a folder's other files.
+             * @enum {string}
+             */
+            kind: "song" | "sidecar" | "folder";
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+        };
+        /** RenamePlanOut */
+        RenamePlanOut: {
+            job: components["schemas"]["FileScanOut"];
+            /** Template */
+            template: string | null;
+            /**
+             * Songs
+             * @description Songs the template was applied to.
+             */
+            songs: number;
+            /**
+             * Unchanged
+             * @description Songs already where the template puts them.
+             */
+            unchanged: number;
+            /** Moves */
+            moves: components["schemas"]["RenameMove"][];
+            /** Skipped */
+            skipped: components["schemas"]["RenameSkip"][];
+            /**
+             * Applied Set Id
+             * @description The edit that made these moves, once made.
+             */
+            applied_set_id: number | null;
+        };
+        /** RenameSkip */
+        RenameSkip: {
+            /** Path */
+            path: string;
+            /** Target */
+            target: string | null;
+            /** Reason */
+            reason: string;
         };
         /** RenderIn */
         RenderIn: {
@@ -7141,6 +7257,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MbReleaseSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_renames_api_servers__server_id__files_renames_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_plan_api_servers__server_id__files_renames__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenamePlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_renames_api_servers__server_id__files_renames__job_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
                 };
             };
             /** @description Validation Error */

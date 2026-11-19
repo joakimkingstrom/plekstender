@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -920,3 +921,189 @@ def test_a_changed_file_is_left_alone_with_a_clear_reason(tmp_path: Path) -> Non
         outcome.error
         == "Left as it was: the file had 'XW', not no value (changed since it was scanned)."
     )
+
+
+# --- Renaming and moving files ---------------------------------------------------------------
+
+
+def test_rename_templates() -> None:
+    from plekstender.tags.rename import (
+        DEFAULT_TEMPLATE,
+        TemplateError,
+        check_template,
+        render,
+        values_for,
+    )
+
+    tags = {
+        "title": "Paranoid Android",
+        "artist": "Radiohead",
+        "album": "OK Computer",
+        "track": 2,
+        "disc": 1,
+        "date": "1997-05-21",
+    }
+    assert (
+        render(DEFAULT_TEMPLATE, values_for(tags, "x.flac", discs=1), ".FLAC")
+        == "Radiohead/OK Computer/02 - Paranoid Android.flac"
+    )
+    assert (
+        render(DEFAULT_TEMPLATE, values_for({**tags, "disc": 2}, "x.flac", discs=2), ".flac")
+        == "Radiohead/OK Computer/2-02 - Paranoid Android.flac"
+    )
+    # Optional parts drop out; unsafe characters and trailing dots don't make it into names.
+    odd = {"title": "What?", "albumartist": "AC/DC", "album": "Vol. 1...", "date": "1980"}
+    assert (
+        render(
+            "{albumartist}/[{year} - ]{album}/[{track:02} ]{title}",
+            values_for(odd, "x.mp3", 1),
+            ".mp3",
+        )
+        == "AC_DC/1980 - Vol. 1/What_.mp3"
+    )
+    assert (
+        render(DEFAULT_TEMPLATE, values_for({}, "Some file.mp3", 1), ".mp3")
+        == "Unknown artist/Unknown album/Some file.mp3"
+    )
+    long = render("{title}", {"title": "x" * 400}, ".flac")
+    assert len(long.encode()) <= 180 and long.endswith(".flac")
+
+    for bad, message in [
+        ("{albumartist}/{nope}/{title}", "isn't a field"),
+        ("{albumartist}/[{year} - {album}/{title}", "Brackets"),
+        ("{title}/{album}", "file name"),
+        ("../{title}", ".. folders"),
+        ("{album}/{track:2} {title}", "{track:02}"),
+    ]:
+        with pytest.raises(TemplateError, match=re.escape(message)):
+            check_template(bad)
+
+
+def test_planning_moves_with_their_files(tmp_path: Path) -> None:
+    from plekstender.tags.rename import Move, plan_moves
+
+    root = tmp_path
+    album = root / "incoming" / "okc"
+    album.mkdir(parents=True)
+    for name in ("01.flac", "02.flac", "01.lrc", "01.en.lrc", "cover.jpg", "album.cue"):
+        (album / name).write_bytes(b"x")
+    (album / "Scans").mkdir()
+    (album / "Scans" / "front.png").write_bytes(b"x")
+    mixed = root / "mixed"
+    mixed.mkdir()
+    for name in ("a.flac", "b.flac", "folder.jpg"):
+        (mixed / name).write_bytes(b"x")
+    (root / "Taken").mkdir()
+    (root / "Taken" / "a.flac").write_bytes(b"x")
+
+    songs = [
+        Move("song", "incoming/okc/01.flac", "Radiohead/OK Computer/01 - Airbag.flac", 1),
+        Move("song", "incoming/okc/02.flac", "Radiohead/OK Computer/02 - Paranoid Android.flac", 2),
+        Move("song", "mixed/a.flac", "Taken/a.flac", 3),  # something's there
+        Move("song", "mixed/b.flac", "Elsewhere/b.flac", 4),
+    ]
+    moves, skipped, unchanged = plan_moves(root, songs)
+    targets = {m.source: (m.kind, m.target) for m in moves}
+    assert targets["incoming/okc/01.lrc"] == ("sidecar", "Radiohead/OK Computer/01 - Airbag.lrc")
+    assert targets["incoming/okc/01.en.lrc"] == (
+        "sidecar",
+        "Radiohead/OK Computer/01 - Airbag.en.lrc",
+    )
+    assert targets["incoming/okc/cover.jpg"] == ("folder", "Radiohead/OK Computer/cover.jpg")
+    assert targets["incoming/okc/Scans"] == ("folder", "Radiohead/OK Computer/Scans")
+    assert targets["mixed/b.flac"] == ("song", "Elsewhere/b.flac")
+    reasons = {s.path: s.reason for s in skipped}
+    assert reasons["mixed/a.flac"] == "Another file is already there."
+    assert reasons["mixed/folder.jpg"] == "Its folder's songs go to different places."
+    assert unchanged == 0
+
+
+@pytest.mark.db
+async def test_renaming_files_and_moving_them_back(
+    app: FastAPI, plex: FakePlex, music: Path
+) -> None:
+    from plekstender.worker import apply_tag_changes, plan_renames, scan_music_files
+
+    (music / "300.lrc").write_text("[00:01] lyrics")
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    bad = await owner.post(
+        f"{base}/renames", json={"scope": "album", "key": 200, "template": "{nope}"}, headers=CSRF
+    )
+    assert bad.status_code == 422 and "isn't a field" in bad.json()["detail"]
+    template = "{albumartist}/{album}/[{track:02} - ]{title}"
+    job = (
+        await owner.post(
+            f"{base}/renames",
+            json={"scope": "album", "key": 200, "template": template},
+            headers=CSRF,
+        )
+    ).json()
+    await plan_renames.func(job_id=job["id"])
+    plan = (await owner.get(f"{base}/renames/{job['id']}")).json()
+    assert plan["job"]["status"] == "succeeded", plan
+    assert {(m["kind"], m["source"], m["target"]) for m in plan["moves"]} == {
+        ("song", "300.flac", "Radiohead/OK Computer/02 - Paranoid Android.flac"),
+        ("sidecar", "300.lrc", "Radiohead/OK Computer/02 - Paranoid Android.lrc"),
+        ("song", "301.flac", "Radiohead/OK Computer/06 - Karma Police (Live).flac"),
+    }
+    assert plan["skipped"] == [] and plan["unchanged"] == 0
+    assert (music / "300.flac").exists()  # a dry run moves nothing
+
+    apply = f"{base}/renames/{job['id']}/apply"
+    assert (await owner.post(apply, headers=CSRF)).status_code == 403  # editing is off
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    resp = await owner.post(apply, headers=CSRF)
+    assert resp.status_code == 201, resp.text
+    change_set = resp.json()
+    assert change_set["description"] == f"Moved 2 songs and 1 other file to {template}"
+    assert (await owner.post(apply, headers=CSRF)).status_code == 409  # not twice
+    plex.library.refreshed.clear()
+    await apply_tag_changes.func(set_id=change_set["id"])
+    album = music / "Radiohead" / "OK Computer"
+    assert sorted(p.name for p in album.iterdir()) == [
+        "02 - Paranoid Android.flac", "02 - Paranoid Android.lrc", "06 - Karma Police (Live).flac",
+    ]  # fmt: skip
+    assert not (music / "300.flac").exists()
+    assert plex.library.refreshed and all(
+        path == "" for _, path in plex.library.refreshed
+    )  # whole sections
+    files = (await owner.get(f"{base}/albums/200")).json()["tracks"]
+    assert {t["file"] for t in files if t["file"]} == {
+        "Radiohead/OK Computer/02 - Paranoid Android.flac",
+        "Radiohead/OK Computer/06 - Karma Police (Live).flac",
+    }
+    [done] = (await owner.get(f"{base}/changes")).json()
+    assert (done["status"], done["counts"]) == ("applied", {"applied": 3})
+
+    # Undo moves them back, and the emptied folders go.
+    undo = await owner.post(f"{base}/undo", json={"set_id": done["id"]}, headers=CSRF)
+    await apply_tag_changes.func(set_id=undo.json()["id"])
+    assert (music / "300.flac").exists() and (music / "300.lrc").exists()
+    assert not (music / "Radiohead").exists()
+
+    # A file in the way is never overwritten: that move is left out.
+    job = (
+        await owner.post(
+            f"{base}/renames",
+            json={"scope": "album", "key": 200, "template": template},
+            headers=CSRF,
+        )
+    ).json()
+    await plan_renames.func(job_id=job["id"])
+    album.mkdir(parents=True)
+    (album / "06 - Karma Police (Live).flac").write_bytes(b"someone else's")
+    resp = await owner.post(f"{base}/renames/{job['id']}/apply", headers=CSRF)
+    await apply_tag_changes.func(set_id=resp.json()["id"])
+    latest = (await owner.get(f"{base}/changes")).json()[0]
+    assert latest["counts"] == {"applied": 2, "conflict": 1}
+    assert (album / "06 - Karma Police (Live).flac").read_bytes() == b"someone else's"
+    assert (music / "301.flac").exists()

@@ -166,7 +166,7 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
                   </Button>
                 </div>
               ) : (
-                <Notice>Allow editing tags (above) to write the matches into the files.</Notice>
+                <Notice>Allow changing files (above) to write the matches into the files.</Notice>
               ))}
           </>
         )}

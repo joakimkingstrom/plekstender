@@ -533,6 +533,24 @@ async def enqueue_identify(job: FileScan) -> None:
 
 
 @app.task(queue="files")
+async def plan_renames(job_id: int) -> None:
+    from plekstender.tags.rename import run_rename_plan
+
+    async with get_sessionmaker()() as db:
+        await run_rename_plan(db, job_id)
+
+
+async def enqueue_rename_plan(job: FileScan) -> None:
+    """A dry run of renaming files (reads folders; waits for scans and edits)."""
+    try:
+        await plan_renames.configure(
+            lock=f"folders-{job.server_id}", queueing_lock=f"rename-{job.id}"
+        ).defer_async(job_id=job.id)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.task(queue="files")
 async def apply_tag_changes(set_id: int) -> None:
     async with (
         httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,

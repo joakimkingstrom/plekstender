@@ -1214,5 +1214,35 @@ class IdentifyPreviewOut(BaseModel):
     changes: int
 
 
+class RenameIn(BaseModel):
+    scope: Literal["album", "artist"]
+    key: int
+    template: str = Field(min_length=1, max_length=300)
+
+
+class RenameMove(BaseModel):
+    kind: Literal["song", "sidecar", "folder"] = Field(
+        description="A song, a file named like a song (lyrics), or a folder's other files."
+    )
+    source: str
+    target: str
+
+
+class RenameSkip(BaseModel):
+    path: str
+    target: str | None
+    reason: str
+
+
+class RenamePlanOut(BaseModel):
+    job: FileScanOut
+    template: str | None
+    songs: int = Field(description="Songs the template was applied to.")
+    unchanged: int = Field(description="Songs already where the template puts them.")
+    moves: list[RenameMove]
+    skipped: list[RenameSkip]
+    applied_set_id: int | None = Field(description="The edit that made these moves, once made.")
+
+
 class TagSettingsIn(BaseModel):
     tag_editing: bool

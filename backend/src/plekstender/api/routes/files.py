@@ -254,7 +254,8 @@ async def _editable(db: DbDep, user: User, server_id: int) -> tuple[UserServer, 
     assert server is not None
     if not server.tag_editing:
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Turn on tag editing first (Settings → Music files)."
+            status.HTTP_403_FORBIDDEN,
+            'Turn on "Allow changing files" first (Settings → Music files).',
         )
     return us, server
 

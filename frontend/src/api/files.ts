@@ -302,3 +302,44 @@ export function useSetAcoustIdKey() {
     },
   })
 }
+
+// --- renaming and moving files ----------------------------------------------------------------
+
+export type RenamePlan = Schemas['RenamePlanOut']
+export const DEFAULT_TEMPLATE = '{albumartist}/{album}/[{disc}-][{track:02} - ]{title}'
+
+/** Start a dry run: where an album's or an artist's files would go (nothing moves). */
+export function usePlanRenames(serverId: number) {
+  return useMutation({
+    mutationFn: (body: Schemas['RenameIn']) =>
+      unwrap(api.POST('/api/servers/{server_id}/files/renames', { params: { path: { server_id: serverId } }, body })),
+  })
+}
+
+/** A dry run's result (polled until the worker has worked it out). */
+export function useRenamePlan(serverId: number, jobId: number | null) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'renames', jobId],
+    enabled: jobId !== null,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/renames/{job_id}', {
+          params: { path: { server_id: serverId, job_id: jobId! } },
+        }),
+      ),
+    refetchInterval: (query) => {
+      const status = query.state.data?.job.status
+      return status === 'queued' || status === 'running' ? 1000 : false
+    },
+  })
+}
+
+export function useApplyRenames(serverId: number) {
+  return useQueueTags(serverId, (jobId: number) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/renames/{job_id}/apply', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+      }),
+    ),
+  )
+}

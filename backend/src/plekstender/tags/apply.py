@@ -1,4 +1,5 @@
-"""Applying a tag change set (worker only): snapshot, write, re-read, tell Plex."""
+"""Applying a change set (worker only): moves first (a file's "path" changing), then tags
+(snapshot, write, re-read); then Plex is asked to rescan."""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from collections import defaultdict
 from pathlib import Path, PurePosixPath
 
 import httpx
-from sqlalchemy import ColumnElement, func, or_, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.config import Settings
@@ -24,6 +25,7 @@ from plekstender.db.models import (
 )
 from plekstender.plex.tv import PlexError
 from plekstender.tags.read import READER, TagReadError, read_file, unread_fields
+from plekstender.tags.rename import MoveError, move, remove_empty_folders
 from plekstender.tags.write import Planned, TagWriteError, apply, snapshot
 
 log = logging.getLogger(__name__)
@@ -66,11 +68,16 @@ async def run_change_set(
         await db.commit()
         return
     root = await asyncio.to_thread(lambda: Path(server.local_path_prefix or "").resolve())
+    moved = await _apply_moves(db, root, server, set_id)
     # File by file, a batch of files at a time (a library-wide edit can be very big).
     file_ids = list(
         await db.scalars(
             select(TagChange.media_file_id)
-            .where(TagChange.change_set_id == set_id, TagChange.status == "pending")
+            .where(
+                TagChange.change_set_id == set_id,
+                TagChange.status == "pending",
+                TagChange.field != "path",
+            )
             .group_by(TagChange.media_file_id)
             .order_by(func.min(TagChange.id))
         )
@@ -85,7 +92,12 @@ async def run_change_set(
         changes = list(
             await db.scalars(
                 select(TagChange)
-                .where(TagChange.change_set_id == set_id, TagChange.status == "pending", in_batch)
+                .where(
+                    TagChange.change_set_id == set_id,
+                    TagChange.status == "pending",
+                    TagChange.field != "path",
+                    in_batch,
+                )
                 .order_by(TagChange.id)
             )
         )
@@ -116,7 +128,58 @@ async def run_change_set(
     )
     change_set.applied_at = change_set.updated_at = dt.datetime.now(dt.UTC)
     await db.commit()
-    await _tell_plex(db, http, settings, server, touched)
+    await _tell_plex(db, http, settings, server, touched, moved)
+
+
+async def _apply_moves(db: AsyncSession, root: Path, server: PlexServer, set_id: int) -> set[int]:
+    """Move files (renames): each one only if it's still where it was and nothing is where it
+    goes. Returns the Plex tracks moved (their library sections are rescanned)."""
+    changes = list(
+        await db.scalars(
+            select(TagChange)
+            .where(
+                TagChange.change_set_id == set_id,
+                TagChange.status == "pending",
+                TagChange.field == "path",
+            )
+            .order_by(TagChange.id)
+        )
+    )
+    moved: set[int] = set()
+    left: set[str] = set()
+    for change in changes:
+        source, target = str(change.old_value), str(change.new_value)
+        try:
+            await asyncio.to_thread(move, root, source, target)
+        except MoveError as exc:
+            change.status, change.error = exc.status, str(exc)
+            await db.commit()
+            continue
+        change.status, change.error = "applied", None
+        left.add(str(PurePosixPath(source).parent))
+        if change.media_file_id is not None:
+            # A row for a file that was at the target before is out of date (it isn't there).
+            await db.execute(
+                delete(MediaFile).where(
+                    MediaFile.server_id == server.id,
+                    MediaFile.path == target,
+                    MediaFile.id != change.media_file_id,
+                )
+            )
+            await db.execute(
+                update(MediaFile).where(MediaFile.id == change.media_file_id).values(path=target)
+            )
+        if change.rating_key is not None and server.plex_path_prefix:
+            moved.add(change.rating_key)
+            await db.execute(  # what Plex will call it (the next library sync confirms)
+                update(Track)
+                .where(Track.server_id == server.id, Track.rating_key == change.rating_key)
+                .values(file_path=str(PurePosixPath(server.plex_path_prefix) / target))
+            )
+        await db.commit()
+    if left:
+        await asyncio.to_thread(remove_empty_folders, root, left)
+    return moved
 
 
 async def _apply_file(
@@ -180,9 +243,12 @@ async def _tell_plex(
     settings: Settings,
     server: PlexServer,
     touched: set[tuple[int | None, str]],
+    moved: set[int] | None = None,
 ) -> None:
-    """Ask Plex to rescan the folders whose files changed (best effort)."""
-    if not touched or not server.plex_path_prefix:
+    """Ask Plex to rescan the folders whose files changed (best effort). Moved files: their
+    whole library sections, so Plex sees the old and new places in one scan (and can tell a
+    moved file from a deleted one)."""
+    if not (touched or moved) or not server.plex_path_prefix:
         return
     from plekstender.artwork.jobs import client_for
 
@@ -205,12 +271,22 @@ async def _tell_plex(
         )
         if section:
             folders[str(PurePosixPath(server.plex_path_prefix) / folder)] = section
+    whole: set[str] = set()
+    for rating_key in moved or set():
+        section = await db.scalar(
+            select(Track.section_key).where(
+                Track.server_id == server.id, Track.rating_key == rating_key
+            )
+        )
+        if section:
+            whole.add(section)
+    if len(folders) > MAX_FOLDER_RESCANS:
+        whole |= set(folders.values())
     try:
-        if len(folders) > MAX_FOLDER_RESCANS:
-            for section in set(folders.values()):
-                await client.refresh_folder(section, None)
-        else:
-            for folder, section in folders.items():
+        for section in whole:
+            await client.refresh_folder(section, None)
+        for folder, section in folders.items():
+            if section not in whole:  # already rescanned as a whole
                 await client.refresh_folder(section, folder)
     except (PlexError, httpx.HTTPError) as exc:
         log.info("Plex rescan failed: %s", exc)

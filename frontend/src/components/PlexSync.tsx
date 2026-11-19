@@ -119,7 +119,7 @@ export function PlexSync({
                 Write {formatCount(data.changes)} {data.changes === 1 ? 'change' : 'changes'}
               </Button>
             ) : (
-              <Notice>Allow editing tags (above) to write these.</Notice>
+              <Notice>Allow changing files (above) to write these.</Notice>
             )}
             {write.isError && <Notice tone="error">{errorMessage(write.error)}</Notice>}
           </div>

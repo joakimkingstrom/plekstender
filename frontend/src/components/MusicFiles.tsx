@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAlbumFiles, useFilesSummary, useSetTagEditing, useStartScan, type TrackFile } from '../api/files'
 import { MusicBrainzLookup } from './MusicBrainzLookup'
 import { PlexSync } from './PlexSync'
+import { RenameFiles } from './RenameFiles'
 import { TagEditor, TagHistory } from './TagEditor'
 import { formatCount, formatDuration, formatRelative } from '../format'
 import { Tooltip } from './Tooltip'
@@ -72,12 +73,12 @@ export function ScanCard({ serverId }: { serverId: number }) {
                 disabled={setEditing.isPending}
                 onChange={(e) => setEditing.mutate(e.target.checked)}
               />
-              Allow editing tags
+              Allow changing files (tags, names and folders)
             </label>
             <p className="text-xs text-muted">
-              Album pages get an Edit tags button. Changes are written to your music files by the worker, after you've
-              reviewed them; every change is recorded and can be undone, and a file changed elsewhere is never
-              overwritten.
+              Lets Plekstender change your music files: edit tags, write Plex's metadata or a MusicBrainz release into
+              them, and rename or move them. Changes are made by the worker after you've reviewed them; every change is
+              recorded and can be undone, and nothing changed elsewhere is overwritten.
             </p>
             {setEditing.isError && <Notice tone="error">{errorMessage(setEditing.error)}</Notice>}
           </div>
@@ -113,6 +114,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
   const summary = useFilesSummary(serverId)
   const [editing, setEditing] = useState(false)
   const [lookup, setLookup] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   if (files.isPending) return null
   if (files.isError) return null // not the owner (403), or nothing to show
   const { tracks, scanned } = files.data
@@ -121,6 +123,15 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
   const canEdit = Boolean(summary.data?.tag_editing) && withFiles.length > 0
   return (
     <div className="space-y-4">
+    {renaming && (
+      <RenameFiles
+        serverId={serverId}
+        scope="album"
+        scopeKey={albumKey}
+        canWrite={Boolean(summary.data?.tag_editing)}
+        onClose={() => setRenaming(false)}
+      />
+    )}
     {lookup && (
       <MusicBrainzLookup
         serverId={serverId}
@@ -141,9 +152,14 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
               {different ? `${different} of ${tracks.length} songs differ from Plex` : 'Same as Plex'}
             </span>
             {withFiles.length > 0 && !editing && (
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setLookup(true)}>
-                MusicBrainz…
-              </Button>
+              <>
+                <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setLookup(true)}>
+                  MusicBrainz…
+                </Button>
+                <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setRenaming(true)}>
+                  Rename…
+                </Button>
+              </>
             )}
             {canEdit && !editing && (
               <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setEditing(true)}>
@@ -242,22 +258,39 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
 export function ArtistFiles({ serverId, artistKey }: { serverId: number; artistKey: number }) {
   const summary = useFilesSummary(serverId)
   const [open, setOpen] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   if (!summary.data?.mapped || !summary.data.files) return null
   return (
     <Card
       title="Tags in the files"
       action={
-        !open ? (
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setOpen(true)}>
-            Take tags from Plex…
+        <span className="flex gap-2">
+          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setRenaming(true)}>
+            Rename files…
           </Button>
-        ) : undefined
+          {!open && (
+            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setOpen(true)}>
+              Take tags from Plex…
+            </Button>
+          )}
+        </span>
       }
     >
       {open ? (
         <PlexSync serverId={serverId} scope="artist" scopeKey={artistKey} canWrite={summary.data.tag_editing} />
       ) : (
-        <p className="text-sm text-muted">Make this artist's files' tags match Plex, or edit them album by album.</p>
+        <p className="text-sm text-muted">
+          Make this artist's files' tags match Plex, rename them into folders, or edit them album by album.
+        </p>
+      )}
+      {renaming && (
+        <RenameFiles
+          serverId={serverId}
+          scope="artist"
+          scopeKey={artistKey}
+          canWrite={summary.data.tag_editing}
+          onClose={() => setRenaming(false)}
+        />
       )}
     </Card>
   )
