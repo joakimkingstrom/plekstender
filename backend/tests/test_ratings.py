@@ -313,3 +313,54 @@ async def test_your_ratings_newest_first(app: FastAPI, plex: FakePlex) -> None:
     assert [i["title"] for i in songs["items"]] == ["Lucky", "Paranoid Android"]
     paged = (await owner.get(base, params={"offset": 1, "limit": 2})).json()
     assert paged["total"] == 4 and len(paged["items"]) == 2
+
+
+@pytest.mark.db
+async def test_undo_one_rating(app: FastAPI, plex: FakePlex) -> None:
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/ratings"
+
+    async def listed() -> dict[int, dict]:
+        return {i["rating_key"]: i for i in (await owner.get(base)).json()["items"]}
+
+    async def rate_(key: int, rating: float) -> None:
+        resp = await owner.post(base, json={"rating_key": key, "rating": rating}, headers=CSRF)
+        assert resp.status_code == 200, resp.text
+
+    async def undo(key: int) -> httpx.Response:
+        return await owner.post(f"{base}/{key}/undo", headers=CSRF)
+
+    # Rated in Plex (no record of the rating before): no undo.
+    before = await listed()
+    assert (before[300]["undoable"], before[100]["undoable"]) == (False, False)
+
+    await rate_(303, 6)
+    await rate_(303, 8)
+    lucky = (await listed())[303]
+    assert (lucky["user_rating"], lucky["undoable"], lucky["undo_to"]) == (8, True, 6)
+
+    resp = await undo(303)
+    assert resp.status_code == 200 and resp.json()["user_rating"] == 6
+    assert plex.library.state["srv-owner"][303]["userRating"] == 6  # saved to Plex
+    lucky = (await listed())[303]
+    assert (lucky["user_rating"], lucky["undo_to"]) == (6, None)  # back to unrated next
+    resp = await undo(303)
+    assert resp.json()["user_rating"] is None
+    assert 303 not in await listed()  # unrated: off the list
+    assert (await undo(303)).status_code == 404
+
+    # Paranoid Android (10 in Plex) rated 4 here, then undone: back to 10, and back in its
+    # place (rated when Plex said), not "just now".
+    await rate_(300, 4)
+    assert (await listed())[300]["undo_to"] == 10
+    await undo(300)
+    android = (await listed())[300]
+    assert android["user_rating"] == 10
+    assert android["rated_at"] == before[300]["rated_at"]
+
+    # Changed in Plex since it was rated here: no undo (it would overwrite that change).
+    await rate_(304, 6)
+    async with get_sessionmaker()() as db:
+        await db.execute(text("UPDATE user_item_state SET user_rating = 2 WHERE rating_key = 304"))
+        await db.commit()
+    assert (await listed())[304]["undoable"] is False

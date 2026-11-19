@@ -863,6 +863,13 @@ class RatedItemOut(BaseModel):
     user_rating: float
     rated_at: dt.datetime | None = Field(description="When it was last rated (Plex or here).")
     link_key: int | None = Field(description="The album (songs, albums) or artist to link to.")
+    undo_to: float | None = Field(
+        default=None, description="The rating an undo would put back (None: unrated)."
+    )
+    undoable: bool = Field(
+        default=False,
+        description="Rated here, and not changed since (ratings set in Plex have no undo).",
+    )
 
 
 class RatedPage(BaseModel):

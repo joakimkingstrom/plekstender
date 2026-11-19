@@ -456,7 +456,10 @@ class RatingEvent(Base):
     """A rating set in Plekstender: an append-only log for undo and history."""
 
     __tablename__ = "rating_events"
-    __table_args__ = (Index("ix_rating_events_user", "user_id", "id"),)
+    __table_args__ = (
+        Index("ix_rating_events_user", "user_id", "id"),
+        Index("ix_rating_events_item", "user_id", "server_id", "rating_key", "id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
@@ -465,6 +468,9 @@ class RatingEvent(Base):
     item_type: Mapped[str] = mapped_column(String(8))
     old_rating: Mapped[float | None] = mapped_column(Float)  # 0-10; None = unrated
     new_rating: Mapped[float | None] = mapped_column(Float)
+    # When the old rating had been set: an undo puts that back too (so the item returns to
+    # its place in "your ratings" instead of looking newly rated).
+    old_rated_at: Mapped[dt.datetime | None]
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
     undone_at: Mapped[dt.datetime | None]
 

@@ -520,6 +520,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 
 **Your ratings**
 - [x] History → Ratings: everything you've rated (here or in Plex), the most recently rated first, by day; filter by songs, albums and artists; change a rating in place.
+- [x] Undo per item on History → Ratings: puts back the rating from before (repeatable), and when it was set. Only for ratings made in Plekstender and not changed in Plex since.
 
 ### Phase 10 — Music files and the tag editor (from `.todo.md`; needs the music folder)
 

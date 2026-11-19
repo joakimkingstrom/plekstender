@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
-import { useRate, useRated, type RatedItem, type RatedKind } from '../api/ratings'
+import { useRate, useRated, useUndoItem, type RatedItem, type RatedKind } from '../api/ratings'
 import { Artwork } from '../components/library'
 import { Segmented } from '../components/Segmented'
 import { StarRating } from '../components/StarRating'
 import { Badge, Button, Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
+import { Tooltip } from '../components/Tooltip'
+import { starsText } from '../swipe'
 import { formatCount, formatDay, formatTime } from '../format'
 
 const KINDS: [RatedKind | 'all', string][] = [
@@ -38,6 +40,7 @@ function RatedList({ serverId }: { serverId: number }) {
   const [kind, setKind] = useState<RatedKind | 'all'>('all')
   const rated = useRated(serverId, kind === 'all' ? null : kind)
   const rate = useRate(serverId)
+  const undo = useUndoItem(serverId)
 
   const items = rated.data?.pages.flatMap((p) => p.items) ?? []
   const total = rated.data?.pages[0]?.total ?? 0
@@ -61,6 +64,7 @@ function RatedList({ serverId }: { serverId: number }) {
         )}
       </div>
       {rate.isError && <Notice tone="error">{errorMessage(rate.error)}</Notice>}
+      {undo.isError && <Notice tone="error">{errorMessage(undo.error)}</Notice>}
       {rated.isPending ? (
         <Spinner />
       ) : rated.isError ? (
@@ -86,6 +90,8 @@ function RatedList({ serverId }: { serverId: number }) {
                     serverId={serverId}
                     item={item}
                     onRate={(rating) => rate.mutate({ rating_key: item.rating_key, rating })}
+                    onUndo={() => undo.mutate(item.rating_key)}
+                    undoing={undo.isPending && undo.variables === item.rating_key}
                   />
                 ))}
               </ol>
@@ -104,7 +110,19 @@ function RatedList({ serverId }: { serverId: number }) {
   )
 }
 
-function RatedRow({ serverId, item, onRate }: { serverId: number; item: RatedItem; onRate: (rating: number | null) => void }) {
+function RatedRow({
+  serverId,
+  item,
+  onRate,
+  onUndo,
+  undoing,
+}: {
+  serverId: number
+  item: RatedItem
+  onRate: (rating: number | null) => void
+  onUndo: () => void
+  undoing: boolean
+}) {
   const to =
     item.link_key === null ? null : item.kind === 'artist' ? `/library/artists/${item.link_key}` : `/library/albums/${item.link_key}`
   return (
@@ -129,6 +147,22 @@ function RatedRow({ serverId, item, onRate }: { serverId: number; item: RatedIte
       </span>
       {item.rated_at && <span className="hidden w-12 text-right text-xs text-muted tabular-nums sm:block">{formatTime(item.rated_at)}</span>}
       <StarRating label={`Rate ${item.title}`} value={item.user_rating} onChange={onRate} />
+      {/* Ratings set in Plex (or changed there since) have no undo: what was before isn't known. */}
+      <span className="w-14 shrink-0 text-right">
+        {item.undoable && (
+          <Tooltip content={item.undo_to === null || item.undo_to === undefined ? 'Back to unrated' : `Back to ${starsText(item.undo_to)} ★`}>
+            <Button
+              variant="ghost"
+              className="px-2 py-1 text-xs"
+              busy={undoing}
+              onClick={onUndo}
+              aria-label={`Undo the rating of ${item.title}`}
+            >
+              ↶ Undo
+            </Button>
+          </Tooltip>
+        )}
+      </span>
     </li>
   )
 }

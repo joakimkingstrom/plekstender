@@ -152,3 +152,17 @@ export function useRated(serverId: number, kind: RatedKind | null) {
     },
   })
 }
+
+/** Undo your latest rating of one item (repeatable: steps further back). */
+export function useUndoItem(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ratingKey: number) =>
+      unwrap(
+        api.POST('/api/servers/{server_id}/ratings/{rating_key}/undo', {
+          params: { path: { server_id: serverId, rating_key: ratingKey } },
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: libraryKeys.library(serverId) }),
+  })
+}

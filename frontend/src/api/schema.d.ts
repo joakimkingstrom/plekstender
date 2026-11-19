@@ -657,6 +657,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/ratings/{rating_key}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Item
+         * @description Undo your latest rating of one item (repeatable, stepping further back).
+         */
+        post: operations["undo_item_api_servers__server_id__ratings__rating_key__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/playlists/search": {
         parameters: {
             query?: never;
@@ -2961,6 +2981,17 @@ export interface components {
              * @description The album (songs, albums) or artist to link to.
              */
             link_key: number | null;
+            /**
+             * Undo To
+             * @description The rating an undo would put back (None: unrated).
+             */
+            undo_to?: number | null;
+            /**
+             * Undoable
+             * @description Rated here, and not changed since (ratings set in Plex have no undo).
+             * @default false
+             */
+            undoable: boolean;
         };
         /** RatedPage */
         RatedPage: {
@@ -4731,6 +4762,38 @@ export interface operations {
             header?: never;
             path: {
                 server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_item_api_servers__server_id__ratings__rating_key__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
             };
             cookie?: never;
         };

@@ -124,6 +124,49 @@ _RATED = """
 """
 
 
+# The latest change made here (not undone) to each item: what an undo would put back.
+_LATEST_EVENT = """
+    LEFT JOIN LATERAL (
+        SELECT e.id, e.old_rating, e.new_rating
+        FROM rating_events e
+        WHERE e.user_id = s.user_id AND e.server_id = s.server_id
+          AND e.rating_key = s.rating_key AND e.undone_at IS NULL
+        ORDER BY e.id DESC
+        LIMIT 1
+    ) ev ON TRUE
+"""
+
+
+_RATED_WITH_UNDO = _RATED.replace("WHERE s.user_id", _LATEST_EVENT + " WHERE s.user_id", 1)
+
+
+@router.post("/ratings/{rating_key}/undo", response_model=RatingOut)
+async def undo_item(
+    server_id: int,
+    rating_key: int,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+    cipher: CipherDep,
+) -> RatingOut:
+    """Undo your latest rating of one item (repeatable, stepping further back)."""
+    us = await get_user_server(db, user, server_id)
+    client = server_client(us, cipher, settings, http)
+    try:
+        undone = await undo_last(
+            db, client, user_id=user.id, server_id=us.server_id, rating_key=rating_key
+        )
+    except PlexError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Plex didn't save it: {exc}") from exc
+    if undone is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nothing to undo")
+    state, _ = undone
+    return RatingOut(
+        rating_key=state.rating_key, item_type=state.item_type, user_rating=state.user_rating
+    )
+
+
 @router.get("/ratings", response_model=RatedPage)
 async def rated(
     server_id: int,
@@ -160,11 +203,14 @@ async def rated(
                      WHEN 'track' THEN t.album_rating_key
                      WHEN 'album' THEN al.rating_key
                      ELSE ar.rating_key
-                   END AS link_key
-            {_RATED}
+                   END AS link_key,
+                   ev.old_rating AS undo_to,
+                   (ev.id IS NOT NULL AND ev.new_rating IS NOT DISTINCT FROM s.user_rating)
+                     AS undoable
+            {_RATED_WITH_UNDO}
             ORDER BY s.last_rated_at DESC NULLS LAST, s.rating_key DESC
             OFFSET :offset LIMIT :limit
-            """
+            """  # noqa: S608 - constant SQL fragments
         ),
         params,
     )
@@ -179,6 +225,8 @@ async def rated(
                 user_rating=r.user_rating,
                 rated_at=r.last_rated_at,
                 link_key=r.link_key,
+                undo_to=r.undo_to if r.undoable else None,
+                undoable=bool(r.undoable),
             )
             for r in rows.all()
         ],

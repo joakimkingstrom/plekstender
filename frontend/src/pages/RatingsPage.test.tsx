@@ -15,6 +15,8 @@ const item = (key: number, kind: string, title: string, subtitle: string | null,
   user_rating: rating,
   rated_at: at?.toISOString() ?? null,
   link_key: kind === 'track' ? 200 : key,
+  undo_to: key === 303 ? 4 : null,
+  undoable: key === 303,
 })
 
 let fetchMock: ReturnType<typeof vi.fn<(input: Request) => Promise<Response>>>
@@ -38,6 +40,7 @@ beforeEach(() => {
       const items = kind ? all.filter((i) => i.kind === kind) : all
       return json({ items, total: items.length })
     }
+    if (url.pathname === '/api/servers/1/ratings/303/undo') return json({ rating_key: 303, item_type: 'track', user_rating: 4 })
     if (url.pathname === '/api/servers/1/ratings' && input.method === 'POST') {
       const body = await input.clone().json()
       return json({ rating_key: body.rating_key, item_type: 'track', user_rating: body.rating })
@@ -71,10 +74,19 @@ describe('RatingsPage', () => {
     expect(await screen.findByText('2 rated songs, most recent first')).toBeInTheDocument()
     expect(screen.queryByText('Dummy')).not.toBeInTheDocument()
 
+    // Only ratings made here can be undone (one button, for Lucky).
+    expect(screen.getAllByRole('button', { name: /^Undo the rating of/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Undo the rating of Lucky',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Undo the rating of Lucky' }))
+    await vi.waitFor(() =>
+      expect(fetchMock.mock.calls.some(([r]) => new URL(r.url).pathname === '/api/servers/1/ratings/303/undo')).toBe(true),
+    )
+
     // Changing a rating saves it to Plex.
     fireEvent.keyDown(screen.getByRole('slider', { name: 'Rate Lucky' }), { key: '4' })
     await vi.waitFor(async () => {
-      const post = fetchMock.mock.calls.find(([r]) => r.method === 'POST')
+      const post = fetchMock.mock.calls.find(([r]) => r.method === 'POST' && new URL(r.url).pathname === '/api/servers/1/ratings')
       expect(await post![0].clone().json()).toEqual({ rating_key: 303, rating: 8 })
     })
   })
