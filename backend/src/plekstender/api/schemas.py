@@ -262,6 +262,8 @@ class ItemListensOut(BaseModel):
     last_at: dt.datetime | None
     years: list[YearListens]
     songs: list[SongListens]
+    artist_keys: list[str] = Field(description="Filters for /api/listens: these artists…")
+    album_key: str | None = Field(description="…and, for an album, this album.")
 
 
 class ArtistDetail(ArtistSummary):

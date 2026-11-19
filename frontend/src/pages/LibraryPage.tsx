@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { Zoomable } from '../components/Lightbox'
+import { ListensDialog } from '../components/listens'
 import { Select } from '../components/Select'
 import { Tooltip } from '../components/Tooltip'
 import { Link, useParams } from 'react-router'
@@ -256,7 +257,16 @@ function BackLink({ to, label }: { to: string; label: string }) {
   )
 }
 
-function YourListens({ listens, showSongs }: { listens: Schemas['ItemListensOut']; showSongs: boolean }) {
+function YourListens({
+  listens,
+  showSongs,
+  name,
+}: {
+  listens: Schemas['ItemListensOut']
+  showSongs: boolean
+  name: string
+}) {
+  const [year, setYear] = useState<number | null>(null)
   if (!listens.listens) {
     return (
       <Card title="Your listens">
@@ -283,6 +293,7 @@ function YourListens({ listens, showSongs }: { listens: Schemas['ItemListensOut'
             caption="Your listens per year"
             unit={unit}
             points={listens.years.map((y) => ({ label: String(y.year), axis: String(y.year), value: y.listens }))}
+            onSelect={(i) => setYear(listens.years[i].year)}
           />
         )}
         {showSongs && (
@@ -297,6 +308,18 @@ function YourListens({ listens, showSongs }: { listens: Schemas['ItemListensOut'
           </ol>
         )}
       </div>
+      {year !== null && (
+        <ListensDialog
+          title={`${name} in ${year}`}
+          filter={{
+            artist: listens.artist_keys,
+            album: listens.album_key,
+            start: new Date(year, 0, 1).toISOString(),
+            end: new Date(year + 1, 0, 1).toISOString(),
+          }}
+          onClose={() => setYear(null)}
+        />
+      )}
     </Card>
   )
 }
@@ -389,7 +412,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
           <Releases serverId={serverId} albums={a.albums} />
         </div>
         <div className="space-y-6">
-        <YourListens listens={a.your_listens} showSongs />
+        <YourListens listens={a.your_listens} showSongs name={a.title} />
         {a.similar.length > 0 && (
           <Card title="Similar artists">
             <ul className="flex flex-wrap gap-2">
@@ -472,7 +495,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           ))}
         </Card>
         <div>
-          <YourListens listens={al.your_listens} showSongs={false} />
+          <YourListens listens={al.your_listens} showSongs={false} name={al.title} />
         </div>
       </div>
     </>

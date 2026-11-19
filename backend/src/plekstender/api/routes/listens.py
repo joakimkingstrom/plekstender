@@ -47,6 +47,8 @@ from plekstender.history.listenbrainz import (
     listen_payload,
 )
 from plekstender.history.listenbrainz_import import ListenBrainzImportError, listen_count
+from plekstender.history.stats import StatsError
+from plekstender.history.stats import zone as stats_zone
 from plekstender.worker import (
     ACTIVE,
     enqueue_listen_counts,
@@ -88,11 +90,41 @@ async def list_listens(
     user: UserDep,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    start: Annotated[dt.datetime | None, Query(description="From this time (inclusive).")] = None,
+    end: Annotated[dt.datetime | None, Query(description="Before this time.")] = None,
+    weekday: Annotated[int | None, Query(ge=1, le=7, description="1 = Monday, in `tz`.")] = None,
+    hour: Annotated[int | None, Query(ge=0, le=23, description="Hour of day, in `tz`.")] = None,
+    tz: Annotated[str, Query(max_length=64)] = "UTC",
+    artist: Annotated[list[str] | None, Query(max_length=20, description="Artist keys.")] = None,
+    album: Annotated[str | None, Query(max_length=500, description="Album key.")] = None,
+    counted: Annotated[bool, Query(description="Leave out duplicates (as stats do).")] = False,
 ) -> ListenPage:
-    total = await db.scalar(select(func.count()).where(Listen.user_id == user.id)) or 0
+    """The user's listens, newest first, optionally narrowed down (e.g. a chart's bar)."""
+    conditions = [Listen.user_id == user.id]
+    if start is not None:
+        conditions.append(Listen.listened_at >= start)
+    if end is not None:
+        conditions.append(Listen.listened_at < end)
+    if weekday is not None or hour is not None:
+        try:
+            zone = stats_zone(tz)
+        except StatsError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        local = func.timezone(zone.key, Listen.listened_at)
+        if weekday is not None:
+            conditions.append(func.extract("isodow", local) == weekday)
+        if hour is not None:
+            conditions.append(func.extract("hour", local) == hour)
+    if artist:
+        conditions.append(Listen.artist_key.in_(artist))
+    if album is not None:
+        conditions.append(Listen.album_key == album)
+    if counted:
+        conditions.append(Listen.duplicate_of.is_(None))
+    total = await db.scalar(select(func.count()).where(*conditions)) or 0
     rows = await db.scalars(
         select(Listen)
-        .where(Listen.user_id == user.id)
+        .where(*conditions)
         .order_by(Listen.listened_at.desc(), Listen.id.desc())
         .offset(offset)
         .limit(limit)

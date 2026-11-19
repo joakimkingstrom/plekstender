@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import { useActiveServer } from '../api/library'
-import { useStatsActivity, useStatsOverview, type TopBy } from '../api/stats'
+import { localTimeZone, useStatsActivity, useStatsOverview, type TopBy } from '../api/stats'
+import type { ListenFilter } from '../api/listens'
+import { ListensDialog } from '../components/listens'
 import { ColumnChart, Heatmap, type ColumnPoint } from '../components/charts'
 import { Artwork } from '../components/library'
 import { Card, Notice, Spinner } from '../components/ui'
@@ -49,6 +52,19 @@ function activityPoints(activity: Schemas['StatsActivityOut']): ColumnPoint[] {
     if (activity.bucket === 'week') return { label: `Week of ${full.format(date)}`, axis: day.format(date), value: p.listens }
     return { label: full.format(date), axis: day.format(date), value: p.listens }
   })
+}
+
+/** The local time range a chart bucket covers, as ISO strings for the API. */
+function bucketRange(start: string, bucket: Schemas['StatsActivityOut']['bucket']): { start: string; end: string } {
+  const [y, m, d] = start.split('-').map(Number)
+  const from = new Date(y, m - 1, d)
+  const to =
+    bucket === 'day'
+      ? new Date(y, m - 1, d + 1)
+      : bucket === 'week'
+        ? new Date(y, m - 1, d + 7)
+        : new Date(y, m, 1)
+  return { start: from.toISOString(), end: to.toISOString() }
 }
 
 function Tile({ label, value, note }: { label: string; value: string; note?: string | null }) {
@@ -148,6 +164,7 @@ export function StatsPage() {
   const serverId = active?.id ?? null
   const overview = useStatsOverview(range, serverId, by)
   const activity = useStatsActivity(range)
+  const [drill, setDrill] = useState<{ title: string; filter: ListenFilter } | null>(null)
 
   if (overview.isPending) return <Spinner />
   if (overview.isError) return <Notice tone="error">{errorMessage(overview.error)}</Notice>
@@ -224,6 +241,13 @@ export function StatsPage() {
             points={activityPoints(activity.data)}
             unit={listens}
             caption={`Listens per ${activity.data.bucket}`}
+            onSelect={(i) => {
+              const point = activity.data.points[i]
+              setDrill({
+                title: activityPoints(activity.data)[i].label,
+                filter: bucketRange(point.start, activity.data.bucket),
+              })
+            }}
           />
         )}
       </Card>
@@ -256,11 +280,29 @@ export function StatsPage() {
 
       <Card title="When you listen">
         {activity.data ? (
-          <Heatmap grid={activity.data.heatmap} dayNames={DAY_NAMES} unit={listens} caption="Listens by weekday and hour" />
+          <Heatmap
+            grid={activity.data.heatmap}
+            dayNames={DAY_NAMES}
+            unit={listens}
+            caption="Listens by weekday and hour"
+            onSelect={(day, hour) =>
+              setDrill({
+                title: `${DAY_NAMES[day]} ${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00`,
+                filter: {
+                  weekday: day + 1,
+                  hour,
+                  tz: localTimeZone(),
+                  start: o.period.start ?? undefined,
+                  end: o.period.end,
+                },
+              })
+            }
+          />
         ) : (
           <Spinner small />
         )}
       </Card>
+      {drill && <ListensDialog title={drill.title} filter={drill.filter} onClose={() => setDrill(null)} />}
     </div>
   )
 }

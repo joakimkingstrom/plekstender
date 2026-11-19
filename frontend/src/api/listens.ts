@@ -3,6 +3,12 @@ import { api, unwrap, type Schemas } from './client'
 
 export type ListenSource = Schemas['ListenOut']['source']
 
+export const SOURCES: Record<ListenSource, string> = {
+  lastfm: 'Last.fm',
+  plex: 'Plex',
+  listenbrainz: 'ListenBrainz',
+}
+
 const PAGE = 50
 
 export const listenKeys = {
@@ -20,12 +26,25 @@ export function useListenSummary() {
   return useQuery({ queryKey: listenKeys.summary, queryFn: () => unwrap(api.GET('/api/listens/summary')) })
 }
 
-export function useListens() {
+/** Narrows the list of listens down, e.g. to what a chart's bar or square stands for. */
+export type ListenFilter = {
+  start?: string
+  end?: string
+  weekday?: number
+  hour?: number
+  tz?: string
+  artist?: string[]
+  album?: string | null
+  counted?: boolean
+}
+
+export function useListens(filter: ListenFilter = {}) {
+  const query = Object.fromEntries(Object.entries(filter).filter(([, v]) => v !== undefined && v !== null))
   return useInfiniteQuery({
-    queryKey: listenKeys.list,
+    queryKey: [...listenKeys.list, query],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
-      unwrap(api.GET('/api/listens', { params: { query: { offset: pageParam, limit: PAGE } } })),
+      unwrap(api.GET('/api/listens', { params: { query: { ...query, offset: pageParam, limit: PAGE } } })),
     getNextPageParam: (last, pages) => {
       const loaded = pages.reduce((n, p) => n + p.items.length, 0)
       return loaded < last.total ? loaded : undefined

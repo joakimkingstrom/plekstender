@@ -300,7 +300,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Listens */
+        /**
+         * List Listens
+         * @description The user's listens, newest first, optionally narrowed down (e.g. a chart's bar).
+         */
         get: operations["list_listens_api_listens_get"];
         put?: never;
         post?: never;
@@ -1598,6 +1601,16 @@ export interface components {
             years: components["schemas"]["YearListens"][];
             /** Songs */
             songs: components["schemas"]["SongListens"][];
+            /**
+             * Artist Keys
+             * @description Filters for /api/listens: these artists…
+             */
+            artist_keys: string[];
+            /**
+             * Album Key
+             * @description …and, for an album, this album.
+             */
+            album_key: string | null;
         };
         /** LastFmImportIn */
         LastFmImportIn: {
@@ -2915,6 +2928,21 @@ export interface operations {
             query?: {
                 offset?: number;
                 limit?: number;
+                /** @description From this time (inclusive). */
+                start?: string | null;
+                /** @description Before this time. */
+                end?: string | null;
+                /** @description 1 = Monday, in `tz`. */
+                weekday?: number | null;
+                /** @description Hour of day, in `tz`. */
+                hour?: number | null;
+                tz?: string;
+                /** @description Artist keys. */
+                artist?: string[] | null;
+                /** @description Album key. */
+                album?: string | null;
+                /** @description Leave out duplicates (as stats do). */
+                counted?: boolean;
             };
             header?: never;
             path?: never;

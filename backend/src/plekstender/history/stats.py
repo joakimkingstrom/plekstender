@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -374,6 +374,8 @@ class ItemListens:
     years: list[tuple[int, int]]
     songs: list[tuple[str, int]]
     by_track_key: dict[str, int]
+    artist_keys: list[str] = field(default_factory=list)
+    album_key: str | None = None
 
 
 async def item_listens(
@@ -399,7 +401,7 @@ async def item_listens(
         )
     ).one()
     if not total:
-        return ItemListens(0, None, None, [], [], {})
+        return ItemListens(0, None, None, [], [], {}, sorted(artist_keys), album_key)
 
     year = func.extract("year", func.timezone(tz.key, Listen.listened_at))
     per_year = dict(
@@ -426,4 +428,6 @@ async def item_listens(
         years=years,
         songs=[(name, n) for _, name, n in tracks[:10]],
         by_track_key={key: n for key, _, n in tracks},
+        artist_keys=sorted(artist_keys),
+        album_key=album_key,
     )

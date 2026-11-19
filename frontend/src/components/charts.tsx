@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { formatCompact, formatCount } from '../format'
 
 export type ColumnPoint = {
@@ -50,14 +50,26 @@ export function ColumnChart({
   unit,
   height = 180,
   caption,
+  onSelect,
 }: {
   points: ColumnPoint[]
   unit: (n: number) => string
   height?: number
   caption: string
+  /** Makes bars clickable (and reachable with the arrow keys). */
+  onSelect?: (index: number) => void
 }) {
   const [ref, width] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
+  const [focused, setFocused] = useState<number | null>(null)
+  const bars = useRef<(SVGRectElement | null)[]>([])
+  const tabbable = focused ?? points.length - 1
+  const moveFocus = (index: number) => {
+    const next = Math.max(0, Math.min(points.length - 1, index))
+    setFocused(next)
+    setHover(next)
+    bars.current[next]?.focus()
+  }
   const max = Math.max(0, ...points.map((p) => p.value))
   const step = niceStep(max)
   const top = step * 2
@@ -93,8 +105,14 @@ export function ColumnChart({
                     opacity={hover === null || hover === i ? 1 : 0.45}
                   />
                 )}
+                {onSelect && focused === i && (
+                  <rect x={AXIS_W + i * band + 1} y={TOP} width={band - 2} height={plotH} fill="none" stroke="var(--color-text)" strokeWidth={1.5} rx={3} pointerEvents="none" />
+                )}
                 {/* Hit target: the whole band, taller than the bar. */}
                 <rect
+                  ref={(el) => {
+                    bars.current[i] = el
+                  }}
                   x={AXIS_W + i * band}
                   y={TOP}
                   width={band}
@@ -102,6 +120,28 @@ export function ColumnChart({
                   fill="transparent"
                   onMouseEnter={() => setHover(i)}
                   onTouchStart={() => setHover(i)}
+                  {...(onSelect
+                    ? {
+                        role: 'button',
+                        tabIndex: i === tabbable ? 0 : -1,
+                        'aria-label': `${p.label}: ${unit(p.value)}`,
+                        className: 'cursor-pointer focus:outline-none',
+                        onClick: () => onSelect(i),
+                        onFocus: () => {
+                          setFocused(i)
+                          setHover(i)
+                        },
+                        onKeyDown: (e: KeyboardEvent<SVGRectElement>) => {
+                          if (e.key === 'ArrowRight') moveFocus(i + 1)
+                          else if (e.key === 'ArrowLeft') moveFocus(i - 1)
+                          else if (e.key === 'Home') moveFocus(0)
+                          else if (e.key === 'End') moveFocus(points.length - 1)
+                          else if (e.key === 'Enter' || e.key === ' ') onSelect(i)
+                          else return
+                          e.preventDefault()
+                        },
+                      }
+                    : {})}
                 />
                 {i % labelEvery === 0 && (
                   <text x={AXIS_W + i * band + band / 2} y={height - 6} textAnchor="middle" className="fill-muted text-[11px]">
@@ -123,6 +163,7 @@ export function ColumnChart({
         >
           <div className="text-muted">{hovered.label}</div>
           <div className="font-medium tabular-nums">{unit(hovered.value)}</div>
+          {onSelect && hovered.value > 0 && <div className="text-muted">Click to see them</div>}
         </div>
       )}
       <table className="sr-only">
@@ -157,25 +198,38 @@ export function Heatmap({
   dayNames,
   unit,
   caption,
+  onSelect,
 }: {
   grid: number[][]
   dayNames: string[]
   unit: (n: number) => string
   caption: string
+  /** Makes squares clickable (and reachable with the arrow keys). */
+  onSelect?: (day: number, hour: number) => void
 }) {
   const [hover, setHover] = useState<[number, number] | null>(null)
+  const [focused, setFocused] = useState<[number, number]>([0, 0])
+  const cells = useRef<Record<string, HTMLElement | null>>({})
+  const moveFocus = (day: number, hour: number) => {
+    const next: [number, number] = [Math.max(0, Math.min(6, day)), Math.max(0, Math.min(23, hour))]
+    setFocused(next)
+    setHover(next)
+    cells.current[`${next[0]}-${next[1]}`]?.focus()
+  }
   const max = Math.max(0, ...grid.flat())
   const hours = Array.from({ length: 24 }, (_, h) => h)
   const readout: ReactNode = hover
     ? `${dayNames[hover[0]]} ${String(hover[1]).padStart(2, '0')}:00–${String((hover[1] + 1) % 24).padStart(2, '0')}:00 · ${unit(grid[hover[0]][hover[1]])}`
-    : 'Hover a square for details.'
+    : onSelect
+      ? 'Hover a square for details, click it to see those listens.'
+      : 'Hover a square for details.'
 
   return (
     <div>
       <div
         className="grid gap-[2px]"
         style={{ gridTemplateColumns: '2.5rem repeat(24, minmax(0, 1fr))' }}
-        role="img"
+        role={onSelect ? 'group' : 'img'}
         aria-label={caption}
         onMouseLeave={() => setHover(null)}
       >
@@ -188,18 +242,50 @@ export function Heatmap({
         {grid.map((row, d) => (
           <div key={d} className="contents">
             <span className="self-center pr-1 text-[11px] text-muted">{dayNames[d]}</span>
-            {row.map((value, h) => (
-              <span
-                key={h}
-                className="h-6 rounded-[3px] sm:h-7"
-                style={{
-                  background: cellColor(value, max),
-                  outline: hover?.[0] === d && hover?.[1] === h ? '2px solid var(--color-text)' : undefined,
-                }}
-                onMouseEnter={() => setHover([d, h])}
-                onTouchStart={() => setHover([d, h])}
-              />
-            ))}
+            {row.map((value, h) => {
+              const style = {
+                background: cellColor(value, max),
+                outline: hover?.[0] === d && hover?.[1] === h ? '2px solid var(--color-text)' : undefined,
+              }
+              if (!onSelect) {
+                return (
+                  <span
+                    key={h}
+                    className="h-6 rounded-[3px] sm:h-7"
+                    style={style}
+                    onMouseEnter={() => setHover([d, h])}
+                    onTouchStart={() => setHover([d, h])}
+                  />
+                )
+              }
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  ref={(el) => {
+                    cells.current[`${d}-${h}`] = el
+                  }}
+                  tabIndex={focused[0] === d && focused[1] === h ? 0 : -1}
+                  aria-label={`${dayNames[d]} ${String(h).padStart(2, '0')}:00: ${unit(value)}`}
+                  className="h-6 rounded-[3px] focus:outline-none sm:h-7"
+                  style={style}
+                  onMouseEnter={() => setHover([d, h])}
+                  onFocus={() => {
+                    setFocused([d, h])
+                    setHover([d, h])
+                  }}
+                  onClick={() => onSelect(d, h)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowRight') moveFocus(d, h + 1)
+                    else if (e.key === 'ArrowLeft') moveFocus(d, h - 1)
+                    else if (e.key === 'ArrowDown') moveFocus(d + 1, h)
+                    else if (e.key === 'ArrowUp') moveFocus(d - 1, h)
+                    else return
+                    e.preventDefault()
+                  }}
+                />
+              )
+            })}
           </div>
         ))}
       </div>

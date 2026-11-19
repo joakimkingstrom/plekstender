@@ -411,7 +411,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Make the "When you listen" heatmap fill the whole width of its card.
 - [ ] Most skipped songs / albums / artists: plays where less than a set share of the track was heard (default 80%, adjustable per user).
   *Check first: Plex's history only records finished plays (Plex counts a play at ~90%), so stopped plays need a session watcher that polls `/status/sessions` every ~10–15 s and records how far each track got. That watcher would also give "playing now" for ListenBrainz and the client details below. Until then, Plex's own `skipCount` (already in the mirror) can power a first version.*
-- [ ] Clicking a chart opens the details behind it, e.g. the 2025 bar on an artist page lists those listens.
+- [x] Clicking a chart opens the details behind it, e.g. the 2025 bar on an artist page lists those listens.
   *A drill-down panel (site-native popup) showing the listens for that period plus the item; for the overview charts the same panel filtered by day, week or month, or by weekday and hour for the heatmap.*
 - [x] Period buttons: hide the horizontal scrollbar, and put "All time" first.
 - [ ] Listens tab: show the client and IP / location for each listen.

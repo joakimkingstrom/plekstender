@@ -317,6 +317,8 @@ def _listens_out(found: stats.ItemListens) -> ItemListensOut:
         last_at=found.last_at,
         years=[YearListens(year=y, listens=n) for y, n in found.years],
         songs=[SongListens(name=name, listens=n) for name, n in found.songs],
+        artist_keys=found.artist_keys,
+        album_key=found.album_key,
     )
 
 

@@ -1,15 +1,9 @@
 import { Link, NavLink, Outlet } from 'react-router'
-import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
-import { useDeleteListen, useListens, useListenSummary } from '../api/listens'
-import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
-import { formatCount, formatDate, formatDay, formatTime } from '../format'
-
-const SOURCES: Record<Schemas['ListenOut']['source'], string> = {
-  lastfm: 'Last.fm',
-  plex: 'Plex',
-  listenbrainz: 'ListenBrainz',
-}
+import { SOURCES, useListens, useListenSummary } from '../api/listens'
+import { ListenList } from '../components/listens'
+import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
+import { formatCount, formatDate } from '../format'
 
 function Summary({ summary }: { summary: Schemas['ListenSummary'] }) {
   const stats: [string, string][] = [
@@ -29,16 +23,6 @@ function Summary({ summary }: { summary: Schemas['ListenSummary'] }) {
       ))}
     </dl>
   )
-}
-
-function groupByDay(items: Schemas['ListenOut'][]) {
-  const days: { day: string; items: Schemas['ListenOut'][] }[] = []
-  for (const item of items) {
-    const day = formatDay(item.listened_at)
-    if (days.at(-1)?.day !== day) days.push({ day, items: [] })
-    days.at(-1)!.items.push(item)
-  }
-  return days
 }
 
 /** History shell: stats overview and the list of listens. */
@@ -66,7 +50,6 @@ export function HistoryLayout() {
 export function ListensPage() {
   const summary = useListenSummary()
   const listens = useListens()
-  const remove = useDeleteListen()
 
   if (summary.isPending || listens.isPending) return <Spinner />
   if (summary.isError) return <Notice tone="error">{errorMessage(summary.error)}</Notice>
@@ -89,46 +72,7 @@ export function ListensPage() {
       ) : (
         <>
           <Summary summary={summary.data} />
-          {remove.isError && <Notice tone="error">{errorMessage(remove.error)}</Notice>}
-          <div className="space-y-6">
-            {groupByDay(items).map(({ day, items: dayItems }) => (
-              <section key={day}>
-                <h2 className="mb-2 text-sm font-semibold text-muted">{day}</h2>
-                <ol className="divide-y divide-border rounded-2xl border border-border bg-surface">
-                  {dayItems.map((listen) => (
-                    <li key={listen.id} className="group flex items-center gap-3 px-4 py-2.5">
-                      <time
-                        dateTime={listen.listened_at}
-                        className="w-12 shrink-0 text-xs text-muted tabular-nums"
-                      >
-                        {formatTime(listen.listened_at)}
-                      </time>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{listen.track_name}</p>
-                        <p className="truncate text-xs text-muted">
-                          {listen.artist_name}
-                          {listen.album_name && ` · ${listen.album_name}`}
-                        </p>
-                      </div>
-                      {listen.duplicate && <Badge>Duplicate</Badge>}
-                      <Badge>{SOURCES[listen.source]}</Badge>
-                      <Tooltip content="Delete this listen">
-                        <button
-                          type="button"
-                          onClick={() => remove.mutate(listen.id)}
-                          disabled={remove.isPending}
-                          className="rounded px-1.5 text-muted opacity-60 hover:bg-surface-2 hover:text-danger group-hover:opacity-100"
-                          aria-label={`Delete listen: ${listen.track_name} at ${formatTime(listen.listened_at)}`}
-                        >
-                          ×
-                        </button>
-                      </Tooltip>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            ))}
-          </div>
+          <ListenList items={items} deletable />
           {listens.hasNextPage && (
             <div className="mt-6 flex justify-center">
               <Button busy={listens.isFetchingNextPage} onClick={() => void listens.fetchNextPage()}>

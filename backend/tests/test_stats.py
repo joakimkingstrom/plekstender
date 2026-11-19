@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -211,7 +212,15 @@ async def test_your_listens_on_artist_and_album_pages(app: FastAPI, plex: FakePl
     }
 
     nothing = (await owner.get(f"/api/servers/{sid}/library/albums/203")).json()["your_listens"]
-    assert nothing == {"listens": 0, "first_at": None, "last_at": None, "years": [], "songs": []}
+    assert nothing == {
+        "listens": 0,
+        "first_at": None,
+        "last_at": None,
+        "years": [],
+        "songs": [],
+        "artist_keys": ["secret band"],
+        "album_key": "secret album",
+    }
 
 
 @pytest.mark.db
@@ -247,3 +256,49 @@ async def test_top_lists_by_listening_time(app: FastAPI, plex: FakePlex) -> None
         "name": "Paranoid Android",
         "listening_ms": 480_000,  # length taken from the library track
     }
+
+
+@pytest.mark.db
+async def test_listens_behind_a_chart(app: FastAPI, plex: FakePlex) -> None:
+    owner, sid = await owner_with_library(app, plex)
+    user_id = (await owner.get("/api/auth/me")).json()["id"]
+    await add_listens(
+        user_id,
+        [
+            (0, "Radiohead", "OK Computer", "Airbag"),
+            (1, "Radiohead", "OK Computer", "Lucky"),
+            (1, "Radiohead", "Kid A", "Idioteque"),
+            (8, "Portishead", "Dummy", "Glory Box"),
+        ],
+    )
+    now = dt.datetime.now(dt.UTC)
+
+    def names(resp: Any) -> list[str]:
+        return sorted(i["track_name"] for i in resp.json()["items"])
+
+    week = await owner.get(
+        "/api/listens",
+        params={"start": (now - dt.timedelta(days=2)).isoformat(), "end": now.isoformat()},
+    )
+    assert names(week) == ["Airbag", "Idioteque", "Lucky"]
+
+    # The artist page gives the keys to filter on; an album page adds its album key.
+    artist = (await owner.get(f"/api/servers/{sid}/library/artists/100")).json()["your_listens"]
+    assert artist["artist_keys"] == ["radiohead"] and artist["album_key"] is None
+    album = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()["your_listens"]
+    assert album["album_key"] == "ok computer"
+    by_album = await owner.get(
+        "/api/listens", params={"artist": album["artist_keys"], "album": album["album_key"]}
+    )
+    assert names(by_album) == ["Airbag", "Lucky"]
+
+    # A heatmap square: weekday and hour in the viewer's time zone.
+    stamp = (now - dt.timedelta(days=8, minutes=4)).astimezone(dt.UTC)
+    cell = await owner.get(
+        "/api/listens",
+        params={"weekday": stamp.isoweekday(), "hour": stamp.hour, "tz": "UTC"},
+    )
+    assert "Glory Box" in names(cell)
+    assert (
+        await owner.get("/api/listens", params={"hour": 3, "tz": "Mars/Base"})
+    ).status_code == 422

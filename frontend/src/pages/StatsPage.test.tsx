@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatChange, formatListeningTime } from '../format'
@@ -42,6 +42,10 @@ function renderPage() {
       '/api/stats/overview': overview,
       '/api/stats/activity': activity,
       '/api/servers': [],
+      '/api/listens': {
+        total: 1,
+        items: [{ id: 1, listened_at: '2026-11-17T21:10:00Z', source: 'plex', artist_name: 'Radiohead', album_name: 'OK Computer', track_name: 'Airbag', duplicate: false }],
+      },
     }
     return new Response(JSON.stringify(body[path] ?? { detail: 'Not found' }), {
       status: path in body ? 200 : 404,
@@ -94,6 +98,20 @@ describe('StatsPage', () => {
     expect(await screen.findByRole('table', { name: 'Listens by weekday and hour' })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Listens per day' })).toBeInTheDocument()
     expect(screen.getByText('34')).toBeInTheDocument()
+  })
+})
+
+describe('chart details', () => {
+  it('shows the listens behind a heatmap square', async () => {
+    const fetch = renderPage()
+    const day = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(new Date(Date.UTC(2026, 10, 17, 12)))
+    fireEvent.click(await screen.findByRole('button', { name: `${day} 21:00: 34 listens` }))
+    const dialog = await screen.findByRole('dialog', { name: `${day} 21:00–22:00` })
+    expect(await within(dialog).findByText('Airbag')).toBeInTheDocument()
+    const request = fetch.mock.calls.map(([r]) => new URL(r.url)).find((u) => u.pathname === '/api/listens')!
+    expect(Object.fromEntries(request.searchParams)).toMatchObject({ weekday: '2', hour: '21', counted: 'true' })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
 
