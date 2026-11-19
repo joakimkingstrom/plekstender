@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     ticketmaster_api_key: SecretStr | None = None
     ticketmaster_api_url: str = "https://app.ticketmaster.com/discovery/v2"
     ticketmaster_daily_cap: int = 4000
+    # Live's UK listings: Data Thistle (an admin's free account; its tokens are pasted on
+    # Settings → Connections and renewed by the worker). 1,000 requests a month.
+    datathistle_api_url: str = "https://api.datathistle.com/v1"
+    datathistle_auth_url: str = "https://auth.datathistle.com/v1"
+    datathistle_daily_cap: int = 30
     # City search for the Live tab (Open-Meteo's free geocoding, no key).
     geocoding_api_url: str = "https://geocoding-api.open-meteo.com/v1"
 

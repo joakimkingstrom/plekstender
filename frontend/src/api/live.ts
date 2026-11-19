@@ -188,3 +188,25 @@ export function useRemoveLiveFeed() {
     onSuccess: () => qc.invalidateQueries({ queryKey: liveKeys.all }),
   })
 }
+
+export function useDataThistle(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'datathistle'],
+    enabled,
+    queryFn: () => unwrap(api.GET('/api/admin/datathistle')),
+  })
+}
+
+export function useSetDataThistle() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (tokens: { access_token: string; refresh_token: string } | null) =>
+      tokens
+        ? unwrap(api.PUT('/api/admin/datathistle', { body: tokens }))
+        : unwrap(api.DELETE('/api/admin/datathistle')),
+    onSuccess: (data) => {
+      qc.setQueryData(['admin', 'datathistle'], data)
+      qc.invalidateQueries({ queryKey: liveKeys.settings() })
+    },
+  })
+}

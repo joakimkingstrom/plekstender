@@ -386,6 +386,125 @@ async def reserve_ticketmaster_call(
     return True
 
 
+# --- Data Thistle (Live) -------------------------------------------------------------------
+
+DATATHISTLE_KEY = "datathistle"
+DATATHISTLE_PURPOSE = "instance.datathistle_token"
+DATATHISTLE_USAGE_KEY = "datathistle_usage"
+
+
+class DataThistleTokens(BaseModel):
+    access: str
+    refresh: str
+    access_expires: dt.datetime | None
+    refresh_expires: dt.datetime | None
+    renewed_at: dt.datetime | None = None
+    error: str | None = None  # why renewing failed, the last time
+
+
+async def get_datathistle_tokens(db: AsyncSession, settings: Settings) -> DataThistleTokens | None:
+    stored = await _get(db, DATATHISTLE_KEY) or {}
+    if not stored.get("access_enc") or not stored.get("refresh_enc"):
+        return None
+    cipher = _cipher(settings)
+    try:
+        access = cipher.decrypt(stored["access_enc"], purpose=DATATHISTLE_PURPOSE)
+        refresh = cipher.decrypt(stored["refresh_enc"], purpose=DATATHISTLE_PURPOSE)
+    except DecryptionError:
+        return None
+
+    def when(key: str) -> dt.datetime | None:
+        return dt.datetime.fromisoformat(stored[key]) if stored.get(key) else None
+
+    return DataThistleTokens(
+        access=access,
+        refresh=refresh,
+        access_expires=when("access_expires"),
+        refresh_expires=when("refresh_expires"),
+        renewed_at=when("renewed_at"),
+        error=stored.get("error"),
+    )
+
+
+async def set_datathistle_tokens(
+    db: AsyncSession, settings: Settings, tokens: DataThistleTokens | None
+) -> None:
+    if tokens is None:
+        await _put(db, DATATHISTLE_KEY, {})
+        return
+    cipher = _cipher(settings)
+
+    def iso(value: dt.datetime | None) -> str | None:
+        return value.isoformat() if value else None
+
+    await _put(
+        db,
+        DATATHISTLE_KEY,
+        {
+            "access_enc": cipher.encrypt(tokens.access, purpose=DATATHISTLE_PURPOSE),
+            "refresh_enc": cipher.encrypt(tokens.refresh, purpose=DATATHISTLE_PURPOSE),
+            "access_expires": iso(tokens.access_expires),
+            "refresh_expires": iso(tokens.refresh_expires),
+            "renewed_at": iso(tokens.renewed_at),
+            "error": tokens.error,
+        },
+    )
+
+
+class DataThistleUsage(BaseModel):
+    """Requests Plekstender sent today (UTC), and the month's quota as Data Thistle last
+    reported it (every answer carries it)."""
+
+    day: str = ""
+    calls: int = 0
+    limit: int | None = None
+    remaining: int | None = None
+    resets_at: dt.datetime | None = None
+
+
+async def get_datathistle_usage(
+    db: AsyncSession, now: dt.datetime | None = None
+) -> DataThistleUsage:
+    try:
+        usage = DataThistleUsage.model_validate(await _get(db, DATATHISTLE_USAGE_KEY) or {})
+    except ValidationError:
+        usage = DataThistleUsage()
+    day = (now or dt.datetime.now(dt.UTC)).astimezone(dt.UTC).date().isoformat()
+    if usage.day != day:
+        usage.day, usage.calls = day, 0
+    return usage
+
+
+async def reserve_datathistle_call(
+    db: AsyncSession, cap: int, now: dt.datetime | None = None
+) -> bool:
+    """Count one request before it's sent; False once today's cap is reached, or when Data
+    Thistle said none are left this month. Commits."""
+    row = await _locked(db, DATATHISTLE_USAGE_KEY)
+    usage = await get_datathistle_usage(db, now)
+    moment = now or dt.datetime.now(dt.UTC)
+    out_of_month = (
+        usage.remaining is not None
+        and usage.remaining <= 0
+        and (usage.resets_at is None or usage.resets_at > moment)
+    )
+    if usage.calls >= cap or out_of_month:
+        await db.rollback()
+        return False
+    usage.calls += 1
+    row.value = usage.model_dump(mode="json")
+    await db.commit()
+    return True
+
+
+async def save_datathistle_quota(
+    db: AsyncSession, limit: int | None, remaining: int | None, resets_at: dt.datetime | None
+) -> None:
+    usage = await get_datathistle_usage(db)
+    usage.limit, usage.remaining, usage.resets_at = limit, remaining, resets_at
+    await _put(db, DATATHISTLE_USAGE_KEY, usage.model_dump(mode="json"))
+
+
 # --- text logo fonts ------------------------------------------------------------------------
 
 FONTS_KEY = "fonts"

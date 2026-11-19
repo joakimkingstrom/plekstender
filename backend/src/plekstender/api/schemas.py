@@ -1357,7 +1357,11 @@ class LiveSettingsOut(BaseModel):
         description="When a refresh can be asked for again (None: now)."
     )
     source_ready: bool = Field(description="A source has a key, or the user has calendar links.")
-    sources: list[Literal["jambase", "ticketmaster"]] = Field(description="Sources with a key.")
+    sources: list[Literal["jambase", "ticketmaster", "datathistle"]] = Field(
+        description="Sources with a key."
+    )
+    datathistle_at: dt.datetime | None = Field(description="Data Thistle last looked up.")
+    datathistle_error: str | None
 
 
 class PlaceOut(BaseModel):
@@ -1472,3 +1476,22 @@ class LiveFeedOut(BaseModel):
     fetched_at: dt.datetime | None
     error: str | None
     show_count: int | None
+
+
+class DataThistleTokensIn(BaseModel):
+    access_token: str = Field(pattern=r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+    refresh_token: str = Field(pattern=r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+
+
+class DataThistleOut(BaseModel):
+    configured: bool
+    access_expires: dt.datetime | None
+    refresh_expires: dt.datetime | None
+    renewed_at: dt.datetime | None = Field(description="When Plekstender last renewed them.")
+    error: str | None = Field(description="Why renewing failed, the last time.")
+    day: str
+    calls: int = Field(description="Requests Plekstender sent today (UTC).")
+    cap: int
+    limit: int | None = Field(description="Data Thistle's monthly limit, as it last said.")
+    remaining: int | None
+    resets_at: dt.datetime | None

@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, update
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
@@ -36,11 +36,20 @@ from plekstender.api.schemas import (
     PlaceOut,
 )
 from plekstender.config import Settings
-from plekstender.db.instance import get_jambase_api_key, get_ticketmaster_api_key
+from plekstender.db.instance import (
+    get_datathistle_tokens,
+    get_jambase_api_key,
+    get_ticketmaster_api_key,
+)
 from plekstender.db.models import LiveFeed, LiveSettings, LiveShow, User
 from plekstender.live import feeds, geocode, ical
 from plekstender.live.merge import merge
-from plekstender.live.refresh import follow_count, listened_artists, period_start
+from plekstender.live.refresh import (
+    DATATHISTLE_KEEP,
+    follow_count,
+    listened_artists,
+    period_start,
+)
 from plekstender.worker import LIVE_MANUAL_GAP, enqueue_live_refresh
 
 router = APIRouter(prefix="/api/live", tags=["live"])
@@ -69,12 +78,20 @@ def _available_at(live: LiveSettings | None) -> dt.datetime | None:
     return at if at > dt.datetime.now(dt.UTC) else None
 
 
-async def _sources(db: DbDep, settings: Settings) -> list[Literal["jambase", "ticketmaster"]]:
-    out: list[Literal["jambase", "ticketmaster"]] = []
+Source = Literal["jambase", "ticketmaster", "datathistle"]
+# Opening the Live tab looks Data Thistle up again when its listings are older than this
+# (they may be kept a day).
+DATATHISTLE_AGE = dt.timedelta(hours=20)
+
+
+async def _sources(db: DbDep, settings: Settings) -> list[Source]:
+    out: list[Source] = []
     if (await get_jambase_api_key(db, settings))[0]:
         out.append("jambase")
     if (await get_ticketmaster_api_key(db, settings))[0]:
         out.append("ticketmaster")
+    if await get_datathistle_tokens(db, settings):
+        out.append("datathistle")
     return out
 
 
@@ -105,11 +122,26 @@ async def _out(db: DbDep, settings: Settings, user: User) -> LiveSettingsOut:
         refresh_available_at=_available_at(live),
         source_ready=bool(sources) or has_feeds,
         sources=sources,
+        datathistle_at=live.datathistle_at if live else None,
+        datathistle_error=live.datathistle_error if live else None,
     )
 
 
 @router.get("/settings", response_model=LiveSettingsOut)
 async def get_live_settings(db: DbDep, settings: SettingsDep, user: UserDep) -> LiveSettingsOut:
+    """The Live tab's settings and status. Opening the tab looks Data Thistle up again
+    when its listings are getting old (they may only be kept a day)."""
+    live = await db.get(LiveSettings, user.id)
+    if (
+        live is not None
+        and live.latitude is not None
+        and (
+            live.datathistle_at is None
+            or live.datathistle_at < dt.datetime.now(dt.UTC) - DATATHISTLE_AGE
+        )
+        and await get_datathistle_tokens(db, settings)
+    ):
+        await enqueue_live_refresh(db, user.id, datathistle="only")
     return await _out(db, settings, user)
 
 
@@ -214,6 +246,7 @@ async def shows(
         .where(
             LiveShow.user_id == user.id,
             func.coalesce(LiveShow.end_date, LiveShow.start_date) >= start,
+            _not_expired(),
         )
         .order_by(LiveShow.start_date, LiveShow.start_time.nulls_last(), LiveShow.id)
     )
@@ -234,6 +267,14 @@ async def shows(
             LiveArtistCount(name=n, shows=c)
             for n, c in sorted(counts.items(), key=lambda x: (-x[1], x[0].lower()))
         ],
+    )
+
+
+def _not_expired() -> ColumnElement[bool]:
+    """Data Thistle's listings older than a day aren't shown (their terms)."""
+    return or_(
+        LiveShow.source != "datathistle",
+        LiveShow.fetched_at >= dt.datetime.now(dt.UTC) - DATATHISTLE_KEEP,
     )
 
 
@@ -460,6 +501,7 @@ async def _starred(db: DbDep, user_id: int) -> list[list[LiveShow]]:
             .where(
                 LiveShow.user_id == user_id,
                 func.coalesce(LiveShow.end_date, LiveShow.start_date) >= since,
+                _not_expired(),
             )
             .order_by(LiveShow.start_date, LiveShow.id)
         )

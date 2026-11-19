@@ -33,3 +33,5 @@ class Event:
     seller: str | None
     page_url: str | None
     performers: list[Performer] = field(default_factory=list)
+    # When the source gives a distance but no coordinates (Data Thistle).
+    distance_km: float | None = None

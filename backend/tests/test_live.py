@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import replace
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 import pytest
@@ -209,10 +209,16 @@ async def owner_listening(app: FastAPI, plex: FakePlex) -> tuple[httpx.AsyncClie
     return owner, user_id
 
 
-async def refresh(user_id: int, **overrides: Any) -> Any:
+async def refresh(user_id: int, datathistle: str = "yes", **overrides: Any) -> Any:
     settings = get_settings().model_copy(update=overrides)
     async with httpx.AsyncClient() as http:
-        return await refresh_user(get_sessionmaker(), http, settings, user_id)
+        return await refresh_user(
+            get_sessionmaker(),
+            http,
+            settings,
+            user_id,
+            datathistle=datathistle,  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.db
@@ -816,3 +822,211 @@ async def test_calendar_links(
     assert (await owner.delete(f"/api/live/feeds/{feed_id}", headers=CSRF)).status_code == 204
     names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
     assert "Somebody at Debaser" not in names and "Radiohead at Avicii Arena" in names
+
+
+# --- Data Thistle -------------------------------------------------------------------------
+
+DT_API = "https://api.datathistle.com/v1"
+DT_AUTH = "https://auth.datathistle.com/v1"
+
+
+def jwt(subject: str, expires: dt.datetime) -> str:
+    import base64
+    import json
+
+    def part(data: dict[str, Any]) -> str:
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
+
+    claims = {"sub": subject, "exp": int(expires.timestamp())}
+    return f"{part({'typ': 'JWT', 'alg': 'HS256'})}.{part(claims)}.c2ln"
+
+
+class FakeDataThistle:
+    def __init__(self, plex: FakePlex) -> None:
+        now = dt.datetime.now(dt.UTC)
+        self.access = jwt("access-1", now + dt.timedelta(days=30))
+        self.refresh = jwt("refresh-1", now + dt.timedelta(days=60))
+        self.renewals = 0
+        self.renew_fails = False
+        self.requests: list[httpx.Request] = []
+        soon = (now + dt.timedelta(days=6)).date().isoformat()
+        later = (now + dt.timedelta(days=9)).date().isoformat()
+        self.listings: list[dict[str, Any]] = [
+            {
+                "event_id": "ev-radiohead",
+                "name": "Radiohead",
+                "website": "https://radiohead.com",
+                "_distance": 2.5,
+                "schedules": [
+                    {
+                        "place_id": "pl-avicii",
+                        "place": {"name": "Avicii Arena", "town": "Stockholm"},
+                        "_distance": 2.5,
+                        "performances": [{
+                            "ts": f"{soon}T19:30:00+01:00",
+                            "links": [{"type": "booking", "url": "https://www.datathistle.com/details/x"}],
+                        }],
+                    },
+                    {   # too far away
+                        "place_id": "pl-far",
+                        "place": {"name": "Far Hall", "town": "Gothenburg"},
+                        "_distance": 250.0,
+                        "performances": [{"ts": f"{later}T19:30:00+01:00"}],
+                    },
+                ],
+            },
+            {
+                "event_id": "ev-portishead",
+                "name": "Portishead: Dummy Live",
+                "_distance": 4.0,
+                "schedules": [{
+                    "place_id": "pl-annexet",
+                    "place": {"name": "Annexet", "town": "Stockholm"},
+                    "performances": [{"ts": f"{later}", "time_unknown": "Times tbc"}],
+                }],
+            },
+            {
+                "event_id": "ev-quiz",
+                "name": "Pub Quiz Night",
+                "schedules": [
+                    {"place": {"name": "Pub"}, "performances": [{"ts": f"{soon}T20:00:00"}]}
+                ],
+            },
+        ]  # fmt: skip
+        plex.router.get(f"{DT_API}/ping").mock(side_effect=self._ping)
+        plex.router.get(f"{DT_API}/events").mock(side_effect=self._events)
+        plex.router.post(f"{DT_AUTH}/refresh").mock(side_effect=self._refresh)
+
+    HEADERS: ClassVar[dict[str, str]] = {
+        "X-RateLimit-Limit": "1000",
+        "X-RateLimit-Remaining": "990",
+        "X-RateLimit-Reset": "1798761600",
+    }
+
+    def _authorised(self, request: httpx.Request, token: str) -> bool:
+        return request.headers.get("authorization") == f"Bearer {token}"
+
+    def _ping(self, request: httpx.Request) -> httpx.Response:
+        if not self._authorised(request, self.access):
+            return httpx.Response(
+                401, json={"status": 401, "error": "Unauthorized", "message": "Not authorised"}
+            )
+        return httpx.Response(200, json={"status": 200, "message": "pong!"}, headers=self.HEADERS)
+
+    def _events(self, request: httpx.Request) -> httpx.Response:
+        if not self._authorised(request, self.access):
+            return httpx.Response(401, json={"status": 401, "message": "Not authorised"})
+        self.requests.append(request)
+        return httpx.Response(200, json=self.listings, headers=self.HEADERS)
+
+    def _refresh(self, request: httpx.Request) -> httpx.Response:
+        if self.renew_fails or not self._authorised(request, self.refresh):
+            return httpx.Response(401, json={"status": 401, "message": "Not authorised"})
+        self.renewals += 1
+        now = dt.datetime.now(dt.UTC)
+        self.access = jwt(f"access-{self.renewals + 1}", now + dt.timedelta(days=30))
+        self.refresh = jwt(f"refresh-{self.renewals + 1}", now + dt.timedelta(days=60))
+        return httpx.Response(
+            200, json={"status": 200, "accessToken": self.access, "refreshToken": self.refresh}
+        )
+
+
+@pytest.mark.db
+async def test_data_thistle(app: FastAPI, plex: FakePlex) -> None:
+    from plekstender.live import datathistle
+    from plekstender.worker import renew_datathistle_tokens
+
+    fake = FakeDataThistle(plex)
+    owner, user_id = await owner_listening(app, plex)
+    # Tokens: both needed, checked with a ping; their expiry dates read from them.
+    wrong = await owner.put(
+        "/api/admin/datathistle",
+        json={"access_token": jwt("x", dt.datetime.now(dt.UTC)), "refresh_token": fake.refresh},
+        headers=CSRF,
+    )
+    assert wrong.status_code == 400 and "refused" in wrong.json()["detail"]
+    saved = await owner.put(
+        "/api/admin/datathistle",
+        json={"access_token": fake.access, "refresh_token": fake.refresh},
+        headers=CSRF,
+    )
+    assert saved.status_code == 200, saved.text
+    out = saved.json()
+    assert out["configured"] and out["remaining"] == 990 and out["limit"] == 1000
+    assert out["access_expires"][:10] == datathistle.token_expiry(fake.access).date().isoformat()
+
+    # Opening the Live tab queues a Data Thistle lookup (only that).
+    await owner.put("/api/live/settings", json={**STOCKHOLM, "top_percent": 100}, headers=CSRF)
+    async with get_sessionmaker()() as db:
+        await db.execute(text("DELETE FROM procrastinate_jobs"))
+        await db.execute(
+            text("UPDATE live_settings SET datathistle_at = NULL, refresh_status = 'done'")
+        )
+        await db.commit()
+    opened = (await owner.get("/api/live/settings")).json()
+    assert "datathistle" in opened["sources"] and opened["refresh_status"] == "done"
+    async with get_sessionmaker()() as db:
+        jobs = (await db.execute(text("SELECT args FROM procrastinate_jobs"))).scalars().all()
+        assert jobs == [{"user_id": user_id, "datathistle": "only"}]
+
+    result = await refresh(user_id, datathistle="only")
+    assert result.complete, result.error
+    params = fake.requests[0].url.params
+    assert (params["tags"], params["limit"], params["distance"]) == ("music", "20", "62.1")  # miles
+    shows = (await owner.get("/api/live/shows")).json()["shows"]
+    names = {s["name"]: s for s in shows}
+    # Matched by name (the quiz isn't an artist); the far place left out.
+    assert set(names) == {"Radiohead", "Portishead: Dummy Live"}
+    radiohead = names["Radiohead"]
+    assert (radiohead["venue"], radiohead["start_time"], round(radiohead["distance_km"])) == (
+        "Avicii Arena", "19:30", 4,
+    )  # fmt: skip
+    assert radiohead["tickets"][0]["url"] == "https://www.datathistle.com/details/x"
+    assert names["Portishead: Dummy Live"]["start_time"] is None
+    assert (await owner.get("/api/live/settings")).json()["refresh_status"] == "done"  # untouched
+
+    # Kept a day at most, starred or not.
+    await owner.put(
+        "/api/live/stars", json={"ids": radiohead["ids"], "starred": True}, headers=CSRF
+    )
+    async with get_sessionmaker()() as db:
+        await db.execute(text("UPDATE live_shows SET fetched_at = now() - interval '25 hours'"))
+        await db.commit()
+    assert (await owner.get("/api/live/shows")).json()["shows"] == []
+
+    # Renewal: a few days before the access token runs out, both tokens are replaced.
+    async with get_sessionmaker()() as db:
+        from plekstender.db.instance import get_datathistle_tokens, set_datathistle_tokens
+
+        tokens = await get_datathistle_tokens(db, get_settings())
+        assert tokens
+        await set_datathistle_tokens(
+            db,
+            get_settings(),
+            tokens.model_copy(
+                update={"access_expires": dt.datetime.now(dt.UTC) + dt.timedelta(days=2)}
+            ),
+        )
+        await db.commit()
+    assert await renew_datathistle_tokens()
+    assert fake.renewals == 1
+    renewed = (await owner.get("/api/admin/datathistle")).json()
+    assert renewed["renewed_at"] and renewed["error"] is None
+    assert not await renew_datathistle_tokens()  # fresh again: nothing to do
+
+    # A failed renewal is reported, and the token that still works keeps being used.
+    async with get_sessionmaker()() as db:
+        tokens = await get_datathistle_tokens(db, get_settings())
+        assert tokens
+        await set_datathistle_tokens(
+            db,
+            get_settings(),
+            tokens.model_copy(
+                update={"access_expires": dt.datetime.now(dt.UTC) + dt.timedelta(days=2)}
+            ),
+        )
+        await db.commit()
+    fake.renew_fails = True
+    assert not await renew_datathistle_tokens()
+    assert "refused" in (await owner.get("/api/admin/datathistle")).json()["error"]
+    assert (await refresh(user_id, datathistle="only")).complete

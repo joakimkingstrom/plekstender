@@ -828,6 +828,9 @@ class LiveSettings(Base):
     refresh_error: Mapped[str | None] = mapped_column(Text)
     refreshed_at: Mapped[dt.datetime | None]
     refresh_requested_at: Mapped[dt.datetime | None]
+    # Data Thistle is looked up when the Live tab is opened (its listings may be kept a day).
+    datathistle_at: Mapped[dt.datetime | None]
+    datathistle_error: Mapped[str | None] = mapped_column(Text)
     artist_count: Mapped[int | None]
     request_count: Mapped[int | None]
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now(), onupdate=utcnow)

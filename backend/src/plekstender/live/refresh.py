@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from functools import partial
+from typing import Literal
 
 import httpx
 from sqlalchemy import delete, func, select
@@ -26,14 +27,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from plekstender.api.routes.library import plays_of, visible
 from plekstender.config import Settings
 from plekstender.db.instance import (
+    DataThistleTokens,
     add_jambase_unknown_ids,
+    get_datathistle_tokens,
     get_jambase_api_key,
     get_jambase_unknown_ids,
     get_jambase_usage,
     get_ticketmaster_api_key,
+    reserve_datathistle_call,
     reserve_jambase_call,
     reserve_ticketmaster_call,
+    save_datathistle_quota,
     save_jambase_quota,
+    set_datathistle_tokens,
 )
 from plekstender.db.models import (
     Artist,
@@ -44,8 +50,8 @@ from plekstender.db.models import (
     LiveShow,
     UserServer,
 )
-from plekstender.live import feeds, jambase, ticketmaster
-from plekstender.live.events import Event
+from plekstender.live import datathistle, feeds, jambase, ticketmaster
+from plekstender.live.events import Event, Performer
 from plekstender.live.geocode import distance_km
 from plekstender.security.crypto import DecryptionError, TokenCipher
 from plekstender.sync.parse import normalise_artist
@@ -63,6 +69,11 @@ ID_RETRIES = 3
 # at most this many requests a refresh.
 TM_WINDOW_DAYS = 30
 TM_MAX_REQUESTS = 80
+# Data Thistle: the next four weeks, at most 10 pages (200 listings, nearest first), and
+# its listings kept a day.
+DATATHISTLE_DAYS = 28
+DATATHISTLE_MAX_PAGES = 10
+DATATHISTLE_KEEP = dt.timedelta(hours=24)
 
 
 @dataclass
@@ -238,23 +249,34 @@ class Result:
     error: str | None = None
 
 
+DataThistleMode = Literal["yes", "no", "only", "starred"]
+
+
 async def refresh_user(
     sessions: async_sessionmaker[AsyncSession],
     http: httpx.AsyncClient,
     settings: Settings,
     user_id: int,
     *,
+    datathistle: DataThistleMode = "yes",
     now: Callable[[], dt.datetime] = lambda: dt.datetime.now(dt.UTC),
 ) -> Result:
-    """Look up the user's shows from every source that has a key, and store them. Records
-    the outcome on their settings."""
+    """Look up the user's shows from every source that's set up, and store them. Records
+    the outcome on their settings.
+
+    Data Thistle's listings may only be kept a day, so it's looked up when the person is
+    looking (the Live tab opened, a refresh asked for, settings changed): `datathistle`
+    is "yes" then, "only" to look up just Data Thistle, "starred" for the daily schedule
+    (only if they starred one of its shows) and "no" to leave it out."""
     started = now()
+    only_dt = datathistle == "only"
     async with sessions() as db:
         live = await db.get(LiveSettings, user_id)
         if live is None or live.latitude is None or live.longitude is None:
             return Result(0, 0, 0, complete=False, error="No place is set.")
-        live.refresh_status, live.refresh_error = "running", None
-        await db.commit()
+        if not only_dt:
+            live.refresh_status, live.refresh_error = "running", None
+            await db.commit()
         since = period_start(live.period_months, started)
         artists, _ = await followed_artists(db, user_id, live.top_percent, since)
         ctx = Context(
@@ -263,18 +285,38 @@ async def refresh_user(
         )  # fmt: skip
         jambase_key, _ = await get_jambase_api_key(db, settings)
         tm_key, _ = await get_ticketmaster_api_key(db, settings)
-        feed_ids = list(await db.scalars(select(LiveFeed.id).where(LiveFeed.user_id == user_id)))
-        everyone = await listened_artists(db, user_id) if feed_ids else []
+        dt_tokens = await get_datathistle_tokens(db, settings)
+        if datathistle == "starred" and dt_tokens:
+            starred_dt = await db.scalar(
+                select(func.count())
+                .select_from(LiveShow)
+                .where(
+                    LiveShow.user_id == user_id,
+                    LiveShow.source == "datathistle",
+                    LiveShow.starred_at.is_not(None),
+                )
+            )
+            datathistle = "yes" if starred_dt else "no"
+        feed_ids = (
+            []
+            if only_dt
+            else list(await db.scalars(select(LiveFeed.id).where(LiveFeed.user_id == user_id)))
+        )
+        use_dt = dt_tokens is not None and datathistle in ("yes", "only")
+        everyone = await listened_artists(db, user_id) if feed_ids or use_dt else []
 
     runs: dict[str, SourceRun] = {}
-    if jambase_key:
-        runs["jambase"] = await _run(partial(_jambase, ctx, jambase_key))
-    if tm_key:
-        runs["ticketmaster"] = await _run(partial(_ticketmaster, ctx, tm_key))
-    if feed_ids:
-        runs["calendar"] = await _run(partial(_calendars, ctx, feed_ids, everyone))
+    if not only_dt:
+        if jambase_key:
+            runs["jambase"] = await _run(partial(_jambase, ctx, jambase_key))
+        if tm_key:
+            runs["ticketmaster"] = await _run(partial(_ticketmaster, ctx, tm_key))
+        if feed_ids:
+            runs["calendar"] = await _run(partial(_calendars, ctx, feed_ids, everyone))
+    if use_dt and dt_tokens:
+        runs["datathistle"] = await _run(partial(_datathistle, ctx, dt_tokens, everyone))
     errors = [run.error for run in runs.values() if run.error]
-    if not runs:
+    if not runs and not only_dt:
         errors = ["No source for shows is set up: an admin can add a JamBase or Ticketmaster "
                   "key in Settings → Connections, or add a calendar link."]  # fmt: skip
     complete = not errors
@@ -290,19 +332,29 @@ async def refresh_user(
                         LiveShow.user_id == user_id,
                         LiveShow.source == source,
                         LiveShow.fetched_at < started,
-                        LiveShow.starred_at.is_(None),
+                        # Data Thistle's terms: nothing of theirs is kept unrefreshed.
+                        *([] if source == "datathistle" else [LiveShow.starred_at.is_(None)]),
                         *(~LiveShow.source_id.startswith(prefix) for prefix in run.keep),
                     )
                 )
+        await expire_datathistle(db, now(), user_id)
         live = await db.get(LiveSettings, user_id)
         if live is not None:
-            live.refresh_status = "done" if complete else "failed"
-            live.refresh_error = " ".join(errors) or None
-            # The JamBase requests a refresh takes (the daily schedule budgets with it).
-            live.request_count = runs["jambase"].requests if "jambase" in runs else 0
-            live.artist_count = len(artists)
-            if complete or any(not run.error for run in runs.values()):
-                live.refreshed_at = now()
+            if "datathistle" in runs:
+                live.datathistle_at = now()
+                live.datathistle_error = runs["datathistle"].error
+            if not only_dt:
+                main = {k: r for k, r in runs.items() if k != "datathistle"}
+                main_errors = [r.error for r in main.values() if r.error]
+                if not runs:
+                    main_errors = errors
+                live.refresh_status = "failed" if main_errors else "done"
+                live.refresh_error = " ".join(e for e in main_errors if e) or None
+                # The JamBase requests a refresh takes (the daily schedule budgets with it).
+                live.request_count = runs["jambase"].requests if "jambase" in runs else 0
+                live.artist_count = len(artists)
+                if main and (not main_errors or any(not r.error for r in main.values())):
+                    live.refreshed_at = now()
         await db.commit()
     for message in errors:
         log.warning("Live refresh for user %s: %s", user_id, message)
@@ -311,7 +363,20 @@ async def refresh_user(
         len(artists),
         sum(run.requests for run in runs.values()),
         complete,
-        " ".join(errors) or None,
+        " ".join(e for e in errors if e) or None,
+    )
+
+
+async def expire_datathistle(
+    db: AsyncSession, now: dt.datetime, user_id: int | None = None
+) -> None:
+    """Data Thistle's listings are kept a day at most (their terms), starred or not."""
+    await db.execute(
+        delete(LiveShow).where(
+            LiveShow.source == "datathistle",
+            LiveShow.fetched_at < now - DATATHISTLE_KEEP,
+            *([LiveShow.user_id == user_id] if user_id is not None else []),
+        )
     )
 
 
@@ -321,7 +386,11 @@ async def _run(work: Callable[[SourceRun], Awaitable[None]]) -> SourceRun:
         await work(run)
     except Stop as exc:
         run.error = str(exc)
-    except (jambase.JamBaseError, ticketmaster.TicketmasterError) as exc:
+    except (
+        jambase.JamBaseError,
+        ticketmaster.TicketmasterError,
+        datathistle.DataThistleError,
+    ) as exc:
         run.error = str(exc)
     return run
 
@@ -497,6 +566,97 @@ async def _calendars(
                 await db.commit()
 
 
+async def _datathistle(
+    ctx: Context, tokens: DataThistleTokens, everyone: list[Followed], run: SourceRun
+) -> None:
+    """Music events near the user for the next few weeks, nearest first, matched by name
+    against all their library's artists (listings have no performers)."""
+    access = await usable_datathistle_token(ctx.sessions, ctx.http, ctx.settings, tokens)
+    match = Matcher(everyone, fuzzy=False)
+    end = ctx.today + dt.timedelta(days=DATATHISTLE_DAYS)
+    for page in range(1, DATATHISTLE_MAX_PAGES + 1):
+        async with ctx.sessions() as db:
+            if not await reserve_datathistle_call(
+                db, ctx.settings.datathistle_daily_cap, ctx.now()
+            ):
+                raise Stop("Today's Data Thistle requests are used up; it's tried again tomorrow.")
+        run.requests += 1
+        listings, quota = await datathistle.events(
+            ctx.http,
+            ctx.settings.datathistle_api_url,
+            access,
+            latitude=ctx.latitude,
+            longitude=ctx.longitude,
+            radius_km=ctx.radius_km,
+            start=ctx.today,
+            end=end,
+            page=page,
+        )
+        async with ctx.sessions() as db:
+            await save_datathistle_quota(db, quota.limit, quota.remaining, quota.resets_at)
+            await db.commit()
+        for raw in listings:
+            for event in datathistle.parse(raw, ctx.today, end, ctx.radius_km):
+                for name in datathistle.candidate_names(event.name):
+                    if match(name):
+                        event = replace(event, performers=[Performer(name, headliner=True)])
+                        _collect(run.found, event, match)
+                        break
+        if len(listings) < datathistle.PAGE_SIZE:
+            break
+
+
+async def usable_datathistle_token(
+    sessions: async_sessionmaker[AsyncSession],
+    http: httpx.AsyncClient,
+    settings: Settings,
+    tokens: DataThistleTokens,
+    *,
+    force: bool = False,
+) -> str:
+    """The access token, renewed first when it's (nearly) run out. Stores renewals."""
+    now = dt.datetime.now(dt.UTC)
+    due = tokens.access_expires is None or tokens.access_expires - now < datathistle.RENEW_BEFORE
+    if not (force or due):
+        return tokens.access
+    if tokens.refresh_expires and tokens.refresh_expires <= now:
+        if tokens.access_expires and tokens.access_expires > now:
+            return tokens.access
+        raise Stop(
+            "Data Thistle's tokens have run out: an admin can paste new ones in "
+            "Settings → Connections."
+        )
+    try:
+        access, refresh = await datathistle.renew(
+            http, settings.datathistle_auth_url, tokens.refresh
+        )
+    except datathistle.DataThistleError as exc:
+        async with sessions() as db:
+            await set_datathistle_tokens(db, settings, replace_model(tokens, error=str(exc)))
+            await db.commit()
+        if tokens.access_expires and tokens.access_expires > now:
+            return tokens.access  # still works for now
+        raise Stop(f"Data Thistle's tokens couldn't be renewed: {exc}") from exc
+    renewed = DataThistleTokens(
+        access=access,
+        refresh=refresh,
+        access_expires=datathistle.token_expiry(access),
+        refresh_expires=datathistle.token_expiry(refresh),
+        renewed_at=now,
+        error=None,
+    )
+    async with sessions() as db:
+        await set_datathistle_tokens(db, settings, renewed)
+        await db.commit()
+    tokens.access, tokens.refresh = renewed.access, renewed.refresh
+    tokens.access_expires, tokens.refresh_expires = renewed.access_expires, renewed.refresh_expires
+    return access
+
+
+def replace_model(tokens: DataThistleTokens, **changes: object) -> DataThistleTokens:
+    return tokens.model_copy(update=changes)
+
+
 async def _check_quota(ctx: Context, api_key: str, needed: int) -> None:
     """Ask JamBase (free) how much is left, and stop before going over its quota."""
     try:
@@ -561,7 +721,7 @@ async def _store(
         distance = (
             round(distance_km(ctx.latitude, ctx.longitude, event.latitude, event.longitude), 1)
             if event.latitude is not None and event.longitude is not None
-            else None
+            else event.distance_km
         )
         rows.append(
             {

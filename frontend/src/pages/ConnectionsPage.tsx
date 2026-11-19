@@ -1,5 +1,6 @@
 import { useMe } from '../api/hooks'
 import { AcoustIdKeyCard } from '../components/AcoustIdKeyCard'
+import { DataThistleCard } from '../components/DataThistleCard'
 import { JamBaseKeyCard } from '../components/JamBaseKeyCard'
 import { TicketmasterKeyCard } from '../components/TicketmasterKeyCard'
 import { Spinner } from '../components/ui'
@@ -23,6 +24,7 @@ export function ConnectionsPage() {
           <AcoustIdKeyCard />
           <JamBaseKeyCard />
           <TicketmasterKeyCard />
+          <DataThistleCard />
         </div>
       )}
     </div>

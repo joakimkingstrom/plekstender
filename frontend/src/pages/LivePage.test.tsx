@@ -20,6 +20,8 @@ const base = {
   refresh_available_at: null,
   source_ready: true,
   sources: ['jambase', 'ticketmaster'],
+  datathistle_at: null as string | null,
+  datathistle_error: null as string | null,
 }
 const placed = {
   ...base,
@@ -258,6 +260,17 @@ describe('LivePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add link' }))
     expect(await screen.findByText('Songkick: tracked artists')).toBeInTheDocument()
     expect(screen.getByText('Not read yet')).toBeInTheDocument()
+  })
+
+  it('credits Data Thistle with its logo and event links', async () => {
+    settings = { ...placed, sources: ['jambase', 'datathistle'], datathistle_error: 'Today’s Data Thistle requests are used up.' }
+    renderPage()
+    expect(await screen.findByRole('img', { name: 'Data Thistle' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add or update an event' })).toHaveAttribute(
+      'href',
+      'https://www.datathistle.com/update/event-listing/',
+    )
+    expect(screen.getByText(/Data Thistle: Today’s Data Thistle requests are used up/)).toBeInTheDocument()
   })
 
   it('says when JamBase has no key yet', async () => {

@@ -581,40 +581,60 @@ LIVE_MANUAL_GAP = dt.timedelta(hours=1)
 
 
 @app.task(queue="live", lock="jambase")
-async def refresh_live(user_id: int) -> None:
-    """Look up one user's upcoming shows (one refresh at a time: they share the budget)."""
+async def refresh_live(user_id: int, datathistle: str = "yes") -> None:
+    """Look up one user's upcoming shows (one refresh at a time: they share the budgets).
+    `datathistle`: "yes", "no", "only" or "starred" (see refresh_user)."""
     from plekstender.live.refresh import refresh_user as refresh_live_user  # (import cycle)
 
+    mode = datathistle if datathistle in ("yes", "no", "only", "starred") else "yes"
     async with httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http:
-        await refresh_live_user(get_sessionmaker(), http, get_settings(), user_id)
+        await refresh_live_user(
+            get_sessionmaker(),
+            http,
+            get_settings(),
+            user_id,
+            datathistle=mode,  # type: ignore[arg-type]
+        )
 
 
-async def enqueue_live_refresh(db: AsyncSession, user_id: int, delay_seconds: int = 0) -> bool:
-    """Queue a refresh (once: a queued one already reads the latest settings). Commits."""
+async def enqueue_live_refresh(
+    db: AsyncSession, user_id: int, delay_seconds: int = 0, datathistle: str = "yes"
+) -> bool:
+    """Queue a refresh (once: a queued one already reads the latest settings). Commits.
+    A Data Thistle-only lookup ("only") is queued separately and leaves the status alone."""
     live = await db.get(LiveSettings, user_id)
     if live is None:
         return False
+    only = datathistle == "only"
     try:
         await refresh_live.configure(
-            queueing_lock=f"live-{user_id}", schedule_in={"seconds": delay_seconds}
-        ).defer_async(user_id=user_id)
+            queueing_lock=f"live-{'dt-' if only else ''}{user_id}",
+            schedule_in={"seconds": delay_seconds},
+        ).defer_async(user_id=user_id, datathistle=datathistle)
     except AlreadyEnqueued:
         return True
-    live.refresh_status, live.refresh_error = "queued", None
-    live.refresh_requested_at = dt.datetime.now(dt.UTC)
+    if only:
+        live.datathistle_at = dt.datetime.now(dt.UTC)  # asked for: don't ask again at once
+    else:
+        live.refresh_status, live.refresh_error = "queued", None
+        live.refresh_requested_at = dt.datetime.now(dt.UTC)
     await db.commit()
     return True
 
 
 async def schedule_live_refreshes(now: dt.datetime | None = None) -> list[int]:
     from plekstender.live.refresh import due_users as due_live_users  # (import cycle)
+    from plekstender.live.refresh import expire_datathistle
 
     now = now or dt.datetime.now(dt.UTC)
     settings = get_settings()
     async with get_sessionmaker()() as db:
+        await expire_datathistle(db, now)
+        await db.commit()
         users = await due_live_users(db, settings, now, LIVE_MIN_AGE)
         for user_id in users:
-            await enqueue_live_refresh(db, user_id)
+            # Data Thistle only for those who starred its shows (kept a day at most).
+            await enqueue_live_refresh(db, user_id, datathistle="starred")
     return users
 
 
@@ -623,6 +643,33 @@ async def schedule_live_refreshes(now: dt.datetime | None = None) -> list[int]:
 async def schedule_live(timestamp: int) -> None:
     """Daily (05:20 UTC): refresh users' shows, as many as today's share of the budget allows."""
     await schedule_live_refreshes()
+
+
+async def renew_datathistle_tokens() -> bool:
+    """Renew Data Thistle's tokens when the access token has a few days left. True if renewed."""
+    from plekstender.db.instance import get_datathistle_tokens
+    from plekstender.live.refresh import Stop, usable_datathistle_token
+
+    settings = get_settings()
+    async with get_sessionmaker()() as db:
+        tokens = await get_datathistle_tokens(db, settings)
+    if tokens is None:
+        return False
+    before = tokens.access
+    async with httpx.AsyncClient() as http:
+        try:
+            await usable_datathistle_token(get_sessionmaker(), http, settings, tokens)
+        except Stop as exc:
+            log.warning("Data Thistle: %s", exc)
+            return False
+    return tokens.access != before
+
+
+@app.periodic(cron="50 4 * * *", periodic_id="renew-datathistle")
+@app.task(queue="maintenance", queueing_lock="renew-datathistle")
+async def renew_datathistle(timestamp: int) -> None:
+    """Daily: keep the Data Thistle tokens alive (each renewal gives a new pair)."""
+    await renew_datathistle_tokens()
 
 
 @app.periodic(cron="* * * * *", periodic_id="heartbeat")

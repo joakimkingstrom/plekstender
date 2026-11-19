@@ -1,4 +1,4 @@
-import { useDeferredValue, useId, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useId, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useMe } from '../api/hooks'
@@ -28,6 +28,7 @@ import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatRelative } from '../format'
 import { describePeriod, followCount } from '../live'
 import { countryName } from '../places'
+import dataThistleLogo from '../assets/datathistle.svg'
 
 const DISTANCES = [25, 50, 100, 200, 500, 1000]
 type Range = 'all' | '30' | '90' | 'starred'
@@ -37,7 +38,12 @@ const RANGES: [Range, string][] = [
   ['90', 'Next 3 months'],
   ['starred', '★ Starred'],
 ]
-const SOURCE_NAMES: Record<string, string> = { jambase: 'JamBase', ticketmaster: 'Ticketmaster', calendar: 'your calendar link' }
+const SOURCE_NAMES: Record<string, string> = {
+  jambase: 'JamBase',
+  ticketmaster: 'Ticketmaster',
+  datathistle: 'Data Thistle',
+  calendar: 'your calendar link',
+}
 
 /** "2027-03-04" as a local date (no time zone shift). */
 function localDate(iso: string): Date {
@@ -116,6 +122,7 @@ function Summary({ settings, onEdit }: { settings: LiveSettings; onEdit: () => v
               : 'Not looked up yet.'}
         </p>
         {settings.refresh_status === 'failed' && settings.refresh_error && <Notice tone="warn">{settings.refresh_error}</Notice>}
+        {settings.datathistle_error && <Notice tone="warn">Data Thistle: {settings.datathistle_error}</Notice>}
         {!settings.source_ready && <SourceMissing />}
         <div className="flex flex-wrap gap-2">
           <Button onClick={onEdit}>Change</Button>
@@ -362,7 +369,18 @@ function Shows({ settings }: { settings: LiveSettings }) {
     setTo(isoDate(d))
   }
   const busy = settings.refresh_status === 'queued' || settings.refresh_status === 'running'
-  const shows = useLiveShows({ artist, to, starred: range === 'starred' }, busy)
+  // A Data Thistle lookup runs in the background when the tab is opened: look again for a bit.
+  const [opened] = useState(() => Date.now())
+  const dtPending =
+    settings.sources.includes('datathistle') &&
+    settings.datathistle_at != null &&
+    Date.parse(settings.datathistle_at) > opened - 60_000
+  const [watching, setWatching] = useState(true)
+  useEffect(() => {
+    const stop = setTimeout(() => setWatching(false), 60_000)
+    return () => clearTimeout(stop)
+  }, [])
+  const shows = useLiveShows({ artist, to, starred: range === 'starred' }, busy || (dtPending && watching))
   const { active } = useActiveServer()
   const artistId = useId()
 
@@ -462,6 +480,16 @@ function Shows({ settings }: { settings: LiveSettings }) {
           <a href="https://www.ticketmaster.com" target="_blank" rel="nofollow noopener noreferrer" className="underline">
             Shows also from Ticketmaster
           </a>
+        )}
+        {settings.sources.includes('datathistle') && (
+          <span className="flex items-center gap-2">
+            <a href="https://www.datathistle.com/" target="_blank" rel="noopener noreferrer" title="Listings from Data Thistle">
+              <img src={dataThistleLogo} alt="Data Thistle" className="h-7 rounded bg-[#1d1d1b] px-1.5 py-0.5" />
+            </a>
+            <a href="https://www.datathistle.com/update/event-listing/" target="_blank" rel="noopener noreferrer" className="underline">
+              Add or update an event
+            </a>
+          </span>
         )}
       </p>
     </div>

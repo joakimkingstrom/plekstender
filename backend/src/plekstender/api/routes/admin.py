@@ -21,6 +21,8 @@ from plekstender.api.schemas import (
     AdminUserOut,
     CatalogueFont,
     CataloguePage,
+    DataThistleOut,
+    DataThistleTokensIn,
     FanartKeyIn,
     FanartKeyOut,
     FontGroup,
@@ -38,9 +40,12 @@ from plekstender.artwork.catalogue import catalogue, find
 from plekstender.artwork.sources import SourceError, fanart_logos
 from plekstender.artwork.text import FontError, check_font
 from plekstender.db.instance import (
+    DataThistleTokens,
     LibrarySettings,
     get_access_settings,
     get_acoustid_api_key,
+    get_datathistle_tokens,
+    get_datathistle_usage,
     get_fanart_api_key,
     get_fonts,
     get_jambase_api_key,
@@ -49,9 +54,11 @@ from plekstender.db.instance import (
     get_library_settings,
     get_ticketmaster_api_key,
     get_ticketmaster_usage,
+    save_datathistle_quota,
     save_jambase_quota,
     set_access_settings,
     set_acoustid_api_key,
+    set_datathistle_tokens,
     set_fanart_api_key,
     set_fonts,
     set_jambase_api_key,
@@ -61,7 +68,7 @@ from plekstender.db.instance import (
 )
 from plekstender.db.models import PlexServer, User, UserServer
 from plekstender.history.lastfm import LastFmClient, LastFmError
-from plekstender.live import jambase, ticketmaster
+from plekstender.live import datathistle, jambase, ticketmaster
 from plekstender.sync.popularity import preview_artist_ranking
 from plekstender.worker import enqueue_popularity_recompute
 
@@ -353,6 +360,72 @@ async def put_ticketmaster(
     await set_ticketmaster_api_key(db, settings, body.api_key)
     await db.commit()
     return await get_ticketmaster(db, admin, settings)
+
+
+async def _datathistle_out(db: DbDep, settings: SettingsDep) -> DataThistleOut:
+    tokens = await get_datathistle_tokens(db, settings)
+    usage = await get_datathistle_usage(db)
+    return DataThistleOut(
+        configured=tokens is not None,
+        access_expires=tokens.access_expires if tokens else None,
+        refresh_expires=tokens.refresh_expires if tokens else None,
+        renewed_at=tokens.renewed_at if tokens else None,
+        error=tokens.error if tokens else None,
+        day=usage.day,
+        calls=usage.calls,
+        cap=settings.datathistle_daily_cap,
+        limit=usage.limit,
+        remaining=usage.remaining,
+        resets_at=usage.resets_at,
+    )
+
+
+@router.get("/datathistle", response_model=DataThistleOut)
+async def get_datathistle(db: DbDep, _: AdminDep, settings: SettingsDep) -> DataThistleOut:
+    """The Data Thistle tokens' expiry dates, renewals and the month's requests."""
+    return await _datathistle_out(db, settings)
+
+
+@router.put("/datathistle", response_model=DataThistleOut)
+async def put_datathistle(
+    body: DataThistleTokensIn, db: DbDep, _: AdminDep, settings: SettingsDep, http: HttpDep
+) -> DataThistleOut:
+    """Save the access and refresh tokens from the Data Thistle account page (the access
+    token is checked with a ping). Plekstender renews them from then on."""
+    access_expires = datathistle.token_expiry(body.access_token)
+    refresh_expires = datathistle.token_expiry(body.refresh_token)
+    if access_expires is None or refresh_expires is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Those don't look like Data Thistle tokens."
+        )
+    if body.access_token == body.refresh_token:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Paste the access token and the refresh token."
+        )
+    try:
+        quota = await datathistle.ping(http, settings.datathistle_api_url, body.access_token)
+    except datathistle.DataThistleError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await set_datathistle_tokens(
+        db,
+        settings,
+        DataThistleTokens(
+            access=body.access_token,
+            refresh=body.refresh_token,
+            access_expires=access_expires,
+            refresh_expires=refresh_expires,
+        ),
+    )
+    await save_datathistle_quota(db, quota.limit, quota.remaining, quota.resets_at)
+    await db.commit()
+    return await _datathistle_out(db, settings)
+
+
+@router.delete("/datathistle", response_model=DataThistleOut)
+async def delete_datathistle(db: DbDep, _: AdminDep, settings: SettingsDep) -> DataThistleOut:
+    await set_datathistle_tokens(db, settings, None)
+    await db.commit()
+    return await _datathistle_out(db, settings)
 
 
 # --- text logo fonts -----------------------------------------------------------------------

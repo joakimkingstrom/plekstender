@@ -1905,7 +1905,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Live Settings */
+        /**
+         * Get Live Settings
+         * @description The Live tab's settings and status. Opening the tab looks Data Thistle up again
+         *     when its listings are getting old (they may only be kept a day).
+         */
         get: operations["get_live_settings_api_live_settings_get"];
         /**
          * Put Live Settings
@@ -2398,6 +2402,32 @@ export interface paths {
         put: operations["put_ticketmaster_api_admin_ticketmaster_put"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/datathistle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Datathistle
+         * @description The Data Thistle tokens' expiry dates, renewals and the month's requests.
+         */
+        get: operations["get_datathistle_api_admin_datathistle_get"];
+        /**
+         * Put Datathistle
+         * @description Save the access and refresh tokens from the Data Thistle account page (the access
+         *     token is checked with a ping). Plekstender renews them from then on.
+         */
+        put: operations["put_datathistle_api_admin_datathistle_put"];
+        post?: never;
+        /** Delete Datathistle */
+        delete: operations["delete_datathistle_api_admin_datathistle_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3075,6 +3105,50 @@ export interface components {
             listens: number;
             /** Listening Ms */
             listening_ms: number;
+        };
+        /** DataThistleOut */
+        DataThistleOut: {
+            /** Configured */
+            configured: boolean;
+            /** Access Expires */
+            access_expires: string | null;
+            /** Refresh Expires */
+            refresh_expires: string | null;
+            /**
+             * Renewed At
+             * @description When Plekstender last renewed them.
+             */
+            renewed_at: string | null;
+            /**
+             * Error
+             * @description Why renewing failed, the last time.
+             */
+            error: string | null;
+            /** Day */
+            day: string;
+            /**
+             * Calls
+             * @description Requests Plekstender sent today (UTC).
+             */
+            calls: number;
+            /** Cap */
+            cap: number;
+            /**
+             * Limit
+             * @description Data Thistle's monthly limit, as it last said.
+             */
+            limit: number | null;
+            /** Remaining */
+            remaining: number | null;
+            /** Resets At */
+            resets_at: string | null;
+        };
+        /** DataThistleTokensIn */
+        DataThistleTokensIn: {
+            /** Access Token */
+            access_token: string;
+            /** Refresh Token */
+            refresh_token: string;
         };
         /** Definition */
         Definition: {
@@ -4108,7 +4182,14 @@ export interface components {
              * Sources
              * @description Sources with a key.
              */
-            sources: ("jambase" | "ticketmaster")[];
+            sources: ("jambase" | "ticketmaster" | "datathistle")[];
+            /**
+             * Datathistle At
+             * @description Data Thistle last looked up.
+             */
+            datathistle_at: string | null;
+            /** Datathistle Error */
+            datathistle_error: string | null;
         };
         /** LiveShowOut */
         LiveShowOut: {
@@ -10229,6 +10310,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_datathistle_api_admin_datathistle_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataThistleOut"];
+                };
+            };
+        };
+    };
+    put_datathistle_api_admin_datathistle_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataThistleTokensIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataThistleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_datathistle_api_admin_datathistle_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataThistleOut"];
                 };
             };
         };
