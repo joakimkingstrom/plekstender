@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender import __version__
 from plekstender.artwork.jobs import run_job as run_artwork_job
+from plekstender.artwork.packs import remove_old_files
 from plekstender.artwork.service import remove_old_uploads
 from plekstender.auth.sessions import delete_expired_sessions
 from plekstender.config import get_settings
@@ -394,6 +395,7 @@ async def cleanup_sessions(timestamp: int) -> None:
         )
         await db.commit()
     remove_old_uploads(get_settings(), dt.timedelta(days=1))
+    remove_old_files(get_settings(), dt.timedelta(days=7))  # artwork exports and imports
     if stale_import_count := int(getattr(stale_imports, "rowcount", 0) or 0):
         log.warning("marked %d interrupted listen imports as failed", stale_import_count)
     if removed:

@@ -563,3 +563,35 @@ class FolderSettingsOut(BaseModel):
     local_prefix: str | None
     plex_root: str | None = Field(description="The common start of Plex's music paths (a hint).")
     example: FolderExample | None
+
+
+class ImportMatchOut(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+    status: str | None
+
+
+class ImportEntryOut(BaseModel):
+    index: int
+    artist_name: str
+    mbid: str | None
+    image: str = Field(description="Thumbnail URL of the pack's image.")
+    match: ImportMatchOut | None
+    matched_by: Literal["mbid", "name"] | None
+
+
+class ImportPreviewOut(BaseModel):
+    import_id: str
+    entries: list[ImportEntryOut]
+    matched: int
+    total: int
+
+
+class ImportItemIn(BaseModel):
+    index: int = Field(ge=0)
+    rating_key: int
+
+
+class ImportApplyIn(BaseModel):
+    items: list[ImportItemIn] = Field(min_length=1, max_length=20000)

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi.responses import FileResponse
 from fastapi.responses import Response as RawResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -34,9 +35,13 @@ from plekstender.api.schemas import (
     FolderSettingsIn,
     FolderSettingsOut,
     FontGroup,
+    ImportApplyIn,
+    ImportEntryOut,
+    ImportMatchOut,
+    ImportPreviewOut,
     UploadOut,
 )
-from plekstender.artwork import folders, images
+from plekstender.artwork import folders, images, packs
 from plekstender.artwork import service as art
 from plekstender.artwork.images import ImageError, Transform
 from plekstender.artwork.text import FONTS
@@ -480,3 +485,147 @@ async def put_folder(
     server.local_path_prefix = local_prefix
     await db.commit()
     return await folder_settings(db, user, us)
+
+
+# --- logo packs: export and import ---------------------------------------------------------
+
+
+@router.post("/jobs/export", response_model=ArtworkJobOut, status_code=status.HTTP_201_CREATED)
+async def start_export(server_id: int, db: DbDep, user: UserDep) -> ArtworkJobOut:
+    """Zip the images of every artist marked Done or Custom (with a manifest)."""
+    us = await owner_server(db, user, server_id)
+    return job_out(server_id, await start_job(db, us, "export", {}))
+
+
+@router.get(
+    "/jobs/{job_id}/download",
+    response_class=FileResponse,
+    responses={200: {"content": {"application/zip": {}}}},
+)
+async def download_export(server_id: int, job_id: int, db: DbDep, user: UserDep) -> FileResponse:
+    us = await owner_server(db, user, server_id)
+    job = await db.get(ArtworkJob, job_id)
+    if job is None or job.server_id != us.server_id or job.kind != "export" or not job.result_path:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Export not found")
+    path = Path(job.result_path)
+    if not await asyncio.to_thread(path.exists):
+        raise HTTPException(status.HTTP_410_GONE, "This export has expired; export again.")
+    stamp = (job.finished_at or job.created_at).strftime("%Y-%m-%d")
+    return FileResponse(
+        path, media_type="application/zip", filename=f"plekstender-artwork-{stamp}.zip"
+    )
+
+
+def _import_image(server_id: int, import_id: str, index: int) -> str:
+    return f"/api/servers/{server_id}/artwork/imports/{import_id}/image/{index}"
+
+
+@router.post(
+    "/imports",
+    response_model=ImportPreviewOut,
+    dependencies=[rate_limit("artwork-import", limit=10, window=60)],
+    openapi_extra={"requestBody": {"content": {"application/zip": {}}, "required": True}},
+)
+async def upload_pack(
+    server_id: int, request: Request, db: DbDep, user: UserDep, settings: SettingsDep
+) -> ImportPreviewOut:
+    """Upload a logo pack (the zip as the request body) and see how it matches."""
+    us = await owner_server(db, user, server_id)
+    folder = packs.imports_dir(settings)
+    await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
+    import_id = __import__("uuid").uuid4().hex
+    path = folder / f"{import_id}.zip"
+    size = 0
+    try:
+        with path.open("wb") as out:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > packs.MAX_PACK:
+                    raise HTTPException(
+                        status.HTTP_413_CONTENT_TOO_LARGE, "Packs can be up to 500 MB."
+                    )
+                out.write(chunk)
+        entries = await asyncio.to_thread(packs.read_manifest, path)
+    except packs.PackError as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    except HTTPException:
+        path.unlink(missing_ok=True)
+        raise
+    matches = await packs.match_entries(db, us, entries)
+    return ImportPreviewOut(
+        import_id=import_id,
+        entries=[
+            ImportEntryOut(
+                index=m.entry.index,
+                artist_name=m.entry.artist_name,
+                mbid=m.entry.mbid,
+                image=_import_image(server_id, import_id, m.entry.index),
+                match=(
+                    ImportMatchOut(
+                        rating_key=m.artist.rating_key,
+                        title=m.artist.title,
+                        thumb=m.artist.thumb,
+                        status=m.status,
+                    )
+                    if m.artist
+                    else None
+                ),
+                matched_by=m.matched_by,
+            )
+            for m in matches
+        ],
+        matched=sum(1 for m in matches if m.artist),
+        total=len(matches),
+    )
+
+
+@router.get(
+    "/imports/{import_id}/image/{index}",
+    response_class=RawResponse,
+    responses={200: {"content": {"image/jpeg": {}, "image/png": {}}}},
+)
+async def pack_image(
+    server_id: int,
+    import_id: str,
+    index: int,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    size: int = 160,
+) -> RawResponse:
+    await owner_server(db, user, server_id)
+    try:
+        path = packs.pack_path(settings, import_id)
+        entries = {e.index: e for e in await asyncio.to_thread(packs.read_manifest, path)}
+        data = await asyncio.to_thread(packs.read_image, path, entries[index].file)
+        body, content_type = images.thumbnail(data, min(THUMB_SIZES, key=lambda s: abs(s - size)))
+    except (packs.PackError, KeyError, ImageError) as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Image not found") from exc
+    return RawResponse(
+        body, media_type=content_type, headers={"Cache-Control": "private, max-age=3600"}
+    )
+
+
+@router.post(
+    "/imports/{import_id}/apply", response_model=ArtworkJobOut, status_code=status.HTTP_201_CREATED
+)
+async def apply_pack(
+    server_id: int,
+    import_id: str,
+    body: ImportApplyIn,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+) -> ArtworkJobOut:
+    """Apply the chosen pack images (entry index -> artist) in a background job."""
+    us = await owner_server(db, user, server_id)
+    try:
+        packs.pack_path(settings, import_id)
+    except packs.PackError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    params: dict[str, object] = {
+        "import_id": import_id,
+        "items": [i.model_dump() for i in body.items],
+    }
+    return job_out(server_id, await start_job(db, us, "import", params))

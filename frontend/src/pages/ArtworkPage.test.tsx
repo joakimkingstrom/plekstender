@@ -33,6 +33,18 @@ beforeEach(() => {
         return new Response(new Blob(['jpeg']), { headers: { 'content-type': 'image/jpeg' } })
       case '/api/servers/1/artwork/jobs':
         return json([])
+      case '/api/servers/1/artwork/imports':
+        return json({
+          import_id: 'abc',
+          matched: 1,
+          total: 2,
+          entries: [
+            { index: 0, artist_name: 'Radiohead', mbid: 'x', image: '/img/0', match: { rating_key: 100, title: 'Radiohead', thumb: null, status: 'none' }, matched_by: 'mbid' },
+            { index: 1, artist_name: 'Unknown Band', mbid: null, image: '/img/1', match: null, matched_by: null },
+          ],
+        })
+      case '/api/servers/1/artwork/imports/abc/apply':
+        return json({ id: 5, kind: 'import', status: 'queued', progress: {}, stats: {}, error: null, created_at: '2026-11-19T00:00:00Z', finished_at: null, download: null })
       case '/api/servers/1/artwork/folder':
         return json({ enabled: false, plex_prefix: null, local_prefix: null, plex_root: '/music', example: null })
       case '/api/servers/1/artwork/artists/100/apply':
@@ -83,6 +95,21 @@ describe('ArtworkPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Save to Plex' }))
     expect(await screen.findByText('Saved to Plex.')).toBeInTheDocument()
+  })
+
+  it('previews a logo pack and applies the matched artists', async () => {
+    renderPage()
+    const input = await screen.findByLabelText('Import a pack (.zip)')
+    fireEvent.change(input, { target: { files: [new File(['zip'], 'pack.zip', { type: 'application/zip' })] } })
+    expect(await screen.findByText(/1 of 2 match your artists/)).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Import Radiohead' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Import Unknown Band' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Apply 1' }))
+    await vi.waitFor(async () => {
+      const call = fetchMock.mock.calls.find(([input]) => typeof input !== 'string' && input.url.endsWith('/imports/abc/apply'))
+      expect(call).toBeTruthy()
+      expect(await (call![0] as Request).clone().json()).toEqual({ items: [{ index: 0, rating_key: 100 }] })
+    })
   })
 
   it('tells people who don’t own the server', async () => {

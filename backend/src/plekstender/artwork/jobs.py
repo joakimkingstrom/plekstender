@@ -114,7 +114,10 @@ async def run_fanart(
         await db.commit()
 
 
-RUNNERS: dict[str, Runner] = {"fanart": run_fanart}
+def _runners() -> dict[str, Runner]:
+    from plekstender.artwork import packs
+
+    return {"fanart": run_fanart, "export": packs.run_export, "import": packs.run_import}
 
 
 async def run_job(
@@ -133,7 +136,7 @@ async def run_job(
     job.error = None
     await db.commit()
     try:
-        await RUNNERS[job.kind](db, http, settings, job, us)
+        await _runners()[job.kind](db, http, settings, job, us)
         job.status = "succeeded"
     except Exception as exc:
         if not isinstance(exc, art.ArtworkError):

@@ -503,3 +503,100 @@ async def test_saving_to_artist_folders(
     escaped = (await owner.post(f"{base}/artists/101/apply", json=body, headers=CSRF)).json()
     assert "outside" in escaped["folder_error"]
     assert not (outside / "artist.jpg").exists()
+
+
+# --- logo packs -------------------------------------------------------------------------------
+
+
+@pytest.mark.db
+async def test_export_and_import_logo_packs(
+    app: FastAPI, plex: FakePlex, web: respx.MockRouter
+) -> None:
+    import json
+    import zipfile
+
+    from plekstender.worker import artwork_job
+
+    owner, sid = await setup(app, plex)
+    base = f"/api/servers/{sid}/artwork"
+    await owner.post(
+        f"{base}/artists/100/apply", json={"source": {"kind": "current"}}, headers=CSRF
+    )
+    await owner.put(f"{base}/artists/101/status", json={"status": "custom"}, headers=CSRF)
+
+    job = (await owner.post(f"{base}/jobs/export", headers=CSRF)).json()
+    await artwork_job.func(job_id=job["id"])
+    [done] = (await owner.get(f"{base}/jobs")).json()[:1]
+    assert done["status"] == "succeeded", done["error"]
+    assert done["stats"] == {"exported": 2, "skipped": 0}
+    download = await owner.get(done["download"])
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "application/zip"
+
+    with zipfile.ZipFile(io.BytesIO(download.content)) as pack:
+        manifest = json.loads(pack.read("manifest.json"))
+        images_in_pack = {
+            name: pack.read(name) for name in pack.namelist() if name != "manifest.json"
+        }
+    assert manifest["version"] == 1
+    assert [(e["artist_name"], e["mbid"]) for e in manifest["entries"]] == [
+        ("Portishead", None),
+        ("Radiohead", "a74b1b7f"),
+    ]
+    # The images are what Plex has now (here the fake server's small JPEG).
+    assert all(Image.open(io.BytesIO(data)).format == "JPEG" for data in images_in_pack.values())
+
+    # A pack from elsewhere: matched by MBID or name, plus an artist this server lacks.
+    manifest["entries"].append(
+        {"mbid": None, "artist_name": "Unknown Band", "file": manifest["entries"][0]["file"]}
+    )
+    manifest["entries"][1]["artist_name"] = "Radiohead (renamed)"  # still matched by MBID
+    shared = io.BytesIO()
+    with zipfile.ZipFile(shared, "w") as pack:
+        pack.writestr("manifest.json", json.dumps(manifest))
+        for name, data in images_in_pack.items():
+            pack.writestr(name, data)
+    preview = await owner.post(
+        f"{base}/imports",
+        content=shared.getvalue(),
+        headers={**CSRF, "content-type": "application/zip"},
+    )
+    assert preview.status_code == 200, preview.text
+    result = preview.json()
+    assert (result["matched"], result["total"]) == (2, 3)
+    assert [
+        (e["artist_name"], e["matched_by"], e["match"] and e["match"]["rating_key"])
+        for e in result["entries"]
+    ] == [
+        ("Portishead", "name", 101),
+        ("Radiohead (renamed)", "mbid", 100),
+        ("Unknown Band", None, None),
+    ]
+    thumb = await owner.get(result["entries"][0]["image"])
+    assert thumb.status_code == 200
+
+    before = len(plex.library.uploaded)
+    items = [
+        {"index": e["index"], "rating_key": e["match"]["rating_key"]}
+        for e in result["entries"]
+        if e["match"]
+    ]
+    started = await owner.post(
+        f"{base}/imports/{result['import_id']}/apply", json={"items": items}, headers=CSRF
+    )
+    assert started.status_code == 201, started.text
+    await artwork_job.func(job_id=started.json()["id"])
+    latest = (await owner.get(f"{base}/jobs")).json()[0]
+    assert (latest["kind"], latest["status"]) == ("import", "succeeded")
+    assert latest["stats"]["applied"] == 2
+    assert len(plex.library.uploaded) == before + 2
+    statuses = {
+        a["title"]: (a["status"], a["source"])
+        for a in (await owner.get(f"{base}/artists")).json()["items"]
+    }
+    assert statuses["Portishead"] == ("done", "import")
+
+    bad = await owner.post(f"{base}/imports", content=b"not a zip", headers=CSRF)
+    assert bad.status_code == 422
+    gone = await owner.post(f"{base}/imports/{'0' * 32}/apply", json={"items": items}, headers=CSRF)
+    assert gone.status_code == 404

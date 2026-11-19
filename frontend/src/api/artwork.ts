@@ -229,3 +229,33 @@ export function useSetFolderSettings(serverId: number) {
     onSuccess: (data) => qc.setQueryData([...artworkKeys.all(serverId), 'folder'], data),
   })
 }
+
+export function useStartExport(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/servers/{server_id}/artwork/jobs/export', { params: { path: { server_id: serverId } } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...artworkKeys.all(serverId), 'jobs'] }),
+  })
+}
+
+export function useUploadPack(serverId: number) {
+  return useMutation({
+    mutationFn: (file: File) =>
+      postRaw<Schemas['ImportPreviewOut']>(`/api/servers/${serverId}/artwork/imports`, file, 'application/zip'),
+  })
+}
+
+export function useApplyPack(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ importId, items }: { importId: string; items: Schemas['ImportItemIn'][] }) =>
+      unwrap(
+        api.POST('/api/servers/{server_id}/artwork/imports/{import_id}/apply', {
+          params: { path: { server_id: serverId, import_id: importId } },
+          body: { items },
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...artworkKeys.all(serverId), 'jobs'] }),
+  })
+}
