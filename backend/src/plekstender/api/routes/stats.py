@@ -10,9 +10,12 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from plekstender.api.deps import DbDep, UserDep
+from plekstender.api.routes.auth import load_preferences
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
     ActivityPoint,
+    SkippedItemOut,
+    SkipsOut,
     StatsActivityOut,
     StatsOverviewOut,
     StatsPeriodOut,
@@ -117,4 +120,27 @@ async def activity(
         bucket=period.bucket,
         points=[ActivityPoint(start=d, listens=n) for d, n in points],
         heatmap=grid,
+    )
+
+
+@router.get("/skips", response_model=SkipsOut)
+async def skips(
+    db: DbDep,
+    user: UserDep,
+    server_id: int,
+    range: RangeQuery = "30d",
+    tz: TzQuery = "UTC",
+    kind: Literal["artist", "album", "track"] = "track",
+) -> SkipsOut:
+    """Most skipped songs, albums or artists (needs the session watcher's live data)."""
+    period, _ = _period(range, tz)
+    us = await get_user_server(db, user, server_id)
+    threshold = load_preferences(user).skip_threshold
+    found = await stats.skipped(
+        db, user.id, us.server_id, kind, period.start, period.end, threshold
+    )
+    return SkipsOut(
+        threshold=threshold,
+        watching=await stats.has_sessions(db, user.id),
+        items=[SkippedItemOut(**s.__dict__) for s in found],
     )

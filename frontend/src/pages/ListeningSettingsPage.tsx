@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
-import { useMe } from '../api/hooks'
+import { useMe, useSetPreferences } from '../api/hooks'
 import {
   useConnectListenBrainz,
   useDeleteListens,
@@ -17,6 +17,7 @@ import {
   useStartListenBrainzImport,
   type ListenSource,
 } from '../api/listens'
+import { Stepper } from '../components/controls'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatRelative } from '../format'
 
@@ -33,6 +34,7 @@ export function ListeningSettingsPage() {
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="space-y-4">
         <PlexPlaysCard />
+        <SkipsCard />
         <LastFmImportCard isAdmin={isAdmin} />
         <ListenBrainzImportCard />
         <DeleteHistoryCard />
@@ -497,6 +499,41 @@ function LastFmKeyCard() {
           </Button>
         )}
         {saved && <Notice>Saved. Last.fm accepted the key.</Notice>}
+        {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+      </div>
+    </Card>
+  )
+}
+
+function SkipsCard() {
+  const me = useMe()
+  const save = useSetPreferences()
+  const [value, setValue] = useState<number | null>(null)
+  if (me.isPending || !me.data) return null
+  const saved = me.data.preferences?.skip_threshold ?? 80
+  const current = value ?? saved
+  const valid = Number.isInteger(current) && current >= 10 && current <= 95
+  return (
+    <Card title="Skips">
+      <div className="space-y-3">
+        <p className="text-sm text-muted">
+          While something plays in Plex, Plekstender notes how far each song gets. A play counts as skipped when less
+          than this much of the song was heard. Used for "Most skipped" on History.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Stepper label="Skip threshold" value={current} min={10} max={95} onChange={setValue} invalid={!valid} />
+          <span className="text-sm text-muted">% of the song</span>
+          <Button
+            variant="primary"
+            disabled={!valid || current === saved}
+            busy={save.isPending}
+            onClick={() =>
+              save.mutate({ ...me.data!.preferences, skip_threshold: current }, { onSuccess: () => setValue(null) })
+            }
+          >
+            Save
+          </Button>
+        </div>
         {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
       </div>
     </Card>

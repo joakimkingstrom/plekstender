@@ -34,3 +34,16 @@ export function useStatsActivity(range: string) {
     placeholderData: keepPreviousData,
   })
 }
+
+export type SkipKind = 'track' | 'album' | 'artist'
+
+export function useSkips(serverId: number | null, range: string, kind: SkipKind) {
+  const tz = localTimeZone()
+  return useQuery({
+    queryKey: ['listens', 'stats', 'skips', serverId, range, tz, kind],
+    enabled: serverId !== null,
+    queryFn: () =>
+      unwrap(api.GET('/api/stats/skips', { params: { query: { server_id: serverId!, range, tz, kind } } })),
+    placeholderData: keepPreviousData,
+  })
+}

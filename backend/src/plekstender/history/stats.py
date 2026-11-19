@@ -431,3 +431,78 @@ async def item_listens(
         artist_keys=sorted(artist_keys),
         album_key=album_key,
     )
+
+
+@dataclass
+class Skipped:
+    rating_key: int
+    name: str
+    artist: str | None
+    thumb: str | None
+    skips: int
+    plays: int
+
+
+_SKIP_GROUPS = {
+    "track": ("t.rating_key", "t.title", "coalesce(t.original_title, ar.title)", "al.thumb"),
+    "album": ("al.rating_key", "al.title", "ar.title", "al.thumb"),
+    "artist": ("ar.rating_key", "ar.title", "NULL", "ar.thumb"),
+}
+
+
+async def skipped(
+    db: AsyncSession,
+    user_id: int,
+    server_id: int,
+    kind: Literal["artist", "album", "track"],
+    start: dt.datetime | None,
+    end: dt.datetime,
+    threshold: int,
+    limit: int = 10,
+) -> list[Skipped]:
+    """Most skipped songs / albums / artists: plays seen live where less than `threshold`
+    percent of the track was heard (from the session watcher)."""
+    key, name, artist, thumb = _SKIP_GROUPS[kind]
+    query = text(
+        f"""
+        SELECT {key} AS rating_key, min({name}) AS name, min({artist}) AS artist,
+               min({thumb}) AS thumb,
+               count(*) FILTER (
+                   WHERE ps.max_offset_ms * 100 < ps.duration_ms * :threshold
+               ) AS skips,
+               count(*) AS plays
+        FROM play_sessions ps
+        JOIN tracks t ON t.server_id = ps.server_id AND t.rating_key = ps.rating_key
+        LEFT JOIN albums al ON al.server_id = t.server_id AND al.rating_key = t.album_rating_key
+        LEFT JOIN artists ar ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
+        WHERE ps.user_id = :user_id AND ps.server_id = :server_id
+          AND ps.ended_at IS NOT NULL AND ps.duration_ms > 0
+          AND ps.started_at < :end
+          AND (CAST(:start AS timestamptz) IS NULL OR ps.started_at >= :start)
+          AND {key} IS NOT NULL
+        GROUP BY {key}
+        HAVING count(*) FILTER (WHERE ps.max_offset_ms * 100 < ps.duration_ms * :threshold) > 0
+        ORDER BY skips DESC, plays DESC, min({name})
+        LIMIT :limit
+        """  # noqa: S608 - constant SQL fragments
+    )
+    rows = await db.execute(
+        query,
+        {
+            "user_id": user_id,
+            "server_id": server_id,
+            "start": start,
+            "end": end,
+            "threshold": threshold,
+            "limit": limit,
+        },
+    )
+    return [Skipped(r.rating_key, r.name, r.artist, r.thumb, r.skips, r.plays) for r in rows.all()]
+
+
+async def has_sessions(db: AsyncSession, user_id: int) -> bool:
+    return bool(
+        await db.scalar(
+            text("SELECT EXISTS (SELECT 1 FROM play_sessions WHERE user_id = :u)"), {"u": user_id}
+        )
+    )

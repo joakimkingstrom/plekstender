@@ -68,6 +68,10 @@ def listen_out(listen: Listen) -> ListenOut:
         album_name=listen.album_name,
         track_name=listen.track_name,
         duplicate=listen.duplicate_of is not None,
+        client=listen.client,
+        address=listen.address,
+        network=listen.network if listen.network in ("lan", "wan") else None,
+        location=listen.location,
     )
 
 

@@ -390,7 +390,7 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - Export (job): every artist marked Done or Custom, their current Plex image (1000 px JPEG) plus `manifest.json` (`version`, entries with `mbid`, `artist_name`, `normalised_name`, `file`, `sha256`, `source`); downloadable for 7 days.
   - Import: upload the zip (up to 500 MB, read in place, never extracted; entries over 15 MB ignored) → matched by MBID, then by normalised name (exact; fuzzy matching wasn't needed so far) → preview with the pack's thumbnails, matched ones ticked → applied as a job (source "import", status Done, also saved to artist folders when on).
 
-### Phase 5 — Feedback round 1 (from `.todo.md`, 19 Nov 2026)
+### Phase 5 — Feedback round 1 (from `.todo.md`, 19 Nov 2026) ✓
 Requests after using Phases 1–4 on the real library. Notes in italics are how they'd be done, or what needs checking first.
 
 **General**
@@ -409,13 +409,15 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Top artists / albums / songs by time spent listening as well as by number of listens (long songs in some genres).
   *Listening time = listens × track length. Last.fm and ListenBrainz listens have no length, so take it from the matched library track (or the song's median Plex length), falling back to 3:35 and marking those as estimates. A "By listens / By time" switch on each top list.*
 - [x] Make the "When you listen" heatmap fill the whole width of its card.
-- [ ] Most skipped songs / albums / artists: plays where less than a set share of the track was heard (default 80%, adjustable per user).
+- [x] Most skipped songs / albums / artists: plays where less than a set share of the track was heard (default 80%, adjustable per user).
   *Check first: Plex's history only records finished plays (Plex counts a play at ~90%), so stopped plays need a session watcher that polls `/status/sessions` every ~10–15 s and records how far each track got. That watcher would also give "playing now" for ListenBrainz and the client details below. Until then, Plex's own `skipCount` (already in the mirror) can power a first version.*
 - [x] Clicking a chart opens the details behind it, e.g. the 2025 bar on an artist page lists those listens.
   *A drill-down panel (site-native popup) showing the listens for that period plus the item; for the overview charts the same panel filtered by day, week or month, or by weekday and hour for the heatmap.*
 - [x] Period buttons: hide the horizontal scrollbar, and put "All time" first.
-- [ ] Listens tab: show the client and IP / location for each listen.
+- [x] Listens tab: show the client and IP / location for each listen.
   *Check first: Plex history only has a `deviceID` (the client name comes from `/devices`), not an IP address. The IP and LAN/WAN come from live sessions (`Player.address`, `Session.location`), i.e. the session watcher above, so only plays captured live would have them. Imported scrobbles have neither. Decided (19 Nov): add a location using a local IP database, so IP addresses never leave the server: DB-IP's free "IP to City Lite" (`.mmdb`, CC BY 4.0, no account or key; credit "IP geolocation by DB-IP" where locations are shown), downloaded monthly by the worker into `DATA_DIR/geoip` and read with `maxminddb`. LAN addresses show as "Local network".*
+
+*Done (19 Nov): the session watcher (`history/sessions.py`) runs as a worker job every minute and polls `/status/sessions` every 10 s through the same connections as play capture (the owner's when available), mapping accounts the same way. Each track seen gets a `play_sessions` row (furthest position, length, player, IP, LAN/WAN, location); a row ends when the track is no longer listed. "Most skipped" on History counts ended plays heard below the user's threshold (Settings → Listening, 10–95%, default 80%). When play capture stores a Plex listen, the nearest session of the same track (±15 min) gives it its client, IP, network and location. Locations come from DB-IP's city database, checked daily and downloaded when missing or a month old (`DATA_DIR/geoip`), looked up locally; LAN addresses show as "Local network". Only plays seen live have this data.*
 
 **Rate**
 - [x] Skip a song in the Lists view.

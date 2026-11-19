@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import logging
 
@@ -28,11 +29,13 @@ from plekstender.db.models import (
     UserSectionSync,
     UserServer,
 )
+from plekstender.history.geo import update_database as update_geoip_database
 from plekstender.history.lastfm_import import run_lastfm_import
 from plekstender.history.listen_counts import refresh_listen_counts
 from plekstender.history.listenbrainz import submit_pending
 from plekstender.history.listenbrainz_import import run_listenbrainz_import
 from plekstender.history.plex_capture import capture_plays
+from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
@@ -242,6 +245,10 @@ async def capture_plex_plays(user_server_id: int) -> None:
         if us is None or not us.music_section_keys:
             return
         result = await capture_plays(db, http, get_settings(), us)
+        # Plays seen live get their player and place.
+        for user_id, since in result.earliest.items():
+            await attach_sessions(db, user_id, since)
+        await db.commit()
     if result.added:
         log.info("captured %d Plex plays via connection %s", result.added, user_server_id)
         await enqueue_listenbrainz(list(result.earliest))
@@ -321,6 +328,26 @@ async def enqueue_listenbrainz(user_ids: list[int] | None = None) -> int:
 async def retry_listenbrainz(timestamp: int) -> None:
     """Every 15 minutes: send anything a failed submission left behind."""
     await enqueue_listenbrainz()
+
+
+@app.periodic(cron="* * * * *", periodic_id="watch-sessions")
+@app.task(queue="sessions", queueing_lock="watch-sessions")
+async def watch_sessions(timestamp: int) -> None:
+    """Every minute: poll what's playing every 10 s (skips, players, locations)."""
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        connections = await capture_connections(db)
+        await watch(db, http, get_settings(), connections, POLLS_PER_RUN, asyncio.sleep)
+
+
+@app.periodic(cron="40 3 * * *", periodic_id="update-geoip")
+@app.task(queue="maintenance", queueing_lock="update-geoip")
+async def update_geoip(timestamp: int) -> None:
+    """Daily: fetch the IP location database when the copy is missing or a month old."""
+    async with httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http:
+        await update_geoip_database(http, get_settings())
 
 
 @app.periodic(cron="*/5 * * * *", periodic_id="capture-plays")

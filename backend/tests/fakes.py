@@ -139,6 +139,8 @@ class FakeLibrary:
             ]
         }
         self.uploaded: list[tuple[int, bytes]] = []
+        # /status/sessions: what's playing (each entry needs "User": {"id": ...}).
+        self.now_playing: list[dict[str, Any]] = []
         self.rate_fails = False
 
         for item in (
@@ -303,6 +305,36 @@ class FakeLibrary:
         posters = self.posters.get(key, [])
         return httpx.Response(200, json={"MediaContainer": {"Metadata": posters}})
 
+    def playing(
+        self, account: int, key: int, offset_ms: int, session: str, *, lan: bool, address: str
+    ) -> dict[str, Any]:
+        """A track playing now, as /status/sessions lists it."""
+        item = self.items[key]
+        return {
+            "type": "track",
+            "ratingKey": str(key),
+            "sessionKey": session,
+            "viewOffset": offset_ms,
+            "duration": item.get("duration"),
+            "title": item["title"],
+            "User": {"id": str(account), "title": f"account {account}"},
+            "Player": {
+                "title": "Joakim's iPhone" if account == 1 else "Living room",
+                "product": "Plexamp",
+                "local": lan,
+                "address": address if lan else "10.0.0.1",
+                **({} if lan else {"remotePublicAddress": address}),
+            },
+            "Session": {"id": session, "location": "lan" if lan else "wan"},
+        }
+
+    def sessions_list(self, request: httpx.Request) -> httpx.Response:
+        token = request.headers.get("X-Plex-Token", "")
+        if token not in SERVER_TOKENS:
+            return httpx.Response(401)
+        mine = [p for p in self.now_playing if token == "srv-owner" or p["User"]["id"] == "2"]
+        return httpx.Response(200, json={"MediaContainer": {"size": len(mine), "Metadata": mine}})
+
     def history_list(self, request: httpx.Request) -> httpx.Response:
         """The owner sees everyone's plays; a shared user (account 2) only their own."""
         token = request.headers.get("X-Plex-Token", "")
@@ -366,6 +398,7 @@ class FakePlex:
         router.route(url__regex=rf"{re.escape(SERVER_URI)}/library/metadata/\d+/posters").mock(
             side_effect=self.library.poster_request
         )
+        router.get(f"{SERVER_URI}/status/sessions").mock(side_effect=self.library.sessions_list)
         router.get(f"{SERVER_URI}/status/sessions/history/all").mock(
             side_effect=self.library.history_list
         )

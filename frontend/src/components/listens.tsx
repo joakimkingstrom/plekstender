@@ -18,6 +18,7 @@ function groupByDay(items: Schemas['ListenOut'][]) {
 /** Listens grouped by day, newest first; optionally with a delete button per listen. */
 export function ListenList({ items, deletable = false }: { items: Schemas['ListenOut'][]; deletable?: boolean }) {
   const remove = useDeleteListen()
+  const located = items.some((i) => i.location && i.network === 'wan')
   return (
     <div className="space-y-6">
       {remove.isError && <Notice tone="error">{errorMessage(remove.error)}</Notice>}
@@ -36,6 +37,20 @@ export function ListenList({ items, deletable = false }: { items: Schemas['Liste
                     {listen.artist_name}
                     {listen.album_name && ` · ${listen.album_name}`}
                   </p>
+                  {(listen.client || listen.location) && (
+                    <p className="truncate text-[11px] text-muted/80">
+                      {listen.client}
+                      {listen.client && listen.location && ' · '}
+                      {listen.location &&
+                        (listen.address ? (
+                          <Tooltip content={`IP address ${listen.address}`}>
+                            <span>{listen.location}</span>
+                          </Tooltip>
+                        ) : (
+                          listen.location
+                        ))}
+                    </p>
+                  )}
                 </div>
                 {listen.duplicate && <Badge>Duplicate</Badge>}
                 <Badge>{SOURCES[listen.source]}</Badge>
@@ -57,6 +72,15 @@ export function ListenList({ items, deletable = false }: { items: Schemas['Liste
           </ol>
         </section>
       ))}
+      {located && (
+        <p className="text-xs text-muted">
+          Locations:{' '}
+          <a href="https://db-ip.com" target="_blank" rel="noreferrer" className="underline">
+            IP geolocation by DB-IP
+          </a>
+          , looked up on this server.
+        </p>
+      )}
     </div>
   )
 }

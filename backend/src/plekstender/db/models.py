@@ -397,6 +397,11 @@ class Listen(Base):
     )
     rating_key: Mapped[int | None] = mapped_column(BigInteger)
     source_ref: Mapped[str | None] = mapped_column(Text)
+    # Plex plays seen live by the session watcher: the player and where it played from.
+    client: Mapped[str | None] = mapped_column(Text)
+    address: Mapped[str | None] = mapped_column(String(64))
+    network: Mapped[str | None] = mapped_column(String(8))  # lan | wan
+    location: Mapped[str | None] = mapped_column(Text)  # "Oslo, Norway" (from the IP database)
     # Same play recorded by another source (e.g. a Plexamp play also scrobbled to Last.fm).
     duplicate_of: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("listens.id", ondelete="SET NULL")
@@ -511,3 +516,31 @@ class ArtworkJob(Base):
     started_at: Mapped[dt.datetime | None]
     finished_at: Mapped[dt.datetime | None]
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class PlaySession(Base):
+    """A track seen playing in Plex (polled from /status/sessions), to tell finished plays
+    from skips and to know the player and where it played from."""
+
+    __tablename__ = "play_sessions"
+    __table_args__ = (
+        UniqueConstraint("server_id", "session_key", "rating_key", "started_at"),
+        Index("ix_play_sessions_user_track", "user_id", "rating_key", "last_seen_at"),
+        Index("ix_play_sessions_open", "server_id", "ended_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    session_key: Mapped[str] = mapped_column(String(64))
+    rating_key: Mapped[int] = mapped_column(BigInteger)
+    started_at: Mapped[dt.datetime]
+    last_seen_at: Mapped[dt.datetime]
+    ended_at: Mapped[dt.datetime | None]
+    # Furthest position reached, and the track's length (ms).
+    max_offset_ms: Mapped[int] = mapped_column(default=0)
+    duration_ms: Mapped[int | None]
+    client: Mapped[str | None] = mapped_column(Text)
+    address: Mapped[str | None] = mapped_column(String(64))
+    network: Mapped[str | None] = mapped_column(String(8))
+    location: Mapped[str | None] = mapped_column(Text)

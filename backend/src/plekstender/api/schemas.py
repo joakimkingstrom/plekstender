@@ -18,6 +18,12 @@ class Preferences(BaseModel):
         pattern=r"^#[0-9a-f]{6}$",
         description="Accent colour; None = the brand amber.",
     )
+    skip_threshold: int = Field(
+        default=80,
+        ge=10,
+        le=95,
+        description="A play counts as skipped when less than this % of the track was heard.",
+    )
 
 
 class UserOut(BaseModel):
@@ -310,6 +316,10 @@ class ListenOut(BaseModel):
     album_name: str | None
     track_name: str
     duplicate: bool = Field(description="Also recorded by another source; not counted twice.")
+    client: str | None = Field(default=None, description="Player, for plays seen live.")
+    address: str | None = None
+    network: Literal["lan", "wan"] | None = None
+    location: str | None = Field(default=None, description="City, country (IP database).")
 
 
 class ListenPage(BaseModel):
@@ -614,3 +624,18 @@ class ImportItemIn(BaseModel):
 
 class ImportApplyIn(BaseModel):
     items: list[ImportItemIn] = Field(min_length=1, max_length=20000)
+
+
+class SkippedItemOut(BaseModel):
+    rating_key: int
+    name: str
+    artist: str | None
+    thumb: str | None
+    skips: int
+    plays: int = Field(description="Plays seen live by the session watcher.")
+
+
+class SkipsOut(BaseModel):
+    threshold: int = Field(description="Percent heard below which a play counts as skipped.")
+    watching: bool = Field(description="Whether any plays have been seen live yet.")
+    items: list[SkippedItemOut]

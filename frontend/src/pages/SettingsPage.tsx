@@ -324,7 +324,8 @@ export function AppearancePage() {
   const save = useSetPreferences()
   if (me.isPending) return <Spinner />
   const current = me.data?.preferences?.accent ?? BRAND
-  const set = (hex: string) => save.mutate({ ...me.data?.preferences, accent: hex === BRAND ? null : hex })
+  const set = (hex: string) =>
+    save.mutate({ skip_threshold: 80, ...me.data?.preferences, accent: hex === BRAND ? null : hex })
   const isPreset = PRESETS.some(([, hex]) => hex === current)
   return (
     <div className="grid gap-4 lg:grid-cols-2">

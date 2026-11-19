@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import { useActiveServer } from '../api/library'
-import { localTimeZone, useStatsActivity, useStatsOverview, type TopBy } from '../api/stats'
+import { localTimeZone, useSkips, useStatsActivity, useStatsOverview, type SkipKind, type TopBy } from '../api/stats'
 import type { ListenFilter } from '../api/listens'
 import { ListensDialog } from '../components/listens'
 import { ColumnChart, Heatmap, type ColumnPoint } from '../components/charts'
@@ -278,6 +278,8 @@ export function StatsPage() {
         <TopList title="Top songs" items={o.top_tracks} kind="track" serverId={serverId} compared={compared} by={by} />
       </div>
 
+      {serverId !== null && <MostSkipped serverId={serverId} range={range} />}
+
       <Card title="When you listen">
         {activity.data ? (
           <Heatmap
@@ -304,5 +306,74 @@ export function StatsPage() {
       </Card>
       {drill && <ListensDialog title={drill.title} filter={drill.filter} onClose={() => setDrill(null)} />}
     </div>
+  )
+}
+
+const SKIP_KINDS: [SkipKind, string][] = [
+  ['track', 'Songs'],
+  ['album', 'Albums'],
+  ['artist', 'Artists'],
+]
+
+function MostSkipped({ serverId, range }: { serverId: number; range: string }) {
+  const [kind, setKind] = useState<SkipKind>('track')
+  const skips = useSkips(serverId, range, kind)
+  const data = skips.data
+  return (
+    <Card
+      title="Most skipped"
+      action={
+        <div className="inline-flex rounded-lg bg-surface-2 p-0.5 text-xs" role="group" aria-label="Skipped">
+          {SKIP_KINDS.map(([key, text]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={kind === key}
+              onClick={() => setKind(key)}
+              className={`rounded-md px-2.5 py-1 ${kind === key ? 'bg-surface font-medium shadow-sm' : 'text-muted hover:text-text'}`}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {skips.isPending ? (
+        <Spinner small />
+      ) : skips.isError ? (
+        <Notice tone="error">{errorMessage(skips.error)}</Notice>
+      ) : !data!.watching ? (
+        <p className="text-sm text-muted">
+          Skips are recorded from now on: Plekstender checks what's playing in Plex every 10 seconds and notes how far
+          each song got.
+        </p>
+      ) : data!.items.length === 0 ? (
+        <p className="text-sm text-muted">Nothing skipped in this period.</p>
+      ) : (
+        <ol className="space-y-2">
+          {data!.items.map((item, i) => (
+            <li key={item.rating_key} className="flex items-center gap-3">
+              <span className="w-5 shrink-0 text-right text-xs text-muted tabular-nums">{i + 1}</span>
+              <Artwork serverId={serverId} path={item.thumb} title={item.name} size={96} round={kind === 'artist'} className="size-9 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{item.name}</p>
+                {item.artist && <p className="truncate text-xs text-muted">{item.artist}</p>}
+              </div>
+              <span className="shrink-0 text-right text-xs text-muted tabular-nums">
+                {formatCount(item.skips)} of {formatCount(item.plays)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {data && (
+        <p className="mt-3 text-xs text-muted">
+          A play counts as skipped when less than {data.threshold}% of the song was heard.{' '}
+          <Link to="/settings/listening" className="underline">
+            Change
+          </Link>
+        </p>
+      )}
+    </Card>
   )
 }

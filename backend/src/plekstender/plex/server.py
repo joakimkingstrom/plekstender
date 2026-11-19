@@ -174,6 +174,12 @@ class PlexServerClient:
         items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Metadata", [])
         return items
 
+    async def sessions(self) -> list[dict[str, Any]]:
+        """What's playing now (all accounts on the owner's token, else the user's own)."""
+        data = await self._get("/status/sessions")
+        items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Metadata", [])
+        return items
+
     async def posters(self, rating_key: int) -> list[dict[str, Any]]:
         """The posters Plex offers for an item (agent images and uploads)."""
         data = await self._get(f"/library/metadata/{rating_key}/posters")

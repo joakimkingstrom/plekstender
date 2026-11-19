@@ -509,6 +509,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stats/skips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Skips
+         * @description Most skipped songs, albums or artists (needs the session watcher's live data).
+         */
+        get: operations["skips_api_stats_skips_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/rate/queue": {
         parameters: {
             query?: never;
@@ -1775,6 +1795,20 @@ export interface components {
              * @description Also recorded by another source; not counted twice.
              */
             duplicate: boolean;
+            /**
+             * Client
+             * @description Player, for plays seen live.
+             */
+            client?: string | null;
+            /** Address */
+            address?: string | null;
+            /** Network */
+            network?: ("lan" | "wan") | null;
+            /**
+             * Location
+             * @description City, country (IP database).
+             */
+            location?: string | null;
         };
         /** ListenPage */
         ListenPage: {
@@ -1859,6 +1893,12 @@ export interface components {
              * @description Accent colour; None = the brand amber.
              */
             accent?: string | null;
+            /**
+             * Skip Threshold
+             * @description A play counts as skipped when less than this % of the track was heard.
+             * @default 80
+             */
+            skip_threshold: number;
         };
         /** ProbeOut */
         ProbeOut: {
@@ -2032,6 +2072,39 @@ export interface components {
             name: string;
             /** Rating Key */
             rating_key: number | null;
+        };
+        /** SkippedItemOut */
+        SkippedItemOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Name */
+            name: string;
+            /** Artist */
+            artist: string | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Skips */
+            skips: number;
+            /**
+             * Plays
+             * @description Plays seen live by the session watcher.
+             */
+            plays: number;
+        };
+        /** SkipsOut */
+        SkipsOut: {
+            /**
+             * Threshold
+             * @description Percent heard below which a play counts as skipped.
+             */
+            threshold: number;
+            /**
+             * Watching
+             * @description Whether any plays have been seen live yet.
+             */
+            watching: boolean;
+            /** Items */
+            items: components["schemas"]["SkippedItemOut"][];
         };
         /** SongListens */
         SongListens: {
@@ -3362,6 +3435,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatsActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skips_api_stats_skips_get: {
+        parameters: {
+            query: {
+                server_id: number;
+                /** @description 7d, 30d, 365d, y2024, all */
+                range?: string;
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+                kind?: "artist" | "album" | "track";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkipsOut"];
                 };
             };
             /** @description Validation Error */
