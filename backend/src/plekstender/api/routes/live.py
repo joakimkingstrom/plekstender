@@ -83,6 +83,7 @@ Source = Literal["jambase", "ticketmaster", "datathistle"]
 # Opening the Live tab looks Data Thistle up again when its listings are older than this
 # (they may be kept a day).
 DATATHISTLE_AGE = dt.timedelta(hours=20)
+DATATHISTLE_RETRY = dt.timedelta(minutes=15)
 
 
 async def _sources(db: DbDep, settings: Settings) -> list[Source]:
@@ -133,13 +134,12 @@ async def get_live_settings(db: DbDep, settings: SettingsDep, user: UserDep) -> 
     """The Live tab's settings and status. Opening the tab looks Data Thistle up again
     when its listings are getting old (they may only be kept a day)."""
     live = await db.get(LiveSettings, user.id)
+    # Again after a day; after a failed lookup, after a short while.
+    wait = DATATHISTLE_RETRY if live is not None and live.datathistle_error else DATATHISTLE_AGE
     if (
         live is not None
         and live.latitude is not None
-        and (
-            live.datathistle_at is None
-            or live.datathistle_at < dt.datetime.now(dt.UTC) - DATATHISTLE_AGE
-        )
+        and (live.datathistle_at is None or live.datathistle_at < dt.datetime.now(dt.UTC) - wait)
         and await get_datathistle_tokens(db, settings)
     ):
         await enqueue_live_refresh(db, user.id, datathistle="only")

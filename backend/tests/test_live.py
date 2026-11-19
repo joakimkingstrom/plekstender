@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import replace
 from typing import Any, ClassVar
 
@@ -992,6 +993,8 @@ async def test_data_thistle(app: FastAPI, plex: FakePlex) -> None:
     assert result.complete, result.error
     params = fake.requests[0].url.params
     assert (params["tags"], params["limit"], params["distance"]) == ("music", "20", "62.1")  # miles
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T00:00:00\+00:00", params["min_date"])
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T23:59:59\+00:00", params["max_date"])
     shows = (await owner.get("/api/live/shows")).json()["shows"]
     names = {s["name"]: s for s in shows}
     # Matched by name (the quiz isn't an artist); the far place left out.
@@ -1003,6 +1006,23 @@ async def test_data_thistle(app: FastAPI, plex: FakePlex) -> None:
     assert radiohead["tickets"][0]["url"] == "https://www.datathistle.com/details/x"
     assert names["Portishead: Dummy Live"]["start_time"] is None
     assert (await owner.get("/api/live/settings")).json()["refresh_status"] == "done"  # untouched
+
+    # A failed lookup is tried again when Live is opened a little later (not a day later).
+    async with get_sessionmaker()() as db:
+        await db.execute(text("DELETE FROM procrastinate_jobs"))
+        await db.execute(
+            text(
+                "UPDATE live_settings SET datathistle_error = 'Data Thistle answered 400',"
+                " datathistle_at = now() - interval '20 minutes'"
+            )
+        )
+        await db.commit()
+    await owner.get("/api/live/settings")
+    async with get_sessionmaker()() as db:
+        jobs = (await db.execute(text("SELECT args FROM procrastinate_jobs"))).scalars().all()
+        assert jobs == [{"user_id": user_id, "datathistle": "only"}]
+        await db.execute(text("DELETE FROM procrastinate_jobs"))
+        await db.commit()
 
     # Kept a day at most, starred or not.
     await owner.put(

@@ -155,8 +155,10 @@ async def events(
             "lat": f"{latitude:.5f}",
             "lon": f"{longitude:.5f}",
             "distance": round(radius_km / MILES, 1),
-            "min_date": f"{start.isoformat()} 00:00:00+00:00",
-            "max_date": f"{end.isoformat()} 23:59:59+00:00",
+            # Strict ISO-8601, like its own answers: the spec's "2025-03-01 12:30:00+00:00"
+            # (with a space) is refused as "Your timestamp is invalid".
+            "min_date": f"{start.isoformat()}T00:00:00+00:00",
+            "max_date": f"{end.isoformat()}T23:59:59+00:00",
             "limit": PAGE_SIZE,
             "page": page,
         },

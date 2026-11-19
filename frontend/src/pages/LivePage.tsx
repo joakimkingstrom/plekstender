@@ -24,11 +24,11 @@ import {
 } from '../api/live'
 import { Slider } from '../components/controls'
 import { Select } from '../components/Select'
+import { DataThistleLogo } from '../components/DataThistleLogo'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatRelative } from '../format'
 import { describePeriod, followCount, formatPrice } from '../live'
 import { countryName } from '../places'
-import dataThistleLogo from '../assets/datathistle.svg'
 
 const DISTANCES = [25, 50, 100, 200, 500, 1000]
 type Range = 'all' | '30' | '90' | 'starred'
@@ -486,7 +486,7 @@ function Shows({ settings }: { settings: LiveSettings }) {
         ))
       )}
 
-      <p className="flex flex-wrap gap-x-3 text-xs text-muted">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">
         {settings.sources.includes('jambase') && (
           <a href="https://www.jambase.com" target="_blank" rel="nofollow noopener noreferrer" className="underline">
             Powered by JamBase
@@ -498,16 +498,16 @@ function Shows({ settings }: { settings: LiveSettings }) {
           </a>
         )}
         {settings.sources.includes('datathistle') && (
-          <span className="flex items-center gap-2">
-            <a href="https://www.datathistle.com/" target="_blank" rel="noopener noreferrer" title="Listings from Data Thistle">
-              <img src={dataThistleLogo} alt="Data Thistle" className="h-7 rounded bg-[#1d1d1b] px-1.5 py-0.5" />
-            </a>
+          <span className="ml-auto flex items-center gap-3">
             <a href="https://www.datathistle.com/update/event-listing/" target="_blank" rel="noopener noreferrer" className="underline">
               Add or update an event
             </a>
+            <a href="https://www.datathistle.com/" target="_blank" rel="noopener noreferrer" title="Listings from Data Thistle">
+              <DataThistleLogo className="h-7 w-auto text-text" />
+            </a>
           </span>
         )}
-      </p>
+      </div>
     </div>
   )
 }
