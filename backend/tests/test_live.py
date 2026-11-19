@@ -141,6 +141,7 @@ class FakeJamBase:
         self.requests: list[httpx.Request] = []
         self.remaining = 1000
         self.refuse_ids = False  # answer every artistId search with an undocumented 400
+        self.extra: list[dict[str, Any]] = []  # more Radiohead shows
         plex.router.get(f"{API}/quota").mock(side_effect=self._quota)
         plex.router.get(f"{API}/events").mock(side_effect=self._events)
 
@@ -181,7 +182,7 @@ class FakeJamBase:
                     for i in unknown
                 ]
                 return httpx.Response(400, json={"success": False, "errors": errors})
-            found = [CONCERT, FESTIVAL]
+            found = [CONCERT, FESTIVAL, *self.extra]
         elif "Portishead" in (params.get("artistName") or "").split("|"):
             found = [FESTIVAL, TRIBUTE]
         return httpx.Response(200, json={
@@ -1111,3 +1112,73 @@ def test_ticket_prices() -> None:
     free, paid = datathistle.parse(listing, dt.date(2027, 1, 1), dt.date(2027, 1, 31), 50)
     assert (free.price_min, free.price_max) == (0.0, 0.0)
     assert (paid.price_min, paid.price_max, paid.currency) == (8.5, 12.0, "GBP")
+
+
+@pytest.mark.db
+async def test_new_shows(app: FastAPI, plex: FakePlex) -> None:
+    """Shows first found in the past week are "new"; a first lookup isn't; Data Thistle's
+    listings are recognised by fingerprint after they've expired and come back."""
+    jb = FakeJamBase(plex)
+    fake_dt = FakeDataThistle(plex)
+    owner, user_id = await owner_listening(app, plex)
+    await owner.put("/api/admin/jambase", json={"api_key": KEY}, headers=CSRF)
+    await owner.put("/api/live/settings", json={**STOCKHOLM, "top_percent": 100}, headers=CSRF)
+    assert (await refresh(user_id, datathistle="no")).complete
+    first = (await owner.get("/api/live/shows")).json()["shows"]
+    assert first and not any(s["is_new"] for s in first)
+    assert all(s["first_seen_at"] for s in first)
+
+    # Announced later: new (and the "new" filter lists just that).
+    jb.extra = [
+        {
+            **CONCERT,
+            "identifier": "jambase:999",
+            "name": "Radiohead, second night",
+            "startDate": "2027-03-05T19:30:00",
+        }
+    ]
+    assert (await refresh(user_id, datathistle="no")).complete
+    shows = (await owner.get("/api/live/shows")).json()["shows"]
+    assert [s["name"] for s in shows if s["is_new"]] == ["Radiohead, second night"]
+    only_new = (await owner.get("/api/live/shows", params={"new": True})).json()["shows"]
+    assert [s["name"] for s in only_new] == ["Radiohead, second night"]
+
+    # Data Thistle: its first lookup isn't new; a listing that expired and comes back
+    # isn't either (only its fingerprint was kept); a listing never seen before is.
+    await owner.put(
+        "/api/admin/datathistle",
+        json={"access_token": fake_dt.access, "refresh_token": fake_dt.refresh},
+        headers=CSRF,
+    )
+    assert (await refresh(user_id, datathistle="only")).complete
+    assert not any(
+        s["is_new"]
+        for s in (await owner.get("/api/live/shows")).json()["shows"]
+        if s["source"] == "datathistle"
+    )
+    async with get_sessionmaker()() as db:
+        await db.execute(
+            text(
+                "UPDATE live_shows SET fetched_at = now() - interval '25 hours'"
+                " WHERE source = 'datathistle'"
+            )
+        )
+        await db.commit()
+        stored = await db.scalar(
+            text("SELECT count(*) FROM live_seen WHERE source = 'datathistle'")
+        )
+        assert stored == 2
+    soon = (dt.datetime.now(dt.UTC) + dt.timedelta(days=12)).date().isoformat()
+    fake_dt.listings.append({
+        "event_id": "ev-new", "name": "Portishead", "schedules": [{
+            "place_id": "pl-new", "place": {"name": "Cirkus", "town": "Stockholm"},
+            "performances": [{"ts": f"{soon}T20:00:00+01:00"}],
+        }],
+    })  # fmt: skip
+    assert (await refresh(user_id, datathistle="only")).complete
+    dt_shows = {
+        s["venue"]: s["is_new"]
+        for s in (await owner.get("/api/live/shows")).json()["shows"]
+        if s["source"] == "datathistle"
+    }
+    assert dt_shows == {"Avicii Arena": False, "Annexet": False, "Cirkus": True}

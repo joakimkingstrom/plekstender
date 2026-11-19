@@ -1392,6 +1392,10 @@ class LiveShowOut(BaseModel):
     sources: list[str]
     starred: bool
     got_ticket: bool = Field(description="The user has a ticket (starred shows).")
+    first_seen_at: dt.datetime | None = Field(
+        default=None, description="When Plekstender first found it (any source)."
+    )
+    is_new: bool = Field(default=False, description="First found in the past week.")
     tickets: list[LiveTicketOut] = Field(description="Ticket links, the first source's first.")
     name: str
     festival: bool

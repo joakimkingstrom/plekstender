@@ -624,12 +624,13 @@ async def enqueue_live_refresh(
 
 async def schedule_live_refreshes(now: dt.datetime | None = None) -> list[int]:
     from plekstender.live.refresh import due_users as due_live_users  # (import cycle)
-    from plekstender.live.refresh import expire_datathistle
+    from plekstender.live.refresh import expire_datathistle, forget_old_sightings
 
     now = now or dt.datetime.now(dt.UTC)
     settings = get_settings()
     async with get_sessionmaker()() as db:
         await expire_datathistle(db, now)
+        await forget_old_sightings(db, now)
         await db.commit()
         users = await due_live_users(db, settings, now, LIVE_MIN_AGE)
         for user_id in users:

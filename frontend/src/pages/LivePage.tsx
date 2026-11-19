@@ -31,11 +31,12 @@ import { describePeriod, followCount, formatPrice } from '../live'
 import { countryName } from '../places'
 
 const DISTANCES = [25, 50, 100, 200, 500, 1000]
-type Range = 'all' | '30' | '90' | 'starred'
+type Range = 'all' | '30' | '90' | 'new' | 'starred'
 const RANGES: [Range, string][] = [
   ['all', 'Any time'],
   ['30', 'Next 30 days'],
   ['90', 'Next 3 months'],
+  ['new', 'New'],
   ['starred', '★ Starred'],
 ]
 const SOURCE_NAMES: Record<string, string> = {
@@ -364,7 +365,7 @@ function Shows({ settings }: { settings: LiveSettings }) {
   const [to, setTo] = useState<string | undefined>(undefined)
   const chooseRange = (key: Range) => {
     setRange(key)
-    if (key === 'all' || key === 'starred') return setTo(undefined)
+    if (key === 'all' || key === 'starred' || key === 'new') return setTo(undefined)
     const d = new Date()
     d.setDate(d.getDate() + Number(key))
     setTo(isoDate(d))
@@ -381,7 +382,10 @@ function Shows({ settings }: { settings: LiveSettings }) {
     const stop = setTimeout(() => setWatching(false), 60_000)
     return () => clearTimeout(stop)
   }, [])
-  const shows = useLiveShows({ artist, venue, to, starred: range === 'starred' }, busy || (dtPending && watching))
+  const shows = useLiveShows(
+    { artist, venue, to, starred: range === 'starred', new: range === 'new' },
+    busy || (dtPending && watching),
+  )
   const { active } = useActiveServer()
   const artistId = useId()
   const venueId = useId()
@@ -467,6 +471,8 @@ function Shows({ settings }: { settings: LiveSettings }) {
             <p className="text-sm text-muted">
               {range === 'starred'
                 ? 'No starred shows yet: star a show to keep it and put it in your calendar.'
+                : range === 'new'
+                ? 'Nothing new this past week: shows appear here for a week after they’re first found.'
                 : artist || venue || range !== 'all'
                 ? 'No shows match these filters.'
                 : `No upcoming shows within ${settings.radius_km} km by your top ${settings.followed_artists} artists. A larger distance or more artists may find some.`}
@@ -557,6 +563,14 @@ function ShowRow({ show, serverId }: { show: LiveShow; serverId: number | null }
           ))}
           {status && <span className="ml-2 rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">{status}</span>}
           {gotTicket && <span className="ml-2 rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok">🎟 Got a ticket</span>}
+          {show.is_new && (
+            <span
+              className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent"
+              title={show.first_seen_at ? `First found ${formatRelative(show.first_seen_at)}` : undefined}
+            >
+              New
+            </span>
+          )}
         </p>
         {(show.festival || others.length > 0) && (
           <p className="truncate text-muted">

@@ -896,3 +896,17 @@ class LiveFeed(Base):
     fetched_at: Mapped[dt.datetime | None]
     error: Mapped[str | None] = mapped_column(Text)
     show_count: Mapped[int | None]
+
+
+class LiveSeen(Base):
+    """When each show was first seen, to list new ones. Only a fingerprint of the source's
+    ID is kept (SHA-256 of "source:id"), not the listing: Data Thistle's listings may only
+    be kept a day, but a listing fetched again is still recognised."""
+
+    __tablename__ = "live_seen"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "key"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    key: Mapped[str] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(16))
+    first_seen_at: Mapped[dt.datetime]

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import difflib
+import hashlib
 import logging
 import math
 import re
@@ -46,6 +47,7 @@ from plekstender.db.models import (
     ArtistArtwork,
     Listen,
     LiveFeed,
+    LiveSeen,
     LiveSettings,
     LiveShow,
     UserServer,
@@ -74,6 +76,10 @@ TM_MAX_REQUESTS = 80
 DATATHISTLE_DAYS = 28
 DATATHISTLE_MAX_PAGES = 10
 DATATHISTLE_KEEP = dt.timedelta(hours=24)
+# "New": first seen within this long. Fingerprints of shows are kept a year and a bit.
+NEW_FOR = dt.timedelta(days=7)
+SEEN_LONG_AGO = dt.timedelta(days=30)
+SEEN_KEEP = dt.timedelta(days=400)
 
 
 @dataclass
@@ -274,6 +280,12 @@ async def refresh_user(
         live = await db.get(LiveSettings, user_id)
         if live is None or live.latitude is None or live.longitude is None:
             return Result(0, 0, 0, complete=False, error="No place is set.")
+        # The first lookup after setting up or changing the settings only notes what's
+        # there: those shows aren't "new" (see `remember`).
+        baseline = live.refreshed_at is None and not only_dt
+        seen_sources = set(
+            await db.scalars(select(LiveSeen.source).where(LiveSeen.user_id == user_id).distinct())
+        )
         if not only_dt:
             live.refresh_status, live.refresh_error = "running", None
             await db.commit()
@@ -325,6 +337,9 @@ async def refresh_user(
         for source, run in runs.items():
             if run.found:
                 await _store(db, user_id, source, run.found, ctx, now())
+                # A source's first lookup only notes what's there, too.
+                quiet = baseline or source not in seen_sources
+                await remember(db, user_id, source, list(run.found), now(), quiet=quiet)
             if not run.error:
                 # Shows not seen in a complete run are gone (cancelled, moved, out of range).
                 await db.execute(
@@ -365,6 +380,46 @@ async def refresh_user(
         complete,
         " ".join(e for e in errors if e) or None,
     )
+
+
+def seen_key(source: str, source_id: str) -> str:
+    """A show's fingerprint: SHA-256 of "source:id" (nothing of the listing itself)."""
+    return hashlib.sha256(f"{source}:{source_id}".encode()).hexdigest()
+
+
+async def remember(
+    db: AsyncSession,
+    user_id: int,
+    source: str,
+    source_ids: list[str],
+    now: dt.datetime,
+    *,
+    quiet: bool = False,
+) -> None:
+    """Note when shows were first seen (shows seen before keep their date). `quiet` notes
+    them as long known, so a first lookup doesn't make everything "new"."""
+    if not source_ids:
+        return
+    when = now - SEEN_LONG_AGO if quiet else now
+    await db.execute(
+        insert(LiveSeen)
+        .values(
+            [
+                {
+                    "user_id": user_id,
+                    "key": seen_key(source, sid),
+                    "source": source,
+                    "first_seen_at": when,
+                }
+                for sid in dict.fromkeys(source_ids)
+            ]
+        )
+        .on_conflict_do_nothing(index_elements=[LiveSeen.user_id, LiveSeen.key])
+    )
+
+
+async def forget_old_sightings(db: AsyncSession, now: dt.datetime) -> None:
+    await db.execute(delete(LiveSeen).where(LiveSeen.first_seen_at < now - SEEN_KEEP))
 
 
 async def expire_datathistle(

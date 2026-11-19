@@ -53,6 +53,8 @@ const concert = {
   region: null,
   country: 'SE',
   distance_km: 4.1,
+  first_seen_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+  is_new: true,
   price_min: 650,
   price_max: 1295,
   currency: 'SEK',
@@ -69,6 +71,7 @@ const festival = {
   ...concert,
   id: 2,
   ids: [2],
+  is_new: false,
   sources: ['jambase'],
   starred: true,
   got_ticket: false,
@@ -131,6 +134,7 @@ beforeEach(() => {
         const artist = url.searchParams.get('artist')
         const shows = [concert, festival].filter((s) => !artist || s.artists.some((a) => a.name === artist))
         const venue = url.searchParams.get('venue')
+        if (url.searchParams.get('new')) shows.splice(0, shows.length, ...shows.filter((s) => s.is_new))
         return json({
           shows: shows.filter((s) => !venue || s.venue === venue),
           artists: [{ name: 'Radiohead', shows: 1 }, { name: 'Portishead', shows: 1 }],
@@ -214,6 +218,7 @@ describe('LivePage', () => {
     expect(within(row).getByText('with Support Act')).toBeInTheDocument()
     expect(within(row).getByText(/Avicii Arena · Stockholm · .* · 19:30/)).toBeInTheDocument()
     expect(within(row).getByText('4 km away')).toBeInTheDocument()
+    expect(within(row).getByText('New')).toHaveAttribute('title', expect.stringMatching(/^First found/))
     expect(within(row).getByText(formatPrice(650, 1295, 'SEK')!.replace(/\s/g, ' '))).toBeInTheDocument()
     const tickets = within(row).getByRole('link', { name: 'Tickets' })
     expect(tickets).toHaveAttribute('href', 'https://www.ticketmaster.se/event/radiohead')
@@ -290,6 +295,16 @@ describe('LivePage', () => {
       'https://www.datathistle.com/update/event-listing/',
     )
     expect(screen.getByText(/Data Thistle: Today’s Data Thistle requests are used up/)).toBeInTheDocument()
+  })
+
+  it('lists only new shows with the New filter', async () => {
+    settings = placed
+    renderPage()
+    await screen.findByRole('link', { name: 'Radiohead' })
+    fireEvent.click(screen.getByRole('button', { name: 'New' }))
+    await vi.waitFor(() => expect(requestsTo('/api/live/shows').at(-1)!.url).toContain('new=true'))
+    await vi.waitFor(() => expect(screen.queryByText('Way Out West 2027')).not.toBeInTheDocument())
+    expect(screen.getByRole('link', { name: 'Radiohead' })).toBeInTheDocument()
   })
 
   it('says when JamBase has no key yet', async () => {

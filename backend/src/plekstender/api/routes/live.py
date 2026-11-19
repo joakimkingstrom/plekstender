@@ -42,14 +42,16 @@ from plekstender.db.instance import (
     get_jambase_api_key,
     get_ticketmaster_api_key,
 )
-from plekstender.db.models import LiveFeed, LiveSettings, LiveShow, User
+from plekstender.db.models import LiveFeed, LiveSeen, LiveSettings, LiveShow, User
 from plekstender.live import feeds, geocode, ical
 from plekstender.live.merge import merge
 from plekstender.live.refresh import (
     DATATHISTLE_KEEP,
+    NEW_FOR,
     follow_count,
     listened_artists,
     period_start,
+    seen_key,
 )
 from plekstender.worker import LIVE_MANUAL_GAP, enqueue_live_refresh
 
@@ -238,9 +240,11 @@ async def shows(
     date_from: Annotated[dt.date | None, Query(alias="from")] = None,
     date_to: Annotated[dt.date | None, Query(alias="to")] = None,
     starred: bool = False,
+    new: bool = False,
 ) -> LiveShowsOut:
     """Upcoming shows, soonest first, each once however many sources found it; `artist`
-    narrows to one of the user's artists, `venue` to one venue, `starred` to starred shows.
+    narrows to one of the user's artists, `venue` to one venue, `starred` to starred shows,
+    `new` to shows first found in the past week.
     The artist and venue lists (for the filters) count the shows the other filters allow."""
     today = dt.datetime.now(dt.UTC).date() - dt.timedelta(days=1)  # time zones: keep tonight
     start = max(date_from or today, today)
@@ -255,9 +259,15 @@ async def shows(
     )
     if date_to:
         query = query.where(LiveShow.start_date <= date_to)
-    groups = [_show(group) for group in merge(list(await db.scalars(query)))]
+    sightings = await db.execute(
+        select(LiveSeen.key, LiveSeen.first_seen_at).where(LiveSeen.user_id == user.id)
+    )
+    seen = {key: when for key, when in sightings.all()}
+    groups = [_show(group, seen) for group in merge(list(await db.scalars(query)))]
     if starred:
         groups = [g for g in groups if g.starred]
+    if new:
+        groups = [g for g in groups if g.is_new]
     by_artist = (
         [g for g in groups if any(a.name == artist for a in g.artists)] if artist else groups
     )
@@ -286,9 +296,12 @@ def _not_expired() -> ColumnElement[bool]:
     )
 
 
-def _show(group: list[LiveShow]) -> LiveShowOut:
-    """One show from its sources' rows (the first is preferred for the details)."""
+def _show(group: list[LiveShow], seen: dict[str, dt.datetime] | None = None) -> LiveShowOut:
+    """One show from its sources' rows (the first is preferred for the details); `seen`
+    gives when each was first found (the earliest counts)."""
     row = group[0]
+    sightings = [s for r in group if seen and (s := seen.get(seen_key(r.source, r.source_id)))]
+    first_seen = min(sightings) if sightings else None
     artists: dict[str, LiveArtistOut] = {}
     for r in group:
         for a in r.artists:  # one entry per artist (on several servers / sources: once)
@@ -312,6 +325,8 @@ def _show(group: list[LiveShow]) -> LiveShowOut:
         sources=[r.source for r in group],
         starred=any(r.starred_at for r in group),
         got_ticket=any(r.ticket_at for r in group),
+        first_seen_at=first_seen,
+        is_new=first_seen is not None and first_seen >= dt.datetime.now(dt.UTC) - NEW_FOR,
         tickets=list(tickets.values()),
         name=row.name,
         festival=any(r.festival for r in group),
