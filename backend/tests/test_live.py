@@ -138,6 +138,7 @@ class FakeJamBase:
     def __init__(self, plex: FakePlex) -> None:
         self.requests: list[httpx.Request] = []
         self.remaining = 1000
+        self.refuse_ids = False  # answer every artistId search with an undocumented 400
         plex.router.get(f"{API}/quota").mock(side_effect=self._quota)
         plex.router.get(f"{API}/events").mock(side_effect=self._events)
 
@@ -163,6 +164,8 @@ class FakeJamBase:
         self.requests.append(request)
         params = request.url.params
         found: list[dict[str, Any]] = []
+        if params.get("artistId") and self.refuse_ids:
+            return httpx.Response(400, json={"success": False, "errors": [{"field": "artistId"}]})
         if ids := params.get("artistId"):
             # Like JamBase: one ID it doesn't know fails the whole request.
             for identifier in ids.split("|"):
@@ -380,3 +383,39 @@ async def test_live_unknown_artist_ids(app: FastAPI, plex: FakePlex) -> None:
     second = await refresh(user_id)
     assert second.complete and second.requests == 2
     assert [r.url.params.get("artistName") for r in jb.requests] == [None, "Portishead"]
+
+
+def test_error_messages() -> None:
+    def problem(status: int, body: Any) -> str:
+        resp = (
+            httpx.Response(status, json=body)
+            if not isinstance(body, str)
+            else httpx.Response(status, text=body)
+        )
+        return jambase._problem(resp)
+
+    documented = {"errors": [{"errorCode": "parameter_invalid", "errorMessage": "Bad date."}]}
+    assert problem(400, documented) == "Bad date."
+    assert problem(400, {"errors": [{"code": "x", "message": "Too many IDs."}]}) == "Too many IDs."
+    assert problem(403, {"type": "plan-feature-required", "title": "Forbidden"}) == "Forbidden"
+    assert problem(400, {"errors": [{"field": "artistId"}]}) == '{"errors":[{"field":"artistId"}]}'
+    assert problem(400, "Bad Request") == "Bad Request"
+
+
+@pytest.mark.db
+async def test_live_ids_refused(app: FastAPI, plex: FakePlex) -> None:
+    """A 400 for the ID search that names no ID: everyone is searched by name instead."""
+    jb = FakeJamBase(plex)
+    jb.refuse_ids = True
+    owner, user_id = await owner_listening(app, plex)
+    await owner.put("/api/admin/jambase", json={"api_key": KEY}, headers=CSRF)
+    await owner.put("/api/live/settings", json={**STOCKHOLM, "top_percent": 100}, headers=CSRF)
+    result = await refresh(user_id)
+    assert result.complete, result.error
+    assert [r.url.params.get("artistName") for r in jb.requests] == [
+        None,
+        "Portishead",
+        "Radiohead",
+    ]
+    names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
+    assert names == ["Way Out West 2027"]  # the fake only knows Portishead by name

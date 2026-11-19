@@ -9,6 +9,7 @@ On that plan the events don't carry MusicBrainz IDs, so performers are matched b
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -25,7 +26,7 @@ BATCH = 20
 # The Developer plan sees six months ahead (a few days' margin on "six months").
 DAYS_AHEAD = 175
 # "The identifier `musicbrainz:…` is invalid."
-_IDENTIFIER = re.compile(r"`([a-z0-9-]+:[^`\s]+)`")
+_IDENTIFIER = re.compile(r"`?\b((?:musicbrainz|jambase|spotify|ticketmaster):[A-Za-z0-9-]+)`?")
 
 
 class JamBaseError(Exception):
@@ -40,7 +41,11 @@ class JamBaseQuotaError(JamBaseError):
     """JamBase's own monthly quota is used up (429 quota-exceeded)."""
 
 
-class JamBaseIdError(JamBaseError):
+class JamBaseRequestError(JamBaseError):
+    """JamBase refused the request's parameters (400)."""
+
+
+class JamBaseIdError(JamBaseRequestError):
     """An artist ID JamBase doesn't know (400 identifier_invalid): the whole request fails.
     `identifier` is the one it named (e.g. "musicbrainz:<mbid>"), when it said."""
 
@@ -84,21 +89,34 @@ def _headers(api_key: str) -> dict[str, str]:
     }
 
 
+def _first(item: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        if item.get(key):
+            return str(item[key])
+    return None
+
+
 def _problem_code(resp: httpx.Response) -> tuple[str, str | None]:
-    """The message and error code in an error answer (`errors[]` or an RFC 7807 problem)."""
+    """The message and error code in an error answer (`errors[]` as documented, other field
+    names JamBase uses in practice, or an RFC 7807 problem); else the answer itself."""
     try:
         body = resp.json()
     except ValueError:
-        return f"HTTP {resp.status_code}", None
+        text = resp.text.strip()[:300]
+        return text or f"HTTP {resp.status_code}", None
     if isinstance(body, dict):
-        errors = body.get("errors")
-        if isinstance(errors, list) and errors and isinstance(errors[0], dict):
-            code = errors[0].get("errorCode")
-            return str(errors[0].get("errorMessage") or code), str(code) if code else None
-        for key in ("detail", "title"):
-            if body.get(key):
-                return str(body[key]), str(body.get("type") or "") or None
-    return f"HTTP {resp.status_code}", None
+        errors = body.get("errors") or body.get("error")
+        first = errors[0] if isinstance(errors, list) and errors else errors
+        for item in (first, body):
+            if isinstance(item, dict):
+                message = _first(item, "errorMessage", "message", "detail", "title", "description")
+                code = _first(item, "errorCode", "code", "type")
+                if message or code:
+                    return message or code or "", code
+        if isinstance(first, str) and first:
+            return first[:300], None
+    raw = json.dumps(body, separators=(",", ":"))[:300]
+    return raw, None
 
 
 def _problem(resp: httpx.Response) -> str:
@@ -123,9 +141,11 @@ async def _get(
         raise JamBaseError("JamBase is busy (too many requests); try again later.")
     if resp.status_code >= 400:
         message, code = _problem_code(resp)
-        if resp.status_code == 400 and code == "identifier_invalid":
-            named = _IDENTIFIER.search(message)
+        named = _IDENTIFIER.search(message)
+        if resp.status_code == 400 and (code == "identifier_invalid" or named):
             raise JamBaseIdError(f"JamBase: {message}", named[1] if named else None)
+        if resp.status_code == 400:
+            raise JamBaseRequestError(f"JamBase refused the request: {message}")
         raise JamBaseError(f"JamBase answered {resp.status_code}: {message}")
     try:
         body = resp.json()

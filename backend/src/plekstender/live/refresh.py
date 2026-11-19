@@ -219,12 +219,25 @@ async def refresh_user(
             batch, retries = queue.pop(0)
             try:
                 await fetch(batch)
-            except jambase.JamBaseIdError as exc:
+            except jambase.JamBaseRequestError as exc:
                 if not batch[0].mbid:
                     raise
-                named = (exc.identifier or "").removeprefix("musicbrainz:").lower()
+                named = (
+                    (exc.identifier or "").removeprefix("musicbrainz:").lower()
+                    if isinstance(exc, jambase.JamBaseIdError)
+                    else ""
+                )
                 culprit = next((a for a in batch if a.mbid == named), None)
-                if culprit is None or retries >= ID_RETRIES:
+                if culprit is None:
+                    # Refused without naming an ID: search everyone by name this time.
+                    log.warning("JamBase refused the artist IDs (%s); searching by name", exc)
+                    by_name.extend(batch)
+                    for rest_batch, _ in queue:
+                        if rest_batch[0].mbid:
+                            by_name.extend(rest_batch)
+                    queue = [(b, r) for b, r in queue if not b[0].mbid]
+                    continue
+                if retries >= ID_RETRIES:
                     log.warning("JamBase refused artist IDs (%s); searching by name", exc)
                     by_name.extend(batch)
                     continue
