@@ -390,12 +390,57 @@ Ordered by the Last.fm deadline (1 Dec 2026):
   - Export (job): every artist marked Done or Custom, their current Plex image (1000 px JPEG) plus `manifest.json` (`version`, entries with `mbid`, `artist_name`, `normalised_name`, `file`, `sha256`, `source`); downloadable for 7 days.
   - Import: upload the zip (up to 500 MB, read in place, never extracted; entries over 15 MB ignored) → matched by MBID, then by normalised name (exact; fuzzy matching wasn't needed so far) → preview with the pack's thumbnails, matched ones ticked → applied as a job (source "import", status Done, also saved to artist folders when on).
 
-### Phase 5 — Smart playlists
+### Phase 5 — Feedback round 1 (from `.todo.md`, 19 Nov 2026)
+Requests after using Phases 1–4 on the real library. Notes in italics are how they'd be done, or what needs checking first.
+
+**General**
+- [ ] Site-native tooltips instead of the browser's `title` tooltips.
+  *A small Tooltip component (shown on hover and keyboard focus, positioned to stay on screen); replace every `title=` in the UI.*
+- [ ] Site-native dropdowns instead of the browser's `<select>`.
+  *A Select / listbox component with full keyboard support (arrows, type-ahead, Esc) and grouped options (fonts); replace every `<select>`.*
+- [ ] Everything else that still looks like a browser default: checkboxes, range sliders, file pickers, colour pickers, number inputs, scrollbars.
+  *Styled replacements sharing the same tokens; file pickers become a button with drag-and-drop.*
+- [ ] Choose the accent colour (the yellow/orange) yourself.
+  *Per user, saved to the account so it follows them across devices: a few presets plus a custom colour. The darker and lighter variants and the chart colour are derived from it, and the chart colour is adjusted until it keeps at least 3:1 contrast in both themes.*
+- [ ] Clicking album covers, artwork, artist images etc. opens a larger version in a lightbox.
+  *A shared Lightbox (Esc / click outside to close, arrow keys where there's a set, focus kept inside); full-size images through the existing image proxy.*
+
+**History**
+- [ ] Top artists / albums / songs by time spent listening as well as by number of listens (long songs in some genres).
+  *Listening time = listens × track length. Last.fm and ListenBrainz listens have no length, so take it from the matched library track (or the song's median Plex length), falling back to 3:35 and marking those as estimates. A "By listens / By time" switch on each top list.*
+- [ ] Make the "When you listen" heatmap fill the whole width of its card.
+- [ ] Most skipped songs / albums / artists: plays where less than a set share of the track was heard (default 80%, adjustable per user).
+  *Check first: Plex's history only records finished plays (Plex counts a play at ~90%), so stopped plays need a session watcher that polls `/status/sessions` every ~10–15 s and records how far each track got. That watcher would also give "playing now" for ListenBrainz and the client details below. Until then, Plex's own `skipCount` (already in the mirror) can power a first version.*
+- [ ] Clicking a chart opens the details behind it, e.g. the 2025 bar on an artist page lists those listens.
+  *A drill-down panel (site-native popup) showing the listens for that period plus the item; for the overview charts the same panel filtered by day, week or month, or by weekday and hour for the heatmap.*
+- [ ] Period buttons: hide the horizontal scrollbar, and put "All time" first.
+- [ ] Listens tab: show the client and IP / location for each listen.
+  *Check first: Plex history only has a `deviceID` (the client name comes from `/devices`), not an IP address. The IP and LAN/WAN come from live sessions (`Player.address`, `Session.location`), i.e. the session watcher above, so only plays captured live would have them. Imported scrobbles have neither. A location beyond LAN/WAN needs a local GeoIP database (e.g. GeoLite2, which needs a free licence key) rather than an outside lookup, to keep IP addresses private. Decide whether that's worth it.*
+
+**Rate**
+- [ ] Skip a song in the Lists view.
+- [ ] When every song on the page is rated or skipped, show the next page automatically.
+- [ ] Lists view: always 15 songs per page (it sometimes shows 10, sometimes 15).
+  *Cause: the row count is worked out from the window height when the page first renders, so it depends on screen size and on what had loaded by then. Fix it at 15 and fit the row height to the window instead (with a minimum, scrolling only on very small screens).*
+- [ ] Genre filter under Songs / Albums / Artists.
+  *Songs inherit genres from their album, falling back to the artist (see the Phase 0 spike). The queue query gets an optional tag filter; the picker lists the genres present in the chosen pool.*
+
+**Library**
+- [ ] Rate artists, albums and songs in the library views too (artist list, artist page, album page, track lists).
+  *Reuse StarRating and the ratings API (same undo log).*
+- [ ] Hide the horizontal scrollbar of the genre chips under the artist search.
+- [ ] Artist page: group releases by type (albums, compilations, singles and EPs, live, …) instead of one list.
+  *Check first: which album fields Plex fills in for release types (e.g. `subtype`, `Format` / `Subformat` tags, or "Compilation"). Add a spike to `plex_probe.py`, store the type in the mirror, and fall back to "Albums" when Plex doesn't say.*
+
+**Artwork**
+- [ ] Change an artist's status by clicking its status dot in the list (cycles To do → Custom → Done).
+
+### Phase 6 — Smart playlists
 - [ ] Definition schema + builder service + preview endpoint
 - [ ] Builder UI
 - [ ] Scheduled refresh
 
-### Phase 6 — Polish
+### Phase 7 — Polish
 - [ ] PWA install, offline shell
 - [ ] M3U playlist exports
 - [ ] Docs, screenshots, published images (GHCR)
