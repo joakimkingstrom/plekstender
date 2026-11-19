@@ -22,8 +22,10 @@ TIMEOUT = 30.0
 PER_PAGE = 100
 # Artists per request (artistId / artistName take several, separated by "|").
 BATCH = 20
-# The Developer plan sees six months ahead.
-DAYS_AHEAD = 180
+# The Developer plan sees six months ahead (a few days' margin on "six months").
+DAYS_AHEAD = 175
+# "The identifier `musicbrainz:…` is invalid."
+_IDENTIFIER = re.compile(r"`([a-z0-9-]+:[^`\s]+)`")
 
 
 class JamBaseError(Exception):
@@ -36,6 +38,15 @@ class JamBaseKeyError(JamBaseError):
 
 class JamBaseQuotaError(JamBaseError):
     """JamBase's own monthly quota is used up (429 quota-exceeded)."""
+
+
+class JamBaseIdError(JamBaseError):
+    """An artist ID JamBase doesn't know (400 identifier_invalid): the whole request fails.
+    `identifier` is the one it named (e.g. "musicbrainz:<mbid>"), when it said."""
+
+    def __init__(self, message: str, identifier: str | None) -> None:
+        super().__init__(message)
+        self.identifier = identifier
 
 
 @dataclass
@@ -73,20 +84,25 @@ def _headers(api_key: str) -> dict[str, str]:
     }
 
 
-def _problem(resp: httpx.Response) -> str:
-    """The message in an error answer (`errors[]` or an RFC 7807 problem)."""
+def _problem_code(resp: httpx.Response) -> tuple[str, str | None]:
+    """The message and error code in an error answer (`errors[]` or an RFC 7807 problem)."""
     try:
         body = resp.json()
     except ValueError:
-        return f"HTTP {resp.status_code}"
+        return f"HTTP {resp.status_code}", None
     if isinstance(body, dict):
         errors = body.get("errors")
         if isinstance(errors, list) and errors and isinstance(errors[0], dict):
-            return str(errors[0].get("errorMessage") or errors[0].get("errorCode"))
+            code = errors[0].get("errorCode")
+            return str(errors[0].get("errorMessage") or code), str(code) if code else None
         for key in ("detail", "title"):
             if body.get(key):
-                return str(body[key])
-    return f"HTTP {resp.status_code}"
+                return str(body[key]), str(body.get("type") or "") or None
+    return f"HTTP {resp.status_code}", None
+
+
+def _problem(resp: httpx.Response) -> str:
+    return _problem_code(resp)[0]
 
 
 async def _get(
@@ -106,7 +122,11 @@ async def _get(
             raise JamBaseQuotaError(f"JamBase's monthly quota is used up: {message}")
         raise JamBaseError("JamBase is busy (too many requests); try again later.")
     if resp.status_code >= 400:
-        raise JamBaseError(f"JamBase answered {resp.status_code}: {_problem(resp)}")
+        message, code = _problem_code(resp)
+        if resp.status_code == 400 and code == "identifier_invalid":
+            named = _IDENTIFIER.search(message)
+            raise JamBaseIdError(f"JamBase: {message}", named[1] if named else None)
+        raise JamBaseError(f"JamBase answered {resp.status_code}: {message}")
     try:
         body = resp.json()
     except ValueError as exc:

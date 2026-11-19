@@ -286,6 +286,31 @@ async def save_jambase_quota(
     await _put(db, JAMBASE_USAGE_KEY, usage.model_dump(mode="json"))
 
 
+JAMBASE_UNKNOWN_KEY = "jambase_unknown_ids"
+# MusicBrainz IDs JamBase didn't know are searched by name, and tried again after this long.
+JAMBASE_UNKNOWN_DAYS = 30
+
+
+async def get_jambase_unknown_ids(db: AsyncSession, now: dt.datetime | None = None) -> set[str]:
+    stored = (await _get(db, JAMBASE_UNKNOWN_KEY) or {}).get("ids") or {}
+    since = ((now or dt.datetime.now(dt.UTC)) - dt.timedelta(days=JAMBASE_UNKNOWN_DAYS)).date()
+    return {mbid for mbid, day in stored.items() if str(day) >= since.isoformat()}
+
+
+async def add_jambase_unknown_ids(
+    db: AsyncSession, mbids: set[str], now: dt.datetime | None = None
+) -> None:
+    """Remember MusicBrainz IDs JamBase refused (older entries are dropped)."""
+    if not mbids:
+        return
+    today = (now or dt.datetime.now(dt.UTC)).date()
+    since = (today - dt.timedelta(days=JAMBASE_UNKNOWN_DAYS)).isoformat()
+    stored = (await _get(db, JAMBASE_UNKNOWN_KEY) or {}).get("ids") or {}
+    kept = {mbid: day for mbid, day in stored.items() if str(day) >= since}
+    kept.update(dict.fromkeys(mbids, today.isoformat()))
+    await _put(db, JAMBASE_UNKNOWN_KEY, {"ids": kept})
+
+
 # --- text logo fonts ------------------------------------------------------------------------
 
 FONTS_KEY = "fonts"

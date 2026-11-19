@@ -163,7 +163,17 @@ class FakeJamBase:
         self.requests.append(request)
         params = request.url.params
         found: list[dict[str, Any]] = []
-        if params.get("artistId") == f"musicbrainz:{RADIOHEAD_MBID}":
+        if ids := params.get("artistId"):
+            # Like JamBase: one ID it doesn't know fails the whole request.
+            for identifier in ids.split("|"):
+                if identifier != f"musicbrainz:{RADIOHEAD_MBID}":
+                    return httpx.Response(400, json={
+                        "success": False,
+                        "errors": [{
+                            "errorCode": "identifier_invalid",
+                            "errorMessage": f"The identifier `{identifier}` is invalid.",
+                        }],
+                    })  # fmt: skip
             found = [CONCERT, FESTIVAL]
         elif params.get("artistName") == "Portishead":
             found = [FESTIVAL, TRIBUTE]
@@ -338,3 +348,35 @@ async def test_live_budget(app: FastAPI, plex: FakePlex) -> None:
         assert await due_users(db, settings, now, dt.timedelta(hours=20)) == [user_id]
         tight = settings.model_copy(update={"jambase_monthly_cap": 3})
         assert await due_users(db, tight, now, dt.timedelta(hours=20)) == []
+
+
+@pytest.mark.db
+async def test_live_unknown_artist_ids(app: FastAPI, plex: FakePlex) -> None:
+    """An ID JamBase doesn't know is left out (and remembered); that artist is searched by name."""
+    jb = FakeJamBase(plex)
+    owner, user_id = await owner_listening(app, plex)
+    unknown = "0103c1cc-4a09-4a5d-a344-56ad99a77193"
+    async with get_sessionmaker()() as db:
+        await db.execute(update(Artist).where(Artist.rating_key == 101).values(mbid=unknown))
+        await db.commit()
+    await owner.put("/api/admin/jambase", json={"api_key": KEY}, headers=CSRF)
+    await owner.put("/api/live/settings", json={**STOCKHOLM, "top_percent": 100}, headers=CSRF)
+
+    first = await refresh(user_id)
+    assert first.complete, first.error
+    # Both IDs (refused), Radiohead's again, then Portishead by name.
+    assert [
+        (r.url.params.get("artistId"), r.url.params.get("artistName")) for r in jb.requests
+    ] == [
+        (f"musicbrainz:{RADIOHEAD_MBID}|musicbrainz:{unknown}", None),
+        (f"musicbrainz:{RADIOHEAD_MBID}", None),
+        (None, "Portishead"),
+    ]
+    names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
+    assert names == ["Radiohead at Avicii Arena", "Way Out West 2027"]
+
+    # Next time the unknown ID isn't sent at all.
+    jb.requests.clear()
+    second = await refresh(user_id)
+    assert second.complete and second.requests == 2
+    assert [r.url.params.get("artistName") for r in jb.requests] == [None, "Portishead"]

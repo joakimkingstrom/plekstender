@@ -13,7 +13,8 @@ import logging
 import math
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass, field, replace
 
 import httpx
 from sqlalchemy import delete, func, select
@@ -23,7 +24,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from plekstender.api.routes.library import plays_of, visible
 from plekstender.config import Settings
 from plekstender.db.instance import (
+    add_jambase_unknown_ids,
     get_jambase_api_key,
+    get_jambase_unknown_ids,
     get_jambase_usage,
     reserve_jambase_call,
     save_jambase_quota,
@@ -41,6 +44,8 @@ MAX_PAGES = 3
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 SKIP_NAMES = {"various artists", "various", "unknown artist", "[unknown]"}
 FUZZY = 0.88
+# Retries of a batch without an ID JamBase didn't know, before searching the rest by name.
+ID_RETRIES = 3
 
 
 @dataclass
@@ -106,10 +111,13 @@ async def followed_artists(
     return listened[: follow_count(len(listened), percent)], len(listened)
 
 
-def batches(artists: list[Followed]) -> list[list[Followed]]:
-    """Requests to make: artists with a MusicBrainz ID by ID, the rest by name."""
-    with_id = [a for a in artists if a.mbid]
-    by_name = [a for a in artists if not a.mbid]
+def batches(
+    artists: list[Followed], unknown: AbstractSet[str] = frozenset()
+) -> list[list[Followed]]:
+    """Requests to make: artists with a MusicBrainz ID by ID, the rest (and those whose ID
+    JamBase didn't know) by name."""
+    with_id = [a for a in artists if a.mbid and a.mbid not in unknown]
+    by_name = [replace(a, mbid=None) for a in artists if a not in with_id]
     size = jambase.BATCH
     return [with_id[i : i + size] for i in range(0, len(with_id), size)] + [
         by_name[i : i + size] for i in range(0, len(by_name), size)
@@ -160,6 +168,7 @@ async def refresh_user(
         artists, _ = await followed_artists(db, user_id, percent)
 
     requests = 0
+    newly_unknown: set[str] = set()
     found: dict[str, tuple[jambase.Event, dict[tuple[int, int], dict[str, object]]]] = {}
     error: str | None = None
     try:
@@ -167,11 +176,15 @@ async def refresh_user(
             raise Stop(
                 "JamBase isn't set up: an admin can add an API key in Settings → Connections."
             )
-        todo = batches(artists)
+        async with sessions() as db:
+            unknown = await get_jambase_unknown_ids(db, started)
+        todo = batches(artists, unknown)
         await _check_quota(sessions, http, settings, api_key, len(todo))
         today = started.date()
         until = today + dt.timedelta(days=jambase.DAYS_AHEAD)
-        for batch in todo:
+
+        async def fetch(batch: list[Followed]) -> None:
+            nonlocal requests
             page, pages = 1, 1
             while page <= min(pages, MAX_PAGES):
                 async with sessions() as db:
@@ -197,6 +210,31 @@ async def refresh_user(
                 for event in events:
                     _collect(found, event, batch)
                 page += 1
+
+        # JamBase refuses a whole request when it doesn't know one of the IDs in it: try
+        # again without the one it names (a few times), then look the rest up by name.
+        by_name: list[Followed] = []
+        queue = [(batch, 0) for batch in todo]
+        while queue:
+            batch, retries = queue.pop(0)
+            try:
+                await fetch(batch)
+            except jambase.JamBaseIdError as exc:
+                if not batch[0].mbid:
+                    raise
+                named = (exc.identifier or "").removeprefix("musicbrainz:").lower()
+                culprit = next((a for a in batch if a.mbid == named), None)
+                if culprit is None or retries >= ID_RETRIES:
+                    log.warning("JamBase refused artist IDs (%s); searching by name", exc)
+                    by_name.extend(batch)
+                    continue
+                newly_unknown.add(named)
+                by_name.append(culprit)
+                rest = [a for a in batch if a is not culprit]
+                if rest:
+                    queue.insert(0, (rest, retries + 1))
+        for batch in batches([replace(a, mbid=None) for a in by_name]):
+            await fetch(batch)
     except Stop as exc:
         error = str(exc)
     except jambase.JamBaseError as exc:
@@ -204,6 +242,7 @@ async def refresh_user(
 
     complete = error is None
     async with sessions() as db:
+        await add_jambase_unknown_ids(db, newly_unknown, started)
         if found:
             await _store(db, user_id, found, lat, lon, now())
         if complete:
@@ -225,7 +264,7 @@ async def refresh_user(
                 live.refreshed_at = now()
         await db.commit()
     if error:
-        log.info("Live refresh for user %s stopped: %s", user_id, error)
+        log.warning("Live refresh for user %s stopped: %s", user_id, error)
     return Result(len(found), len(artists), requests, complete, error)
 
 
