@@ -168,7 +168,9 @@ class FakeLibrary:
             },
             101: {"Genre": _tags("Trip Hop"), "Similar": _tags("Massive Attack")},
             102: {"Genre": _tags("Rock")},
-            200: {"Genre": _tags("Rock"), "Mood": _tags("Paranoid")},
+            200: {"Genre": _tags("Rock"), "Mood": _tags("Paranoid"), "Format": _tags("Album")},
+            201: {"Format": _tags("Album"), "Subformat": _tags("Compilation")},
+            202: {"Format": _tags("EP")},
         }
         for key in (102, 203, 305):
             self.hidden_from[key] = {"srv-friend"}

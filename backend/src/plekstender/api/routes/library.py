@@ -180,14 +180,45 @@ async def list_tags(
     return [TagOut(id=i, kind=k, name=n, count=c) for i, k, n, c in rows.all()]
 
 
+RELEASE_KINDS = ("format", "subformat")
+
+
 async def _tags_for(db: DbDep, server_id: int, rating_key: int) -> list[TagOut]:
+    """Genres, moods, styles and countries (release formats are shown as a type instead)."""
     rows = await db.execute(
         select(Tag.id, Tag.kind, Tag.name)
         .join(ItemTag, ItemTag.tag_id == Tag.id)
-        .where(ItemTag.server_id == server_id, ItemTag.rating_key == rating_key)
+        .where(
+            ItemTag.server_id == server_id,
+            ItemTag.rating_key == rating_key,
+            Tag.kind.not_in(RELEASE_KINDS),
+        )
         .order_by(Tag.kind, Tag.name)
     )
     return [TagOut(id=i, kind=k, name=n) for i, k, n in rows.all()]
+
+
+async def _release_types(db: DbDep, server_id: int, keys: list[int]) -> dict[int, str]:
+    """Each album's release type: its Subformat (Compilation, Live…) if Plex set one,
+    else its Format (Album, EP, Single)."""
+    if not keys:
+        return {}
+    rows = await db.execute(
+        select(ItemTag.rating_key, Tag.kind, Tag.name)
+        .join(Tag, ItemTag.tag_id == Tag.id)
+        .where(
+            ItemTag.server_id == server_id,
+            ItemTag.rating_key.in_(keys),
+            Tag.kind.in_(RELEASE_KINDS),
+        )
+        .order_by(Tag.name)
+    )
+    found: dict[int, dict[str, str]] = {}
+    for key, kind, name in rows.all():
+        found.setdefault(key, {}).setdefault(kind, name)
+    return {
+        key: tags.get("subformat") or tags.get("format") or "Album" for key, tags in found.items()
+    }
 
 
 async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> list[AlbumSummary]:
@@ -198,6 +229,8 @@ async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> lis
         .where(*where, *filters)
         .order_by(Album.year.nulls_last(), Album.title)
     )
+    found = rows.all()
+    types = await _release_types(db, us.server_id, [a.rating_key for a, _, _ in found])
     return [
         AlbumSummary(
             rating_key=a.rating_key,
@@ -209,8 +242,9 @@ async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> lis
             track_count=a.track_count,
             user_rating=rating,
             plays=plays,
+            release_type=types.get(a.rating_key, "Album"),
         )
-        for a, rating, plays in rows.all()
+        for a, rating, plays in found
     ]
 
 

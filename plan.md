@@ -429,8 +429,8 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [ ] Rate artists, albums and songs in the library views too (artist list, artist page, album page, track lists).
   *Reuse StarRating and the ratings API (same undo log).*
 - [x] Hide the horizontal scrollbar of the genre chips under the artist search.
-- [ ] Artist page: group releases by type (albums, compilations, singles and EPs, live, …) instead of one list.
-  *Spike (19 Nov): album details have a `Format` tag array (artists also have `Location`). `plex_probe.py --formats` counts the `Format` / `Subformat` values across albums to see which release types Plex uses. Store them as tags (kinds `format` / `subformat`) during the detail sync, and fall back to "Albums" when Plex doesn't say.*
+- [x] Artist page: group releases by type (albums, compilations, singles and EPs, live, …) instead of one list.
+  *Spike (19 Nov, 500 of 7,278 albums): every album has a `Format` tag — Album 493, EP 4, Single 3 — and some a `Subformat` — Compilation 15, Live 7, Soundtrack 4. Done: both are stored as tags (kinds `format` / `subformat`) by the album detail sync; an album's type is its Subformat if set, else its Format, else Album; the artist page shows a section per type (Albums, EPs, Singles, Live, Compilations, Soundtracks, then any other). Existing albums get their types on the next full sync.*
 
 **Artwork**
 - [x] Change an artist's status by clicking its status dot in the list (cycles To do → Custom → Done).

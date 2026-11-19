@@ -299,6 +299,49 @@ function YourListens({ listens, showSongs }: { listens: Schemas['ItemListensOut'
   )
 }
 
+const RELEASE_ORDER = ['Album', 'EP', 'Single', 'Live', 'Compilation', 'Soundtrack']
+const RELEASE_HEADINGS: Record<string, string> = {
+  Album: 'Albums',
+  EP: 'EPs',
+  Single: 'Singles',
+  Live: 'Live',
+  Compilation: 'Compilations',
+  Soundtrack: 'Soundtracks',
+}
+
+/** An artist's releases, grouped by type (albums, EPs, singles, live, compilations…). */
+function Releases({ serverId, albums }: { serverId: number; albums: Schemas['AlbumSummary'][] }) {
+  const groups = new Map<string, Schemas['AlbumSummary'][]>()
+  for (const al of albums) groups.set(al.release_type ?? 'Album', [...(groups.get(al.release_type ?? 'Album') ?? []), al])
+  const rank = (type: string) => {
+    const i = RELEASE_ORDER.indexOf(type)
+    return i < 0 ? RELEASE_ORDER.length : i
+  }
+  const ordered = [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+  return (
+    <>
+      {ordered.map(([type, items]) => (
+        <Card key={type} title={ordered.length > 1 ? (RELEASE_HEADINGS[type] ?? type) : 'Albums'}>
+          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {items.map((al) => (
+                <li key={al.rating_key}>
+                  <Link to={`/library/albums/${al.rating_key}`} className="group block">
+                    <Artwork serverId={serverId} path={al.thumb} title={al.title} className="w-full group-hover:opacity-85" />
+                    <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
+                    <div className="flex items-center justify-between gap-2 text-xs text-muted">
+                      <span>{al.year ?? ''}</span>
+                      {al.user_rating !== null && <Stars rating={al.user_rating} />}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+          </ul>
+        </Card>
+      ))}
+    </>
+  )
+}
+
 export function ArtistPage() {
   const { blocker, active } = useLibraryServer()
   const key = Number(useParams().key)
@@ -336,22 +379,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
               <TrackList tracks={a.top_tracks} showAlbum showListens={a.your_listens.listens > 0} />
             </Card>
           )}
-          <Card title="Albums">
-            <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              {a.albums.map((al) => (
-                <li key={al.rating_key}>
-                  <Link to={`/library/albums/${al.rating_key}`} className="group block">
-                    <Artwork serverId={serverId} path={al.thumb} title={al.title} className="w-full group-hover:opacity-85" />
-                    <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
-                    <div className="flex items-center justify-between gap-2 text-xs text-muted">
-                      <span>{al.year ?? ''}</span>
-                      {al.user_rating !== null && <Stars rating={al.user_rating} />}
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <Releases serverId={serverId} albums={a.albums} />
         </div>
         <div className="space-y-6">
         <YourListens listens={a.your_listens} showSongs />

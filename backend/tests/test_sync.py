@@ -290,3 +290,18 @@ async def test_disconnect_removes_personal_state(app: FastAPI, plex: FakePlex) -
         artists = len(list(await db.scalars(select(Artist))))
     assert states == 0
     assert artists == 3  # shared metadata stays for other users of the server
+
+
+async def test_release_types_from_plex_formats(app: FastAPI, plex: FakePlex) -> None:
+    owner, sid = await owner_with_library(app, plex)
+    radiohead = (await owner.get(f"/api/servers/{sid}/library/artists/100")).json()
+    assert {a["title"]: a["release_type"] for a in radiohead["albums"]} == {
+        "OK Computer": "Album",
+        "OK Computer OKNOTOK": "Compilation",  # Subformat wins over Format
+    }
+    portishead = (await owner.get(f"/api/servers/{sid}/library/artists/101")).json()
+    assert [a["release_type"] for a in portishead["albums"]] == ["EP"]
+    secret = (await owner.get(f"/api/servers/{sid}/library/artists/102")).json()
+    assert [a["release_type"] for a in secret["albums"]] == ["Album"]  # no tags: Album
+    album = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
+    assert {t["kind"] for t in album["tags"]} == {"genre", "mood"}  # formats aren't badges

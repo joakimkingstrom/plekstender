@@ -205,6 +205,10 @@ class AlbumSummary(BaseModel):
     track_count: int | None
     user_rating: float | None
     plays: int
+    release_type: str = Field(
+        default="Album",
+        description="Album, EP, Single, Compilation, Live, Soundtrack… (from Plex's tags).",
+    )
 
 
 class TrackOut(BaseModel):

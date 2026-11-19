@@ -1152,6 +1152,12 @@ export interface components {
             user_rating: number | null;
             /** Plays */
             plays: number;
+            /**
+             * Release Type
+             * @description Album, EP, Single, Compilation, Live, Soundtrack… (from Plex's tags).
+             * @default Album
+             */
+            release_type: string;
             /** Summary */
             summary: string | null;
             /** Released */
@@ -1188,6 +1194,12 @@ export interface components {
             user_rating: number | null;
             /** Plays */
             plays: number;
+            /**
+             * Release Type
+             * @description Album, EP, Single, Compilation, Live, Soundtrack… (from Plex's tags).
+             * @default Album
+             */
+            release_type: string;
         };
         /** ArtistDetail */
         ArtistDetail: {

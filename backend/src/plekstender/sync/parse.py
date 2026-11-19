@@ -12,7 +12,15 @@ Item = dict[str, Any]
 # Plex `type` numbers for library listings.
 PLEX_TYPES = {"artist": 8, "album": 9, "track": 10}
 
-TAG_KINDS = {"Genre": "genre", "Mood": "mood", "Style": "style", "Country": "country"}
+TAG_KINDS = {
+    "Genre": "genre",
+    "Mood": "mood",
+    "Style": "style",
+    "Country": "country",
+    # Albums: release type (Album / EP / Single) and kind (Compilation / Live / Soundtrack).
+    "Format": "format",
+    "Subformat": "subformat",
+}
 
 # Bracketed or dashed suffixes that mark another release of the same recording,
 # e.g. "Song (2011 Remaster)", "Song - Mono Version", "Song [Deluxe Edition Bonus Track]".
@@ -184,7 +192,7 @@ def state_row(
 
 
 def tags_of(item: Item) -> list[tuple[str, str]]:
-    """(kind, name) pairs for genres, moods, styles and countries."""
+    """(kind, name) pairs for genres, moods, styles, countries and release formats."""
     out: list[tuple[str, str]] = []
     for field, kind in TAG_KINDS.items():
         for tag in item.get(field) or []:
