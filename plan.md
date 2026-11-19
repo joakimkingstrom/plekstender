@@ -489,10 +489,53 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Docs and published images (GHCR: amd64 + arm64 after CI passes on main; compose can use them via PLEKSTENDER_IMAGE)
 - [ ] Screenshots for the README (from a real library)
 
-## Later
+### Phase 9 — Previews and "Guess the intro" (from `.todo.md`, 19 Nov 2026)
 
-### Preview playback
-Fetch the track file directly from Plex (`/library/parts/…`) and trim it to 30–60 s with ffmpeg on the server (`-t 45 -c:a libopus`), streamed to an `<audio>` element. Plex counts plays from client timeline/scrobble reports, so direct file access should not affect stats (to be confirmed in a Phase 0 spike). Useful inside the playlist builder.
+**Previews** (also the base for the game)
+- [ ] `GET /api/servers/{id}/tracks/{key}/preview`: a 40-second AAC clip (m4a) cut by ffmpeg straight from the Plex file (`/library/parts/…`, the user's own token, never a Plex transcode session, so no "now playing" entry and no play counted). ffmpeg comes from the `imageio-ffmpeg` wheel (static binary, amd64 + arm64), overridable with `FFMPEG_PATH`.
+- [ ] The same pass measures the intro with `silencedetect`: leading silence and quiet start are stored per track (`track_intros`), so clips can start where the music does.
+- [ ] Clips are cached under `DATA_DIR/previews` (a few hundred MB at most, oldest removed first) and served with byte ranges (iOS Safari needs them).
+- [ ] Play buttons: playlist builder preview list, Rate cards and the Lists layout.
+
+**Guess the intro** (a mode of the card view in Rate)
+- [ ] Toggle "Guess the intro" on the card view. The card's artwork, artist and title are hidden and the song starts playing: the song itself, an album's or artist's popular songs (one of the top 3 by popularity, at random).
+- [ ] 30 seconds per round. The artwork unblurs gradually over the round; then the artist is revealed (at 18 s), and finally the song's or album's title (at 26 s; not in artist mode, where the artist is the answer).
+- [ ] Guessing: a search field. Artists (and albums in album mode) are suggested from 3 letters. Songs: either pick the artist first and then search their songs, or search songs directly, shown from 5 letters (or 80% of the title for short titles).
+- [ ] Right answer or time up: everything is revealed, and the card can be rated as usual (swipe or stars). A wrong pick costs 3 seconds.
+- [ ] Score: points for the seconds left, a streak, and a best score per mode (kept per account).
+- [ ] Avoided: songs with very short titles (under 4 letters), and songs whose intro is silent or near-silent for more than 8 seconds (known after their first clip; skipped automatically in game mode).
+- [ ] The next round's clip is prepared while the current one plays.
+
+### Phase 10 — Music files and the tag editor (from `.todo.md`; needs the music folder)
+
+**Music folder on the worker only**
+- [ ] Only the worker mounts the music folder (read-write); the web container never touches music files. "Save to artist folders" becomes a background job (the rendered image is handed over through `/data`), and the folder check runs in the worker.
+
+**Tag editor** (server owners; off until an admin turns it on)
+
+*Principles.* Every change to a file is recorded before it's made, grouped into change sets ("Applied MusicBrainz release … to 12 files", "Renamed 240 files"). Nothing is written without a preview of the changes. All file work happens in worker jobs, inside the mounted folder only (paths resolved and checked), one job per folder at a time. Plex is asked to rescan the affected folders afterwards.
+
+*Data.* `media_files` (path, size, mtime, format, duration, linked Plex track), `tag_snapshots` (each file's tags the first time Plekstender touches it, embedded pictures stored once by hash under `/data`), `change_sets` (who, when, what kind, status) and `tag_changes` (file, field, old value, new value, change set; also `path` for moves).
+
+*History and undo.* Per file, album and artist: a timeline of change sets and their changes. Undo a whole change set, or cherry-pick changes: undo creates a new change set that writes the old values back. If a file changed since (the value on disk isn't the one recorded), that change is flagged instead of overwritten. An artist's history lists every change set that touched their files, with pick-and-choose undo.
+
+*Stages.*
+- [ ] 10a. Scan and view: read tags with `mutagen` (FLAC/Vorbis, MP3 ID3v2.3/2.4, MP4/M4A, Opus/Ogg, WAV/AIFF), match files to Plex tracks, show tags per album with differences to Plex highlighted. Read-only.
+- [ ] 10b. Manual editing (per file or across an album) with history and undo.
+- [ ] 10c. Write Plex's metadata to the files: titles, artists, album, year, genres and (optionally) your ratings as POPM / RATING, previewed as a diff.
+- [ ] 10d. MusicBrainz: search releases (artist, album, track count, durations), pick one like in Picard, map tracks, preview, apply. Store MusicBrainz IDs in the tags.
+- [ ] 10e. Identify unknown files by fingerprint: Chromaprint (`fpcalc`) + AcoustID (an AcoustID application key, set by the admin), then MusicBrainz.
+- [ ] 10f. Rename and move files into a folder structure from a template (e.g. `{albumartist}/{year} - {album}/{disc}{track:02} {title}`): dry run with conflicts listed, sidecar files (cover.jpg, .lrc, .cue, .nfo) moved along, undo moves them back.
+- [ ] 10g. `.nfo` files (Kodi-style artist.nfo / album.nfo): read MusicBrainz IDs, biographies, genres; offer to apply them.
+- [ ] 10h. Artwork in folders: cover.jpg / folder.jpg / artist.jpg, and embedded covers (with the size limits players need).
+
+*Open questions.* Undo for files Plekstender didn't create the snapshot for (scan first, always). Large libraries: scan incrementally by mtime. Whether to write ratings into files by default (off).
+
+### Phase 11 — More services (from `.todo.md`)
+- [ ] More scrobble services: any ListenBrainz-compatible server (Maloja, Koito, Multi-Scrobbler) with a custom address, and Libre.fm (Last.fm-style API).
+- [ ] Import playlists from Spotify, Apple Music, Tidal and others: first from files (CSV exports such as Exportify / TuneMyMusic, M3U, JSPF), then Spotify's API for public playlist links. Songs are matched to the library (artist + title, then duration); unmatched ones are listed; the result is saved as a Plex playlist.
+
+## Later
 
 ### Writing imported plays back to Plex
 Plekstender's own history makes this optional: the ratings queues and stats already count imported plays. If Plex's own play counts should include them too:
