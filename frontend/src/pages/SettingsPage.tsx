@@ -10,7 +10,7 @@ import { useFanartKey, useSetFanartKey } from '../api/artwork'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
-/** Settings shell: Servers and Listening for everyone, Library for admins. */
+/** Settings shell: personal tabs for everyone; Library and Admin for admins. */
 export function SettingsLayout() {
   const { data: me } = useMe()
   const tab = ({ isActive }: { isActive: boolean }) =>
@@ -20,20 +20,31 @@ export function SettingsLayout() {
   return (
     <>
       <PageTitle>Settings</PageTitle>
-      <nav className="mb-6 flex gap-6 border-b border-border" aria-label="Settings">
+      <nav className="no-scrollbar mb-6 flex gap-6 overflow-x-auto whitespace-nowrap border-b border-border" aria-label="Settings">
         <NavLink to="/settings" end className={tab}>
           Servers
         </NavLink>
         <NavLink to="/settings/listening" className={tab}>
           Listening
         </NavLink>
+        <NavLink to="/settings/connections" className={tab}>
+          Connections
+        </NavLink>
+        <NavLink to="/settings/export" className={tab}>
+          Export / import
+        </NavLink>
         <NavLink to="/settings/appearance" className={tab}>
           Appearance
         </NavLink>
         {me?.is_admin && (
-          <NavLink to="/settings/library" className={tab}>
-            Library
-          </NavLink>
+          <>
+            <NavLink to="/settings/library" className={tab}>
+              Library
+            </NavLink>
+            <NavLink to="/settings/admin" className={tab}>
+              Admin
+            </NavLink>
+          </>
         )}
       </nav>
       <Outlet />
@@ -93,14 +104,11 @@ export function LibrarySettingsPage() {
   return (
     <div className="space-y-4">
       <LibrarySettingsForm initial={settings.data} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <FanartKeyCard />
-      </div>
     </div>
   )
 }
 
-function FanartKeyCard() {
+export function FanartKeyCard() {
   const key = useFanartKey(true)
   const save = useSetFanartKey()
   const [value, setValue] = useState('')

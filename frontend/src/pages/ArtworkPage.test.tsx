@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import { ArtworkPage } from './ArtworkPage'
+import { ExportPage } from './ExportPage'
 
 const radiohead = { rating_key: 100, title: 'Radiohead', thumb: null, status: 'none', source: null, applied_at: null, has_mbid: true }
 let owner = true
@@ -63,11 +65,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function renderPage() {
+function renderPage(page: ReactNode = <ArtworkPage />) {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter>
-        <ArtworkPage />
+        {page}
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -99,8 +101,10 @@ describe('ArtworkPage', () => {
     expect(await screen.findByText('Saved to Plex.')).toBeInTheDocument()
   })
 
-  it('previews a logo pack and applies the matched artists', async () => {
-    renderPage()
+  it('exports the library and history, and previews a logo pack and applies the matched artists (Export / import)', async () => {
+    renderPage(<ExportPage />)
+    expect(await screen.findByRole('link', { name: 'Songs (CSV)' })).toHaveAttribute('href', '/api/servers/1/export/tracks.csv')
+    expect(screen.getByRole('link', { name: 'Download all listens' })).toHaveAttribute('href', '/api/listens/export.jsonl')
     const input = await screen.findByLabelText('Import a pack (.zip)')
     fireEvent.change(input, { target: { files: [new File(['zip'], 'pack.zip', { type: 'application/zip' })] } })
     expect(await screen.findByText(/1 of 2 match your artists/)).toBeInTheDocument()

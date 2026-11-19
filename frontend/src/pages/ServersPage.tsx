@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import {
@@ -93,16 +94,13 @@ function ConnectedServer({ server }: { server: Schemas['ServerOut'] }) {
         <div className="mt-5 space-y-4 border-t border-border pt-4">
           <h3 className="text-sm font-semibold">Library sync</h3>
           <SyncPanel serverId={server.id} />
-          <div className="text-sm">
-            <span className="text-muted">Export your library with your ratings and plays: </span>
-            <a className="text-accent underline" href={`/api/servers/${server.id}/export/tracks.csv`} download>
-              tracks (CSV)
-            </a>
-            <span className="text-muted"> · </span>
-            <a className="text-accent underline" href={`/api/servers/${server.id}/export/library.json`} download>
-              full library (JSON)
-            </a>
-          </div>
+          <p className="text-sm text-muted">
+            Export this library with your ratings and plays from{' '}
+            <Link to="/settings/export" className="text-accent underline">
+              Export / import
+            </Link>
+            .
+          </p>
         </div>
       )}
       {connect.isError && (

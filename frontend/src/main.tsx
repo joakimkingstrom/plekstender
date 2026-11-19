@@ -3,13 +3,15 @@ import '@fontsource/bricolage-grotesque/600.css'
 import '@fontsource/bricolage-grotesque/700.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createBrowserRouter } from 'react-router'
+import { createBrowserRouter, Navigate } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { ApiError } from './api/client'
 import { Layout } from './components/Layout'
 import './index.css'
 import { AdminPage } from './pages/AdminPage'
 import { ArtworkPage } from './pages/ArtworkPage'
+import { ConnectionsPage } from './pages/ConnectionsPage'
+import { ExportPage } from './pages/ExportPage'
 import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
@@ -67,11 +69,14 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <ServersPage /> },
           { path: 'listening', element: <ListeningSettingsPage /> },
+          { path: 'connections', element: <ConnectionsPage /> },
+          { path: 'export', element: <ExportPage /> },
           { path: 'appearance', element: <AppearancePage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
+          { path: 'admin', element: <AdminPage /> },
         ],
       },
-      { path: 'admin', element: <AdminPage /> },
+      { path: 'admin', element: <Navigate to="/settings/admin" replace /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

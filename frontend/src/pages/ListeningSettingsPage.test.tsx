@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
+import { ConnectionsPage } from './ConnectionsPage'
 import { ListeningSettingsPage } from './ListeningSettingsPage'
 
 afterEach(() => {
@@ -25,7 +27,7 @@ const finished = {
   error: null,
 }
 
-function renderPage(responses: Record<string, unknown>) {
+function renderPage(responses: Record<string, unknown>, page: ReactNode = <ListeningSettingsPage />) {
   responses = {
     'GET /api/listens/plex': [],
     'GET /api/listens/imports/listenbrainz': { available: true, username: null, active: null, last: null },
@@ -44,7 +46,7 @@ function renderPage(responses: Record<string, unknown>) {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter>
-        <ListeningSettingsPage />
+        {page}
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -130,7 +132,7 @@ describe('Scrobble to ListenBrainz', () => {
       'GET /api/auth/me': user,
       'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
       'PUT /api/listens/listenbrainz': connected,
-    })
+    }, <ConnectionsPage />)
     const input = await screen.findByLabelText('User token')
     fireEvent.change(input, { target: { value: 'abcd-1234-efgh' } })
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
@@ -155,14 +157,14 @@ describe('Scrobble to ListenBrainz', () => {
         paused: true,
         error: 'ListenBrainz rejected the token, so scrobbling is paused. Paste a new token to resume.',
       },
-    })
+    }, <ConnectionsPage />)
     expect(await screen.findByText(/scrobbling is paused/)).toBeInTheDocument()
     expect(screen.getByLabelText('New user token')).toBeInTheDocument()
   })
 })
 
 describe('Import from ListenBrainz', () => {
-  it('starts an import for a username and offers the history download', async () => {
+  it('starts an import for a username', async () => {
     const fetch = renderPage({
       'GET /api/auth/me': user,
       'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
@@ -177,6 +179,5 @@ describe('Import from ListenBrainz', () => {
         fetch.mock.calls.some(([r]) => r.method === 'POST' && r.url.endsWith('/api/listens/imports/listenbrainz')),
       ).toBe(true),
     )
-    expect(screen.getByRole('link', { name: 'Download all listens' })).toHaveAttribute('href', '/api/listens/export.jsonl')
   })
 })

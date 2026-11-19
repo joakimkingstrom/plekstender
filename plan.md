@@ -465,8 +465,12 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 - [x] Search results showed broken images. Cause: the signed image references weren't escaped in the thumbnail links, so a `&` in a search thumbnail's URL (e.g. Bing's) cut the reference short and its signature failed. They're escaped now, image hosts are asked for PNG / JPEG / WebP / GIF first (AVIF is read too), and a thumbnail host that refuses falls back to the full image.
 
 **Settings**
-- [ ] Move the Last.fm, ListenBrainz and fanart.tv keys and accounts to a "Connections" tab.
-- [ ] An "Export / import" tab: the library export (with ratings and plays: tracks.csv, library.json), the listening history download, and the logo pack export / import.
+- [x] Move the Last.fm, ListenBrainz and fanart.tv keys and accounts to a "Connections" tab.
+- [x] An "Export / import" tab: the library export (with ratings and plays: tracks.csv, library.json), the listening history download, and the logo pack export / import.
+- [x] Move Admin from the main menu to a Settings tab (`/admin` redirects there).
+
+**General (cont.)**
+- [x] Clicking the logo spins the pick once (skipped with reduced motion).
 
 ### Phase 8 — Polish
 - [ ] PWA install, offline shell

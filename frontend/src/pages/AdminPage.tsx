@@ -11,7 +11,7 @@ import {
   useUpdateAdminAccess,
   useUpdateUser,
 } from '../api/hooks'
-import { Avatar, Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
+import { Avatar, Badge, Button, Card, Notice, Spinner } from '../components/ui'
 
 type Mode = Schemas['AccessMode']
 
@@ -167,15 +167,15 @@ function UsersCard({ selfId }: { selfId: number }) {
 export function AdminPage() {
   const { data: me, isPending } = useMe()
   if (isPending) return <Spinner />
-  if (!me?.is_admin) return <Navigate to="/" replace />
+  if (!me?.is_admin) return <Navigate to="/settings" replace />
   return (
-    <>
-      <PageTitle subtitle="Settings for this Plekstender instance.">Admin</PageTitle>
+    <div className="space-y-4">
+      <p className="text-sm text-muted">Settings for this Plekstender instance, for admins only.</p>
       <div className="grid gap-4 lg:grid-cols-2">
         <AccessCard />
         <ServersCard />
         <UsersCard selfId={me.id} />
       </div>
-    </>
+    </div>
   )
 }

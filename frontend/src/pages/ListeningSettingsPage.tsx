@@ -40,10 +40,27 @@ export function ListeningSettingsPage() {
         <DeleteHistoryCard />
       </div>
       <div className="space-y-4">
-        <ListenBrainzCard />
-        {isAdmin && <LastFmKeyCard />}
+        <ConnectionsNote />
       </div>
     </div>
+  )
+}
+
+function ConnectionsNote() {
+  return (
+    <Card title="Scrobbling and accounts">
+      <p className="text-sm text-muted">
+        Sending plays to ListenBrainz, and the Last.fm and fanart.tv keys, are on the{' '}
+        <Link to="/settings/connections" className="text-accent underline">
+          Connections
+        </Link>{' '}
+        tab. To download your history, see{' '}
+        <Link to="/settings/export" className="text-accent underline">
+          Export / import
+        </Link>
+        .
+      </p>
+    </Card>
   )
 }
 
@@ -275,7 +292,7 @@ function ListenBrainzImportCard() {
   )
 }
 
-function ListenBrainzCard() {
+export function ListenBrainzCard() {
   const status = useListenBrainz()
   const connect = useConnectListenBrainz()
   const disconnect = useDisconnectListenBrainz()
@@ -398,18 +415,6 @@ function DeleteHistoryCard() {
   return (
     <Card title="Your history">
       <div className="space-y-4">
-        <div>
-          <a
-            href="/api/listens/export.jsonl"
-            download
-            className="inline-flex items-center rounded-lg bg-surface-2 px-4 py-2 text-sm font-semibold hover:bg-border"
-          >
-            Download all listens
-          </a>
-          <p className="mt-2 text-xs text-muted">
-            One file in ListenBrainz's format (JSON lines), oldest first, with each play once.
-          </p>
-        </div>
         <p className="text-sm text-muted">
           Deleting removes listens from Plekstender only. Last.fm, ListenBrainz and Plex keep their own
           copies.
@@ -424,7 +429,7 @@ function DeleteHistoryCard() {
   )
 }
 
-function LastFmKeyCard() {
+export function LastFmKeyCard() {
   const key = useLastFmKey(true)
   const save = useSetLastFmKey()
   const [value, setValue] = useState('')

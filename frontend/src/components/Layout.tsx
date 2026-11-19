@@ -106,11 +106,6 @@ export function Layout() {
                 {item.label}
               </NavLink>
             ))}
-            {me.is_admin && (
-              <NavLink to="/admin" className={navClass}>
-                Admin
-              </NavLink>
-            )}
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <button
