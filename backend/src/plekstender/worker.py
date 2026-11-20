@@ -673,6 +673,40 @@ async def renew_datathistle(timestamp: int) -> None:
     await renew_datathistle_tokens()
 
 
+# --- gigs ---------------------------------------------------------------------------------
+
+
+@app.task(queue="gigs", lock="nominatim")
+async def place_gigs(user_id: int | None = None) -> None:
+    """Look up where gigs were (one at a time: Nominatim allows a request a second)."""
+    from plekstender.gigs.places import place_gigs as place  # (import cycle)
+
+    async with (
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        get_sessionmaker()() as db,
+    ):
+        await place(db, http, get_settings().nominatim_url, user_id)
+
+
+async def enqueue_gig_places(user_id: int) -> None:
+    try:
+        await place_gigs.configure(
+            queueing_lock=f"gig-places-{user_id}", schedule_in={"seconds": 5}
+        ).defer_async(user_id=user_id)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.periodic(cron="35 * * * *", periodic_id="place-gigs")
+@app.task(queue="maintenance", queueing_lock="place-gigs-sweep")
+async def place_gigs_sweep(timestamp: int) -> None:
+    """Hourly: places for gigs a run didn't get to (or a busy lookup left behind)."""
+    try:
+        await place_gigs.configure(queueing_lock="gig-places-all").defer_async()
+    except AlreadyEnqueued:
+        pass
+
+
 @app.periodic(cron="* * * * *", periodic_id="heartbeat")
 @app.task(queue="maintenance", queueing_lock="heartbeat")
 async def heartbeat(timestamp: int) -> None:

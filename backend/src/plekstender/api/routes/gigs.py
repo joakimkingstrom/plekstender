@@ -15,6 +15,7 @@ from plekstender.api.schemas import GigFromLiveIn, GigIn, GigOut, GigsOut, GigYe
 from plekstender.db.models import Gig, LiveShow
 from plekstender.gigs.service import gig_from_live, library_matcher, link_artists, live_refs
 from plekstender.live.merge import merge
+from plekstender.worker import enqueue_gig_places
 
 router = APIRouter(prefix="/api/gigs", tags=["gigs"])
 
@@ -68,6 +69,7 @@ async def add_gig(body: GigIn, db: DbDep, user: UserDep) -> GigOut:
     db.add(gig)
     await db.commit()
     await db.refresh(gig)
+    await enqueue_gig_places(user.id)
     return gig_out(gig)
 
 
@@ -100,6 +102,8 @@ async def edit_gig(gig_id: int, body: GigIn, db: DbDep, user: UserDep) -> GigOut
     _apply(gig, body, link_artists(body.artists, await library_matcher(db, user.id)))
     await db.commit()
     await db.refresh(gig)
+    if gig.place_precision is None:
+        await enqueue_gig_places(user.id)
     return gig_out(gig)
 
 

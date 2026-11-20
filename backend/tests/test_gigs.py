@@ -7,7 +7,7 @@ import datetime as dt
 
 import pytest
 from fastapi import FastAPI
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from plekstender.db import get_sessionmaker
 from plekstender.db.models import LiveShow, User
@@ -133,3 +133,78 @@ async def test_gigs_from_live(app: FastAPI, plex: FakePlex) -> None:
         "/api/gigs/from-live", json={"ids": suggestions[0]["ids"]}, headers=CSRF
     )
     assert again.status_code == 404
+
+
+@pytest.mark.db
+async def test_gig_places(app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Venues are looked up once on Nominatim (the town if the venue isn't found)."""
+    import httpx
+
+    from plekstender.config import get_settings
+    from plekstender.gigs import places
+
+    monkeypatch.setattr(places, "INTERVAL", 0.0)
+    asked: list[dict[str, str]] = []
+
+    def nominatim(request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+        asked.append(params)
+        assert request.headers["user-agent"].startswith("Plekstender/")
+        if params.get("q") == "Royal Albert Hall, London":
+            return httpx.Response(
+                200, json=[{"lat": "51.5009", "lon": "-0.1774", "display_name": "RAH"}]
+            )
+        if params.get("city") == "Pilton":
+            return httpx.Response(200, json=[{"lat": "51.16", "lon": "-2.59"}])
+        return httpx.Response(200, json=[])
+
+    plex.router.get("https://nominatim.openstreetmap.org/search").mock(side_effect=nominatim)
+    owner, _ = await owner_with_library(app, plex)
+    for body in (
+        {
+            "date": "2019-10-02",
+            "artists": ["Portishead"],
+            "venue": "Royal Albert Hall",
+            "city": "London",
+            "country": "GB",
+        },
+        {
+            "date": "2021-10-02",
+            "artists": ["Radiohead"],
+            "venue": "Royal Albert Hall",
+            "city": "London",
+            "country": "GB",
+        },
+        {
+            "date": "2017-06-24",
+            "artists": ["Radiohead"],
+            "venue": "Pyramid Stage",
+            "city": "Pilton",
+            "country": "GB",
+        },
+        {
+            "date": "2010-01-01",
+            "artists": ["Radiohead"],
+            "venue": "Nowhere Hall",
+            "city": "Atlantis",
+        },
+    ):
+        assert (await owner.post("/api/gigs", json=body, headers=CSRF)).status_code == 201
+    async with get_sessionmaker()() as db:
+        jobs = (await db.execute(text("SELECT args FROM procrastinate_jobs"))).scalars().all()
+        assert jobs and all(j.get("user_id") for j in jobs)  # adding a gig queues the lookup
+        async with httpx.AsyncClient() as http:
+            placed = await places.place_gigs(db, http, get_settings().nominatim_url)
+    assert placed == 3
+    gigs = {(g["venue"], g["date"]): g for g in (await owner.get("/api/gigs")).json()["gigs"]}
+    rah = gigs[("Royal Albert Hall", "2019-10-02")]
+    assert (rah["latitude"], rah["longitude"], rah["place_precision"]) == (
+        51.5009,
+        -0.1774,
+        "venue",
+    )
+    assert gigs[("Pyramid Stage", "2017-06-24")]["place_precision"] == "city"
+    assert gigs[("Nowhere Hall", "2010-01-01")]["place_precision"] is None
+    # The Royal Albert Hall was looked up once for both gigs; the country narrows the search.
+    assert [a.get("q") or a.get("city") for a in asked].count("Royal Albert Hall, London") == 1
+    assert asked[0]["countrycodes"] == "gb"
