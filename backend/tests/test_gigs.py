@@ -345,3 +345,49 @@ async def test_gig_imports_and_exports(app: FastAPI, plex: FakePlex) -> None:
     assert len((await owner.get("/api/gigs/export.json")).json()["gigs"]) == 4
     ics_out = (await owner.get("/api/gigs/export.ics")).text
     assert ics_out.count("BEGIN:VEVENT") == 4 and "SUMMARY:Portishead + Young Fathers" in ics_out
+
+
+def test_gig_stats() -> None:
+    from plekstender.db.models import Gig
+    from plekstender.gigs.stats import gig_stats, season
+
+    assert [season(m, 51.5) for m in (12, 1, 3, 6, 9)] == [
+        "winter",
+        "winter",
+        "spring",
+        "summer",
+        "autumn",
+    ]
+    assert season(12, -33.9) == "summer"  # Sydney
+    gigs = [
+        Gig(date=dt.date(2019, 10, 2), venue="Royal Albert Hall", city="London", latitude=51.5,
+            artists=[{"name": "Portishead", "rating_key": 101, "server_id": 1}, {"name": "Young Fathers"}]),
+        Gig(date=dt.date(2019, 12, 1), venue="Royal Albert Hall", city="London",
+            artists=[{"name": "Portishead"}]),
+        Gig(date=dt.date(2017, 6, 24), venue="Pyramid Stage", city="Pilton",
+            artists=[{"name": "Radiohead"}]),
+        Gig(date=dt.date(2020, 1, 10), venue="Opera House", city="Sydney", latitude=-33.86,
+            artists=[{"name": "The Radiohead"}]),
+    ]  # fmt: skip
+    s = gig_stats(gigs)
+    assert (s.total, s.artists, s.venues, s.first, s.last) == (
+        4,
+        3,
+        3,
+        dt.date(2017, 6, 24),
+        dt.date(2020, 1, 10),
+    )
+    assert [(a["name"], a["gigs"], a["rating_key"]) for a in s.top_artists] == [
+        ("Portishead", 2, 101), ("Radiohead", 2, None), ("Young Fathers", 1, None),
+    ]  # fmt: skip
+    assert s.top_venues[0] == {"name": "Royal Albert Hall", "city": "London", "gigs": 2}
+    assert s.years == [
+        {"year": y, "gigs": n} for y, n in ((2017, 1), (2018, 0), (2019, 2), (2020, 1))
+    ]
+    assert s.months[9] == 1 and s.months[11] == 1
+    assert s.seasons == {
+        "winter": 1,
+        "spring": 0,
+        "summer": 2,
+        "autumn": 1,
+    }  # Sydney's January is summer

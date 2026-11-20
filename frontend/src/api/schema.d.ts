@@ -1059,6 +1059,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gigs/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stats
+         * @description Most seen artists and venues, gigs a year, by month and by season.
+         */
+        get: operations["stats_api_gigs_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gigs/artists": {
         parameters: {
             query?: never;
@@ -3927,6 +3947,66 @@ export interface components {
             source: string;
             /** Url */
             url: string | null;
+        };
+        /** GigStatsOut */
+        GigStatsOut: {
+            /** Total */
+            total: number;
+            /**
+             * Artists
+             * @description Different artists seen.
+             */
+            artists: number;
+            /**
+             * Venues
+             * @description Different venues.
+             */
+            venues: number;
+            /** First */
+            first: string | null;
+            /** Last */
+            last: string | null;
+            /** Top Artists */
+            top_artists: components["schemas"]["GigTopArtist"][];
+            /** Top Venues */
+            top_venues: components["schemas"]["GigTopVenue"][];
+            /**
+             * Years
+             * @description Every year from the first gig's to the last's.
+             */
+            years: components["schemas"]["GigYear"][];
+            /**
+             * Months
+             * @description Gigs in each month, January first.
+             */
+            months: number[];
+            /**
+             * Seasons
+             * @description winter, spring, summer, autumn (by hemisphere).
+             */
+            seasons: {
+                [key: string]: number;
+            };
+        };
+        /** GigTopArtist */
+        GigTopArtist: {
+            /** Name */
+            name: string;
+            /** Gigs */
+            gigs: number;
+            /** Server Id */
+            server_id: number | null;
+            /** Rating Key */
+            rating_key: number | null;
+        };
+        /** GigTopVenue */
+        GigTopVenue: {
+            /** Name */
+            name: string;
+            /** City */
+            city: string | null;
+            /** Gigs */
+            gigs: number;
         };
         /** GigYear */
         GigYear: {
@@ -8288,6 +8368,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stats_api_gigs_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigStatsOut"];
                 };
             };
         };

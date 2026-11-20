@@ -18,6 +18,7 @@ from plekstender.api.schemas import (
     GigIn,
     GigOut,
     GigsOut,
+    GigStatsOut,
     GigYear,
     LiveShowOut,
     SetlistFmImportIn,
@@ -26,6 +27,7 @@ from plekstender.db.instance import get_setlistfm_api_key
 from plekstender.db.models import Gig, LiveShow
 from plekstender.gigs import imports
 from plekstender.gigs.service import gig_from_live, library_matcher, link_artists, live_refs
+from plekstender.gigs.stats import gig_stats
 from plekstender.live.merge import merge
 from plekstender.worker import enqueue_gig_places
 
@@ -163,6 +165,13 @@ async def from_live(body: GigFromLiveIn, db: DbDep, user: UserDep) -> GigOut:
             await db.refresh(gig)
             return gig_out(gig)
     raise HTTPException(status.HTTP_404_NOT_FOUND, "No such past gig to record")
+
+
+@router.get("/stats", response_model=GigStatsOut)
+async def stats(db: DbDep, user: UserDep) -> GigStatsOut:
+    """Most seen artists and venues, gigs a year, by month and by season."""
+    gigs = list(await db.scalars(select(Gig).where(Gig.user_id == user.id)))
+    return GigStatsOut.model_validate(gig_stats(gigs), from_attributes=True)
 
 
 @router.get("/artists", response_model=list[str])

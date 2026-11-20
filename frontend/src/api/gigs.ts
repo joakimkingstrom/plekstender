@@ -86,3 +86,7 @@ export function useSetSetlistFmKey() {
     onSuccess: (data) => qc.setQueryData(['admin', 'setlistfm'], data),
   })
 }
+
+export function useGigStats() {
+  return useQuery({ queryKey: [...gigKeys.all, 'stats'], queryFn: () => unwrap(api.GET('/api/gigs/stats')) })
+}

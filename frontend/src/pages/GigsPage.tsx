@@ -15,6 +15,7 @@ import {
 import { useActiveServer } from '../api/library'
 import { useStarShow } from '../api/live'
 import { FilePicker } from '../components/controls'
+import { GigStats } from '../components/GigStats'
 import { Select } from '../components/Select'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { localDate } from '../live'
@@ -34,6 +35,7 @@ export function GigsPage() {
   return (
     <div className="space-y-6">
       <Suggestions />
+      <GigStats />
       <div className="flex flex-wrap items-center gap-2">
         <span id={artistId} className="sr-only">
           Artist

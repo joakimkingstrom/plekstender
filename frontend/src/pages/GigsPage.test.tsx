@@ -45,6 +45,15 @@ beforeEach(() => {
         return json(['Portishead', 'Radiohead'])
       case '/api/gigs/suggestions':
         return json([suggestion])
+      case '/api/gigs/stats':
+        return json({
+          total: 2, artists: 2, venues: 2, first: '2017-06-24', last: '2019-10-02',
+          top_artists: [{ name: 'Radiohead', gigs: 1, server_id: 1, rating_key: 100 }, { name: 'Portishead', gigs: 1, server_id: 1, rating_key: 101 }],
+          top_venues: [{ name: 'Royal Albert Hall', city: 'London', gigs: 1 }],
+          years: [{ year: 2017, gigs: 1 }, { year: 2018, gigs: 0 }, { year: 2019, gigs: 1 }],
+          months: [0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0],
+          seasons: { winter: 0, spring: 0, summer: 1, autumn: 1 },
+        })
       case '/api/gigs/import/setlistfm':
         return json({ added: 12, updated: 3, skipped: 1, problems: [] })
       case '/api/gigs/from-live':
@@ -76,10 +85,19 @@ describe('GigsPage', () => {
     renderPage()
     expect(await screen.findByRole('heading', { name: /2019/ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /2017/ })).toBeInTheDocument()
-    expect(await screen.findByRole('link', { name: 'Radiohead' })).toHaveAttribute('href', '/library/artists/100')
+    const links = await screen.findAllByRole('link', { name: 'Radiohead' })
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/library/artists/100', '/library/artists/100'])
     expect(screen.getByText('Glastonbury 2017')).toBeInTheDocument()
     expect(screen.getByText('Paranoid Android!')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '2019' })).toBeInTheDocument()
+  })
+
+  it('shows stats: busiest year, most seen artists and venues, time of year', async () => {
+    renderPage()
+    expect(await screen.findByText('Busiest year')).toBeInTheDocument()
+    expect(screen.getByText('Most seen artists')).toBeInTheDocument()
+    expect(screen.getByText(/by season winter 0, spring 0, summer 1, autumn 1/)).toBeInTheDocument()
+    expect(screen.getByText('Royal Albert Hall', { selector: 'li span' })).toBeInTheDocument()
   })
 
   it('records a starred Live gig that has happened', async () => {

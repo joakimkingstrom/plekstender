@@ -1580,3 +1580,29 @@ class SetlistFmKeyIn(BaseModel):
 class SetlistFmKeyOut(BaseModel):
     configured: bool
     source: Literal["settings", "environment"] | None
+
+
+class GigTopArtist(BaseModel):
+    name: str
+    gigs: int
+    server_id: int | None
+    rating_key: int | None
+
+
+class GigTopVenue(BaseModel):
+    name: str
+    city: str | None
+    gigs: int
+
+
+class GigStatsOut(BaseModel):
+    total: int
+    artists: int = Field(description="Different artists seen.")
+    venues: int = Field(description="Different venues.")
+    first: dt.date | None
+    last: dt.date | None
+    top_artists: list[GigTopArtist]
+    top_venues: list[GigTopVenue]
+    years: list[GigYear] = Field(description="Every year from the first gig's to the last's.")
+    months: list[int] = Field(description="Gigs in each month, January first.")
+    seasons: dict[str, int] = Field(description="winter, spring, summer, autumn (by hemisphere).")
