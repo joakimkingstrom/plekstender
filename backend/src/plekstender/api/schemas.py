@@ -1832,3 +1832,13 @@ class AlbumColourOut(BaseModel):
     thumb: str | None
     artist_title: str | None
     hex: str
+
+
+class RecentItem(BaseModel):
+    """An album or artist recently added to Plex."""
+
+    rating_key: int
+    title: str
+    subtitle: str | None = Field(description="Albums: the artist.")
+    thumb: str | None
+    added_at: dt.datetime | None

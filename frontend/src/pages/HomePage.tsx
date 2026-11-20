@@ -7,6 +7,14 @@ import {
   useServers,
   type ConnectionStatus,
 } from "../api/hooks";
+import { useActiveServer } from "../api/library";
+import {
+  LatestRatings,
+  RecentlyAdded,
+  TopThisMonth,
+  UpcomingGigs,
+  YourListening,
+} from "../components/HomeSections";
 import { SyncPanel } from "../components/library";
 import {
   Badge,
@@ -18,28 +26,13 @@ import {
 } from "../components/ui";
 import { ServersPage } from "./ServersPage";
 
-const UPCOMING = [
-  {
-    title: "Rate",
-    to: "/library/rate",
-    text: "Swipe through songs, albums and artists you know, and rate them in seconds.",
-  },
-  {
-    title: "Artwork",
-    to: "/library/artwork",
-    text: "Swap artist photos for logos from fanart.tv, image search, uploads or custom fonts.",
-  },
-  {
-    title: "Playlists",
-    to: "/library/playlists",
-    text: "Build playlists from artists, genres or moods, with similar artists and rating filters.",
-  },
-];
-
 export function HomePage() {
   const { data: me } = useMe();
   const servers = useServers();
   const health = useHealth();
+  const { active } = useActiveServer();
+  const libraryServer =
+    active && active.music_section_keys.length > 0 ? active : null;
 
   if (servers.isPending) return <Spinner />;
   if (servers.isError)
@@ -52,7 +45,7 @@ export function HomePage() {
 
   return (
     <>
-      <PageTitle subtitle="Here's what Plekstender is set up to work with.">
+      <PageTitle subtitle="Your music at a glance.">
         Hi {me?.username}
       </PageTitle>
 
@@ -69,6 +62,13 @@ export function HomePage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <YourListening serverId={libraryServer?.id ?? null} />
+        </div>
+        <TopThisMonth serverId={libraryServer?.id ?? null} />
+        {libraryServer && <RecentlyAdded serverId={libraryServer.id} />}
+        <UpcomingGigs serverId={libraryServer?.id ?? null} />
+        {libraryServer && <LatestRatings serverId={libraryServer.id} />}
         {servers.data
           .filter((s) => s.music_section_keys.length > 0)
           .map((s) => (
@@ -133,21 +133,6 @@ export function HomePage() {
         </Card>
       </div>
 
-      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wider text-muted">
-        Coming up
-      </h2>
-      <div className="grid gap-4 md:grid-cols-3">
-        {UPCOMING.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            className="rounded-2xl border border-dashed border-border p-5 hover:border-accent/50"
-          >
-            <div className="mb-1 font-semibold">{item.title}</div>
-            <p className="text-sm text-muted">{item.text}</p>
-          </Link>
-        ))}
-      </div>
     </>
   );
 }

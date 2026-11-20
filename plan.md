@@ -633,10 +633,11 @@ Library → Stats (a tab next to Library; Tag editing is its own tab since Phase
 - [x] Word clouds of the 100 most common words in song, album and artist names: each name counts a word once, a song released more than once counts once, words in brackets ("(2011 Remaster)", "[feat. …]") are left out, and so are stop words in English, Swedish, German, French, Spanish, Italian, Dutch and Portuguese plus title clutter ("remastered", "live", "edit"…). Sized on a square-root scale, scattered in a stable order.
 
 ### Phase 15 — A fuller Home page (from `.todo.md`)
-- [ ] Remove "Coming up".
-- [ ] Your stats at a glance: listening this week / month, top artists and albums with charts, streaks, latest ratings.
-- [ ] Recently added albums and artists.
-- [ ] Upcoming live shows (Phase 11).
+- [x] Remove "Coming up".
+- [x] Your listening at a glance: this week's listens (against the week before), the last 30 days' listens, artists and time, the current and longest streak, and a column chart of the last 30 days; top 5 artists and albums of the last 30 days with bars; the latest 6 ratings. A short note instead when there's no history yet.
+- [x] Recently added albums or artists (12, newest first; `GET /library/recent`).
+- [x] Gigs coming up: the next 4 from the Gigs page, or a prompt to set a place there.
+- The library sync, Servers and Status cards stay below.
 
 ### Phase 16 — Rewind (from `.todo.md`)
 A "wrapped"-style story for any period you choose (a year, a month, a custom range), opened as a full-screen popup within the site, far more colourful than the rest of Plekstender: each card takes its colours from the album covers on it.

@@ -224,3 +224,16 @@ async def test_cover_colours(app: FastAPI, plex: FakePlex) -> None:
     assert {a["title"] for a in blue} == {"OK Computer", "OK Computer OKNOTOK"}
     assert all(a["artist_title"] == "Radiohead" and a["hex"].startswith("#") for a in blue)
     assert (await owner.get(f"{base}/mauve")).status_code == 422
+
+
+async def test_recently_added(app: FastAPI, plex: FakePlex) -> None:
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/library/recent"
+    # The fake adds items in key order: the highest key last.
+    albums = (await owner.get(base, params={"limit": 2})).json()
+    assert [(a["title"], a["subtitle"]) for a in albums] == [
+        ("Secret Album", "Secret Band"),
+        ("Dummy", "Portishead"),
+    ]
+    artists = (await owner.get(base, params={"kind": "artist"})).json()
+    assert [a["title"] for a in artists] == ["Secret Band", "Portishead", "Radiohead"]

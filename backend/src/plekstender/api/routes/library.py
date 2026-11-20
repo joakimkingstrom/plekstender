@@ -24,6 +24,7 @@ from plekstender.api.schemas import (
     ArtistPage,
     ArtistSummary,
     ItemListensOut,
+    RecentItem,
     SimilarArtistOut,
     SongListens,
     TagAlbum,
@@ -204,6 +205,60 @@ async def list_tags(
         .limit(limit)
     )
     return [TagOut(id=i, kind=k, name=n, count=c) for i, k, n, c in rows.all()]
+
+
+@router.get("/library/recent", response_model=list[RecentItem])
+async def recently_added(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    kind: Literal["album", "artist"] = "album",
+    limit: int = Query(default=12, ge=1, le=60),
+) -> list[RecentItem]:
+    """Albums or artists most recently added to Plex (that you can see)."""
+    us = await get_user_server(db, user, server_id)
+    if kind == "artist":
+        state, cond, where = visible(Artist, user.id, us)
+        artists = await db.scalars(
+            select(Artist)
+            .join(state, cond)
+            .where(*where, Artist.added_at.is_not(None))
+            .order_by(Artist.added_at.desc(), Artist.rating_key.desc())
+            .limit(limit)
+        )
+        return [
+            RecentItem(
+                rating_key=a.rating_key,
+                title=a.title,
+                subtitle=None,
+                thumb=a.thumb,
+                added_at=a.added_at,
+            )
+            for a in artists
+        ]
+    state, cond, where = visible(Album, user.id, us)
+    owner = aliased(Artist)
+    rows = await db.execute(
+        select(Album, owner.title)
+        .join(state, cond)
+        .outerjoin(
+            owner,
+            and_(owner.server_id == Album.server_id, owner.rating_key == Album.artist_rating_key),
+        )
+        .where(*where, Album.added_at.is_not(None))
+        .order_by(Album.added_at.desc(), Album.rating_key.desc())
+        .limit(limit)
+    )
+    return [
+        RecentItem(
+            rating_key=a.rating_key,
+            title=a.title,
+            subtitle=artist,
+            thumb=a.thumb,
+            added_at=a.added_at,
+        )
+        for a, artist in rows.all()
+    ]
 
 
 TagSort = Literal["plays", "rating", "year", "name"]

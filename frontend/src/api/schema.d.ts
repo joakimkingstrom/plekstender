@@ -382,6 +382,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recently Added
+         * @description Albums or artists most recently added to Plex (that you can see).
+         */
+        get: operations["recently_added_api_servers__server_id__library_recent_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/tags/{tag_id}": {
         parameters: {
             query?: never;
@@ -6136,6 +6156,25 @@ export interface components {
             /** User Rating */
             user_rating: number | null;
         };
+        /**
+         * RecentItem
+         * @description An album or artist recently added to Plex.
+         */
+        RecentItem: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /**
+             * Subtitle
+             * @description Albums: the artist.
+             */
+            subtitle: string | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Added At */
+            added_at: string | null;
+        };
         /** ReleasedAlbum */
         ReleasedAlbum: {
             /** Rating Key */
@@ -7768,6 +7807,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recently_added_api_servers__server_id__library_recent_get: {
+        parameters: {
+            query?: {
+                kind?: "album" | "artist";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentItem"][];
                 };
             };
             /** @description Validation Error */

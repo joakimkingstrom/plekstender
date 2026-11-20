@@ -1,0 +1,277 @@
+import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { Link } from 'react-router'
+import { api, unwrap, type Schemas } from '../api/client'
+import { useLiveSettings, useLiveShows } from '../api/live'
+import { useRated } from '../api/ratings'
+import { useStatsActivity, useStatsOverview } from '../api/stats'
+import { formatChange, formatCount, formatListeningTime } from '../format'
+import { ColumnChart } from './charts'
+import { GigRow } from './GigRow'
+import { Artwork } from './library'
+import { Segmented } from './Segmented'
+import { Card, Spinner } from './ui'
+
+const more = 'text-sm text-accent hover:underline'
+
+function Tile({ label, value, note }: { label: string; value: string; note?: string | null }) {
+  return (
+    <div className="rounded-xl bg-surface-2/60 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</p>
+      <p className="font-display text-2xl font-bold tabular-nums">{value}</p>
+      {note && <p className="text-xs text-muted">{note}</p>}
+    </div>
+  )
+}
+
+/** This week and month at a glance, with the last 30 days' listens day by day. */
+export function YourListening({ serverId }: { serverId: number | null }) {
+  const week = useStatsOverview('7d', serverId)
+  const month = useStatsOverview('30d', serverId)
+  const activity = useStatsActivity('30d')
+  if (week.isPending || month.isPending) return <Card title="Your listening"><Spinner /></Card>
+  const w = week.data
+  const m = month.data
+  if (!w?.totals || !m?.totals) return null
+  if (m.totals.listens === 0 && !m.first_listen_at)
+    return (
+      <Card title="Your listening">
+        <p className="text-sm text-muted">
+          No listens yet. Plays in Plex show up here, and you can import your Last.fm or ListenBrainz history on{' '}
+          <Link to="/settings/listening" className="text-accent hover:underline">
+            Settings → Listening history
+          </Link>
+          .
+        </p>
+      </Card>
+    )
+  const change = (now: number, before: number | undefined) => {
+    const c = formatChange(now, before)
+    return c ? `${c} on the week before` : null
+  }
+  const day = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
+  const full = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+  const points = (activity.data?.points ?? []).map((p) => {
+    const [y, mo, d] = p.start.split('-').map(Number)
+    const date = new Date(y, mo - 1, d)
+    return { label: full.format(date), axis: day.format(date), value: p.listens }
+  })
+  return (
+    <Card
+      title="Your listening"
+      action={
+        <Link to="/history" className={more}>
+          History
+        </Link>
+      }
+    >
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Tile label="This week" value={formatCount(w.totals.listens)} note={change(w.totals.listens, w.previous?.listens)} />
+        <Tile label="Last 30 days" value={formatCount(m.totals.listens)} note={`${formatCount(m.totals.artists)} artists`} />
+        <Tile label="Time listening" value={formatListeningTime(m.totals.listening_ms)} note="last 30 days" />
+        <Tile
+          label="Streak"
+          value={`${formatCount(m.current_streak)} ${m.current_streak === 1 ? 'day' : 'days'}`}
+          note={`Longest ${formatCount(m.longest_streak)}`}
+        />
+      </div>
+      {points.length > 0 && (
+        <div className="mt-4">
+          <ColumnChart points={points} unit={(n) => `${formatCount(n)} ${n === 1 ? 'listen' : 'listens'}`} caption="Listens per day, the last 30 days" height={140} />
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function TopList({ serverId, items, kind }: { serverId: number | null; items: Schemas['TopItemOut'][]; kind: 'artist' | 'album' }) {
+  const max = Math.max(1, ...items.map((i) => i.listens))
+  return (
+    <ol className="space-y-2">
+      {items.slice(0, 5).map((item, i) => {
+        const to = item.rating_key ? `/library/${kind === 'artist' ? 'artists' : 'albums'}/${item.rating_key}` : null
+        const body = (
+          <>
+            <span className="w-4 shrink-0 text-right text-xs text-muted tabular-nums">{i + 1}</span>
+            {serverId !== null && (
+              <Artwork serverId={serverId} path={item.thumb} title={item.name} size={64} round={kind === 'artist'} className="size-9 shrink-0" />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{item.name}</span>
+              {item.artist && <span className="block truncate text-xs text-muted">{item.artist}</span>}
+              <span className="mt-1 block h-1 rounded-full bg-chart" style={{ width: `${(item.listens / max) * 100}%` }} aria-hidden />
+            </span>
+            <span className="shrink-0 text-xs text-muted tabular-nums">{formatCount(item.listens)}</span>
+          </>
+        )
+        const label = `${item.name}${item.artist ? ` by ${item.artist}` : ''}: ${formatCount(item.listens)} ${item.listens === 1 ? 'listen' : 'listens'}`
+        return (
+          <li key={`${item.name}-${item.artist}`}>
+            {to ? (
+              <Link to={to} aria-label={label} className="flex items-center gap-2 rounded-lg hover:bg-surface-2/60">
+                {body}
+              </Link>
+            ) : (
+              <div className="flex items-center gap-2">{body}</div>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/** The month's top artists and albums. */
+export function TopThisMonth({ serverId }: { serverId: number | null }) {
+  const month = useStatsOverview('30d', serverId)
+  const m = month.data
+  if (!m?.top_artists?.length) return null
+  return (
+    <>
+      <Card title="Top artists · 30 days">
+        <TopList serverId={serverId} items={m.top_artists} kind="artist" />
+      </Card>
+      <Card title="Top albums · 30 days">
+        <TopList serverId={serverId} items={m.top_albums} kind="album" />
+      </Card>
+    </>
+  )
+}
+
+/** Albums or artists most recently added to Plex. */
+export function RecentlyAdded({ serverId }: { serverId: number }) {
+  const [kind, setKind] = useState<'album' | 'artist'>('album')
+  const recent = useQuery({
+    queryKey: ['servers', serverId, 'library', 'recent', kind],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/recent', {
+          params: { path: { server_id: serverId }, query: { kind, limit: 12 } },
+        }),
+      ),
+  })
+  return (
+    <Card
+      title="Recently added"
+      action={
+        <Segmented
+          label="Recently added"
+          value={kind}
+          onChange={setKind}
+          options={[
+            ['album', 'Albums'],
+            ['artist', 'Artists'],
+          ]}
+        />
+      }
+      className="md:col-span-2"
+    >
+      {recent.isPending ? (
+        <Spinner />
+      ) : !Array.isArray(recent.data) || recent.data.length === 0 ? (
+        <p className="text-sm text-muted">Nothing yet.</p>
+      ) : (
+        <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+          {recent.data.map((item) => (
+            <li key={item.rating_key}>
+              <Link to={`/library/${kind === 'album' ? 'albums' : 'artists'}/${item.rating_key}`} className="group block">
+                <Artwork serverId={serverId} path={item.thumb} title={item.title} round={kind === 'artist'} className="w-full group-hover:opacity-85" />
+                <div className={`mt-1 truncate text-xs font-medium ${kind === 'artist' ? 'text-center' : ''}`}>{item.title}</div>
+              </Link>
+              {item.subtitle && <div className="truncate text-xs text-muted">{item.subtitle}</div>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+/** The next few gigs from the Gigs page (when a place is set). */
+export function UpcomingGigs({ serverId }: { serverId: number | null }) {
+  const settings = useLiveSettings()
+  const placed = Boolean(settings.data?.place_name)
+  const shows = useLiveShows({}, false)
+  if (settings.isPending || !settings.data) return null
+  if (!placed)
+    return (
+      <Card title="Gigs coming up">
+        <p className="text-sm text-muted">
+          Set your place on{' '}
+          <Link to="/gigs" className="text-accent hover:underline">
+            Gigs
+          </Link>{' '}
+          to see gigs near you by the artists you listen to.
+        </p>
+      </Card>
+    )
+  const list = shows.data?.shows ?? []
+  return (
+    <Card
+      title="Gigs coming up"
+      action={
+        <Link to="/gigs" className={more}>
+          All gigs
+        </Link>
+      }
+    >
+      {shows.isPending ? (
+        <Spinner />
+      ) : list.length === 0 ? (
+        <p className="text-sm text-muted">No gigs found near you yet.</p>
+      ) : (
+        <ul className="-mx-3 divide-y divide-border">
+          {list.slice(0, 4).map((show) => (
+            <GigRow key={show.id} show={show} serverId={serverId} />
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+function stars(rating: number): string {
+  const halves = Math.round(rating)
+  return `${'★'.repeat(Math.floor(halves / 2))}${halves % 2 ? '½' : ''}`
+}
+
+/** What you rated last. */
+export function LatestRatings({ serverId }: { serverId: number }) {
+  const rated = useRated(serverId, null)
+  const items = rated.data?.pages?.[0]?.items ?? []
+  if (rated.isPending || items.length === 0) return null
+  return (
+    <Card
+      title="Latest ratings"
+      action={
+        <Link to="/history/ratings" className={more}>
+          All ratings
+        </Link>
+      }
+    >
+      <ul className="space-y-2">
+        {items.slice(0, 6).map((item) => {
+          const to = item.link_key ? `/library/${item.kind === 'artist' ? 'artists' : 'albums'}/${item.link_key}` : null
+          return (
+            <li key={`${item.kind}-${item.rating_key}`} className="flex items-center gap-2">
+              <Artwork serverId={serverId} path={item.thumb} title={item.title} size={64} round={item.kind === 'artist'} className="size-9 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {to ? (
+                  <Link to={to} className="block truncate text-sm font-medium hover:underline">
+                    {item.title}
+                  </Link>
+                ) : (
+                  <span className="block truncate text-sm font-medium">{item.title}</span>
+                )}
+                {item.subtitle && <span className="block truncate text-xs text-muted">{item.subtitle}</span>}
+              </span>
+              <span className="shrink-0 text-sm text-accent" aria-label={`${item.user_rating / 2} stars`}>
+                {stars(item.user_rating)}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
+  )
+}
