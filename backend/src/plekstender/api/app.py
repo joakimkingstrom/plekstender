@@ -33,6 +33,7 @@ from plekstender.api.routes import (
     scrobblers,
     servers,
     stats,
+    statuses,
     sync,
 )
 from plekstender.config import Settings, get_settings
@@ -76,6 +77,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         library,
         listens,
         stats,
+        statuses,
         ratings,
         playlists,
         previews,

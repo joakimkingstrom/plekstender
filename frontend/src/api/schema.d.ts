@@ -592,6 +592,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/status/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Connections
+         * @description Every connection, the user's own first.
+         */
+        get: operations["connections_api_status_connections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/rate/queue": {
         parameters: {
             query?: never;
@@ -3502,6 +3522,29 @@ export interface components {
             server: components["schemas"]["ServerOut"];
             /** Probes */
             probes: components["schemas"]["ProbeOut"][];
+        };
+        /** ConnectionStatus */
+        ConnectionStatus: {
+            /** Name */
+            name: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "yours" | "instance";
+            /**
+             * State
+             * @description off: not set up; warning: working, but look (nearly at a limit).
+             * @enum {string}
+             */
+            state: "ok" | "warning" | "error" | "off";
+            /** Detail */
+            detail?: string | null;
+            /**
+             * Link
+             * @description Where it's set up or fixed.
+             */
+            link?: string | null;
         };
         /** CountryListensOut */
         CountryListensOut: {
@@ -7677,6 +7720,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connections_api_status_connections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionStatus"][];
                 };
             };
         };

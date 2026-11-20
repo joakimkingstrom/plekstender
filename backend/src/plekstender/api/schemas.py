@@ -1685,3 +1685,13 @@ class SpotifyAppOut(BaseModel):
 
 class SpotifyImportIn(BaseModel):
     url: str = Field(min_length=10, max_length=500)
+
+
+class ConnectionStatus(BaseModel):
+    name: str
+    group: Literal["yours", "instance"]
+    state: Literal["ok", "warning", "error", "off"] = Field(
+        description="off: not set up; warning: working, but look (nearly at a limit)."
+    )
+    detail: str | None = None
+    link: str | None = Field(default=None, description="Where it's set up or fixed.")

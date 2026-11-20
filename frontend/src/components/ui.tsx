@@ -1,23 +1,26 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { Mark } from './Mark'
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Mark } from "./Mark";
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-accent text-on-accent hover:bg-accent-strong',
-  secondary: 'bg-surface-2 text-text hover:bg-border',
-  ghost: 'text-muted hover:text-text hover:bg-surface-2',
-  danger: 'text-danger hover:bg-danger/10',
-}
+  primary: "bg-accent text-on-accent hover:bg-accent-strong",
+  secondary: "bg-surface-2 text-text hover:bg-border",
+  ghost: "text-muted hover:text-text hover:bg-surface-2",
+  danger: "text-danger hover:bg-danger/10",
+};
 
 export function Button({
-  variant = 'secondary',
+  variant = "secondary",
   busy = false,
-  className = '',
+  className = "",
   children,
   disabled,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; busy?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: Variant;
+  busy?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -29,22 +32,24 @@ export function Button({
       {busy && <Spinner small />}
       {children}
     </button>
-  )
+  );
 }
 
 export function Card({
   title,
   action,
   children,
-  className = '',
+  className = "",
 }: {
-  title?: ReactNode
-  action?: ReactNode
-  children: ReactNode
-  className?: string
+  title?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className={`rounded-2xl border border-border bg-surface p-5 ${className}`}>
+    <section
+      className={`rounded-2xl border border-border bg-surface p-5 ${className}`}
+    >
       {(title || action) && (
         <header className="mb-4 flex items-center justify-between gap-3">
           {title && <h2 className="text-base font-semibold">{title}</h2>}
@@ -53,82 +58,141 @@ export function Card({
       )}
       {children}
     </section>
-  )
+  );
 }
 
 /** Loading: the brand's spinning pick (the same turn as clicking the logo). */
 export function Spinner({ small = false }: { small?: boolean }) {
-  const size = small ? 'size-4' : 'size-7'
+  const size = small ? "size-4" : "size-7";
   return (
-    <span role="status" aria-label="Loading" className={`inline-flex shrink-0 ${size}`}>
+    <span
+      role="status"
+      aria-label="Loading"
+      className={`inline-flex shrink-0 ${size}`}
+    >
       <Mark className="pick-spin size-full" />
     </span>
-  )
+  );
 }
 
 export function Notice({
-  tone = 'info',
+  tone = "info",
   children,
 }: {
-  tone?: 'info' | 'error' | 'warn'
-  children: ReactNode
+  tone?: "info" | "error" | "warn";
+  children: ReactNode;
 }) {
   const tones = {
-    info: 'border-border bg-surface-2 text-text',
-    error: 'border-danger/40 bg-danger/10 text-danger',
-    warn: 'border-warn/40 bg-warn/10 text-warn',
-  }
+    info: "border-border bg-surface-2 text-text",
+    error: "border-danger/40 bg-danger/10 text-danger",
+    warn: "border-warn/40 bg-warn/10 text-warn",
+  };
   return (
-    <div role={tone === 'error' ? 'alert' : undefined} className={`rounded-lg border px-4 py-3 text-sm ${tones[tone]}`}>
+    <div
+      role={tone === "error" ? "alert" : undefined}
+      className={`rounded-lg border px-4 py-3 text-sm ${tones[tone]}`}
+    >
       {children}
     </div>
-  )
+  );
 }
 
-export function StatusDot({ ok, label }: { ok: boolean; label: string }) {
+const DOT = {
+  ok: "bg-ok",
+  warning: "bg-warn",
+  error: "bg-danger",
+  off: "bg-border",
+} as const;
+
+export function StatusDot({
+  ok,
+  tone,
+  label,
+}: {
+  ok?: boolean;
+  tone?: keyof typeof DOT;
+  label: string;
+}) {
   return (
     <span className="inline-flex items-center gap-2 text-sm text-muted">
-      <span className={`size-2 rounded-full ${ok ? 'bg-ok' : 'bg-danger'}`} aria-hidden />
+      <span
+        className={`size-2 shrink-0 rounded-full ${DOT[tone ?? (ok ? "ok" : "error")]}`}
+        aria-hidden
+      />
       {label}
     </span>
-  )
+  );
 }
 
 export function Avatar({ url, name }: { url?: string | null; name: string }) {
   if (url) {
-    return <img src={url} alt="" className="size-8 rounded-full object-cover" referrerPolicy="no-referrer" />
+    return (
+      <img
+        src={url}
+        alt=""
+        className="size-8 rounded-full object-cover"
+        referrerPolicy="no-referrer"
+      />
+    );
   }
   return (
     <span className="flex size-8 items-center justify-center rounded-full bg-surface-2 text-sm font-semibold">
       {name.slice(0, 1).toUpperCase()}
     </span>
-  )
+  );
 }
 
-export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'accent' | 'ok' }) {
+export function Badge({
+  children,
+  tone = "muted",
+}: {
+  children: ReactNode;
+  tone?: "muted" | "accent" | "ok";
+}) {
   const tones = {
-    muted: 'bg-surface-2 text-muted',
-    accent: 'bg-accent/15 text-accent',
-    ok: 'bg-ok/15 text-ok',
-  }
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>
+    muted: "bg-surface-2 text-muted",
+    accent: "bg-accent/15 text-accent",
+    ok: "bg-ok/15 text-ok",
+  };
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]}`}
+    >
+      {children}
+    </span>
+  );
 }
 
-export function PageTitle({ children, subtitle }: { children: ReactNode; subtitle?: ReactNode }) {
+export function PageTitle({
+  children,
+  subtitle,
+}: {
+  children: ReactNode;
+  subtitle?: ReactNode;
+}) {
   return (
     <div className="mb-6">
       <h1 className="text-2xl font-bold tracking-tight">{children}</h1>
       {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
     </div>
-  )
+  );
 }
 
 /** A curved "go back" arrow for undo buttons (the ↶ character is missing from many fonts). */
-export function UndoIcon({ className = 'size-3.5' }: { className?: string }) {
+export function UndoIcon({ className = "size-3.5" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`shrink-0 ${className}`}>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={`shrink-0 ${className}`}
+    >
       <path d="M5.5 3 2.5 6l3 3" />
       <path d="M2.5 6h7a4 4 0 0 1 0 8H7" />
     </svg>
-  )
+  );
 }
