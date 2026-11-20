@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from plekstender import __version__
 from plekstender.api.middleware import CSRFMiddleware, RateLimiter, SecurityHeadersMiddleware
 from plekstender.api.routes import (
+    achievements,
     admin,
     artwork,
     auth,
@@ -99,6 +100,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         export,
         live,
         notifications,
+        achievements,
         admin,
     ):
         app.include_router(module.router)

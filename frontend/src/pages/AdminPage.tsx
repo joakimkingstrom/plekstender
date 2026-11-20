@@ -12,6 +12,7 @@ import {
   useUpdateUser,
 } from '../api/hooks'
 import { Avatar, Badge, Button, Card, Notice, Spinner } from '../components/ui'
+import { useAchievementSettings, useSetAchievementSettings } from '../api/achievements'
 
 type Mode = Schemas['AccessMode']
 
@@ -177,6 +178,7 @@ export function AdminSettings() {
         <AccessCard />
         <ServersCard />
         <UsersCard selfId={me.id} />
+        <AchievementsCard />
       </div>
     </section>
   )
@@ -188,4 +190,25 @@ export function UsersPage() {
   if (isPending) return null
   if (!me?.is_admin) return <Navigate to="/settings" replace />
   return <AdminSettings />
+}
+
+/** Achievements on or off for everyone (each person can also turn them off on their profile). */
+function AchievementsCard() {
+  const settings = useAchievementSettings(true)
+  const set = useSetAchievementSettings()
+  const on = set.isPending ? set.variables : (settings.data?.enabled ?? true)
+  return (
+    <Card title="Achievements">
+      <label className="flex items-start gap-3 text-sm">
+        <input type="checkbox" checked={on} disabled={settings.isPending} onChange={(e) => set.mutate(e.target.checked)} className="mt-0.5" />
+        <span>
+          <span className="font-medium">On for everyone</span>
+          <span className="block text-muted">
+            Small rewards for milestones, with a pop-up when one unlocks. Off: no pop-ups and no list, for anyone. Each
+            person can also turn them off for themselves on their profile.
+          </span>
+        </span>
+      </label>
+    </Card>
+  )
 }

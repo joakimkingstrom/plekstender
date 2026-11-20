@@ -10,6 +10,7 @@ import { Mark } from './Mark'
 import { Avatar, Button } from './ui'
 import { useAppTime } from '../appTime'
 import { NotificationBell } from './NotificationBell'
+import { AchievementCelebration } from './Achievements'
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -163,6 +164,7 @@ export function Layout() {
       >
         <Outlet />
       </main>
+      <AchievementCelebration enabled={me.preferences?.achievements !== false} />
 
       {/* Mobile bottom navigation */}
       <nav

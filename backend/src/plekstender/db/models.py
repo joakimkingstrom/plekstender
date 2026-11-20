@@ -677,6 +677,19 @@ class NotificationState(Base):
     dismissed_at: Mapped[dt.datetime | None]
 
 
+class UserAchievement(Base):
+    """An achievement a person unlocked (see plekstender.achievements), and when they saw
+    its celebration."""
+
+    __tablename__ = "user_achievements"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "achievement"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    achievement: Mapped[str] = mapped_column(String(64))
+    unlocked_at: Mapped[dt.datetime]
+    seen_at: Mapped[dt.datetime | None]
+
+
 class AppTime(Base):
     """Time spent with Plekstender open and in use, per person and day (for Rewind)."""
 

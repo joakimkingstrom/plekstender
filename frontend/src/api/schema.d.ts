@@ -2927,6 +2927,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/achievements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Achievements
+         * @description Every achievement with your progress, unlocking any you've just reached. Empty (and
+         *     `enabled` false) when they're turned off, for you or by the admins.
+         */
+        get: operations["list_achievements_api_achievements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/achievements/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Seen */
+        post: operations["seen_api_achievements_seen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/achievements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_api_admin_achievements_get"];
+        /** Put Settings */
+        put: operations["put_settings_api_admin_achievements_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/access": {
         parameters: {
             query?: never;
@@ -3440,6 +3496,56 @@ export interface components {
             allowlist: string[];
             /** Initial Admin Configured */
             initial_admin_configured: boolean;
+        };
+        /** AchievementOut */
+        AchievementOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "library" | "rating" | "game" | "gigs" | "connections" | "listening";
+            /** Message */
+            message: string;
+            /** Hint */
+            hint: string;
+            /** Goal */
+            goal: number;
+            /**
+             * Progress
+             * @description Where you are now (may be past the goal).
+             */
+            progress: number;
+            /** Unlocked At */
+            unlocked_at: string | null;
+            /** Seen */
+            seen: boolean;
+        };
+        /** AchievementsOut */
+        AchievementsOut: {
+            /**
+             * Enabled
+             * @description On for you (and for everyone, by the admins).
+             */
+            enabled: boolean;
+            /** Items */
+            items: components["schemas"]["AchievementOut"][];
+        };
+        /** AchievementsSeenIn */
+        AchievementsSeenIn: {
+            /** Ids */
+            ids: string[];
+        };
+        /** AchievementsSettings */
+        AchievementsSettings: {
+            /**
+             * Enabled
+             * @description Achievements on for everyone (each person can still turn them off).
+             */
+            enabled: boolean;
         };
         /** AcoustIdKeyIn */
         AcoustIdKeyIn: {
@@ -12723,6 +12829,123 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_achievements_api_achievements_get: {
+        parameters: {
+            query?: {
+                tz?: string;
+                /** @description Only unlocked ones not celebrated yet. */
+                new?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AchievementsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    seen_api_achievements_seen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AchievementsSeenIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_settings_api_admin_achievements_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AchievementsSettings"];
+                };
+            };
+        };
+    };
+    put_settings_api_admin_achievements_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AchievementsSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AchievementsSettings"];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -662,24 +662,17 @@ Tell people when something they rely on stops working, before they notice it the
 
 ### Phase 19 — Achievements (20 Nov 2026)
 Small, silly rewards. Every one has a name from music lore, a badge, and a humorous message; unlocking one pops up a short celebration (confetti / a spinning record; calmer with reduced motion).
-- [ ] What they're for (each in steps):
-  - The library: artists (100 / 250 / 500 / 1,000…), albums, tracks (10,000 / 25,000 / 50,000 / 100,000 / … / 1,000,000).
-  - Rating: songs rated, as a number and as a share of the library (10 % / 25 % / 50 % / 100 %).
-  - Guess the intro: games played, perfect rounds, streaks, fastest guesses.
-  - Gigs: gigs been to, venues, countries, a busy year.
-  - Connections: scrobble services and other connections set up; scrobbles sent.
-  - Listening: scrobbles, days in a row, artists discovered.
-- [ ] A starting list to set the tone (wording to be polished):
-  - Roadie — the first 100 artists. "You carry the gear now. Lift with your knees."
-  - Groupie — 25 gigs been to. "Security knows you by name."
-  - Band-Aid — 50 gigs. "Not a groupie. You're here for the music, obviously."
-  - Golden God — 1,000 artists. "Shout it from a rooftop in Topeka."
-  - Music Hoarder — 100,000 tracks. "We hope you're not hoarding other things at home as much as you hoard music."
-  - These Go to Eleven — 1,000,000 tracks. "Your library has been referred to a support group. They're very understanding. Please call them."
-  - Crate Digger — 50,000 tracks. Liner Notes Reader — 1,000 songs rated. Critic's Choice — every song rated ("Even the hidden track. Even the 12-minute one."). Deep Cut, B-Side, One-Hit Wonder, Session Musician, Sound Check, Backstage Pass, Tour Bus, Headliner, Brown M&Ms (a perfect Guess-the-intro game: "Every detail of the rider, checked."), Air Guitar, Stage Diver, Encore, Platinum Record, Hall of Fame.
-- [ ] A page of achievements (on the profile): unlocked ones with their date and message, locked ones as silhouettes with a hint and progress.
-- [ ] Unlocked when the numbers change (sync, ratings, games, gigs, scrobbles), each once, per person; library ones count what that person can see.
-- [ ] Each person can turn achievements off (no pop-ups, hidden page); an admin can turn them off for everyone (Settings → Admin).
+- [x] 32 to start with (`plekstender/achievements.py`, wording to be polished), each a threshold on one of the person's own numbers:
+  - The library (what their account can see): Roadie, Session Musician, Headliner, Golden God, Hall of Fame (100 / 250 / 500 / 1,000 / 2,500 artists); Deep Cut, B-Side, Crate Digger, Music Hoarder, Platinum Record, These Go to Eleven (10,000 / 25,000 / 50,000 / 100,000 / 250,000 / 1,000,000 tracks).
+  - Rating: One-Hit Wonder (a first rating), Liner Notes Reader (1,000 songs), Air Guitar / Stage Diver / Encore / Critic's Choice (10 / 25 / 50 / 100 % of songs rated: "Even the hidden track. Even the 12-minute one.").
+  - Guess the intro: Sound Check (a first round), Backstage Pass (100 rounds), Brown M&Ms (ten right in a row: "Every detail of the rider, checked.").
+  - Gigs: Front Row (a first), Groupie (25), Band-Aid (50), Tour Bus (10 venues), World Tour (3 countries), Residency (12 in a year).
+  - Connections: Patch Bay (a scrobble service), Daisy Chain (three).
+  - Listening: Heavy Rotation and Gold Record (10,000 / 100,000 scrobbles), On Tour (30 days in a row), Deep Diver (1,000 artists heard).
+- [x] Profile → Achievements: unlocked ones (newest first) with their date and message, locked ones as silhouettes ("???") with a hint and a progress bar; "N of M unlocked".
+- [x] Unlocked when the numbers change: worked out whenever the app asks (it checks every 3 minutes while open, and the profile asks when opened), each once per person (`user_achievements`), kept even if a number goes down later. New ones pop up at the bottom of the screen (a spinning record badge and confetti, both still with reduced motion), one after another, until "Nice!".
+- [x] Each person can turn them off (Profile: no pop-ups, no list); an admin can turn them off for everyone (Settings → Users & access).
+- [ ] Badges drawn per achievement (today: a record-label badge in the accent colour with a symbol per kind).
 
 ## Later
 

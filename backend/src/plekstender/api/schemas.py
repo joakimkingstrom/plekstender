@@ -1957,3 +1957,30 @@ class ProfileOut(BaseModel):
     first_listen_at: dt.datetime | None
     ratings: int
     gigs: int
+
+
+class AchievementOut(BaseModel):
+    id: str
+    name: str
+    group: Literal["library", "rating", "game", "gigs", "connections", "listening"]
+    message: str
+    hint: str
+    goal: int
+    progress: int = Field(description="Where you are now (may be past the goal).")
+    unlocked_at: dt.datetime | None
+    seen: bool
+
+
+class AchievementsOut(BaseModel):
+    enabled: bool = Field(description="On for you (and for everyone, by the admins).")
+    items: list[AchievementOut]
+
+
+class AchievementsSeenIn(BaseModel):
+    ids: list[str] = Field(max_length=100)
+
+
+class AchievementsSettings(BaseModel):
+    enabled: bool = Field(
+        description="Achievements on for everyone (each person can still turn them off)."
+    )

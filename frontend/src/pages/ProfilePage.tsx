@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { api, errorMessage, unwrap } from '../api/client'
 import { useMe, useSetPreferences } from '../api/hooks'
+import { AchievementList } from '../components/Achievements'
 import { Segmented } from '../components/Segmented'
 import { Avatar, Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCount, formatDate } from '../format'
@@ -124,6 +125,12 @@ export function ProfilePage() {
           </Toggle>
         </Card>
       </div>
+      {prefs?.achievements !== false && (
+        <>
+          <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wider text-muted">Achievements</h2>
+          <AchievementList />
+        </>
+      )}
       {save.isError && <div className="mt-4"><Notice tone="error">{errorMessage(save.error)}</Notice></div>}
     </>
   )

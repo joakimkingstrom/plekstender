@@ -278,3 +278,15 @@ input[type='number']::-webkit-outer-spin-button {
     transform: none;
   }
 }
+
+/* Achievements: confetti falls once. */
+@keyframes confetti {
+  from {
+    transform: translateY(-8px) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(160px) rotate(540deg);
+    opacity: 0;
+  }
+}
