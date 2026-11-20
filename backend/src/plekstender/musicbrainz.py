@@ -38,6 +38,10 @@ class MusicBrainzError(Exception):
     pass
 
 
+class NotFound(MusicBrainzError):
+    """MusicBrainz has no such thing (400 / 404), as opposed to being unreachable or busy."""
+
+
 def clear_cache() -> None:
     _cache.clear()
 
@@ -65,7 +69,7 @@ async def _get(http: httpx.AsyncClient, path: str, params: dict[str, str]) -> An
         finally:
             _last = time.monotonic()
     if resp.status_code in (400, 404):
-        raise MusicBrainzError("MusicBrainz doesn't have that release.")
+        raise NotFound("MusicBrainz doesn't have that release.")
     if resp.status_code == 503:
         raise MusicBrainzError("MusicBrainz is busy; try again in a moment.")
     if resp.status_code >= 400:
@@ -273,3 +277,53 @@ async def cover(http: httpx.AsyncClient, mbid: str) -> bytes | None:
     if resp.status_code != 200 or not resp.headers.get("content-type", "").startswith("image/"):
         return None
     return resp.content
+
+
+# --- artists' countries ------------------------------------------------------------------------
+
+
+def _area_country(area: dict[str, Any] | None) -> str | None:
+    """An area's country: its ISO 3166-1 code, else the country part of its 3166-2 code
+    (a city or region: "GB-ENG")."""
+    if not area:
+        return None
+    for code in area.get("iso-3166-1-codes") or []:
+        return str(code)[:2].upper()
+    for code in area.get("iso-3166-2-codes") or []:
+        return str(code)[:2].upper()
+    return None
+
+
+def artist_country_of(artist: dict[str, Any]) -> str | None:
+    """Where an artist is from: MusicBrainz's country, else their area's or begin area's."""
+    country = artist.get("country")
+    if country:
+        return str(country).upper()
+    return _area_country(artist.get("area")) or _area_country(artist.get("begin-area"))
+
+
+async def artist_country(http: httpx.AsyncClient, mbid: str) -> str | None:
+    """An artist's country by MusicBrainz ID (NotFound when MusicBrainz doesn't know it)."""
+    if not MBID.fullmatch(mbid):
+        raise NotFound("Not a MusicBrainz ID.")
+    return artist_country_of(await _get(http, f"/artist/{mbid}", {}))
+
+
+def _fold(name: str) -> str:
+    return " ".join(name.casefold().split())
+
+
+async def find_artist_country(http: httpx.AsyncClient, name: str) -> str | None:
+    """An artist's country by name: only when MusicBrainz is sure (a 100 score for the exact
+    name) and every artist of that name it's sure about is from the same country."""
+    name = " ".join(name.split())
+    if not name:
+        return None
+    data = await _get(http, "/artist", {"query": f"artist:{_quote(name)}", "limit": "5"})
+    exact = [
+        a
+        for a in data.get("artists") or []
+        if int(a.get("score") or 0) == 100 and _fold(str(a.get("name") or "")) == _fold(name)
+    ]
+    countries = {artist_country_of(a) for a in exact}
+    return countries.pop() if len(countries) == 1 else None

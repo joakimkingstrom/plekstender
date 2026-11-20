@@ -84,3 +84,72 @@ def test_word_counting() -> None:
     assert counted["Stop"] == 2 and "Don't" not in counted  # a stop word, whichever apostrophe
     assert "Remaster" not in counted and "Someone" not in counted and "feat" not in counted
     assert "är" not in counted and "the" not in {k.lower() for k in counted}
+
+
+async def test_where_artists_are_from(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    from plekstender import artist_countries, musicbrainz
+
+    monkeypatch.setattr(musicbrainz, "INTERVAL", 0.0)
+    monkeypatch.setattr(artist_countries, "PAUSE", 0.0)
+    musicbrainz.clear_cache()
+    searched: list[str] = []
+
+    def search(request: httpx.Request) -> httpx.Response:
+        query = request.url.params["query"]
+        searched.append(query)
+        if query == 'artist:"Portishead"':
+            found = [
+                {"name": "Portishead", "score": 100, "area": {"iso-3166-2-codes": ["GB-ENG"]}},
+                {"name": "Portishead Tribute", "score": 60, "country": "US"},
+            ]
+        else:
+            found = []
+        return httpx.Response(200, json={"artists": found})
+
+    plex.router.get("https://musicbrainz.org/ws/2/artist").mock(side_effect=search)
+
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/library/stats/countries"
+    # Radiohead's country comes from Plex; the others wait for MusicBrainz.
+    before = (await owner.get(base)).json()
+    assert before == {
+        "countries": [{"country_code": "GB", "artists": 1}],
+        "unknown": 2,
+        "pending": 2,
+    }
+
+    async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
+        assert await artist_countries.look_up(db, http) == 2
+        assert await artist_countries.look_up(db, http) == 0  # not again (for a while)
+    assert sorted(searched) == ['artist:"Portishead"', 'artist:"Secret Band"']
+
+    after = (await owner.get(base)).json()
+    assert after == {
+        "countries": [{"country_code": "GB", "artists": 2}],
+        "unknown": 1,
+        "pending": 0,
+    }
+    gb = (await owner.get(f"{base}/gb")).json()
+    assert {a["title"] for a in gb} == {"Radiohead", "Portishead"}
+    assert (await owner.get(f"{base}/SE")).json() == []
+
+
+def test_country_names_and_areas() -> None:
+    from plekstender.countries import country_code
+    from plekstender.musicbrainz import artist_country_of
+
+    assert [country_code(n) for n in ("United Kingdom", "USA", "Côte d'Ivoire", "gb")] == [
+        "GB",
+        "US",
+        "CI",
+        "GB",
+    ]
+    assert country_code("Atlantis") is None and country_code(None) is None
+    assert artist_country_of({"country": "se"}) == "SE"
+    assert artist_country_of({"area": {"iso-3166-2-codes": ["GB-SCT"]}}) == "GB"
+    assert artist_country_of({"begin-area": {"iso-3166-1-codes": ["IS"]}}) == "IS"
+    assert artist_country_of({}) is None

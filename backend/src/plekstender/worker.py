@@ -13,6 +13,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender import __version__
+from plekstender.artist_countries import look_up as look_up_artist_countries
 from plekstender.artwork.folders import check_server as check_folder_mapping
 from plekstender.artwork.folders import write_queued as write_queued_folder
 from plekstender.artwork.jobs import run_job as run_artwork_job
@@ -715,6 +716,20 @@ async def place_gigs_sweep(timestamp: int) -> None:
         await place_gigs.configure(queueing_lock="gig-places-all").defer_async()
     except AlreadyEnqueued:
         pass
+
+
+@app.periodic(cron="25 * * * *", periodic_id="artist-countries")
+@app.task(queue="maintenance", queueing_lock="artist-countries")
+async def find_artist_countries(timestamp: int) -> None:
+    """Hourly: where artists without a country in Plex are from, on MusicBrainz (Library →
+    Stats map). A few hundred an hour; a big library is done over a day or two."""
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        done = await look_up_artist_countries(db, http)
+    if done:
+        log.info("Looked up %d artists' countries on MusicBrainz", done)
 
 
 @app.periodic(cron="* * * * *", periodic_id="heartbeat")

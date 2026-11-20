@@ -9,13 +9,16 @@ from __future__ import annotations
 import datetime as dt
 from typing import Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Path, Query
 from sqlalchemy import extract, func, select
 
 from plekstender.api.deps import DbDep, UserDep
-from plekstender.api.routes.library import plays_of, visible
+from plekstender.api.routes.library import _album_count, _artist_summary, plays_of, visible
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
+    ArtistCountriesOut,
+    ArtistSummary,
+    CountryArtists,
     DecadeCount,
     GrowthPoint,
     LibraryStatsOut,
@@ -23,7 +26,8 @@ from plekstender.api.schemas import (
     ReleasedOut,
     WordCount,
 )
-from plekstender.db.models import Album, Artist, Track
+from plekstender.artist_countries import ArtistKey, countries_for
+from plekstender.db.models import Album, Artist, Track, UserServer
 from plekstender.library_stats import words
 
 router = APIRouter(prefix="/api/servers/{server_id}/library/stats", tags=["library"])
@@ -191,3 +195,62 @@ async def name_words(
         )
     titles = list(await db.scalars(query))
     return [WordCount(word=w, count=n) for w, n in words(titles, limit)]
+
+
+async def _artist_countries(
+    db: DbDep, user_id: int, us: UserServer
+) -> tuple[dict[int, str], int, int]:
+    """The visible artists' countries, how many have none (yet) and how many wait for a
+    MusicBrainz lookup."""
+    state, cond, where = visible(Artist, user_id, us)
+    rows = await db.execute(
+        select(Artist.rating_key, Artist.title, Artist.mbid, Artist.name_key)
+        .join(state, cond)
+        .where(*where)
+    )
+    artists = [ArtistKey(*r) for r in rows.all()]
+    found, pending = await countries_for(db, us.server_id, artists)
+    return found, len(artists) - len(found), pending
+
+
+@router.get("/countries", response_model=ArtistCountriesOut)
+async def artist_countries(server_id: int, db: DbDep, user: UserDep) -> ArtistCountriesOut:
+    """Artists per country: Plex's country for the artist, else MusicBrainz's (looked up a
+    few hundred an hour by the worker)."""
+    us = await get_user_server(db, user, server_id)
+    found, unknown, pending = await _artist_countries(db, user.id, us)
+    per: dict[str, int] = {}
+    for code in found.values():
+        per[code] = per.get(code, 0) + 1
+    return ArtistCountriesOut(
+        countries=[
+            CountryArtists(country_code=c, artists=n)
+            for c, n in sorted(per.items(), key=lambda x: (-x[1], x[0]))
+        ],
+        unknown=unknown,
+        pending=pending,
+    )
+
+
+@router.get("/countries/{code}", response_model=list[ArtistSummary])
+async def country_artists(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    code: str = Path(pattern=r"^[A-Za-z]{2}$"),
+) -> list[ArtistSummary]:
+    """A country's artists, most played first."""
+    us = await get_user_server(db, user, server_id)
+    found, _unknown, _pending = await _artist_countries(db, user.id, us)
+    keys = [k for k, c in found.items() if c == code.upper()]
+    if not keys:
+        return []
+    state, cond, where = visible(Artist, user.id, us)
+    rows = await db.execute(
+        select(Artist, state.user_rating, plays_of(state), _album_count(user.id, us))
+        .join(state, cond)
+        .where(*where, Artist.rating_key.in_(keys))
+        .order_by(plays_of(state).desc(), func.lower(Artist.title))
+        .limit(500)
+    )
+    return [_artist_summary(r) for r in rows.all()]

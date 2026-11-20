@@ -44,3 +44,26 @@ export function useWords(serverId: number, kind: WordKind) {
       ),
   })
 }
+
+/** Artists per country (Plex's country, else MusicBrainz's). */
+export function useArtistCountries(serverId: number) {
+  return useQuery({
+    queryKey: [...keys.all(serverId), 'countries'],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/library/stats/countries', { params: { path: { server_id: serverId } } })),
+  })
+}
+
+export function useCountryArtists(serverId: number, code: string | null) {
+  return useQuery({
+    queryKey: [...keys.all(serverId), 'countries', code],
+    enabled: code !== null,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/stats/countries/{code}', {
+          params: { path: { server_id: serverId, code: code! } },
+        }),
+      ),
+  })
+}

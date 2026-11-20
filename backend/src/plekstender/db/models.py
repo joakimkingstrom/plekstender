@@ -273,6 +273,18 @@ class ItemTag(Base):
     tag_id: Mapped[int] = mapped_column(ForeignKey("tags.id", ondelete="CASCADE"))
 
 
+class ArtistArea(Base):
+    """Where an artist is from, as MusicBrainz says (for artists Plex has no country for).
+    Shared by every server: keyed by MusicBrainz ID ("mbid:…") or normalised name
+    ("name:…"). A None country was looked up and not found (tried again after a while)."""
+
+    __tablename__ = "artist_areas"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    country_code: Mapped[str | None] = mapped_column(String(2))
+    checked_at: Mapped[dt.datetime]
+
+
 class SimilarArtist(Base):
     __tablename__ = "similar_artists"
     __table_args__ = (PrimaryKeyConstraint("server_id", "artist_rating_key", "position"),)

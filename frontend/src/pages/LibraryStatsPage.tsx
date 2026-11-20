@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
-import { useLibraryStats, useReleased, useWords, type WordKind } from '../api/libraryStats'
+import {
+  useArtistCountries,
+  useCountryArtists,
+  useLibraryStats,
+  useReleased,
+  useWords,
+  type WordKind,
+} from '../api/libraryStats'
+import type { MapArea } from '../api/stats'
+import { ListensMap } from '../components/ListensMap'
+import { CONTINENTS, countryName } from '../places'
 import { AreaChart, ColumnChart } from '../components/charts'
 import { Artwork } from '../components/library'
 import { Segmented } from '../components/Segmented'
@@ -52,10 +62,90 @@ function Stats({ serverId }: { serverId: number }) {
           </div>
         ))}
       </div>
+      <Countries serverId={serverId} />
       <Growth growth={s.growth} />
       <Decades serverId={serverId} decades={s.decades} undated={s.undated_albums} />
       <Words serverId={serverId} />
     </div>
+  )
+}
+
+function Countries({ serverId }: { serverId: number }) {
+  const countries = useArtistCountries(serverId)
+  const [area, setArea] = useState<MapArea>({ level: 'world' })
+  const code = area.level === 'country' ? area.country : null
+  const artists = useCountryArtists(serverId, code)
+  if (countries.isPending) return <Card title="Where artists are from"><Spinner /></Card>
+  if (countries.isError) return <Notice tone="error">{errorMessage(countries.error)}</Notice>
+  const c = countries.data
+  const data = c.countries.map((x) => ({ country_code: x.country_code, continent_code: null, listens: x.artists }))
+  const known = c.countries.reduce((n, x) => n + x.artists, 0)
+  return (
+    <Card title="Where artists are from">
+      {area.level !== 'world' && (
+        <nav aria-label="Map area" className="mb-2 flex flex-wrap items-center gap-1 text-sm">
+          <button type="button" onClick={() => setArea({ level: 'world' })} className="text-accent hover:underline">
+            World
+          </button>
+          {area.continent && (
+            <>
+              <span className="text-muted">›</span>
+              {area.level === 'country' ? (
+                <button type="button" onClick={() => setArea({ level: 'continent', continent: area.continent! })} className="text-accent hover:underline">
+                  {CONTINENTS[area.continent] ?? area.continent}
+                </button>
+              ) : (
+                <span className="font-semibold">{CONTINENTS[area.continent] ?? area.continent}</span>
+              )}
+            </>
+          )}
+          {area.level === 'country' && (
+            <>
+              <span className="text-muted">›</span>
+              <span className="font-semibold">{countryName(area.country)}</span>
+            </>
+          )}
+        </nav>
+      )}
+      <ListensMap countries={data} area={area} onArea={setArea} unit={['artist', 'artists']} />
+      {code === null ? (
+        c.countries.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Countries with the most artists">
+            {c.countries.slice(0, 12).map((x) => (
+              <button
+                key={x.country_code}
+                type="button"
+                onClick={() => setArea({ level: 'country', continent: null, country: x.country_code })}
+                className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted hover:text-text"
+              >
+                {countryName(x.country_code)} <span className="tabular-nums">{formatCount(x.artists)}</span>
+              </button>
+            ))}
+          </div>
+        )
+      ) : artists.isPending ? (
+        <Spinner />
+      ) : artists.isError ? (
+        <Notice tone="error">{errorMessage(artists.error)}</Notice>
+      ) : (
+        <ul className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-8">
+          {artists.data.map((a) => (
+            <li key={a.rating_key}>
+              <Link to={`/library/artists/${a.rating_key}`} className="group block">
+                <Artwork serverId={serverId} path={a.thumb} title={a.title} round className="w-full group-hover:opacity-85" />
+                <div className="mt-1 truncate text-center text-xs font-medium">{a.title}</div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-xs text-muted">
+        {formatCount(known)} {known === 1 ? 'artist' : 'artists'} placed, from Plex's country or else MusicBrainz.
+        {c.unknown > 0 && ` ${formatCount(c.unknown)} without a country`}
+        {c.pending > 0 && ` (${formatCount(c.pending)} still to be looked up on MusicBrainz, a few hundred an hour)`}
+        {c.unknown > 0 && '.'}
+      </p>
+    </Card>
   )
 }
 

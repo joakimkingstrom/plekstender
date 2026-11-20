@@ -9,8 +9,8 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600)
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: Request) => {
-      const url = new URL(input.url)
+    vi.fn(async (input: Request | string) => {
+      const url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost')
       const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
       switch (url.pathname) {
         case '/api/auth/me':
@@ -36,6 +36,10 @@ beforeEach(() => {
               albums: [{ rating_key: 200, title: 'OK Computer', thumb: null, released: '1997-05-21', artist_title: 'Radiohead', plays: 3 }],
             })
           return json({ buckets: Array.from({ length: 10 }, (_, i) => ({ decade: 1990 + i, albums: i === 7 ? 2 : 0 })), albums: [] })
+        case '/api/servers/1/library/stats/countries':
+          return json({ countries: [{ country_code: 'GB', artists: 2 }, { country_code: 'SE', artists: 1 }], unknown: 4, pending: 3 })
+        case '/api/servers/1/library/stats/countries/SE':
+          return json([{ rating_key: 105, title: 'The Knife', thumb: null, popularity: null, user_rating: null, plays: 0, album_count: 1 }])
         case '/api/servers/1/library/stats/words':
           return json([{ word: 'Love', count: 40 }, { word: 'Karma', count: 2 }])
         default:
@@ -70,5 +74,11 @@ describe('Library stats', () => {
     expect(screen.getByRole('button', { name: 'The 1990s' })).toBeInTheDocument()
 
     expect(await screen.findByTitle('Love: in 40 names')).toBeInTheDocument()
+
+    // Where artists are from: a country's artists.
+    expect(screen.getByText(/3 artists placed/)).toBeInTheDocument()
+    expect(screen.getByText(/4 without a country \(3 still to be looked up/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Sweden/ }))
+    expect(await screen.findByRole('link', { name: 'The Knife' })).toHaveAttribute('href', '/library/artists/105')
   })
 })

@@ -262,6 +262,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/stats/countries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Artist Countries
+         * @description Artists per country: Plex's country for the artist, else MusicBrainz's (looked up a
+         *     few hundred an hour by the worker).
+         */
+        get: operations["artist_countries_api_servers__server_id__library_stats_countries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/stats/countries/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Country Artists
+         * @description A country's artists, most played first.
+         */
+        get: operations["country_artists_api_servers__server_id__library_stats_countries__code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/artists": {
         parameters: {
             query?: never;
@@ -3445,6 +3486,21 @@ export interface components {
              */
             release_type: string;
         };
+        /** ArtistCountriesOut */
+        ArtistCountriesOut: {
+            /** Countries */
+            countries: components["schemas"]["CountryArtists"][];
+            /**
+             * Unknown
+             * @description Artists without a known country.
+             */
+            unknown: number;
+            /**
+             * Pending
+             * @description Of those, waiting for a MusicBrainz lookup.
+             */
+            pending: number;
+        };
         /** ArtistDetail */
         ArtistDetail: {
             /** Rating Key */
@@ -3747,6 +3803,13 @@ export interface components {
              * @description Where it's set up or fixed.
              */
             link?: string | null;
+        };
+        /** CountryArtists */
+        CountryArtists: {
+            /** Country Code */
+            country_code: string;
+            /** Artists */
+            artists: number;
         };
         /** CountryListensOut */
         CountryListensOut: {
@@ -7419,6 +7482,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WordCount"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artist_countries_api_servers__server_id__library_stats_countries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistCountriesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    country_artists_api_servers__server_id__library_stats_countries__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistSummary"][];
                 };
             };
             /** @description Validation Error */

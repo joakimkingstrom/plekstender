@@ -55,17 +55,21 @@ function fill(s: number) {
 }
 
 /**
- * A choropleth of listens per country. Click (or Enter on) a country to zoom to its
- * continent, then to the country itself. Countries without listens are drawn but inert.
+ * A choropleth of listens (or another count, see `unit`) per country. Click (or Enter on) a
+ * country to zoom to its continent, then to the country itself. Countries without any are
+ * drawn but inert.
  */
 export function ListensMap({
   countries,
   area,
   onArea,
+  unit = ['listen', 'listens'],
 }: {
   countries: CountryListens[]
   area: MapArea
   onArea: (area: MapArea) => void
+  /** What's counted, singular and plural. */
+  unit?: [string, string]
 }) {
   const world = useWorld()
   const [hover, setHover] = useState<{ code: string; x: number; y: number } | null>(null)
@@ -129,7 +133,7 @@ export function ListensMap({
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="w-full select-none"
         role="group"
-        aria-label="Listens by country"
+        aria-label={`${unit[1][0].toUpperCase()}${unit[1].slice(1)} by country`}
         onMouseLeave={() => setHover(null)}
       >
         <path d={drawn.sphere} fill="var(--color-bg)" stroke="var(--color-border)" strokeWidth={1} />
@@ -148,7 +152,7 @@ export function ListensMap({
               opacity={dim ? 0.35 : 1}
               tabIndex={active && !dim ? 0 : undefined}
               role={active ? 'button' : undefined}
-              aria-label={active ? `${countryName(code)}: ${formatCount(listens)} listens` : undefined}
+              aria-label={active ? `${countryName(code)}: ${formatCount(listens)} ${listens === 1 ? unit[0] : unit[1]}` : undefined}
               className={active ? 'cursor-pointer outline-none transition-opacity hover:brightness-110 focus-visible:stroke-[var(--color-text)] focus-visible:[stroke-width:2]' : ''}
               onClick={() => choose(f)}
               onKeyDown={(e) => onKey(e, f)}
@@ -169,22 +173,22 @@ export function ListensMap({
           <span className="font-medium">{countryName(hovered.code)}</span>
           <span className="text-muted">
             {' · '}
-            {hovered.listens ? `${formatCount(hovered.listens)} ${hovered.listens === 1 ? 'listen' : 'listens'}` : 'no listens'}
+            {hovered.listens ? `${formatCount(hovered.listens)} ${hovered.listens === 1 ? unit[0] : unit[1]}` : `no ${unit[1]}`}
           </span>
         </div>
       )}
-      <Legend max={max} />
+      <Legend max={max} label={`${unit[1][0].toUpperCase()}${unit[1].slice(1)}`} />
     </div>
   )
 }
 
-function Legend({ max }: { max: number }) {
+function Legend({ max, label }: { max: number; label: string }) {
   if (max <= 0) return null
   // The smallest count in each step.
   const starts = STEPS.map((_, i) => (i === 0 ? 1 : Math.ceil(Math.exp((Math.log(max) * i) / STEPS.length))))
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted" aria-hidden>
-      <span>Listens</span>
+      <span>{label}</span>
       <span className="flex items-center gap-1">
         <span className="size-3 rounded-sm border border-border" style={{ background: fill(-1) }} />
         none

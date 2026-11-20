@@ -1800,3 +1800,14 @@ class ReleasedOut(BaseModel):
 class WordCount(BaseModel):
     word: str
     count: int
+
+
+class CountryArtists(BaseModel):
+    country_code: str
+    artists: int
+
+
+class ArtistCountriesOut(BaseModel):
+    countries: list[CountryArtists]
+    unknown: int = Field(description="Artists without a known country.")
+    pending: int = Field(description="Of those, waiting for a MusicBrainz lookup.")
