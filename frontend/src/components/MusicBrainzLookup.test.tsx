@@ -65,14 +65,17 @@ describe('MusicBrainz lookup', () => {
     fireEvent.click(within(releases).getByRole('button'))
 
     // Matched automatically; the changes per file, MusicBrainz IDs summed up.
-    const select = (await screen.findByRole('combobox', { name: 'Release track for Paranoid Android (Live)' })) as HTMLSelectElement
-    expect(select.value).toBe('t2')
+    const select = await screen.findByRole('button', { name: 'Release track for Paranoid Android (Live)' })
+    fireEvent.click(select)
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent(/Paranoid Android/)
+    fireEvent.click(select) // close
     expect(screen.getByText('Paranoid Android')).toBeInTheDocument()
     expect(screen.getByText('+ 1 MusicBrainz ID')).toBeInTheDocument()
     expect(previews[0]).toMatchObject({ release_id: RELEASE.id, mapping: null })
 
     // Another track for the file: previewed with that match.
-    fireEvent.change(select, { target: { value: 't1' } })
+    fireEvent.click(select)
+    fireEvent.click(screen.getByRole('option', { name: /Airbag/ }))
     expect(await screen.findByText('Airbag')).toBeInTheDocument()
     expect(previews.at(-1)).toMatchObject({ mapping: { '11': 't1' } })
     expect(screen.getByText(/The file is 99 s longer than this track/)).toBeInTheDocument()

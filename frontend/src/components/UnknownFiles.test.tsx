@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UnknownFiles } from './UnknownFiles'
@@ -43,9 +43,11 @@ describe('Unknown files', () => {
       </QueryClientProvider>,
     )
     // The suggestion is picked; the other releases (and "just the song") can be.
-    const match = (await screen.findByRole('combobox', { name: 'Match for demo.mp3' })) as HTMLSelectElement
-    expect(match.value).toBe('rec1|t1')
-    expect(within(match).getByRole('option', { name: 'Airbag · Radiohead · OKNOTOK (2017, GB, CD) · 93%' })).toBeInTheDocument()
+    const match = await screen.findByRole('button', { name: 'Match for demo.mp3' })
+    fireEvent.click(match)
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent(/OK Computer \(1997/)
+    expect(screen.getByRole('option', { name: 'Airbag · Radiohead · OKNOTOK (2017, GB, CD) · 93%' })).toBeInTheDocument()
+    fireEvent.click(match) // close
     expect(screen.getByText('Not identified yet.')).toBeInTheDocument()
     expect(screen.getByText('Last run: 1 identified.')).toBeInTheDocument()
 
@@ -55,7 +57,8 @@ describe('Unknown files', () => {
       expect(await post![0].clone().json()).toEqual({ kind: 'missing', again: false })
     })
 
-    fireEvent.change(match, { target: { value: 'rec1|t2' } })
+    fireEvent.click(match)
+    fireEvent.click(screen.getByRole('option', { name: 'Airbag · Radiohead · OKNOTOK (2017, GB, CD) · 93%' }))
     fireEvent.click(screen.getByRole('button', { name: 'Check the changes for 1 file' }))
     expect(await screen.findByText('Airbag')).toBeInTheDocument()
     expect(screen.getByText('+ 1 MusicBrainz ID')).toBeInTheDocument()

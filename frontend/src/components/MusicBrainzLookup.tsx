@@ -1,3 +1,4 @@
+import { Select } from './Select'
 import { useState, type FormEvent } from 'react'
 import { errorMessage } from '../api/client'
 import {
@@ -397,20 +398,20 @@ function FileMatches({
                 <span aria-hidden className="hidden text-muted sm:inline">
                   →
                 </span>
-                <select
+                <Select
+                  size="sm"
+                  label={`Release track for ${name}`}
                   value={f.track_id ?? ''}
-                  onChange={(e) => onChoose(f.file_id, e.target.value || null)}
-                  aria-label={`Release track for ${name}`}
-                  className="w-full min-w-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-sm sm:w-72"
-                >
-                  <option value="">Leave this file alone</option>
-                  {data.tracks.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {number(t.disc, t.position)}
-                      {t.title} ({formatDuration(t.length_ms)})
-                    </option>
-                  ))}
-                </select>
+                  className="w-full min-w-0 sm:w-72"
+                  options={[
+                    { value: '', label: 'Leave this file alone' },
+                    ...data.tracks.map((t) => ({
+                      value: t.id,
+                      label: `${number(t.disc, t.position)}${t.title} (${formatDuration(t.length_ms)})`,
+                    })),
+                  ]}
+                  onChange={(v) => onChoose(f.file_id, v || null)}
+                />
               </div>
               {Math.abs(diff) > 10 && (
                 <p className="text-xs text-warn">

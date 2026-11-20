@@ -1,3 +1,4 @@
+import { Select } from './Select'
 import { useState } from 'react'
 import { errorMessage } from '../api/client'
 import {
@@ -17,7 +18,6 @@ const SIZES: [number, string][] = [
   [1000, '1000 px (most players)'],
   [1500, '1500 px'],
 ]
-const select = 'rounded-md border border-border bg-surface-2 px-2 py-1 text-sm'
 
 function kb(bytes: number) {
   return bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${Math.round(bytes / 1000)} KB`
@@ -124,20 +124,20 @@ function ArtworkBody({ serverId, albumKey, art, canWrite }: { serverId: number; 
           {sources.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               <span>{allSame ? 'Replace the cover in every song with' : 'Put the same cover in every song:'}</span>
-              <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="Cover to use" className={select}>
-                {sources.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <select value={maxPx} onChange={(e) => setMaxPx(Number(e.target.value))} aria-label="Largest size" className={select}>
-                {SIZES.map(([px, label]) => (
-                  <option key={px} value={px}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <Select
+                size="sm"
+                label="Cover to use"
+                value={source}
+                options={sources.map(([value, label]) => ({ value, label }))}
+                onChange={setSource}
+              />
+              <Select
+                size="sm"
+                label="Largest size"
+                value={maxPx}
+                options={SIZES.map(([px, label]) => ({ value: px, label }))}
+                onChange={setMaxPx}
+              />
               <Button
                 variant="secondary"
                 className="px-3 py-1.5 text-xs"
@@ -217,13 +217,13 @@ export function ArtworkSummaryCard({ serverId, canWrite }: { serverId: number; c
         {s.oversized > 0 &&
           (canWrite ? (
             <div className="flex flex-wrap items-center gap-2">
-              <select value={maxPx} onChange={(e) => setMaxPx(Number(e.target.value))} aria-label="Shrink to" className={select}>
-                {SIZES.map(([px, label]) => (
-                  <option key={px} value={px}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <Select
+                size="sm"
+                label="Shrink to"
+                value={maxPx}
+                options={SIZES.map(([px, label]) => ({ value: px, label }))}
+                onChange={setMaxPx}
+              />
               <Button variant="secondary" busy={shrink.isPending} onClick={() => shrink.mutate(maxPx)}>
                 Shrink {formatCount(s.oversized)} {s.oversized === 1 ? 'cover' : 'covers'}
               </Button>

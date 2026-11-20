@@ -1,3 +1,4 @@
+import { Select } from './Select'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
@@ -201,19 +202,14 @@ function FileRow({ file, value, onChange }: { file: UnknownFile; value: string; 
         </p>
       </div>
       {file.status === 'identified' ? (
-        <select
+        <Select
+          size="sm"
+          label={`Match for ${name}`}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={`Match for ${name}`}
-          className="w-full min-w-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-sm"
-        >
-          <option value="">Leave this file alone</option>
-          {options(file).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          className="w-full min-w-0"
+          options={[{ value: '', label: 'Leave this file alone' }, ...options(file)]}
+          onChange={onChange}
+        />
       ) : (
         <p className={`text-xs ${file.status === 'error' ? 'text-danger' : 'text-muted'}`}>
           {file.status === 'new'
