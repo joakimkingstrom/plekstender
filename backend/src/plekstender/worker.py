@@ -747,6 +747,20 @@ async def find_cover_colours(timestamp: int) -> None:
         log.info("Worked out %d album covers' colours", done)
 
 
+@app.periodic(cron="*/5 * * * *", periodic_id="check-notifications")
+@app.task(queue="maintenance", queueing_lock="check-notifications")
+async def check_notifications(timestamp: int) -> None:
+    """Every 5 minutes: raise, update or resolve notifications from every connection's
+    status (Phase 17)."""
+    from plekstender.notifications import check
+
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        await check(db, http, get_settings())
+
+
 @app.periodic(cron="* * * * *", periodic_id="heartbeat")
 @app.task(queue="maintenance", queueing_lock="heartbeat")
 async def heartbeat(timestamp: int) -> None:

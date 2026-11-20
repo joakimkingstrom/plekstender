@@ -649,10 +649,10 @@ A "wrapped"-style story for any period you choose (a year, a month, a custom ran
 
 ### Phase 17 — Notifications (20 Nov 2026)
 Tell people when something they rely on stops working, before they notice it themselves.
-- [ ] A bell in the header with a count; a list of notifications (newest first, read / unread, a link to where it's fixed).
-- [ ] What raises one: a connection that fails (a Plex server unreachable, ListenBrainz or another scrobble service rejecting its token, a calendar link that can't be read, a Data Thistle renewal failing, a key refused), and one nearing its limit (JamBase's month, Ticketmaster's or Data Thistle's day, setlist.fm), with the numbers. Raised by the code that already notices (workers, checks), once per problem: repeats update it rather than piling up, and it clears itself when the problem goes away.
-- [ ] Who sees what: each person their own (their scrobble services, calendar links, servers); instance-wide ones (service keys, quotas, the worker) only those allowed to act on them (admins; a server's owner for that server).
-- [ ] Each person can dismiss theirs; an admin can hide or dismiss an instance-wide one for everyone.
+- [x] A bell in the header with a count of new problems; its list shows open problems first (newest first, red or amber dot, the detail, how long ago, a Fix link to where it's fixed), then the ones fixed in the last 3 days (marked fixed). Opening it marks them read; polled every 2 minutes.
+- [x] What raises one: the worker looks at every connection's status every 5 minutes (the same view as Home's Status card, so whatever turns a dot amber or red there): a Plex server whose last sync failed, ListenBrainz or another scrobble service failing or rejecting its token, a calendar link that can't be read, a Data Thistle renewal failing or its tokens running out, JamBase / Ticketmaster from 80 % of their limit (with the numbers), SearXNG not answering. Once per problem (`notifications.key`): repeats update it, getting worse (amber to red) makes it unread again, and it's resolved by itself when the status is back to working. *Rather than each worker job raising its own, one check reads the statuses: simpler, and the bell and Status card can't disagree. Not covered: setlist.fm has no usage numbers to warn about; a refused key shows up as the feature failing, not as a notification.*
+- [x] Who sees what: each person their own (servers, scrobble services, calendar links); the instance's (service keys, quotas, SearXNG) only admins.
+- [x] Each person can dismiss theirs (it comes back only if fixed and then broken again); an admin can hide an instance one for every admin.
 - [ ] Later: email or push (the app is installable) for the serious ones, per person.
 
 ### Phase 18 — Profile (20 Nov 2026)

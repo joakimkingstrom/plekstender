@@ -1910,3 +1910,25 @@ class RewindOut(BaseModel):
 
 class AppTimeIn(BaseModel):
     seconds: int = Field(ge=1, le=120, description="Time in use since the last report.")
+
+
+class NotificationOut(BaseModel):
+    id: int
+    level: Literal["warning", "error"]
+    title: str
+    detail: str | None
+    link: str | None
+    instance: bool = Field(description="About this Plekstender (for admins), not just you.")
+    first_at: dt.datetime
+    updated_at: dt.datetime
+    resolved_at: dt.datetime | None = Field(description="Fixed (it went away by itself).")
+    read: bool
+
+
+class NotificationsOut(BaseModel):
+    items: list[NotificationOut]
+    unread: int
+
+
+class NotificationsReadIn(BaseModel):
+    ids: list[int] | None = Field(default=None, description="Left out: all of them.")

@@ -9,6 +9,7 @@ import { SPIN_MS, SPIN_SCALE } from '../brand'
 import { Mark } from './Mark'
 import { Avatar, Button } from './ui'
 import { useAppTime } from '../appTime'
+import { NotificationBell } from './NotificationBell'
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -123,6 +124,7 @@ export function Layout() {
             >
               {theme === 'dark' ? '☀' : '☾'}
             </button>
+            <NotificationBell isAdmin={me.is_admin} />
             <Avatar url={me.thumb_url} name={me.username} />
             <button
               type="button"

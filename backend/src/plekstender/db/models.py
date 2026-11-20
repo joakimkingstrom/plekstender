@@ -644,6 +644,39 @@ class TrackIntro(Base):
     analysed_at: Mapped[dt.datetime]
 
 
+class Notification(Base):
+    """Something someone relies on that stopped working or nears a limit (Phase 17). One row
+    per problem (`key`): repeats update it, and it's resolved when the problem goes away.
+    `user_id` None: about the instance, for admins."""
+
+    __tablename__ = "notifications"
+    __table_args__ = (Index("ix_notifications_user", "user_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    key: Mapped[str] = mapped_column(Text, unique=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    level: Mapped[str] = mapped_column(String(8))  # warning | error
+    title: Mapped[str] = mapped_column(Text)
+    detail: Mapped[str | None] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(Text)
+    first_at: Mapped[dt.datetime]
+    updated_at: Mapped[dt.datetime]
+    resolved_at: Mapped[dt.datetime | None]
+    hidden_at: Mapped[dt.datetime | None]  # an admin dismissed it for everyone
+
+
+class NotificationState(Base):
+    """A person's read / dismissed state of a notification."""
+
+    __tablename__ = "notification_states"
+    __table_args__ = (PrimaryKeyConstraint("notification_id", "user_id"),)
+
+    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    read_at: Mapped[dt.datetime | None]
+    dismissed_at: Mapped[dt.datetime | None]
+
+
 class AppTime(Base):
     """Time spent with Plekstender open and in use, per person and day (for Rewind)."""
 
