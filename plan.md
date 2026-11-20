@@ -584,6 +584,14 @@ A **Live** tab: upcoming shows near you by the artists you listen to most.
 - [x] Gigs on artist pages: a library artist's page lists their upcoming gigs (the Live list's rows: star, ticket, calendar), and artists with an upcoming gig get a ticket badge on their picture (artist page and library grid). "Gigs" is the word for events, concerts and shows everywhere on the site.
 - [ ] Bandsintown optionally, if they approve an app ID.
 
+### Phase 11½ — Gigs you went to (20 Nov 2026)
+History → Gigs: the gigs each person went to ("gigs" is the site's word for events, concerts and shows).
+- [x] 11½a. Gigs by hand and from Live: date, artists (one a line, the headliner first; linked to the library by name), festival or tour name, venue, town, country, notes, a link. Past Live gigs that were starred or had a ticket are offered under "Did you go?" ("I went" records it with its place and coordinates; "Didn't go" unstars it). Listed by year with year and artist filters; edit and delete.
+- [ ] 11½b. Import and export. No service found has a public API for *writing* attended gigs: setlist.fm's API is read-only (`GET /rest/1.0/user/{userId}/attended`, `x-api-key`, free for non-commercial use); Songkick's API (with a gigography endpoint) isn't open to hobby projects; Concert Archives couldn't be checked. So: import from setlist.fm (an admin's key, each person's setlist.fm username), CSV and iCalendar files; export CSV, JSON and iCalendar, and a private calendar feed of gigs gone to.
+- [ ] 11½c. Places: each venue looked up once (OpenStreetMap's Nominatim, one request a second, cached and shared; the town if the venue isn't found), so gigs can be mapped at the venue.
+- [ ] 11½d. Stats on History: most seen artists, gigs a year (the busiest year), by month and by season.
+- [ ] 11½e. The gig map: a plain street map (few colours, like the listens map) that zooms from the world to a street, with 3D-looking red pushpins: a pin per venue (with its count), and at most a few pins (plus a number) where many gigs are close together when zoomed out.
+
 ### Phase 12 — More services (from `.todo.md`)
 - [ ] More scrobble services: any ListenBrainz-compatible server (Maloja, Koito, Multi-Scrobbler) with a custom address, and Libre.fm (Last.fm-style API).
 - [ ] Import playlists from Spotify, Apple Music, Tidal and others: first from files (CSV exports such as Exportify / TuneMyMusic, M3U, JSPF), then Spotify's API for public playlist links. Songs are matched to the library (artist + title, then duration); unmatched ones are listed; the result is saved as a Plex playlist.

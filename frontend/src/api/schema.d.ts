@@ -980,6 +980,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gigs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Gigs
+         * @description The user's gigs, newest first; `year` and `artist` narrow them.
+         */
+        get: operations["list_gigs_api_gigs_get"];
+        put?: never;
+        /** Add Gig */
+        post: operations["add_gig_api_gigs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/{gig_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit Gig */
+        put: operations["edit_gig_api_gigs__gig_id__put"];
+        post?: never;
+        /** Delete Gig */
+        delete: operations["delete_gig_api_gigs__gig_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggestions
+         * @description Starred (or ticketed) Live gigs that have happened: did the user go?
+         */
+        get: operations["suggestions_api_gigs_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/from-live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From Live
+         * @description Record a Live gig as one the user went to.
+         */
+        post: operations["from_live_api_gigs_from_live_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/artists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gig Artists
+         * @description Everyone on the user's gigs, most seen first (for the filter).
+         */
+        get: operations["gig_artists_api_gigs_artists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/summary": {
         parameters: {
             query?: never;
@@ -3605,6 +3704,96 @@ export interface components {
             points: number;
             /** Best Streak */
             best_streak: number;
+        };
+        /** GigArtistOut */
+        GigArtistOut: {
+            /** Name */
+            name: string;
+            /** Server Id */
+            server_id?: number | null;
+            /** Rating Key */
+            rating_key?: number | null;
+        };
+        /** GigFromLiveIn */
+        GigFromLiveIn: {
+            /**
+             * Ids
+             * @description The Live gig's rows.
+             */
+            ids: number[];
+        };
+        /** GigIn */
+        GigIn: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Artists */
+            artists: string[];
+            /** Name */
+            name?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** GigOut */
+        GigOut: {
+            /** Id */
+            id: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Name */
+            name: string | null;
+            /** Venue */
+            venue: string | null;
+            /** City */
+            city: string | null;
+            /** Country */
+            country: string | null;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
+            /** Place Precision */
+            place_precision: ("venue" | "city") | null;
+            /** Notes */
+            notes: string | null;
+            /** Artists */
+            artists: components["schemas"]["GigArtistOut"][];
+            /** Source */
+            source: string;
+            /** Url */
+            url: string | null;
+        };
+        /** GigYear */
+        GigYear: {
+            /** Year */
+            year: number;
+            /** Gigs */
+            gigs: number;
+        };
+        /** GigsOut */
+        GigsOut: {
+            /** Gigs */
+            gigs: components["schemas"]["GigOut"][];
+            /**
+             * Years
+             * @description Gigs per year (all of them, for the filter).
+             */
+            years: components["schemas"]["GigYear"][];
+            /** Total */
+            total: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -7748,6 +7937,208 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_gigs_api_gigs_get: {
+        parameters: {
+            query?: {
+                year?: number | null;
+                artist?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_gig_api_gigs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GigIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_gig_api_gigs__gig_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gig_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GigIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_gig_api_gigs__gig_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gig_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggestions_api_gigs_suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveShowOut"][];
+                };
+            };
+        };
+    };
+    from_live_api_gigs_from_live_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GigFromLiveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gig_artists_api_gigs_artists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
                 };
             };
         };

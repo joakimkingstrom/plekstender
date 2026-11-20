@@ -910,3 +910,55 @@ class LiveSeen(Base):
     key: Mapped[str] = mapped_column(String(64))
     source: Mapped[str] = mapped_column(String(16))
     first_seen_at: Mapped[dt.datetime]
+
+
+class Gig(Base):
+    """A gig the user went to: added by hand, from a starred Live gig, or imported."""
+
+    __tablename__ = "gigs"
+    __table_args__ = (
+        Index("ix_gigs_user_date", "user_id", "date"),
+        Index(
+            "uq_gigs_source_ref",
+            "user_id",
+            "source",
+            "source_ref",
+            unique=True,
+            postgresql_where=text("source_ref IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    date: Mapped[dt.date] = mapped_column(Date)
+    # A festival's or tour's name, if it had one.
+    name: Mapped[str | None] = mapped_column(Text)
+    venue: Mapped[str | None] = mapped_column(Text)
+    city: Mapped[str | None] = mapped_column(Text)
+    country: Mapped[str | None] = mapped_column(String(2))
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    # How exact the place is: venue | city (None: not looked up yet, or not found).
+    place_precision: Mapped[str | None] = mapped_column(String(8))
+    notes: Mapped[str | None] = mapped_column(Text)
+    # On the bill, the first ones the headliners: [{"name", "server_id", "rating_key"}].
+    artists: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # Where it came from: manual | live | setlistfm | csv | ical; and its ID there.
+    source: Mapped[str] = mapped_column(String(16), default="manual")
+    source_ref: Mapped[str | None] = mapped_column(String(128))
+    url: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now(), onupdate=utcnow)
+
+
+class GigPlace(Base):
+    """Where a venue is (looked up once, shared by everyone's gigs)."""
+
+    __tablename__ = "gig_places"
+
+    # "venue|city|country", folded.
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    precision: Mapped[str | None] = mapped_column(String(8))  # venue | city | None (not found)
+    looked_up_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

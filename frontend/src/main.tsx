@@ -18,6 +18,7 @@ import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
 import { LivePage } from './pages/LivePage'
 import { GameSettingsPage } from './pages/GameSettingsPage'
+import { GigsPage } from './pages/GigsPage'
 import { MapPage } from './pages/MapPage'
 import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
@@ -56,6 +57,7 @@ const router = createBrowserRouter([
           { index: true, element: <StatsPage /> },
           { path: 'listens', element: <ListensPage /> },
           { path: 'map', element: <MapPage /> },
+          { path: 'gigs', element: <GigsPage /> },
           { path: 'ratings', element: <RatingsPage /> },
           { path: 'scores', element: <ScoresPage /> },
         ],

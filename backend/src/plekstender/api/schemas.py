@@ -1509,3 +1509,54 @@ class DataThistleOut(BaseModel):
     limit: int | None = Field(description="Data Thistle's monthly limit, as it last said.")
     remaining: int | None
     resets_at: dt.datetime | None
+
+
+# --- gigs (the ones the user went to) -------------------------------------------------------
+
+
+class GigArtistOut(BaseModel):
+    name: str
+    server_id: int | None = None
+    rating_key: int | None = None
+
+
+class GigIn(BaseModel):
+    date: dt.date
+    artists: list[str] = Field(min_length=1, max_length=50)
+    name: str | None = Field(default=None, max_length=300)
+    venue: str | None = Field(default=None, max_length=300)
+    city: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, pattern=r"^[A-Za-z]{2}$")
+    notes: str | None = Field(default=None, max_length=4000)
+    url: str | None = Field(default=None, max_length=2000, pattern=r"^https?://")
+
+
+class GigOut(BaseModel):
+    id: int
+    date: dt.date
+    name: str | None
+    venue: str | None
+    city: str | None
+    country: str | None
+    latitude: float | None
+    longitude: float | None
+    place_precision: Literal["venue", "city"] | None
+    notes: str | None
+    artists: list[GigArtistOut]
+    source: str
+    url: str | None
+
+
+class GigYear(BaseModel):
+    year: int
+    gigs: int
+
+
+class GigsOut(BaseModel):
+    gigs: list[GigOut]
+    years: list[GigYear] = Field(description="Gigs per year (all of them, for the filter).")
+    total: int
+
+
+class GigFromLiveIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=20, description="The Live gig's rows.")
