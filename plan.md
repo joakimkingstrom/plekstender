@@ -641,14 +641,11 @@ Library → Stats (a tab next to Library; Tag editing is its own tab since Phase
 
 ### Phase 16 — Rewind (from `.todo.md`)
 A "wrapped"-style story for any period you choose (a year, a month, a custom range), opened as a full-screen popup within the site, far more colourful than the rest of Plekstender: each card takes its colours from the album covers on it.
-- [ ] Top artists, albums and songs; minutes listened; days listened.
-- [ ] New obsessions: artists and albums first played in the period that you played a lot.
-- [ ] New releases you played most (released in the period).
-- [ ] When you listen: the busiest day of the week and hour; genres (and styles) by day of the week and by hour of the day.
-- [ ] On repeat: songs played two or more times in a row, and the longest run.
-- [ ] Guess the intro: best streaks, records and score in the period.
-- [ ] Time spent in Plekstender (rating, playing, browsing): needs Plekstender to record app time, from when this is built.
-- [ ] Shareable cards: each story card as an image (generated graphics in the style of the period's covers), to save or share.
+- [x] History → Rewind (also linked from Home's "Your listening"): this year so far, last year, this month, last month, the last 30 days, or any dates (up to ten years). `GET /api/rewind?start&end&tz&server_id`.
+- [x] The story: a full-screen dialog of cards with progress bars; tap the right two thirds (or →, Space, "Next") to go on, the left third (or ←, "Back") to go back, Esc or × to close. Each card's background is a gradient between two of the period's album cover colours (from Library → Stats' cover colours; vivid fallbacks until they're known), white text; cards slide in unless reduced motion is on.
+- [x] Cards: the period in numbers (listens, time, days with music out of the period's days); top artist (big picture) and top 5 artists, albums and songs; new obsessions (artists and albums first heard in the period and played at least 10 times in it); new releases you played most (released in the period by the library's release date, or its year when the period is whole years); when you listen (busiest weekday and hour, with bars for both); your sound (top genres, the top genre of each part of the day and each weekday: an artist's listens split over their own and their albums' genres in Plex); on repeat (songs played two or more times in a row, how often, and the longest run); Guess the intro (rounds, points, accuracy, best streak, days played); time in Plekstender; and a closing card.
+- [x] Time in Plekstender: recorded from now on, per person and day (`app_time`): each minute the page is visible and was used in the last two minutes counts (`POST /api/app-time`).
+- [ ] Shareable cards: each story card as an image (generated graphics in the style of the period's covers), to save or share. *Not built yet: drawing each card on a canvas (covers fetched through the image proxy) is its own piece of work.*
 
 ### Phase 17 — Notifications (20 Nov 2026)
 Tell people when something they rely on stops working, before they notice it themselves.

@@ -39,6 +39,7 @@ export function HistoryLayout() {
           { to: '/history/map', label: 'Map' },
           { to: '/history/ratings', label: 'Ratings' },
           { to: '/history/scores', label: 'Scores' },
+          { to: '/history/rewind', label: 'Rewind' },
         ]}
       />
       <Outlet />

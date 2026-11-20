@@ -778,6 +778,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rewind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Rewind
+         * @description Your Rewind for the days from `start` to `end` (in your time zone).
+         */
+        get: operations["get_rewind_api_rewind_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/app-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record App Time
+         * @description Time spent in Plekstender (the app reports it each minute it's open and in use).
+         */
+        post: operations["record_app_time_api_app_time_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/status/connections": {
         parameters: {
             query?: never;
@@ -3560,6 +3600,14 @@ export interface components {
              */
             release_type: string;
         };
+        /** AppTimeIn */
+        AppTimeIn: {
+            /**
+             * Seconds
+             * @description Time in use since the last report.
+             */
+            seconds: number;
+        };
         /** ArtistCountriesOut */
         ArtistCountriesOut: {
             /** Countries */
@@ -6278,6 +6326,150 @@ export interface components {
              */
             transform: components["schemas"]["Transform"];
         };
+        /** RewindGame */
+        RewindGame: {
+            /** Rounds */
+            rounds: number;
+            /** Correct */
+            correct: number;
+            /** Points */
+            points: number;
+            /** Best Streak */
+            best_streak: number;
+            /** Days */
+            days: number;
+        };
+        /** RewindGenre */
+        RewindGenre: {
+            /** Genre */
+            genre: string;
+            /** Listens */
+            listens: number;
+        };
+        /** RewindGenreTime */
+        RewindGenreTime: {
+            /**
+             * When
+             * @description A weekday ("0" = Monday) or night / morning / afternoon / evening.
+             */
+            when: string;
+            /** Genre */
+            genre: string;
+            /** Share */
+            share: number;
+        };
+        /** RewindItem */
+        RewindItem: {
+            /** Name */
+            name: string;
+            /** Artist */
+            artist: string | null;
+            /** Listens */
+            listens: number;
+            /** Listening Ms */
+            listening_ms: number;
+            /**
+             * Rating Key
+             * @description Library artist or album (songs: the album).
+             */
+            rating_key: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /**
+             * Colour
+             * @description The album cover's main colour, if known.
+             */
+            colour: string | null;
+        };
+        /** RewindOut */
+        RewindOut: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             * @description The last day (inclusive).
+             */
+            end: string;
+            /** Listens */
+            listens: number;
+            /** Listening Ms */
+            listening_ms: number;
+            /**
+             * Days
+             * @description Days with listens.
+             */
+            days: number;
+            /** Period Days */
+            period_days: number;
+            /** Artists */
+            artists: number;
+            /** Tracks */
+            tracks: number;
+            /** Top Artists */
+            top_artists: components["schemas"]["RewindItem"][];
+            /** Top Albums */
+            top_albums: components["schemas"]["RewindItem"][];
+            /** Top Tracks */
+            top_tracks: components["schemas"]["RewindItem"][];
+            /**
+             * New Artists
+             * @description First played in the period, played a lot.
+             */
+            new_artists: components["schemas"]["RewindItem"][];
+            /** New Albums */
+            new_albums: components["schemas"]["RewindItem"][];
+            /**
+             * New Releases
+             * @description Released in the period.
+             */
+            new_releases: components["schemas"]["RewindItem"][];
+            /**
+             * Weekdays
+             * @description Listens per weekday, Monday first.
+             */
+            weekdays: number[];
+            /**
+             * Hours
+             * @description Listens per hour of the day.
+             */
+            hours: number[];
+            /** Genres */
+            genres: components["schemas"]["RewindGenre"][];
+            /** Genre Days */
+            genre_days: components["schemas"]["RewindGenreTime"][];
+            /** Genre Parts */
+            genre_parts: components["schemas"]["RewindGenreTime"][];
+            /** Repeats */
+            repeats: components["schemas"]["RewindRepeat"][];
+            longest_repeat: components["schemas"]["RewindRepeat"] | null;
+            game: components["schemas"]["RewindGame"] | null;
+            /**
+             * App Seconds
+             * @description Time in Plekstender (recorded since Nov 2026).
+             */
+            app_seconds: number | null;
+        };
+        /** RewindRepeat */
+        RewindRepeat: {
+            /** Name */
+            name: string;
+            /** Artist */
+            artist: string;
+            /**
+             * Runs
+             * @description Times it was played two or more times in a row.
+             */
+            runs: number;
+            /**
+             * Longest
+             * @description The most times in a row.
+             */
+            longest: number;
+        };
         /**
          * Rules
          * @description Which of the chosen artists' songs make it in.
@@ -8573,6 +8765,75 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PlaceDetailOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rewind_api_rewind_get: {
+        parameters: {
+            query: {
+                start: string;
+                /** @description The last day (inclusive). */
+                end: string;
+                tz?: string;
+                /** @description Link items to this server. */
+                server_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RewindOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_app_time_api_app_time_post: {
+        parameters: {
+            query?: {
+                tz?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppTimeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

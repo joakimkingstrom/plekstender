@@ -25,6 +25,7 @@ import { MapPage } from './pages/MapPage'
 import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
 import { RatingsPage } from './pages/RatingsPage'
+import { RewindPage } from './pages/RewindPage'
 import { ScoresPage } from './pages/ScoresPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
@@ -88,6 +89,7 @@ const router = createBrowserRouter([
           { path: 'gigs', element: <Navigate to="/gigs/been-to" replace /> },
           { path: 'ratings', element: <RatingsPage /> },
           { path: 'scores', element: <ScoresPage /> },
+          { path: 'rewind', element: <RewindPage /> },
         ],
       },
       // Old addresses (bookmarks, an installed app's start page).

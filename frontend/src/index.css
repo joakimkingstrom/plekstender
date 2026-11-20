@@ -266,3 +266,15 @@ input[type='number']::-webkit-outer-spin-button {
     animation: pick-pulse 1.6s ease-in-out infinite;
   }
 }
+
+/* Rewind's cards come in from below. */
+@keyframes rewind-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

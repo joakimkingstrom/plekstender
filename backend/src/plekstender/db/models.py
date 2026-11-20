@@ -644,6 +644,17 @@ class TrackIntro(Base):
     analysed_at: Mapped[dt.datetime]
 
 
+class AppTime(Base):
+    """Time spent with Plekstender open and in use, per person and day (for Rewind)."""
+
+    __tablename__ = "app_time"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "day"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    day: Mapped[dt.date] = mapped_column(Date)
+    seconds: Mapped[int] = mapped_column(default=0)
+
+
 class GameStats(Base):
     """A user's "Guess the intro" record per mode (track | album | artist)."""
 

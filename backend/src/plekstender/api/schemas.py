@@ -1842,3 +1842,71 @@ class RecentItem(BaseModel):
     subtitle: str | None = Field(description="Albums: the artist.")
     thumb: str | None
     added_at: dt.datetime | None
+
+
+class RewindItem(BaseModel):
+    name: str
+    artist: str | None
+    listens: int
+    listening_ms: int
+    rating_key: int | None = Field(description="Library artist or album (songs: the album).")
+    thumb: str | None
+    colour: str | None = Field(description="The album cover's main colour, if known.")
+
+
+class RewindRepeat(BaseModel):
+    name: str
+    artist: str
+    runs: int = Field(description="Times it was played two or more times in a row.")
+    longest: int = Field(description="The most times in a row.")
+
+
+class RewindGenreTime(BaseModel):
+    when: str = Field(
+        description='A weekday ("0" = Monday) or night / morning / afternoon / evening.'
+    )
+    genre: str
+    share: float
+
+
+class RewindGenre(BaseModel):
+    genre: str
+    listens: int
+
+
+class RewindGame(BaseModel):
+    rounds: int
+    correct: int
+    points: int
+    best_streak: int
+    days: int
+
+
+class RewindOut(BaseModel):
+    start: dt.date
+    end: dt.date = Field(description="The last day (inclusive).")
+    listens: int
+    listening_ms: int
+    days: int = Field(description="Days with listens.")
+    period_days: int
+    artists: int
+    tracks: int
+    top_artists: list[RewindItem]
+    top_albums: list[RewindItem]
+    top_tracks: list[RewindItem]
+    new_artists: list[RewindItem] = Field(description="First played in the period, played a lot.")
+    new_albums: list[RewindItem]
+    new_releases: list[RewindItem] = Field(description="Released in the period.")
+    weekdays: list[int] = Field(description="Listens per weekday, Monday first.")
+    hours: list[int] = Field(description="Listens per hour of the day.")
+    genres: list[RewindGenre]
+    genre_days: list[RewindGenreTime]
+    genre_parts: list[RewindGenreTime]
+    repeats: list[RewindRepeat]
+    longest_repeat: RewindRepeat | None
+    game: RewindGame | None
+    app_seconds: int | None = Field(description="Time in Plekstender (recorded since Nov 2026).")
+
+
+class AppTimeIn(BaseModel):
+    seconds: int = Field(ge=1, le=120, description="Time in use since the last report.")

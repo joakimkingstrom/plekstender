@@ -60,9 +60,14 @@ export function YourListening({ serverId }: { serverId: number | null }) {
     <Card
       title="Your listening"
       action={
-        <Link to="/history" className={more}>
-          History
-        </Link>
+        <span className="flex gap-3">
+          <Link to="/history/rewind" className={more}>
+            Rewind
+          </Link>
+          <Link to="/history" className={more}>
+            History
+          </Link>
+        </span>
       }
     >
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

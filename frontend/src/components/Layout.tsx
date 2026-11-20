@@ -8,6 +8,7 @@ import { useTheme } from '../theme'
 import { SPIN_MS, SPIN_SCALE } from '../brand'
 import { Mark } from './Mark'
 import { Avatar, Button } from './ui'
+import { useAppTime } from '../appTime'
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -55,6 +56,7 @@ export function Layout() {
   const accent = me?.preferences?.accent ?? null
   // The user's accent colour, worked out for the current theme.
   useEffect(() => applyAccent(accent, theme), [accent, theme])
+  useAppTime(Boolean(me))
 
   if (isPending) {
     return <PageLoader />
