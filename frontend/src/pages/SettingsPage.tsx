@@ -2,13 +2,14 @@ import { useDeferredValue, useState } from 'react'
 import { ColorPicker, Stepper } from '../components/controls'
 import { BRAND, PRESETS } from '../accent'
 import { Tooltip } from '../components/Tooltip'
-import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { Navigate, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useLibrarySettings, useMe, usePopularityPreview, useSetPreferences, useUpdateLibrarySettings } from '../api/hooks'
 import { useActiveServer } from '../api/library'
 import { fontPreviewUrl, useEditFonts, useFanartKey, useFontCatalogue, useFonts, useSetFanartKey, type FontGroupName } from '../api/artwork'
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
+import { SERVICE_KINDS } from '../settingsSections'
 import { FolderSettings } from '../components/FolderSettings'
 import { ScanCard } from '../components/MusicFiles'
 import { ArtworkSummaryCard } from '../components/FileArtwork'
@@ -19,7 +20,7 @@ import { useFilesSummary } from '../api/files'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
-type Section = { to: string; label: string; end?: boolean }
+type Section = { to: string; label: string; end?: boolean; children?: Section[] }
 type Group = { name: string; sections: Section[] }
 
 /** The Settings sections, in groups: yours, your server's library (owners), and the admin's. */
@@ -44,8 +45,19 @@ function settingsGroups(owner: boolean, admin: boolean): Group[] {
       sections: [
         { to: '/settings/users', label: 'Users & access' },
         { to: '/settings/library', label: 'Library tuning' },
-        { to: '/settings/artwork', label: 'Text logo fonts' },
-        { to: '/settings/services', label: 'Services' },
+        {
+          to: '/settings/fonts',
+          label: 'Text logo fonts',
+          children: [
+            { to: '/settings/fonts/offered', label: 'Offered' },
+            { to: '/settings/fonts/add', label: 'Add from Google Fonts' },
+          ],
+        },
+        {
+          to: '/settings/services',
+          label: 'Services',
+          children: SERVICE_KINDS.map((k) => ({ to: `/settings/services/${k.slug}`, label: k.title })),
+        },
       ],
     })
   return groups
@@ -58,11 +70,15 @@ export function SettingsLayout() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const groups = settingsGroups(Boolean(active?.is_owner), Boolean(me?.is_admin))
-  const sections = groups.flatMap((g) => g.sections)
-  const current =
-    sections.find((s) => (s.end ? pathname === s.to || pathname === `${s.to}/` : pathname.startsWith(s.to))) ?? sections[0]
+  const sections = groups.flatMap((g) => g.sections.flatMap((s) => [s, ...(s.children ?? [])]))
+  const matches = (s: Section) => (s.end ? pathname === s.to || pathname === `${s.to}/` : pathname.startsWith(s.to))
+  // The most specific section the address is in (Services → Gigs rather than Services).
+  const current = sections.filter(matches).sort((a, b) => b.to.length - a.to.length)[0] ?? sections[0]
+  const parent = sections.find((s) => s.children?.includes(current))
   const link = ({ isActive }: { isActive: boolean }) =>
     `block rounded-lg px-3 py-1.5 text-sm ${isActive ? 'bg-surface-2 font-medium text-text' : 'text-muted hover:text-text'}`
+  const subLink = ({ isActive }: { isActive: boolean }) =>
+    `block rounded-md px-2 py-1 text-sm ${isActive ? 'font-medium text-accent' : 'text-muted hover:text-text'}`
   return (
     <>
       <PageTitle>Settings</PageTitle>
@@ -72,9 +88,20 @@ export function SettingsLayout() {
             <div key={g.name} className="mb-5">
               <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted">{g.name}</p>
               {g.sections.map((s) => (
-                <NavLink key={s.to} to={s.to} end={s.end} className={link}>
-                  {s.label}
-                </NavLink>
+                <div key={s.to}>
+                  <NavLink to={s.children ? s.children[0].to : s.to} end={s.end} className={link}>
+                    {s.label}
+                  </NavLink>
+                  {s.children && matches(s) && (
+                    <div className="mb-1 ml-3 mt-0.5 border-l border-border pl-2">
+                      {s.children.map((c) => (
+                        <NavLink key={c.to} to={c.to} className={subLink}>
+                          {c.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           ))}
@@ -84,11 +111,20 @@ export function SettingsLayout() {
             <Select
               label="Settings section"
               value={current.to}
-              options={groups.flatMap((g) => g.sections.map((s) => ({ value: s.to, label: s.label, group: g.name })))}
+              options={groups.flatMap((g) =>
+                g.sections.flatMap((s) =>
+                  s.children
+                    ? s.children.map((c) => ({ value: c.to, label: `${s.label}: ${c.label}`, group: g.name }))
+                    : [{ value: s.to, label: s.label, group: g.name }],
+                ),
+              )}
               onChange={(to) => navigate(to)}
             />
           </div>
-          <h2 className="mb-4 hidden text-lg font-semibold lg:block">{current.label}</h2>
+          <h2 className="mb-4 hidden text-lg font-semibold lg:block">
+            {parent && <span className="font-normal text-muted">{parent.label} · </span>}
+            {current.label}
+          </h2>
           <Outlet />
         </div>
       </div>
@@ -178,24 +214,31 @@ function FontPreview({ family, text, className = 'h-7' }: { family: string; text
   )
 }
 
-export function FontsCard() {
+function PreviewWith({ value, onChange }: { value: string; onChange: (text: string) => void }) {
+  return (
+    <label className="block max-w-md">
+      <span className="mb-1 block font-medium">Preview with</span>
+      <input
+        value={value}
+        maxLength={40}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Each font's name (or type an artist)"
+        className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+      />
+    </label>
+  )
+}
+
+/** Settings → Text logo fonts → Offered: the fonts the Artwork tab offers (remove, restore). */
+export function OfferedFonts() {
   const fonts = useFonts()
-  const { add, remove, reset } = useEditFonts()
+  const { remove, reset } = useEditFonts()
   const [sample, setSample] = useState('')
-  // The font just added: highlighted in the list, and named under the search.
-  const [justAdded, setJustAdded] = useState<{ name: string; group: string } | null>(null)
-  const error = add.error ?? remove.error ?? reset.error
-  const addFont = (name: string) =>
-    add.mutate(name, {
-      onSuccess: (groups) => {
-        const group = groups.find((g) => g.fonts.includes(name))?.name ?? ''
-        setJustAdded({ name, group })
-      },
-    })
+  const error = remove.error ?? reset.error
   const total = (fonts.data ?? []).reduce((n, g) => n + g.fonts.length, 0)
   return (
     <Card
-      title="Text logo fonts"
+      title={`Offered (${total})`}
       action={
         <Button
           variant="ghost"
@@ -210,73 +253,86 @@ export function FontsCard() {
     >
       <div className="space-y-5 text-sm">
         <p className="text-muted">
-          The fonts the Artwork page offers for text logos. Browse Google Fonts below to add more; each is downloaded the
-          first time someone uses it.
+          The fonts the Artwork tab offers for text logos. More can be added from{' '}
+          <NavLink to="/settings/fonts/add" className="text-accent underline">
+            Google Fonts
+          </NavLink>
+          ; each is downloaded the first time someone uses it.
         </p>
-        <label className="block max-w-md">
-          <span className="mb-1 block font-medium">Preview with</span>
-          <input
-            value={sample}
-            maxLength={40}
-            onChange={(e) => setSample(e.target.value)}
-            placeholder="Each font's name (or type an artist)"
-            className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-          />
-        </label>
+        <PreviewWith value={sample} onChange={setSample} />
         {error && <Notice tone="error">{errorMessage(error)}</Notice>}
-
-        <section aria-labelledby="offered-fonts">
-          <h3 id="offered-fonts" className="mb-2 font-semibold">
-            Offered <span className="font-normal text-muted">({total})</span>
-          </h3>
-          {fonts.isPending ? (
-            <Spinner small />
-          ) : fonts.isError ? (
-            <Notice tone="error">{errorMessage(fonts.error)}</Notice>
-          ) : (
-            <div className="gap-6 sm:columns-2 lg:columns-3">
-              {fonts.data.map((g) => (
-                <div key={g.name} className="mb-5 break-inside-avoid">
-                  <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
-                    {g.name} <span className="font-normal">({g.fonts.length})</span>
-                  </h4>
-                  <ul className="space-y-1">
-                    {g.fonts.map((f) => (
-                      <li
-                        key={f}
-                        className={`group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-surface-2 ${
-                          justAdded?.name === f ? 'bg-accent/10 ring-1 ring-accent' : ''
-                        }`}
+        {fonts.isPending ? (
+          <Spinner small />
+        ) : fonts.isError ? (
+          <Notice tone="error">{errorMessage(fonts.error)}</Notice>
+        ) : (
+          <div className="gap-6 sm:columns-2 lg:columns-3">
+            {fonts.data.map((g) => (
+              <div key={g.name} className="mb-5 break-inside-avoid">
+                <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
+                  {g.name} <span className="font-normal">({g.fonts.length})</span>
+                </h4>
+                <ul className="space-y-1">
+                  {g.fonts.map((f) => (
+                    <li key={f} className="group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-surface-2">
+                      <div className="min-w-0 flex-1">
+                        <FontPreview family={f} text={sample} />
+                        {sample.trim() && <span className="block text-[11px] text-muted">{f}</span>}
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${f}`}
+                        disabled={remove.isPending}
+                        onClick={() => remove.mutate(f)}
+                        className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted hover:bg-border hover:text-text"
                       >
-                        <div className="min-w-0 flex-1">
-                          <FontPreview family={f} text={sample} />
-                          {sample.trim() && <span className="block text-[11px] text-muted">{f}</span>}
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={`Remove ${f}`}
-                          disabled={remove.isPending}
-                          onClick={() => remove.mutate(f)}
-                          className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted hover:bg-border hover:text-text"
-                        >
-                          ×
-                        </button>
-                      </li>
-                    ))}
-                    {g.fonts.length === 0 && <li className="px-2 text-xs text-muted">None</li>}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                  {g.fonts.length === 0 && <li className="px-2 text-xs text-muted">None</li>}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-muted">
+          Saving artist images into artist folders (artist.jpg) is under{' '}
+          <NavLink to="/settings/files" className="text-accent underline">
+            Music files
+          </NavLink>
+          .
+        </p>
+      </div>
+    </Card>
+  )
+}
 
-        <FontBrowser
-          sample={sample}
-          onAdd={addFont}
-          adding={add.isPending ? add.variables : null}
-          added={justAdded}
-        />
+/** Settings → Text logo fonts → Add: browse Google Fonts and add some. */
+export function AddFonts() {
+  const { add } = useEditFonts()
+  const [sample, setSample] = useState('')
+  const [justAdded, setJustAdded] = useState<{ name: string; group: string } | null>(null)
+  const addFont = (name: string) =>
+    add.mutate(name, {
+      onSuccess: (groups) => {
+        const group = groups.find((g) => g.fonts.includes(name))?.name ?? ''
+        setJustAdded({ name, group })
+      },
+    })
+  return (
+    <Card>
+      <div className="space-y-5 text-sm">
+        <p className="text-muted">
+          Google Fonts, most used first. Added fonts join their group in the{' '}
+          <NavLink to="/settings/fonts/offered" className="text-accent underline">
+            offered list
+          </NavLink>
+          .
+        </p>
+        <PreviewWith value={sample} onChange={setSample} />
+        {add.error && <Notice tone="error">{errorMessage(add.error)}</Notice>}
+        <FontBrowser sample={sample} onAdd={addFont} adding={add.isPending ? add.variables : null} added={justAdded} />
       </div>
     </Card>
   )
@@ -303,8 +359,8 @@ function FontBrowser({
     `rounded-full px-3 py-1 text-xs font-medium ${active ? 'bg-accent text-on-accent' : 'bg-surface-2 text-muted hover:text-text'}`
 
   return (
-    <section aria-labelledby="add-fonts" className="space-y-3 border-t border-border pt-4">
-      <h3 id="add-fonts" className="font-semibold">
+    <section aria-labelledby="add-fonts" className="space-y-3">
+      <h3 id="add-fonts" className="sr-only">
         Add from Google Fonts
       </h3>
       <input
@@ -680,22 +736,15 @@ export function AppearancePage() {
 }
 
 /** Artwork settings (admins): the text logo fonts. */
-export function ArtworkSettingsPage() {
+/** Settings → Text logo fonts (admins): the offered fonts, or adding some. */
+export function FontsSettingsPage() {
   const me = useMe()
+  const { part } = useParams()
   if (me.isPending) return <Spinner />
   if (!me.data?.is_admin) return <Navigate to="/settings" replace />
-  return (
-    <div className="space-y-4">
-      <FontsCard />
-      <p className="text-sm text-muted">
-        Saving artist images into artist folders (artist.jpg) is under{' '}
-        <NavLink to="/settings/files" className="text-accent underline">
-          Music files
-        </NavLink>
-        .
-      </p>
-    </div>
-  )
+  if (part === 'add') return <AddFonts />
+  if (part === 'offered') return <OfferedFonts />
+  return <Navigate to="/settings/fonts/offered" replace />
 }
 
 function PlexSyncCard({ serverId }: { serverId: number }) {

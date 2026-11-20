@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Navigate } from 'react-router'
+import { Navigate, useParams } from 'react-router'
 import { useMe } from '../api/hooks'
 import { AcoustIdKeyCard } from '../components/AcoustIdKeyCard'
 import { DataThistleCard } from '../components/DataThistleCard'
@@ -9,6 +9,7 @@ import { SetlistFmKeyCard } from '../components/SetlistFmKeyCard'
 import { SpotifyAppCard } from '../components/SpotifyAppCard'
 import { TicketmasterKeyCard } from '../components/TicketmasterKeyCard'
 import { Spinner } from '../components/ui'
+import { SERVICE_KINDS, type ServiceKind } from '../settingsSections'
 import { LastFmKeyCard, ListenBrainzCard } from './ListeningSettingsPage'
 import { FanartKeyCard } from './SettingsPage'
 
@@ -22,43 +23,34 @@ export function ScrobblingPage() {
   )
 }
 
-function Group({ title, about, children }: { title: string; about: string; children: ReactNode }) {
-  return (
-    <section className="space-y-3" aria-label={title}>
-      <div>
-        <h3 className="font-semibold">{title}</h3>
-        <p className="text-sm text-muted">{about}</p>
-      </div>
-      <div className="grid items-start gap-4 xl:grid-cols-2">{children}</div>
-    </section>
-  )
+/** The keys and apps for each kind of service. */
+const CARDS: Record<ServiceKind, () => ReactNode> = {
+  gigs: () => (
+    <>
+      <JamBaseKeyCard />
+      <TicketmasterKeyCard />
+      <DataThistleCard />
+      <SetlistFmKeyCard />
+    </>
+  ),
+  history: () => <LastFmKeyCard />,
+  playlists: () => <SpotifyAppCard />,
+  artwork: () => <FanartKeyCard />,
+  files: () => <AcoustIdKeyCard />,
 }
 
-/** Settings → Services (admins): every outside service's key or app, by what it's for. */
+/** Settings → Services → one kind (admins): the keys and apps for it. */
 export function ServicesPage() {
   const me = useMe()
+  const { kind } = useParams()
   if (me.isPending) return <Spinner />
   if (!me.data?.is_admin) return <Navigate to="/settings" replace />
+  const found = SERVICE_KINDS.find((k) => k.slug === kind)
+  if (!found) return <Navigate to={`/settings/services/${SERVICE_KINDS[0].slug}`} replace />
   return (
-    <div className="space-y-8">
-      <Group title="Gigs" about="Upcoming gigs near people (Gigs → Upcoming), and importing the ones they went to.">
-        <JamBaseKeyCard />
-        <TicketmasterKeyCard />
-        <DataThistleCard />
-        <SetlistFmKeyCard />
-      </Group>
-      <Group title="History" about="Importing listening history.">
-        <LastFmKeyCard />
-      </Group>
-      <Group title="Playlists" about="Importing playlists from Spotify links.">
-        <SpotifyAppCard />
-      </Group>
-      <Group title="Artwork" about="Artist logos for the Artwork tab.">
-        <FanartKeyCard />
-      </Group>
-      <Group title="Music files" about="Identifying music files by how they sound.">
-        <AcoustIdKeyCard />
-      </Group>
+    <div className="space-y-4">
+      <p className="text-sm text-muted">{found.about}</p>
+      <div className="grid items-start gap-4 xl:grid-cols-2">{CARDS[found.slug]()}</div>
     </div>
   )
 }

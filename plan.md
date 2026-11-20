@@ -608,6 +608,7 @@ The menus had grown one page at a time; this tidies them before Phase 13 adds mo
   - Library (server owners): Music files.
   - Admin: Users & access · Library tuning · Text logo fonts · Services (every key and app, grouped by what it's for: Gigs — JamBase, Ticketmaster, Data Thistle, setlist.fm; History — Last.fm; Playlists — Spotify; Artwork — fanart.tv; Music files — AcoustID).
   - The old Connections page leads to Scrobbling.
+  - Services and Text logo fonts open sub-pages underneath them in the sidebar (and in the phone's picker): Services → Gigs · History · Playlists · Artwork · Identifying files; Text logo fonts → Offered · Add from Google Fonts. /settings/services and /settings/fonts open the first; /settings/artwork leads to the fonts.
 
 ### Phase 13 — Genres, styles and moods; tag editing in bulk (from `.todo.md`, 19 Nov 2026)
 Plex gives albums one or two broad genres (often "Pop/Rock") but many **styles** ("Art Rock", "Prog-Rock") and **moods** ("Witty", "Laid-Back/Mellow") from its own metadata. Plekstender already mirrors them (`tags`, kinds genre / style / mood / country); they just aren't used yet.

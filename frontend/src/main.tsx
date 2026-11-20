@@ -27,7 +27,7 @@ import { RatingsPage } from './pages/RatingsPage'
 import { ScoresPage } from './pages/ScoresPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
-import { AppearancePage, ArtworkSettingsPage, FilesSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
+import { AppearancePage, FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
 import { GigsLayout, LibraryLayout, PlaylistRedirect } from './pages/Sections'
 
@@ -99,11 +99,14 @@ const router = createBrowserRouter([
           { path: 'listening', element: <ListeningSettingsPage /> },
           { path: 'scrobbling', element: <ScrobblingPage /> },
           { path: 'services', element: <ServicesPage /> },
+          { path: 'services/:kind', element: <ServicesPage /> },
           { path: 'users', element: <UsersPage /> },
           { path: 'connections', element: <Navigate to="/settings/scrobbling" replace /> },
           { path: 'export', element: <ExportPage /> },
           { path: 'appearance', element: <AppearancePage /> },
-          { path: 'artwork', element: <ArtworkSettingsPage /> },
+          { path: 'artwork', element: <Navigate to="/settings/fonts/offered" replace /> },
+          { path: 'fonts', element: <FontsSettingsPage /> },
+          { path: 'fonts/:part', element: <FontsSettingsPage /> },
           { path: 'files', element: <FilesSettingsPage /> },
           { path: 'game', element: <GameSettingsPage /> },
           { path: 'library', element: <LibrarySettingsPage /> },

@@ -2,15 +2,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { FontsCard } from './SettingsPage'
+import type { ReactNode } from 'react'
+import { AddFonts, OfferedFonts } from './SettingsPage'
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
 })
 
-describe('FontsCard', () => {
-  it('previews the offered fonts, browses Google Fonts and adds one (any capitals)', async () => {
+describe('Text logo fonts', () => {
+  it('previews the offered fonts, then browses Google Fonts and adds one (any capitals)', async () => {
     let finishSaving = () => {}
     const saved = new Promise<void>((resolve) => (finishSaving = resolve))
     let offered = [
@@ -42,19 +43,24 @@ describe('FontsCard', () => {
       return json({})
     })
     vi.stubGlobal('fetch', fetch)
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <MemoryRouter>
-          <FontsCard />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    const show = (page: ReactNode) =>
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <MemoryRouter>{page}</MemoryRouter>
+        </QueryClientProvider>,
+      )
+    show(<OfferedFonts />)
     // Each offered font is shown in itself.
     expect(await screen.findByAltText('Anton in Anton')).toHaveAttribute('src', '/api/artwork/fonts/preview.png?family=Anton')
     // The preview text applies to every font.
     fireEvent.change(screen.getByPlaceholderText(/Each font's name/), { target: { value: 'Radiohead' } })
     expect(await screen.findByAltText('Radiohead in Monoton')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Google Fonts' })).toHaveAttribute('href', '/settings/fonts/add')
 
+    // The other page: adding from Google Fonts.
+    cleanup()
+    show(<AddFonts />)
+    fireEvent.change(screen.getByPlaceholderText(/Each font's name/), { target: { value: 'Radiohead' } })
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search Google Fonts' }), { target: { value: 'roboto' } })
     expect(await screen.findByText('Roboto Slab · Serif')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Add Roboto' }))
@@ -72,7 +78,7 @@ describe('FontsCard', () => {
       const post = fetch.mock.calls.find(([r]) => r.method === 'POST')
       expect(await post![0].clone().json()).toEqual({ name: 'Roboto' })
     })
-    // Now offered (and still in the search results).
-    await vi.waitFor(() => expect(screen.getAllByAltText('Radiohead in Roboto')).toHaveLength(2))
+    // Still in the search results, now as offered.
+    expect(screen.getByAltText('Radiohead in Roboto')).toBeInTheDocument()
   })
 })
