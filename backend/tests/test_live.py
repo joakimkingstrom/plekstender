@@ -273,6 +273,12 @@ async def test_live_shows_flow(app: FastAPI, plex: FakePlex) -> None:
         {"name": "Radiohead", "shows": 2},
         {"name": "Portishead", "shows": 1},
     ]
+    # The artist's page lists their gigs; the library marks artists with any.
+    sid = festival["artists"][0]["server_id"]
+    portishead = (await owner.get(f"/api/live/artists/{sid}/101/gigs")).json()
+    assert [g["name"] for g in portishead] == ["Way Out West 2027"]
+    assert (await owner.get(f"/api/live/artists/{sid}/102/gigs")).json() == []
+    assert (await owner.get(f"/api/live/artists/{sid}")).json() == [100, 101]
     only = (await owner.get("/api/live/shows", params={"artist": "Portishead"})).json()
     assert [s["name"] for s in only["shows"]] == ["Way Out West 2027"]
     until = (await owner.get("/api/live/shows", params={"to": "2027-04-01"})).json()

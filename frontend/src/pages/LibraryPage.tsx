@@ -1,3 +1,6 @@
+import { useArtistGigs, useArtistsWithGigs } from '../api/live'
+import { GigMarker } from '../components/GigMarker'
+import { GigRow } from '../components/GigRow'
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { Zoomable } from '../components/Lightbox'
 import { ListensDialog } from '../components/listens'
@@ -125,6 +128,7 @@ function ArtistGrid({
   tag: number | null
 }) {
   const artists = useArtists(serverId, q, sort, tag)
+  const withGigs = useArtistsWithGigs(serverId)
   const sentinel = useRef<HTMLDivElement>(null)
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = artists
 
@@ -159,7 +163,10 @@ function ArtistGrid({
           {items.map((a) => (
             <li key={a.rating_key}>
               <Link to={`/library/artists/${a.rating_key}`} className="group block">
-                <Artwork serverId={serverId} path={a.thumb} title={a.title} round className="w-full transition-opacity group-hover:opacity-85" />
+                <div className="relative">
+                  <Artwork serverId={serverId} path={a.thumb} title={a.title} round className="w-full transition-opacity group-hover:opacity-85" />
+                  {withGigs.data?.has(a.rating_key) && <GigMarker className="bottom-[6%] right-[6%] size-7" />}
+                </div>
                 <div className="mt-2 truncate text-center text-sm font-medium">{a.title}</div>
               </Link>
               <div className="flex justify-center">
@@ -388,6 +395,7 @@ export function ArtistPage() {
 
 function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: number }) {
   const artist = useArtist(serverId, artistKey)
+  const gigs = useArtistGigs(serverId, artistKey)
   if (artist.isPending) return <Spinner />
   if (artist.isError) return <Notice tone="error">{errorMessage(artist.error)}</Notice>
   const a = artist.data
@@ -396,12 +404,12 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
     <>
       <BackLink to="/library" label="Library" />
       <div className="mb-8 flex flex-col gap-6 sm:flex-row">
-        <Zoomable
-          image={a.thumb ? { src: imageUrl(serverId, a.thumb, 1000)!, alt: a.title } : null}
-          className="w-40 shrink-0 self-center sm:self-start"
-        >
-          <Artwork serverId={serverId} path={a.thumb} title={a.title} size={400} round className="w-full" />
-        </Zoomable>
+        <div className="relative w-40 shrink-0 self-center sm:self-start">
+          <Zoomable image={a.thumb ? { src: imageUrl(serverId, a.thumb, 1000)!, alt: a.title } : null} className="w-full">
+            <Artwork serverId={serverId} path={a.thumb} title={a.title} size={400} round className="w-full" />
+          </Zoomable>
+          {(gigs.data?.length ?? 0) > 0 && <GigMarker className="bottom-[6%] right-[6%] size-9" />}
+        </div>
         <div className="min-w-0 flex-1 space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">{a.title}</h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
@@ -416,6 +424,22 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
+          {gigs.data && gigs.data.length > 0 && (
+            <Card
+              title="Upcoming gigs"
+              action={
+                <Link to="/live" className="text-sm text-accent hover:underline">
+                  All gigs
+                </Link>
+              }
+            >
+              <ul className="-mx-3 divide-y divide-border">
+                {gigs.data.map((show) => (
+                  <GigRow key={show.id} show={show} serverId={serverId} />
+                ))}
+              </ul>
+            </Card>
+          )}
           {a.top_tracks.length > 0 && (
             <Card title="Most popular songs">
               <TrackList serverId={serverId} tracks={a.top_tracks} showAlbum showListens={a.your_listens.listens > 0} />

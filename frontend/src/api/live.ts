@@ -217,3 +217,28 @@ export function useSetDataThistle() {
     },
   })
 }
+
+/** A library artist's upcoming gigs (their page). */
+export function useArtistGigs(serverId: number, ratingKey: number) {
+  return useQuery({
+    queryKey: [...liveKeys.all, 'shows', 'artist', serverId, ratingKey],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/live/artists/{server_id}/{rating_key}/gigs', {
+          params: { path: { server_id: serverId, rating_key: ratingKey } },
+        }),
+      ),
+  })
+}
+
+/** The library artists with an upcoming gig (to mark their pictures). */
+export function useArtistsWithGigs(serverId: number | null) {
+  return useQuery({
+    queryKey: [...liveKeys.all, 'shows', 'artists', serverId],
+    enabled: serverId != null,
+    queryFn: () =>
+      unwrap(api.GET('/api/live/artists/{server_id}', { params: { path: { server_id: serverId! } } })),
+    select: (keys) => new Set(keys),
+    staleTime: 5 * 60_000,
+  })
+}

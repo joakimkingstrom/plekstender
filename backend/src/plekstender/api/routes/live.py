@@ -246,24 +246,7 @@ async def shows(
     narrows to one of the user's artists, `venue` to one venue, `starred` to starred shows,
     `new` to shows first found in the past week.
     The artist and venue lists (for the filters) count the shows the other filters allow."""
-    today = dt.datetime.now(dt.UTC).date() - dt.timedelta(days=1)  # time zones: keep tonight
-    start = max(date_from or today, today)
-    query = (
-        select(LiveShow)
-        .where(
-            LiveShow.user_id == user.id,
-            func.coalesce(LiveShow.end_date, LiveShow.start_date) >= start,
-            _not_expired(),
-        )
-        .order_by(LiveShow.start_date, LiveShow.start_time.nulls_last(), LiveShow.id)
-    )
-    if date_to:
-        query = query.where(LiveShow.start_date <= date_to)
-    sightings = await db.execute(
-        select(LiveSeen.key, LiveSeen.first_seen_at).where(LiveSeen.user_id == user.id)
-    )
-    seen = {key: when for key, when in sightings.all()}
-    groups = [_show(group, seen) for group in merge(list(await db.scalars(query)))]
+    groups = await _upcoming(db, user.id, date_from, date_to)
     if starred:
         groups = [g for g in groups if g.starred]
     if new:
@@ -286,6 +269,53 @@ async def shows(
             for n, c in sorted(venue_counts.items(), key=lambda x: (-x[1], x[0].lower()))
         ],
     )
+
+
+async def _upcoming(
+    db: DbDep,
+    user_id: int,
+    date_from: dt.date | None = None,
+    date_to: dt.date | None = None,
+    *where: ColumnElement[bool],
+) -> list[LiveShowOut]:
+    """The user's upcoming gigs, soonest first, each once however many sources found it."""
+    today = dt.datetime.now(dt.UTC).date() - dt.timedelta(days=1)  # time zones: keep tonight
+    start = max(date_from or today, today)
+    query = (
+        select(LiveShow)
+        .where(
+            LiveShow.user_id == user_id,
+            func.coalesce(LiveShow.end_date, LiveShow.start_date) >= start,
+            _not_expired(),
+            *where,
+        )
+        .order_by(LiveShow.start_date, LiveShow.start_time.nulls_last(), LiveShow.id)
+    )
+    if date_to:
+        query = query.where(LiveShow.start_date <= date_to)
+    sightings = await db.execute(
+        select(LiveSeen.key, LiveSeen.first_seen_at).where(LiveSeen.user_id == user_id)
+    )
+    seen = {key: when for key, when in sightings.all()}
+    return [_show(group, seen) for group in merge(list(await db.scalars(query)))]
+
+
+@router.get("/artists/{server_id}/{rating_key}/gigs", response_model=list[LiveShowOut])
+async def artist_gigs(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep
+) -> list[LiveShowOut]:
+    """One library artist's upcoming gigs (for their page)."""
+    match = LiveShow.artists.contains([{"server_id": server_id, "rating_key": rating_key}])
+    return await _upcoming(db, user.id, None, None, match)
+
+
+@router.get("/artists/{server_id}", response_model=list[int])
+async def artists_with_gigs(server_id: int, db: DbDep, user: UserDep) -> list[int]:
+    """The library artists (rating keys) with an upcoming gig, to mark their pictures."""
+    keys: set[int] = set()
+    for show in await _upcoming(db, user.id):
+        keys.update(a.rating_key for a in show.artists if a.server_id == server_id and a.rating_key)
+    return sorted(keys)
 
 
 def _not_expired() -> ColumnElement[bool]:

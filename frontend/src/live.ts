@@ -28,3 +28,10 @@ export function formatPrice(min: number | null | undefined, max: number | null |
   }
   return high > min ? `${format(min)}–${format(high)}` : format(min)
 }
+
+/** "2027-03-04" as a local date (no time zone shift). */
+export function localDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
