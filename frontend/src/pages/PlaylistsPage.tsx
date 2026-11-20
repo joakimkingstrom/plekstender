@@ -1,3 +1,4 @@
+import { PlaylistImport } from '../components/PlaylistImport'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
@@ -67,7 +68,12 @@ export function PlaylistsPage() {
       <PageTitle subtitle="Playlists built from artists, songs and genres, saved to Plex under your own account.">
         Playlists
       </PageTitle>
-      {blocker ?? <PlaylistList serverId={active!.id} />}
+      {blocker ?? (
+        <div className="space-y-6">
+          <PlaylistList serverId={active!.id} />
+          <PlaylistImport serverId={active!.id} />
+        </div>
+      )}
     </>
   )
 }

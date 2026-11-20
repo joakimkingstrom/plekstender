@@ -835,6 +835,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/playlists/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Import
+         * @description Read a playlist file (CSV such as Exportify's, M3U, JSPF) and match its songs to the
+         *     library on this server. Nothing is made until it's confirmed.
+         */
+        post: operations["preview_import_api_servers__server_id__playlists_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/playlists/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Import
+         * @description Make the imported playlist in Plex (under the user's own account), songs in order.
+         */
+        post: operations["create_import_api_servers__server_id__playlists_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/tracks/{rating_key}/preview": {
         parameters: {
             query?: never;
@@ -5093,6 +5134,64 @@ export interface components {
             /** Seed Tracks */
             seed_tracks: components["schemas"]["SeedTrack"][];
         };
+        /** PlaylistImportIn */
+        PlaylistImportIn: {
+            /** Name */
+            name: string;
+            /** Rating Keys */
+            rating_keys: number[];
+        };
+        /** PlaylistImportMatch */
+        PlaylistImportMatch: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string | null;
+            /** Album */
+            album: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /**
+             * How
+             * @description exact: title and artist; title: only a lone same-title song of that length.
+             * @enum {string}
+             */
+            how: "exact" | "title";
+        };
+        /** PlaylistImportOut */
+        PlaylistImportOut: {
+            /** Plex Playlist Key */
+            plex_playlist_key: number;
+            /** Songs */
+            songs: number;
+        };
+        /** PlaylistImportPreviewOut */
+        PlaylistImportPreviewOut: {
+            /** Name */
+            name: string | null;
+            /** Total */
+            total: number;
+            /** Matched */
+            matched: number;
+            /** Songs */
+            songs: components["schemas"]["PlaylistImportSong"][];
+        };
+        /** PlaylistImportSong */
+        PlaylistImportSong: {
+            /** Index */
+            index: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string;
+            /** Album */
+            album: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            match: components["schemas"]["PlaylistImportMatch"] | null;
+        };
         /** PlaylistIn */
         PlaylistIn: {
             /** Name */
@@ -8040,6 +8139,78 @@ export interface operations {
                 content: {
                     "text/plain": string;
                     "audio/x-mpegurl": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_import_api_servers__server_id__playlists_import_preview_post: {
+        parameters: {
+            query?: {
+                filename?: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistImportPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_import_api_servers__server_id__playlists_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaylistImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistImportOut"];
                 };
             };
             /** @description Validation Error */

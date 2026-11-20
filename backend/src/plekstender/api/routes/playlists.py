@@ -8,15 +8,21 @@ import re
 from typing import Annotated, Any, Literal
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
+from plekstender.api.routes.library import visible
 from plekstender.api.routes.servers import get_user_server, server_client
 from plekstender.api.schemas import (
     PlaylistDetail,
+    PlaylistImportIn,
+    PlaylistImportMatch,
+    PlaylistImportOut,
+    PlaylistImportPreviewOut,
+    PlaylistImportSong,
     PlaylistIn,
     PlaylistOut,
     PlaylistPreviewOut,
@@ -26,11 +32,13 @@ from plekstender.api.schemas import (
     SeedArtist,
     SeedTrack,
 )
-from plekstender.db.models import Playlist, UserServer
-from plekstender.playlists import builder
+from plekstender.db.models import Playlist, Track, UserServer
+from plekstender.playlists import builder, imports
 from plekstender.playlists.definition import Definition
 from plekstender.playlists.service import (
+    BATCH,
     PlaylistError,
+    _client,
     m3u,
     remove_from_plex,
     select_songs,
@@ -324,3 +332,96 @@ async def delete_playlist(
     await db.delete(playlist)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- importing playlists from elsewhere (files) ---------------------------------------------
+
+MAX_FILE = 5 * 1024 * 1024
+
+
+@router.post(
+    "/import/preview",
+    response_model=PlaylistImportPreviewOut,
+    dependencies=[rate_limit("playlist-import", 30, 60)],
+    openapi_extra={
+        "requestBody": {"content": {"application/octet-stream": {"schema": {"type": "string"}}}}
+    },
+)
+async def preview_import(
+    server_id: int,
+    request: Request,
+    db: DbDep,
+    user: UserDep,
+    filename: Annotated[str, Query(max_length=300)] = "playlist",
+) -> PlaylistImportPreviewOut:
+    """Read a playlist file (CSV such as Exportify's, M3U, JSPF) and match its songs to the
+    library on this server. Nothing is made until it's confirmed."""
+    us = await get_user_server(db, user, server_id)
+    body = await request.body()
+    if len(body) > MAX_FILE:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Files can be up to 5 MB.")
+    try:
+        name, entries = imports.parse(filename, body.decode("utf-8-sig", errors="replace"))
+    except imports.PlaylistFileError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    matches = await imports.match(db, user.id, us, entries)
+    songs = [
+        PlaylistImportSong(
+            index=i,
+            title=e.title,
+            artist=e.artists[0] if e.artists else "",
+            album=e.album,
+            duration_ms=e.duration_ms,
+            match=PlaylistImportMatch.model_validate(m, from_attributes=True) if m else None,
+        )
+        for i, (e, m) in enumerate(zip(entries, matches, strict=True))
+    ]
+    return PlaylistImportPreviewOut(
+        name=name, total=len(songs), matched=sum(1 for s in songs if s.match), songs=songs
+    )
+
+
+@router.post(
+    "/import",
+    response_model=PlaylistImportOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[rate_limit("playlist-import", 30, 60)],
+)
+async def create_import(
+    server_id: int,
+    body: PlaylistImportIn,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+) -> PlaylistImportOut:
+    """Make the imported playlist in Plex (under the user's own account), songs in order."""
+    us = await get_user_server(db, user, server_id)
+    state, cond, where = visible(Track, user.id, us)
+    allowed = set(
+        await db.scalars(
+            select(Track.rating_key)
+            .join(state, cond)
+            .where(*where, Track.rating_key.in_(body.rating_keys))
+        )
+    )
+    keys = [k for k in body.rating_keys if k in allowed]
+    if not keys:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "None of those songs are in the library."
+        )
+    try:
+        client = _client(settings, http, us)
+        batches = [keys[i : i + BATCH] for i in range(0, len(keys), BATCH)]
+        key = await client.create_playlist(
+            body.name.strip(), us.server.machine_identifier, batches[0]
+        )
+        for batch in batches[1:]:
+            await client.add_to_playlist(key, us.server.machine_identifier, batch)
+    except PlaylistError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except PlexError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Plex didn't make the playlist: {exc}"
+        ) from exc
+    return PlaylistImportOut(plex_playlist_key=key, songs=len(keys))

@@ -1633,3 +1633,40 @@ class ScrobbleTargetOut(BaseModel):
     last_submitted_at: dt.datetime | None
     paused: bool
     error: str | None
+
+
+class PlaylistImportMatch(BaseModel):
+    rating_key: int
+    title: str
+    artist: str | None
+    album: str | None
+    duration_ms: int | None
+    how: Literal["exact", "title"] = Field(
+        description="exact: title and artist; title: only a lone same-title song of that length."
+    )
+
+
+class PlaylistImportSong(BaseModel):
+    index: int
+    title: str
+    artist: str
+    album: str | None
+    duration_ms: int | None
+    match: PlaylistImportMatch | None
+
+
+class PlaylistImportPreviewOut(BaseModel):
+    name: str | None
+    total: int
+    matched: int
+    songs: list[PlaylistImportSong]
+
+
+class PlaylistImportIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    rating_keys: list[int] = Field(min_length=1, max_length=5000)
+
+
+class PlaylistImportOut(BaseModel):
+    plex_playlist_key: int
+    songs: int

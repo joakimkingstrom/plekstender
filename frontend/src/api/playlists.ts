@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, unwrap, type Schemas } from './client'
+import { api, postRaw, unwrap, type Schemas } from './client'
 
 export type Playlist = Schemas['PlaylistOut']
 export type PlaylistDetail = Schemas['PlaylistDetail']
@@ -137,5 +137,26 @@ export function useDeletePlaylist(serverId: number) {
         }),
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: playlistKeys.all(serverId) }),
+  })
+}
+
+export type PlaylistImportPreview = Schemas['PlaylistImportPreviewOut']
+
+/** Read a playlist file (CSV, M3U, JSPF) and match its songs to this server's library. */
+export function usePreviewPlaylistImport(serverId: number) {
+  return useMutation({
+    mutationFn: (file: File) =>
+      postRaw<PlaylistImportPreview>(
+        `/api/servers/${serverId}/playlists/import/preview?filename=${encodeURIComponent(file.name)}`,
+        file,
+        file.type || 'application/octet-stream',
+      ),
+  })
+}
+
+export function useCreatePlaylistImport(serverId: number) {
+  return useMutation({
+    mutationFn: (body: Schemas['PlaylistImportIn']) =>
+      unwrap(api.POST('/api/servers/{server_id}/playlists/import', { params: { path: { server_id: serverId } }, body })),
   })
 }
