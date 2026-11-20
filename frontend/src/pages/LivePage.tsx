@@ -79,7 +79,7 @@ function SourceMissing() {
         <>
           Add one in{' '}
           <Link to="/settings/services" className="underline">
-            Settings → Connections
+            Settings → Services
           </Link>
           .
         </>

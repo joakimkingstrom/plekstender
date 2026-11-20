@@ -169,7 +169,7 @@ async def start_identify(
     if key is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Add an AcoustID application key first (Settings → Connections).",
+            "Add an AcoustID application key first (Settings → Services).",
         )
     query = select(MediaFile).where(MediaFile.server_id == us.server_id)
     if body.kind is not None:

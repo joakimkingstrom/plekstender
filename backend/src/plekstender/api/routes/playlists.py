@@ -408,7 +408,7 @@ async def preview_spotify(
     if app is None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Spotify isn't set up: an admin can add a Spotify app in Settings → Connections.",
+            "Spotify isn't set up: an admin can add a Spotify app in Settings → Services.",
         )
     try:
         pid = spotify.playlist_id(body.url)

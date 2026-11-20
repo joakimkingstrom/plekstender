@@ -10,7 +10,8 @@ import { Layout } from './components/Layout'
 import './index.css'
 import { registerServiceWorker } from './online'
 import { ArtworkPage } from './pages/ArtworkPage'
-import { ConnectionsPage } from './pages/ConnectionsPage'
+import { ScrobblingPage, ServicesPage } from './pages/ConnectionsPage'
+import { UsersPage } from './pages/AdminPage'
 import { ExportPage } from './pages/ExportPage'
 import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { HomePage, NotFoundPage } from './pages/HomePage'
@@ -96,7 +97,10 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <ServersPage /> },
           { path: 'listening', element: <ListeningSettingsPage /> },
-          { path: 'connections', element: <ConnectionsPage /> },
+          { path: 'scrobbling', element: <ScrobblingPage /> },
+          { path: 'services', element: <ServicesPage /> },
+          { path: 'users', element: <UsersPage /> },
+          { path: 'connections', element: <Navigate to="/settings/scrobbling" replace /> },
           { path: 'export', element: <ExportPage /> },
           { path: 'appearance', element: <AppearancePage /> },
           { path: 'artwork', element: <ArtworkSettingsPage /> },

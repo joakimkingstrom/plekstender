@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     # ffmpeg for song previews; by default the one bundled with the imageio-ffmpeg package.
     ffmpeg_path: str | None = None
     # Identifying music files by sound: Chromaprint's fpcalc (in the Docker image) and an
-    # AcoustID application key (or set on Settings → Connections by an admin; that wins).
+    # AcoustID application key (or set on Settings → Services by an admin; that wins).
     fpcalc_path: str = "fpcalc"
     acoustid_api_key: SecretStr | None = None
     acoustid_api_url: str = "https://api.acoustid.org/v2"
@@ -84,21 +84,21 @@ class Settings(BaseSettings):
     jambase_api_url: str = "https://api.data.jambase.com/v3"
     jambase_monthly_cap: int = 900
     # Live's second source: Ticketmaster's Discovery API (a free Consumer Key, 5,000 requests
-    # a day; or set on Settings → Connections). Plekstender stops at its own daily cap.
+    # a day; or set on Settings → Services). Plekstender stops at its own daily cap.
     ticketmaster_api_key: SecretStr | None = None
     ticketmaster_api_url: str = "https://app.ticketmaster.com/discovery/v2"
     ticketmaster_daily_cap: int = 4000
     # Live's UK listings: Data Thistle (an admin's free account; its tokens are pasted on
-    # Settings → Connections and renewed by the worker). 1,000 requests a month.
+    # Settings → Services and renewed by the worker). 1,000 requests a month.
     datathistle_api_url: str = "https://api.datathistle.com/v1"
     datathistle_auth_url: str = "https://auth.datathistle.com/v1"
     datathistle_daily_cap: int = 30
     # Gigs gone to, imported from setlist.fm (an admin's free, non-commercial API key; or set
-    # on Settings → Connections, that wins).
+    # on Settings → Services, that wins).
     setlistfm_api_key: SecretStr | None = None
     setlistfm_api_url: str = "https://api.setlist.fm/rest/1.0"
     # Playlist imports from Spotify links: an admin's Spotify app (client credentials; or
-    # set on Settings → Connections, that wins).
+    # set on Settings → Services, that wins).
     spotify_client_id: str | None = None
     spotify_client_secret: SecretStr | None = None
     spotify_accounts_url: str = "https://accounts.spotify.com/api/token"

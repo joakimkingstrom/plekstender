@@ -1,3 +1,4 @@
+import { Navigate } from 'react-router'
 import { useState } from 'react'
 import { errorMessage, type Schemas } from '../api/client'
 import {
@@ -169,12 +170,9 @@ export function AdminSettings() {
   if (isPending || !me?.is_admin) return null
   return (
     <section className="space-y-4" aria-labelledby="admin-heading">
-      <div>
-        <h2 id="admin-heading" className="text-lg font-semibold">
-          This Plekstender
-        </h2>
-        <p className="text-sm text-muted">Who can sign in, which servers they can use, and users. For admins only.</p>
-      </div>
+      <p id="admin-heading" className="text-sm text-muted">
+        Who can sign in, which servers they can use, and users. For admins only.
+      </p>
       <div className="grid gap-4 lg:grid-cols-2">
         <AccessCard />
         <ServersCard />
@@ -182,4 +180,12 @@ export function AdminSettings() {
       </div>
     </section>
   )
+}
+
+/** Settings → Users & access (admins). */
+export function UsersPage() {
+  const { data: me, isPending } = useMe()
+  if (isPending) return null
+  if (!me?.is_admin) return <Navigate to="/settings" replace />
+  return <AdminSettings />
 }

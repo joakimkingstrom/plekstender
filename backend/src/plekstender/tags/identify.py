@@ -66,7 +66,7 @@ async def run_identify(
             raise IdentifyError("Set up the music folder first (Settings → Music files).")
         key, _ = await get_acoustid_api_key(db, settings)
         if not key:
-            raise IdentifyError("Add an AcoustID application key first (Settings → Connections).")
+            raise IdentifyError("Add an AcoustID application key first (Settings → Services).")
         root = await asyncio.to_thread(Path(server.local_path_prefix).resolve)
         if not await asyncio.to_thread(root.is_dir):
             raise IdentifyError(f"{root} doesn't exist in the worker container.")

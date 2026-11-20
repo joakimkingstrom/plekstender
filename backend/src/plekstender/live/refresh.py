@@ -330,7 +330,7 @@ async def refresh_user(
     errors = [run.error for run in runs.values() if run.error]
     if not runs and not only_dt:
         errors = ["No source for gigs is set up: an admin can add a JamBase or Ticketmaster "
-                  "key in Settings → Connections, or add a calendar link."]  # fmt: skip
+                  "key in Settings → Services, or add a calendar link."]  # fmt: skip
     complete = not errors
 
     async with sessions() as db:
@@ -679,7 +679,7 @@ async def usable_datathistle_token(
             return tokens.access
         raise Stop(
             "Data Thistle's tokens have run out: an admin can paste new ones in "
-            "Settings → Connections."
+            "Settings → Services."
         )
     try:
         access, refresh = await datathistle.renew(

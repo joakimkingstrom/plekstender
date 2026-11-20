@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import { ConnectionsPage } from './ConnectionsPage'
+import { ScrobblingPage } from './ConnectionsPage'
 import { ExportPage } from './ExportPage'
 import { ListeningSettingsPage } from './ListeningSettingsPage'
 
@@ -133,7 +133,7 @@ describe('Scrobble to ListenBrainz', () => {
       'GET /api/auth/me': user,
       'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
       'PUT /api/listens/listenbrainz': connected,
-    }, <ConnectionsPage />)
+    }, <ScrobblingPage />)
     const input = await screen.findByLabelText('User token')
     fireEvent.change(input, { target: { value: 'abcd-1234-efgh' } })
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
@@ -158,7 +158,7 @@ describe('Scrobble to ListenBrainz', () => {
         paused: true,
         error: 'ListenBrainz rejected the token, so scrobbling is paused. Paste a new token to resume.',
       },
-    }, <ConnectionsPage />)
+    }, <ScrobblingPage />)
     expect(await screen.findByText(/scrobbling is paused/)).toBeInTheDocument()
     expect(screen.getByLabelText('New user token')).toBeInTheDocument()
   })
@@ -175,7 +175,7 @@ describe('Send history to ListenBrainz', () => {
         'GET /api/listens/listenbrainz/send': { available: true, username: 'joakim_lb', active: null, last: sendJob },
         'POST /api/listens/listenbrainz/send': { ...sendJob, id: 12, status: 'queued', stats: {} },
       },
-      <ConnectionsPage />,
+      <ScrobblingPage />,
     )
     expect(await screen.findByText(/850 sent, 50 already there/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Send again' }))

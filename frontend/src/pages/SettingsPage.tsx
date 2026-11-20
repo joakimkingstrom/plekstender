@@ -2,12 +2,13 @@ import { useDeferredValue, useState } from 'react'
 import { ColorPicker, Stepper } from '../components/controls'
 import { BRAND, PRESETS } from '../accent'
 import { Tooltip } from '../components/Tooltip'
-import { Navigate, NavLink, Outlet } from 'react-router'
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useLibrarySettings, useMe, usePopularityPreview, useSetPreferences, useUpdateLibrarySettings } from '../api/hooks'
 import { useActiveServer } from '../api/library'
 import { fontPreviewUrl, useEditFonts, useFanartKey, useFontCatalogue, useFonts, useSetFanartKey, type FontGroupName } from '../api/artwork'
 import { Segmented } from '../components/Segmented'
+import { Select } from '../components/Select'
 import { FolderSettings } from '../components/FolderSettings'
 import { ScanCard } from '../components/MusicFiles'
 import { ArtworkSummaryCard } from '../components/FileArtwork'
@@ -18,56 +19,79 @@ import { useFilesSummary } from '../api/files'
 import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
-/** Settings shell: personal tabs for everyone; Library and Admin for admins. */
+type Section = { to: string; label: string; end?: boolean }
+type Group = { name: string; sections: Section[] }
+
+/** The Settings sections, in groups: yours, your server's library (owners), and the admin's. */
+function settingsGroups(owner: boolean, admin: boolean): Group[] {
+  const groups: Group[] = [
+    {
+      name: 'You',
+      sections: [
+        { to: '/settings', label: 'Servers', end: true },
+        { to: '/settings/scrobbling', label: 'Scrobbling' },
+        { to: '/settings/listening', label: 'Listening history' },
+        { to: '/settings/appearance', label: 'Appearance' },
+        { to: '/settings/game', label: 'Guess the intro' },
+        { to: '/settings/export', label: 'Export & import' },
+      ],
+    },
+  ]
+  if (owner) groups.push({ name: 'Library', sections: [{ to: '/settings/files', label: 'Music files' }] })
+  if (admin)
+    groups.push({
+      name: 'Admin',
+      sections: [
+        { to: '/settings/users', label: 'Users & access' },
+        { to: '/settings/library', label: 'Library tuning' },
+        { to: '/settings/artwork', label: 'Text logo fonts' },
+        { to: '/settings/services', label: 'Services' },
+      ],
+    })
+  return groups
+}
+
+/** Settings shell: a grouped sidebar (a section picker on phones) beside the section. */
 export function SettingsLayout() {
   const { data: me } = useMe()
   const { active } = useActiveServer()
-  const tab = ({ isActive }: { isActive: boolean }) =>
-    `border-b-2 px-1 pb-2 text-sm font-medium ${
-      isActive ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'
-    }`
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const groups = settingsGroups(Boolean(active?.is_owner), Boolean(me?.is_admin))
+  const sections = groups.flatMap((g) => g.sections)
+  const current =
+    sections.find((s) => (s.end ? pathname === s.to || pathname === `${s.to}/` : pathname.startsWith(s.to))) ?? sections[0]
+  const link = ({ isActive }: { isActive: boolean }) =>
+    `block rounded-lg px-3 py-1.5 text-sm ${isActive ? 'bg-surface-2 font-medium text-text' : 'text-muted hover:text-text'}`
   return (
     <>
       <PageTitle>Settings</PageTitle>
-      <nav className="no-scrollbar mb-6 flex gap-6 overflow-x-auto whitespace-nowrap border-b border-border" aria-label="Settings">
-        <NavLink to="/settings" end className={tab}>
-          {me?.is_admin ? 'Servers & admin' : 'Servers'}
-        </NavLink>
-        <NavLink to="/settings/listening" className={tab}>
-          Listening
-        </NavLink>
-        <NavLink to="/settings/connections" className={tab}>
-          Connections
-        </NavLink>
-        <NavLink to="/settings/export" className={tab}>
-          Export / import
-        </NavLink>
-        <NavLink to="/settings/appearance" className={tab}>
-          Appearance
-        </NavLink>
-        <NavLink to="/settings/game" className={tab}>
-          Guess the intro
-        </NavLink>
-        {active?.is_owner && (
-          <NavLink to="/settings/files" className={tab}>
-            Music files
-          </NavLink>
-        )}
-        {me?.is_admin && (
-          <NavLink to="/settings/artwork" className={tab}>
-            Artwork
-          </NavLink>
-        )}
-        {me?.is_admin && (
-          <>
-            <NavLink to="/settings/library" className={tab}>
-              Library
-            </NavLink>
-
-          </>
-        )}
-      </nav>
-      <Outlet />
+      <div className="grid gap-6 lg:grid-cols-[13rem_1fr] lg:gap-8">
+        <nav aria-label="Settings" className="hidden lg:block">
+          {groups.map((g) => (
+            <div key={g.name} className="mb-5">
+              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted">{g.name}</p>
+              {g.sections.map((s) => (
+                <NavLink key={s.to} to={s.to} end={s.end} className={link}>
+                  {s.label}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="min-w-0">
+          <div className="mb-4 lg:hidden">
+            <Select
+              label="Settings section"
+              value={current.to}
+              options={groups.flatMap((g) => g.sections.map((s) => ({ value: s.to, label: s.label, group: g.name })))}
+              onChange={(to) => navigate(to)}
+            />
+          </div>
+          <h2 className="mb-4 hidden text-lg font-semibold lg:block">{current.label}</h2>
+          <Outlet />
+        </div>
+      </div>
     </>
   )
 }

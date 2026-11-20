@@ -99,7 +99,7 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
                     {' '}
                     (
                     <Link to="/settings/services" className="text-accent underline">
-                      Settings → Connections
+                      Settings → Services
                     </Link>
                     )
                   </>

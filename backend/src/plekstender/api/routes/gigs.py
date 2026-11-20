@@ -219,7 +219,7 @@ async def import_setlistfm(
     if not key:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "setlist.fm isn't set up: an admin can add an API key in Settings → Connections.",
+            "setlist.fm isn't set up: an admin can add an API key in Settings → Services.",
         )
     try:
         drafts = await imports.setlistfm_attended(
