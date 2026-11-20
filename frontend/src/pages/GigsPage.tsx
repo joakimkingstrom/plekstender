@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react'
+import { lazy, Suspense, useId, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import {
@@ -36,6 +36,7 @@ export function GigsPage() {
     <div className="space-y-6">
       <Suggestions />
       <GigStats />
+      <WhereMap />
       <div className="flex flex-wrap items-center gap-2">
         <span id={artistId} className="sr-only">
           Artist
@@ -160,6 +161,29 @@ function ImportExport() {
           import one of these files there.
         </p>
       </div>
+    </Card>
+  )
+}
+
+const GigMap = lazy(() => import('../components/GigMap'))
+
+/** Every gig with a place, on the map (whatever the filters below). */
+function WhereMap() {
+  const all = useGigs(null, '')
+  const placed = all.data?.gigs.filter((g) => g.latitude != null) ?? []
+  if (placed.length === 0) return null
+  const waiting = (all.data?.gigs.length ?? 0) - placed.length
+  return (
+    <Card title="Where">
+      <Suspense fallback={<div className="h-[26rem]"><Spinner /></div>}>
+        <GigMap gigs={placed} />
+      </Suspense>
+      {waiting > 0 && (
+        <p className="mt-2 text-xs text-muted">
+          {waiting} {waiting === 1 ? 'gig isn’t' : 'gigs aren’t'} on the map yet: places are looked up in the background
+          (a venue a second), or there isn’t one to look up.
+        </p>
+      )}
     </Card>
   )
 }

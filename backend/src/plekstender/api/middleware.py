@@ -64,7 +64,10 @@ CSP = "; ".join(
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob: https://plex.tv https://*.plex.tv",
         "font-src 'self'",
-        "connect-src 'self'",
+        # Map tiles and fonts for the gig map; MapLibre runs its workers from blobs.
+        "connect-src 'self' https://tiles.openfreemap.org",
+        "worker-src 'self' blob:",
+        "child-src blob:",
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",
