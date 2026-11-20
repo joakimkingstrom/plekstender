@@ -27,7 +27,7 @@ import { Select } from '../components/Select'
 import { StarRating } from '../components/StarRating'
 import { Tooltip } from '../components/Tooltip'
 import { PlayButton } from '../components/PlayButton'
-import { Badge, Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
+import { Badge, Button, Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { formatCount, formatDuration, formatListeningTime, formatRelative } from '../format'
 
@@ -65,9 +65,9 @@ export function PlaylistsPage() {
   const { active, blocker } = useLibraryServer()
   return (
     <>
-      <PageTitle subtitle="Playlists built from artists, songs and genres, saved to Plex under your own account.">
-        Playlists
-      </PageTitle>
+      <p className="mb-4 text-sm text-muted">
+        Playlists built from artists, songs and genres, saved to Plex under your own account.
+      </p>
       {blocker ?? (
         <div className="space-y-6">
           <PlaylistList serverId={active!.id} />
@@ -106,7 +106,7 @@ function PlaylistList({ serverId }: { serverId: number }) {
           {playlists.data.length === 0 ? '' : `${formatCount(playlists.data.length)} playlists`}
         </p>
         <Link
-          to="/playlists/new"
+          to="/library/playlists/new"
           className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-strong"
         >
           + New playlist
@@ -176,7 +176,7 @@ function PlaylistList({ serverId }: { serverId: number }) {
                     )}
                     <div className="mt-auto flex flex-wrap gap-2">
                       <Link
-                        to={`/playlists/${p.id}`}
+                        to={`/library/playlists/${p.id}`}
                         className="inline-flex items-center rounded-lg bg-surface-2 px-4 py-2 text-sm font-semibold hover:bg-border"
                       >
                         Edit
@@ -249,9 +249,12 @@ export function PlaylistEditorPage() {
   const playlistId = id && id !== 'new' ? Number(id) : null
   return (
     <>
-      <PageTitle subtitle={<Link to="/playlists" className="hover:text-text">← All playlists</Link>}>
-        {playlistId === null ? 'New playlist' : 'Edit playlist'}
-      </PageTitle>
+      <div className="mb-4">
+        <Link to="/library/playlists" className="text-sm text-muted hover:text-text">
+          ← All playlists
+        </Link>
+        <h2 className="mt-1 text-xl font-bold tracking-tight">{playlistId === null ? 'New playlist' : 'Edit playlist'}</h2>
+      </div>
       {blocker ??
         (playlistId === null ? (
           <Builder serverId={active!.id} initial={null} />
@@ -345,7 +348,7 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
         definition: def,
         display: { genres: draft.genres },
       },
-      { onSuccess: () => navigate('/playlists') },
+      { onSuccess: () => navigate('/library/playlists') },
     )
   }
   const canSave = draft.name.trim().length > 0 && definitionOf(draft) !== null
@@ -399,7 +402,7 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
               <Button variant="primary" onClick={submit} disabled={!canSave} busy={save.isPending}>
                 {initial ? 'Save and update in Plex' : 'Create in Plex'}
               </Button>
-              <Link to="/playlists" className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold text-muted hover:bg-surface-2 hover:text-text">
+              <Link to="/library/playlists" className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold text-muted hover:bg-surface-2 hover:text-text">
                 Cancel
               </Link>
             </div>

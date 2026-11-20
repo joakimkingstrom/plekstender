@@ -73,7 +73,7 @@ function RatedList({ serverId }: { serverId: number }) {
         <Card>
           <p className="text-sm text-muted">
             Nothing rated yet. Ratings you set here or in Plex and Plexamp show up once the library has synced.{' '}
-            <Link to="/rate" className="text-accent underline">
+            <Link to="/library/rate" className="text-accent underline">
               Start rating
             </Link>
           </p>

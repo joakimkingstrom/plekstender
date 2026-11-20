@@ -23,7 +23,7 @@ import { useLibraryServer } from '../components/useLibraryServer'
 import { AlbumFiles, ArtistFiles } from '../components/MusicFiles'
 import { ArtistNfo } from '../components/NfoCards'
 import { TagHistory } from '../components/TagEditor'
-import { Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
+import { Badge, Card, Notice, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
 
 const SORTS: { value: ArtistSort; label: string }[] = [
@@ -34,7 +34,7 @@ const SORTS: { value: ArtistSort; label: string }[] = [
   { value: 'added', label: 'Recently added' },
 ]
 
-function ServerPicker({
+export function ServerPicker({
   servers,
   active,
   choose,
@@ -50,7 +50,7 @@ function ServerPicker({
 }
 
 export function LibraryPage() {
-  const { servers, active, choose, blocker } = useLibraryServer()
+  const { active, blocker } = useLibraryServer()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<ArtistSort>('title')
   const [tag, setTag] = useState<number | null>(null)
@@ -58,10 +58,6 @@ export function LibraryPage() {
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <PageTitle>Library</PageTitle>
-        {active && <ServerPicker servers={servers} active={active} choose={choose} />}
-      </div>
       {blocker ?? (
         <>
           <div className="mb-4 flex flex-wrap gap-2">
@@ -428,7 +424,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
             <Card
               title="Upcoming gigs"
               action={
-                <Link to="/live" className="text-sm text-accent hover:underline">
+                <Link to="/gigs" className="text-sm text-accent hover:underline">
                   All gigs
                 </Link>
               }

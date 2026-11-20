@@ -1,4 +1,5 @@
-import { Link, NavLink, Outlet } from 'react-router'
+import { TabNav } from '../components/TabNav'
+import { Link, Outlet } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { SOURCES, useListens, useListenSummary } from '../api/listens'
 import { ListenList } from '../components/listens'
@@ -27,33 +28,19 @@ function Summary({ summary }: { summary: Schemas['ListenSummary'] }) {
 
 /** History shell: stats overview and the list of listens. */
 export function HistoryLayout() {
-  const tab = ({ isActive }: { isActive: boolean }) =>
-    `border-b-2 px-1 pb-2 text-sm font-medium ${
-      isActive ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'
-    }`
   return (
     <>
       <PageTitle subtitle="What you've listened to. Only you can see this.">History</PageTitle>
-      <nav className="no-scrollbar mb-6 flex gap-6 overflow-x-auto whitespace-nowrap border-b border-border" aria-label="History">
-        <NavLink to="/history" end className={tab}>
-          Overview
-        </NavLink>
-        <NavLink to="/history/listens" className={tab}>
-          Listens
-        </NavLink>
-        <NavLink to="/history/map" className={tab}>
-          Map
-        </NavLink>
-        <NavLink to="/history/gigs" className={tab}>
-          Gigs
-        </NavLink>
-        <NavLink to="/history/ratings" className={tab}>
-          Ratings
-        </NavLink>
-        <NavLink to="/history/scores" className={tab}>
-          Scores
-        </NavLink>
-      </nav>
+      <TabNav
+        label="History"
+        tabs={[
+          { to: '/history', label: 'Overview', end: true },
+          { to: '/history/scrobbles', label: 'Scrobbles' },
+          { to: '/history/map', label: 'Map' },
+          { to: '/history/ratings', label: 'Ratings' },
+          { to: '/history/scores', label: 'Scores' },
+        ]}
+      />
       <Outlet />
     </>
   )

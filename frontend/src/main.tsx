@@ -28,6 +28,7 @@ import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { AppearancePage, ArtworkSettingsPage, FilesSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
+import { GigsLayout, LibraryLayout, PlaylistRedirect } from './pages/Sections'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,33 +48,48 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: 'library', element: <LibraryPage /> },
+      {
+        path: 'library',
+        element: <LibraryLayout />,
+        children: [
+          { index: true, element: <LibraryPage /> },
+          { path: 'playlists', element: <PlaylistsPage /> },
+          { path: 'playlists/new', element: <PlaylistEditorPage /> },
+          { path: 'playlists/:id', element: <PlaylistEditorPage /> },
+          { path: 'rate', element: <RatePage /> },
+          { path: 'artwork', element: <ArtworkPage /> },
+        ],
+      },
       { path: 'library/artists/:key', element: <ArtistPage /> },
       { path: 'library/albums/:key', element: <AlbumPage /> },
+      {
+        path: 'gigs',
+        element: <GigsLayout />,
+        children: [
+          { index: true, element: <LivePage /> },
+          { path: 'been-to', element: <GigsPage /> },
+        ],
+      },
       {
         path: 'history',
         element: <HistoryLayout />,
         children: [
           { index: true, element: <StatsPage /> },
-          { path: 'listens', element: <ListensPage /> },
+          { path: 'scrobbles', element: <ListensPage /> },
+          { path: 'listens', element: <Navigate to="/history/scrobbles" replace /> },
           { path: 'map', element: <MapPage /> },
-          { path: 'gigs', element: <GigsPage /> },
+          { path: 'gigs', element: <Navigate to="/gigs/been-to" replace /> },
           { path: 'ratings', element: <RatingsPage /> },
           { path: 'scores', element: <ScoresPage /> },
         ],
       },
-      {
-        path: 'rate',
-        element: <RatePage />,
-      },
-      {
-        path: 'artwork',
-        element: <ArtworkPage />,
-      },
-      { path: 'playlists', element: <PlaylistsPage /> },
-      { path: 'playlists/new', element: <PlaylistEditorPage /> },
-      { path: 'playlists/:id', element: <PlaylistEditorPage /> },
-      { path: 'live', element: <LivePage /> },
+      // Old addresses (bookmarks, an installed app's start page).
+      { path: 'rate', element: <Navigate to="/library/rate" replace /> },
+      { path: 'artwork', element: <Navigate to="/library/artwork" replace /> },
+      { path: 'playlists', element: <PlaylistRedirect /> },
+      { path: 'playlists/new', element: <Navigate to="/library/playlists/new" replace /> },
+      { path: 'playlists/:id', element: <PlaylistRedirect /> },
+      { path: 'live', element: <Navigate to="/gigs" replace /> },
       {
         path: 'settings',
         element: <SettingsLayout />,

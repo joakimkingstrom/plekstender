@@ -13,10 +13,7 @@ const NAV = [
   { to: '/', label: 'Home', end: true },
   { to: '/library', label: 'Library' },
   { to: '/history', label: 'History' },
-  { to: '/rate', label: 'Rate' },
-  { to: '/artwork', label: 'Artwork' },
-  { to: '/playlists', label: 'Playlists' },
-  { to: '/live', label: 'Live' },
+  { to: '/gigs', label: 'Gigs' },
   { to: '/settings', label: 'Settings' },
 ]
 
@@ -90,7 +87,7 @@ export function Layout() {
     (me.preferences?.phone_start ?? 'rate') === 'rate' &&
     window.matchMedia?.('(max-width: 767px)').matches
   ) {
-    return <Navigate to="/rate" replace />
+    return <Navigate to="/library/rate" replace />
   }
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -99,7 +96,7 @@ export function Layout() {
     }`
 
   // On a phone, Rate takes the whole screen (no header or tab bar); it has its own close button.
-  const focus = location.pathname === '/rate'
+  const focus = location.pathname === '/library/rate'
   const phoneHidden = focus ? 'max-md:hidden' : ''
   return (
     <div className="flex min-h-dvh flex-col">
@@ -152,7 +149,7 @@ export function Layout() {
 
       {/* Mobile bottom navigation */}
       <nav
-        className={`fixed inset-x-0 bottom-0 z-10 grid grid-cols-8 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden ${phoneHidden}`}
+        className={`fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden ${phoneHidden}`}
         aria-label="Main"
       >
         {NAV.map((item) => (

@@ -599,10 +599,10 @@ History → Gigs: the gigs each person went to ("gigs" is the site's word for ev
 
 ### Phase 12½ — Navigation and Settings layout (20 Nov 2026)
 The menus had grown one page at a time; this tidies them before Phase 13 adds more.
-- [ ] Main menu: Home, Library, History, Gigs, Settings (five, so the phone's bottom bar has room).
-- [ ] Library page with tabs: Library (the artists and albums), Playlists, Rate, Artwork (server owners). Artist and album pages stay under /library. Old addresses (/rate, /artwork, /playlists…) lead to the new ones.
-- [ ] Gigs (was Live) with tabs: Upcoming (the Live page) and Been to (the gig history, moved out of History, with its stats and map). /live and /history/gigs lead there.
-- [ ] History: "Listens" becomes "Scrobbles" (/history/scrobbles; /history/listens leads there).
+- [x] Main menu: Home, Library, History, Gigs, Settings (five, so the phone's bottom bar has room).
+- [x] Library page with tabs: Library (the artists and albums), Playlists, Rate, Artwork (server owners). Artist and album pages stay under /library. Old addresses (/rate, /artwork, /playlists…) lead to the new ones.
+- [x] Gigs (was Live) with tabs: Upcoming (the Live page) and Been to (the gig history, moved out of History, with its stats and map). /live and /history/gigs lead there.
+- [x] History: "Listens" becomes "Scrobbles" (/history/scrobbles; /history/listens leads there).
 - [ ] Settings in a grouped sidebar (a section picker on phones):
   - You: Servers · Scrobbling (ListenBrainz and the other services) · Listening history (Plex plays, imports, skips, deleting) · Appearance · Guess the intro · Export & import.
   - Library (server owners): Music files.

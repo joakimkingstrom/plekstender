@@ -13,7 +13,7 @@ function renderAt(path: string) {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<p>Home page</p>} />
-            <Route path="/rate" element={<p>Rate page</p>} />
+            <Route path="/library/rate" element={<p>Rate page</p>} />
           </Route>
           <Route path="/login" element={<p>Login page</p>} />
         </Routes>

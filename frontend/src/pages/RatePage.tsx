@@ -22,7 +22,7 @@ import { useGameSettings, useIntroRound } from '../game'
 import { fetchSample, useAddToGamePlaylist, useGameStats } from '../api/game'
 import { playSample, stopAudio, unlockAudio } from '../audio'
 import { StarRating } from '../components/StarRating'
-import { Badge, Button, Card, Notice, PageTitle, Spinner, UndoIcon } from '../components/ui'
+import { Badge, Button, Card, Notice, Spinner, UndoIcon } from '../components/ui'
 import { formatCompact, formatCount, formatDuration } from '../format'
 import { starsText, swipeResult } from '../swipe'
 import { useLibraryServer } from '../components/useLibraryServer'
@@ -86,18 +86,12 @@ export function RatePage() {
         </Link>
       </div>
       <div className="hidden md:block">
-        <PageTitle
-          subtitle={
-            <>
-              Ratings are saved to Plex with your own account.{' '}
-              <Link to="/history/ratings" className="text-accent underline">
-                Everything you've rated
-              </Link>
-            </>
-          }
-        >
-          Rate
-        </PageTitle>
+        <p className="mb-4 text-sm text-muted">
+          Ratings are saved to Plex with your own account.{' '}
+          <Link to="/history/ratings" className="text-accent underline">
+            Everything you've rated
+          </Link>
+        </p>
       </div>
       {blocker ?? <Rater serverId={active!.id} />}
     </>

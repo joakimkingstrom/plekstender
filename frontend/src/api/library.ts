@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { api, unwrap, type Schemas } from './client'
 import { useServers } from './hooks'
 import { localTimeZone } from './stats'
@@ -34,10 +34,25 @@ function readStoredServer(): number | null {
   }
 }
 
+// The picked server, shared by every component that asks (the Library header's picker and
+// the page under it), and remembered in localStorage.
+let storedServer: number | null = readStoredServer()
+const serverListeners = new Set<() => void>()
+function subscribeServer(listener: () => void) {
+  serverListeners.add(listener)
+  return () => {
+    serverListeners.delete(listener)
+  }
+}
+function setStored(id: number) {
+  storedServer = id
+  for (const listener of serverListeners) listener()
+}
+
 /** The server the library pages show: the last one picked, else the first with a library. */
 export function useActiveServer() {
   const servers = useServers()
-  const [stored, setStored] = useState<number | null>(readStoredServer)
+  const stored = useSyncExternalStore(subscribeServer, () => storedServer)
   const list = servers.data ?? []
   const active =
     list.find((s) => s.id === stored) ??

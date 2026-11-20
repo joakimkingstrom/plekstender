@@ -79,7 +79,7 @@ describe('Playlists', () => {
   it('explains what playlists are when there are none', async () => {
     renderAt('/playlists')
     expect(await screen.findByText('No playlists yet')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '+ New playlist' })).toHaveAttribute('href', '/playlists/new')
+    expect(screen.getByRole('link', { name: '+ New playlist' })).toHaveAttribute('href', '/library/playlists/new')
   })
 
   it('builds a playlist from search and suggestions, previews it and saves it', async () => {

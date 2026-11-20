@@ -23,7 +23,7 @@ import {
 import { Slider } from '../components/controls'
 import { Select } from '../components/Select'
 import { DataThistleLogo } from '../components/DataThistleLogo'
-import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
+import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatRelative } from '../format'
 import { describePeriod, followCount, localDate } from '../live'
 import { GigRow } from '../components/GigRow'
@@ -47,7 +47,7 @@ export function LivePage() {
   const [editing, setEditing] = useState(false)
   return (
     <>
-      <PageTitle subtitle="Upcoming gigs near you by the artists you listen to most.">Live</PageTitle>
+      <p className="mb-4 text-sm text-muted">Upcoming gigs near you by the artists you listen to most.</p>
       {settings.isPending ? (
         <Spinner />
       ) : settings.isError ? (
@@ -78,7 +78,7 @@ function SourceMissing() {
       {me.data?.is_admin ? (
         <>
           Add one in{' '}
-          <Link to="/settings/connections" className="underline">
+          <Link to="/settings/services" className="underline">
             Settings → Connections
           </Link>
           .

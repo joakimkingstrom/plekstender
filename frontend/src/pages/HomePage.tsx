@@ -8,17 +8,17 @@ import { ServersPage } from './ServersPage'
 const UPCOMING = [
   {
     title: 'Rate',
-    to: '/rate',
+    to: '/library/rate',
     text: 'Swipe through songs, albums and artists you know, and rate them in seconds.',
   },
   {
     title: 'Artwork',
-    to: '/artwork',
+    to: '/library/artwork',
     text: 'Swap artist photos for logos from fanart.tv, image search, uploads or custom fonts.',
   },
   {
     title: 'Playlists',
-    to: '/playlists',
+    to: '/library/playlists',
     text: 'Build playlists from artists, genres or moods, with similar artists and rating filters.',
   },
 ]

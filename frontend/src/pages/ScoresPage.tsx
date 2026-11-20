@@ -25,7 +25,7 @@ export function ScoresPage() {
         <Segmented label="Mode" value={mode} options={MODES} onChange={setMode} />
         <p className="text-sm text-muted">
           Guess the intro, on{' '}
-          <Link to="/rate" className="text-accent underline">
+          <Link to="/library/rate" className="text-accent underline">
             Rate
           </Link>{' '}
           (card view).

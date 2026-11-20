@@ -26,7 +26,7 @@ import {
 import { errorMessage, type Schemas } from '../api/client'
 import { useMe } from '../api/hooks'
 import { Artwork } from '../components/library'
-import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
+import { Button, Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { formatRelative } from '../format'
 
@@ -66,9 +66,9 @@ export function ArtworkPage() {
   const me = useMe()
   return (
     <>
-      <PageTitle subtitle="Replace artist photos with logos. Changes are saved to Plex for everyone using the server.">
-        Artwork
-      </PageTitle>
+      <p className="mb-4 text-sm text-muted">
+        Replace artist photos with logos. Changes are saved to Plex for everyone using the server.
+      </p>
       {blocker ??
         (!active!.is_owner ? (
           <Notice>
