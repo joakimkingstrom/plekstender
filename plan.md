@@ -643,6 +643,40 @@ A "wrapped"-style story for any period you choose (a year, a month, a custom ran
 - [ ] Time spent in Plekstender (rating, playing, browsing): needs Plekstender to record app time, from when this is built.
 - [ ] Shareable cards: each story card as an image (generated graphics in the style of the period's covers), to save or share.
 
+### Phase 17 — Notifications (20 Nov 2026)
+Tell people when something they rely on stops working, before they notice it themselves.
+- [ ] A bell in the header with a count; a list of notifications (newest first, read / unread, a link to where it's fixed).
+- [ ] What raises one: a connection that fails (a Plex server unreachable, ListenBrainz or another scrobble service rejecting its token, a calendar link that can't be read, a Data Thistle renewal failing, a key refused), and one nearing its limit (JamBase's month, Ticketmaster's or Data Thistle's day, setlist.fm), with the numbers. Raised by the code that already notices (workers, checks), once per problem: repeats update it rather than piling up, and it clears itself when the problem goes away.
+- [ ] Who sees what: each person their own (their scrobble services, calendar links, servers); instance-wide ones (service keys, quotas, the worker) only those allowed to act on them (admins; a server's owner for that server).
+- [ ] Each person can dismiss theirs; an admin can hide or dismiss an instance-wide one for everyone.
+- [ ] Later: email or push (the app is installable) for the serious ones, per person.
+
+### Phase 18 — Profile (20 Nov 2026)
+- [ ] A profile page (from the avatar in the header): name and picture from Plex, when you joined, your servers, a few numbers (scrobbles, ratings, gigs).
+- [ ] Personal preferences in one place: appearance (accent colour, already saved per account; and the light / dark theme, which is per browser today and moves to the account too), what the app opens on (Home or Rate on a phone), achievements on or off (Phase 19), notification choices (Phase 17).
+- [ ] Settings → Appearance moves here (Settings keeps what concerns servers, services and admin).
+
+### Phase 19 — Achievements (20 Nov 2026)
+Small, silly rewards. Every one has a name from music lore, a badge, and a humorous message; unlocking one pops up a short celebration (confetti / a spinning record; calmer with reduced motion).
+- [ ] What they're for (each in steps):
+  - The library: artists (100 / 250 / 500 / 1,000…), albums, tracks (10,000 / 25,000 / 50,000 / 100,000 / … / 1,000,000).
+  - Rating: songs rated, as a number and as a share of the library (10 % / 25 % / 50 % / 100 %).
+  - Guess the intro: games played, perfect rounds, streaks, fastest guesses.
+  - Gigs: gigs been to, venues, countries, a busy year.
+  - Connections: scrobble services and other connections set up; scrobbles sent.
+  - Listening: scrobbles, days in a row, artists discovered.
+- [ ] A starting list to set the tone (wording to be polished):
+  - Roadie — the first 100 artists. "You carry the gear now. Lift with your knees."
+  - Groupie — 25 gigs been to. "Security knows you by name."
+  - Band-Aid — 50 gigs. "Not a groupie. You're here for the music, obviously."
+  - Golden God — 1,000 artists. "Shout it from a rooftop in Topeka."
+  - Music Hoarder — 100,000 tracks. "We hope you're not hoarding other things at home as much as you hoard music."
+  - These Go to Eleven — 1,000,000 tracks. "Your library has been referred to a support group. They're very understanding. Please call them."
+  - Crate Digger — 50,000 tracks. Liner Notes Reader — 1,000 songs rated. Critic's Choice — every song rated ("Even the hidden track. Even the 12-minute one."). Deep Cut, B-Side, One-Hit Wonder, Session Musician, Sound Check, Backstage Pass, Tour Bus, Headliner, Brown M&Ms (a perfect Guess-the-intro game: "Every detail of the rider, checked."), Air Guitar, Stage Diver, Encore, Platinum Record, Hall of Fame.
+- [ ] A page of achievements (on the profile): unlocked ones with their date and message, locked ones as silhouettes with a hint and progress.
+- [ ] Unlocked when the numbers change (sync, ratings, games, gigs, scrobbles), each once, per person; library ones count what that person can see.
+- [ ] Each person can turn achievements off (no pop-ups, hidden page); an admin can turn them off for everyone (Settings → Admin).
+
 ## Later
 
 ### Writing imported plays back to Plex
