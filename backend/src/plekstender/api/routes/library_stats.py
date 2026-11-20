@@ -16,8 +16,11 @@ from plekstender.api.deps import DbDep, UserDep
 from plekstender.api.routes.library import _album_count, _artist_summary, plays_of, visible
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
+    AlbumColourOut,
     ArtistCountriesOut,
     ArtistSummary,
+    ColourFamily,
+    ColoursOut,
     CountryArtists,
     DecadeCount,
     GrowthPoint,
@@ -27,7 +30,8 @@ from plekstender.api.schemas import (
     WordCount,
 )
 from plekstender.artist_countries import ArtistKey, countries_for
-from plekstender.db.models import Album, Artist, Track, UserServer
+from plekstender.cover_colours import ORDER, family
+from plekstender.db.models import Album, AlbumColour, Artist, Track, UserServer
 from plekstender.library_stats import words
 
 router = APIRouter(prefix="/api/servers/{server_id}/library/stats", tags=["library"])
@@ -254,3 +258,96 @@ async def country_artists(
         .limit(500)
     )
     return [_artist_summary(r) for r in rows.all()]
+
+
+ColourName = Literal[
+    "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "white", "grey", "black"
+]
+Coloured = tuple[str, float, float, str, int, str, str | None, str | None]
+
+
+async def _coloured(db: DbDep, user_id: int, us: UserServer) -> tuple[list[Coloured], int]:
+    """Visible albums with a cover colour, as (family, hue, lightness, hex, album, artist),
+    and how many covers are still to be looked at."""
+    state, cond, where = visible(Album, user_id, us)
+    owner = Artist.__table__.alias("owner")
+    rows = await db.execute(
+        select(
+            AlbumColour.hex,
+            AlbumColour.hue,
+            AlbumColour.saturation,
+            AlbumColour.lightness,
+            AlbumColour.thumb == Album.thumb,
+            Album.rating_key,
+            Album.title,
+            Album.thumb,
+            owner.c.title,
+        )
+        .select_from(Album)
+        .join(state, cond)
+        .outerjoin(
+            AlbumColour,
+            (AlbumColour.server_id == Album.server_id)
+            & (AlbumColour.rating_key == Album.rating_key),
+        )
+        .outerjoin(
+            owner,
+            (owner.c.server_id == Album.server_id)
+            & (owner.c.rating_key == Album.artist_rating_key),
+        )
+        .where(*where, Album.thumb.is_not(None))
+    )
+    out: list[Coloured] = []
+    waiting = 0
+    for hex_, hue, sat, light, current, key, title, thumb, artist in rows.all():
+        if hex_ is None:
+            waiting += 0 if current else 1  # looked at and unreadable: not waiting
+            continue
+        if not current:
+            waiting += 1
+        out.append((family(hue, sat, light), hue, light, hex_, key, title, thumb, artist))
+    rank = {name: i for i, name in enumerate(ORDER)}
+    out.sort(
+        key=lambda x: (rank[x[0]], x[1] if x[0] not in ("white", "grey", "black") else 0, -x[2])
+    )
+    return out, waiting
+
+
+@router.get("/colours", response_model=ColoursOut)
+async def cover_colours(server_id: int, db: DbDep, user: UserDep) -> ColoursOut:
+    """Covers' main colours by family (reds to pinks, then white, grey and black), and a
+    strip of up to 360 of them in spectrum order."""
+    us = await get_user_server(db, user, server_id)
+    coloured, waiting = await _coloured(db, user.id, us)
+    families: dict[str, list[str]] = {}
+    for fam, _hue, _light, hex_, *_ in coloured:
+        families.setdefault(fam, []).append(hex_)
+    step = max(1, len(coloured) / 360)
+    strip = [coloured[int(i * step)][3] for i in range(min(360, len(coloured)))]
+    return ColoursOut(
+        families=[
+            ColourFamily(name=name, albums=len(hexes), hex=hexes[len(hexes) // 2])
+            for name in ORDER
+            if (hexes := families.get(name))
+        ],
+        strip=strip,
+        albums=len(coloured),
+        waiting=waiting,
+    )
+
+
+@router.get("/colours/{name}", response_model=list[AlbumColourOut])
+async def colour_family(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    name: ColourName,
+) -> list[AlbumColourOut]:
+    """A colour family's covers, in spectrum order (up to 400)."""
+    us = await get_user_server(db, user, server_id)
+    coloured, _waiting = await _coloured(db, user.id, us)
+    return [
+        AlbumColourOut(rating_key=key, title=title, thumb=thumb, artist_title=artist, hex=hex_)
+        for fam, _hue, _light, hex_, key, title, thumb, artist in coloured
+        if fam == name
+    ][:400]

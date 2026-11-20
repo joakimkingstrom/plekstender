@@ -3,6 +3,9 @@ import { Link } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import {
   useArtistCountries,
+  useColourFamily,
+  useColours,
+  type ColourName,
   useCountryArtists,
   useLibraryStats,
   useReleased,
@@ -65,6 +68,7 @@ function Stats({ serverId }: { serverId: number }) {
       <Countries serverId={serverId} />
       <Growth growth={s.growth} />
       <Decades serverId={serverId} decades={s.decades} undated={s.undated_albums} />
+      <Colours serverId={serverId} />
       <Words serverId={serverId} />
     </div>
   )
@@ -255,6 +259,79 @@ function Decades({ serverId, decades, undated }: { serverId: number; decades: Sc
           : year === null
             ? 'Click a year for its months and albums.'
             : 'Albums with only a year count as "?".'}
+      </p>
+    </Card>
+  )
+}
+
+function Colours({ serverId }: { serverId: number }) {
+  const colours = useColours(serverId)
+  const [chosen, setChosen] = useState<ColourName | null>(null)
+  const covers = useColourFamily(serverId, chosen)
+  if (colours.isPending) return <Card title="Cover colours"><Spinner /></Card>
+  if (colours.isError) return <Notice tone="error">{errorMessage(colours.error)}</Notice>
+  const c = colours.data
+  const name = (n: string) => n[0].toUpperCase() + n.slice(1)
+  return (
+    <Card title="Cover colours">
+      {c.albums === 0 ? (
+        <p className="text-sm text-muted">
+          {c.waiting > 0 ? 'The covers are being looked at; their colours show up here soon.' : 'No album covers yet.'}
+        </p>
+      ) : (
+        <>
+          <div className="flex h-8 overflow-hidden rounded-lg" aria-hidden>
+            {c.strip.map((hex, i) => (
+              <div key={i} className="min-w-0 flex-1" style={{ background: hex }} />
+            ))}
+          </div>
+          <div className="mt-2 flex h-9 gap-0.5" role="group" aria-label="Colour families">
+            {c.families.map((f) => {
+              const on = f.name === chosen
+              return (
+                <button
+                  key={f.name}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={`${name(f.name)}: ${plural(f.albums, 'album', 'albums')}`}
+                  title={`${name(f.name)}: ${plural(f.albums, 'album', 'albums')}`}
+                  onClick={() => setChosen(on ? null : (f.name as ColourName))}
+                  className={`min-w-2 rounded-md border-2 transition-transform hover:-translate-y-0.5 ${on ? 'border-text' : 'border-transparent'}`}
+                  style={{ background: f.hex, flexGrow: f.albums, flexBasis: 0 }}
+                />
+              )
+            })}
+          </div>
+          <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted" aria-hidden>
+            {c.families.map((f) => (
+              <li key={f.name} className="flex items-center gap-1">
+                <span className="size-2.5 rounded-sm border border-border" style={{ background: f.hex }} />
+                {name(f.name)} <span className="tabular-nums">{formatCount(f.albums)}</span>
+              </li>
+            ))}
+          </ul>
+          {chosen &&
+            (covers.isPending ? (
+              <Spinner />
+            ) : covers.isError ? (
+              <Notice tone="error">{errorMessage(covers.error)}</Notice>
+            ) : (
+              <ul className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
+                {covers.data.map((a) => (
+                  <li key={a.rating_key}>
+                    <Link to={`/library/albums/${a.rating_key}`} className="group block" title={`${a.title}${a.artist_title ? ` · ${a.artist_title}` : ''}`}>
+                      <Artwork serverId={serverId} path={a.thumb} title={a.title} size={128} className="w-full group-hover:opacity-85" />
+                      <div className="mt-1 h-1.5 rounded-full" style={{ background: a.hex }} aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ))}
+        </>
+      )}
+      <p className="mt-3 text-xs text-muted">
+        Each cover's main colour, from a small copy of it. Click a colour for its covers.
+        {c.waiting > 0 && ` ${plural(c.waiting, 'cover', 'covers')} still to be looked at (a few thousand every 15 minutes).`}
       </p>
     </Card>
   )

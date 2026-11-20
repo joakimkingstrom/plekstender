@@ -21,6 +21,7 @@ from plekstender.artwork.packs import remove_old_files
 from plekstender.artwork.service import remove_old_uploads
 from plekstender.auth.sessions import delete_expired_sessions
 from plekstender.config import get_settings
+from plekstender.cover_colours import colour_covers
 from plekstender.db import get_sessionmaker
 from plekstender.db.instance import get_library_settings, record_worker_heartbeat
 from plekstender.db.models import (
@@ -730,6 +731,20 @@ async def find_artist_countries(timestamp: int) -> None:
         done = await look_up_artist_countries(db, http)
     if done:
         log.info("Looked up %d artists' countries on MusicBrainz", done)
+
+
+@app.periodic(cron="*/15 * * * *", periodic_id="cover-colours")
+@app.task(queue="maintenance", queueing_lock="cover-colours")
+async def find_cover_colours(timestamp: int) -> None:
+    """Every 15 minutes: the main colour of covers not looked at yet, or changed (Library →
+    Stats). The first runs go through a big library; then only new covers."""
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        done = await colour_covers(db, http, get_settings())
+    if done:
+        log.info("Worked out %d album covers' colours", done)
 
 
 @app.periodic(cron="* * * * *", periodic_id="heartbeat")

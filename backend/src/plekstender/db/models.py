@@ -285,6 +285,23 @@ class ArtistArea(Base):
     checked_at: Mapped[dt.datetime]
 
 
+class AlbumColour(Base):
+    """An album cover's main colour (worker, from a small thumbnail). `thumb` is the cover it
+    was taken from: a new cover is looked at again. No colour: the cover couldn't be read."""
+
+    __tablename__ = "album_colours"
+    __table_args__ = (PrimaryKeyConstraint("server_id", "rating_key"),)
+
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    rating_key: Mapped[int] = mapped_column(BigInteger)
+    thumb: Mapped[str] = mapped_column(Text)
+    hex: Mapped[str | None] = mapped_column(String(7))
+    hue: Mapped[float | None] = mapped_column(Float)  # 0-360
+    saturation: Mapped[float | None] = mapped_column(Float)  # 0-1
+    lightness: Mapped[float | None] = mapped_column(Float)  # 0-1
+    checked_at: Mapped[dt.datetime]
+
+
 class SimilarArtist(Base):
     __tablename__ = "similar_artists"
     __table_args__ = (PrimaryKeyConstraint("server_id", "artist_rating_key", "position"),)

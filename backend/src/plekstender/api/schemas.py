@@ -1811,3 +1811,24 @@ class ArtistCountriesOut(BaseModel):
     countries: list[CountryArtists]
     unknown: int = Field(description="Artists without a known country.")
     pending: int = Field(description="Of those, waiting for a MusicBrainz lookup.")
+
+
+class ColourFamily(BaseModel):
+    name: str = Field(description="red, orange, … pink, white, grey or black")
+    albums: int
+    hex: str = Field(description="A typical cover colour in the family (the middle one).")
+
+
+class ColoursOut(BaseModel):
+    families: list[ColourFamily]
+    strip: list[str] = Field(description="Up to 360 cover colours, in spectrum order.")
+    albums: int = Field(description="Albums whose cover colour is known.")
+    waiting: int = Field(description="Covers not looked at yet (the worker does them).")
+
+
+class AlbumColourOut(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+    artist_title: str | None
+    hex: str

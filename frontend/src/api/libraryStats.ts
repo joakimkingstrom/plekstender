@@ -67,3 +67,28 @@ export function useCountryArtists(serverId: number, code: string | null) {
       ),
   })
 }
+
+export type ColourName = 'red' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue' | 'purple' | 'pink' | 'white' | 'grey' | 'black'
+
+/** Covers' main colours by family, and a spectrum strip. */
+export function useColours(serverId: number) {
+  return useQuery({
+    queryKey: [...keys.all(serverId), 'colours'],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/library/stats/colours', { params: { path: { server_id: serverId } } })),
+  })
+}
+
+export function useColourFamily(serverId: number, name: ColourName | null) {
+  return useQuery({
+    queryKey: [...keys.all(serverId), 'colours', name],
+    enabled: name !== null,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/stats/colours/{name}', {
+          params: { path: { server_id: serverId, name: name! } },
+        }),
+      ),
+  })
+}

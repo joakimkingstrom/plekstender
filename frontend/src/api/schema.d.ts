@@ -303,6 +303,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/stats/colours": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cover Colours
+         * @description Covers' main colours by family (reds to pinks, then white, grey and black), and a
+         *     strip of up to 360 of them in spectrum order.
+         */
+        get: operations["cover_colours_api_servers__server_id__library_stats_colours_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/stats/colours/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Colour Family
+         * @description A colour family's covers, in spectrum order (up to 400).
+         */
+        get: operations["colour_family_api_servers__server_id__library_stats_colours__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/artists": {
         parameters: {
             query?: never;
@@ -3334,6 +3375,19 @@ export interface components {
             /** Plex Poster */
             plex_poster: boolean;
         };
+        /** AlbumColourOut */
+        AlbumColourOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+            /** Artist Title */
+            artist_title: string | null;
+            /** Hex */
+            hex: string;
+        };
         /** AlbumDetail */
         AlbumDetail: {
             /** Rating Key */
@@ -3769,6 +3823,41 @@ export interface components {
             name: string;
             /** Listens */
             listens: number;
+        };
+        /** ColourFamily */
+        ColourFamily: {
+            /**
+             * Name
+             * @description red, orange, … pink, white, grey or black
+             */
+            name: string;
+            /** Albums */
+            albums: number;
+            /**
+             * Hex
+             * @description A typical cover colour in the family (the middle one).
+             */
+            hex: string;
+        };
+        /** ColoursOut */
+        ColoursOut: {
+            /** Families */
+            families: components["schemas"]["ColourFamily"][];
+            /**
+             * Strip
+             * @description Up to 360 cover colours, in spectrum order.
+             */
+            strip: string[];
+            /**
+             * Albums
+             * @description Albums whose cover colour is known.
+             */
+            albums: number;
+            /**
+             * Waiting
+             * @description Covers not looked at yet (the worker does them).
+             */
+            waiting: number;
         };
         /** ConnectServerIn */
         ConnectServerIn: {
@@ -7545,6 +7634,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtistSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cover_colours_api_servers__server_id__library_stats_colours_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColoursOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    colour_family_api_servers__server_id__library_stats_colours__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                name: "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink" | "white" | "grey" | "black";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumColourOut"][];
                 };
             };
             /** @description Validation Error */

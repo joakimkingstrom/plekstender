@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from plekstender.db import get_sessionmaker
 from plekstender.db.models import Album
 from plekstender.library_stats import words
-from tests.fakes import FakePlex
+from tests.fakes import SERVER_URI, FakePlex
 from tests.test_sync import owner_with_library
 
 pytestmark = pytest.mark.db
@@ -153,3 +153,74 @@ def test_country_names_and_areas() -> None:
     assert artist_country_of({"area": {"iso-3166-2-codes": ["GB-SCT"]}}) == "GB"
     assert artist_country_of({"begin-area": {"iso-3166-1-codes": ["IS"]}}) == "IS"
     assert artist_country_of({}) is None
+
+
+def _cover(*parts: tuple[tuple[int, int, int], float]) -> bytes:
+    """A JPEG in horizontal bands: (colour, share of the height)."""
+    import io
+
+    from PIL import Image
+
+    image = Image.new("RGB", (64, 64))
+    top = 0
+    for colour, share in parts:
+        height = round(64 * share)
+        image.paste(colour, (0, top, 64, min(64, top + height)))
+        top += height
+    out = io.BytesIO()
+    image.save(out, "JPEG", quality=95)
+    return out.getvalue()
+
+
+def test_main_colours() -> None:
+    from plekstender.cover_colours import family, main_colour
+
+    def fam(data: bytes) -> str:
+        c = main_colour(data)
+        return family(c.hue, c.saturation, c.lightness)
+
+    assert fam(_cover(((200, 30, 30), 1))) == "red"
+    assert fam(_cover(((40, 80, 200), 1))) == "blue"
+    # A small red logo on a black sleeve stays black; half orange, half grey reads orange.
+    assert fam(_cover(((10, 10, 10), 0.85), ((200, 30, 30), 0.15))) == "black"
+    assert fam(_cover(((128, 128, 128), 0.5), ((240, 140, 20), 0.5))) == "orange"
+    assert fam(_cover(((250, 250, 248), 1))) == "white"
+    assert family(350, 0.8, 0.5) == "red" and family(10, 0.8, 0.5) == "red"
+    assert family(200, 0.05, 0.5) == "grey"
+
+
+async def test_cover_colours(app: FastAPI, plex: FakePlex) -> None:
+    import httpx
+
+    from plekstender.config import get_settings
+    from plekstender.cover_colours import colour_covers
+
+    # OK Computer and its reissue blue, Dummy red, Secret Album unreadable.
+    def photo(request: httpx.Request) -> httpx.Response:
+        url = request.url.params["url"]
+        if "/203/" in url:
+            return httpx.Response(
+                200, content=b"not an image", headers={"content-type": "image/jpeg"}
+            )
+        colour = (200, 30, 30) if "/202/" in url else (40, 80, 200)
+        return httpx.Response(
+            200, content=_cover((colour, 1)), headers={"content-type": "image/jpeg"}
+        )
+
+    owner, sid = await owner_with_library(app, plex)
+    plex.router.get(f"{SERVER_URI}/photo/:/transcode").mock(side_effect=photo)
+    base = f"/api/servers/{sid}/library/stats/colours"
+    before = (await owner.get(base)).json()
+    assert (before["albums"], before["waiting"], before["families"]) == (0, 4, [])
+
+    async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
+        assert await colour_covers(db, http, get_settings()) == 4
+        assert await colour_covers(db, http, get_settings()) == 0  # only new or changed covers
+
+    after = (await owner.get(base)).json()
+    assert [(f["name"], f["albums"]) for f in after["families"]] == [("red", 1), ("blue", 2)]
+    assert (after["albums"], after["waiting"], len(after["strip"])) == (3, 0, 3)
+    blue = (await owner.get(f"{base}/blue")).json()
+    assert {a["title"] for a in blue} == {"OK Computer", "OK Computer OKNOTOK"}
+    assert all(a["artist_title"] == "Radiohead" and a["hex"].startswith("#") for a in blue)
+    assert (await owner.get(f"{base}/mauve")).status_code == 422

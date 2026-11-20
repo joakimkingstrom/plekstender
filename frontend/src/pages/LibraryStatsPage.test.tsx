@@ -40,6 +40,10 @@ beforeEach(() => {
           return json({ countries: [{ country_code: 'GB', artists: 2 }, { country_code: 'SE', artists: 1 }], unknown: 4, pending: 3 })
         case '/api/servers/1/library/stats/countries/SE':
           return json([{ rating_key: 105, title: 'The Knife', thumb: null, popularity: null, user_rating: null, plays: 0, album_count: 1 }])
+        case '/api/servers/1/library/stats/colours':
+          return json({ families: [{ name: 'red', albums: 1, hex: '#c81e1e' }, { name: 'blue', albums: 2, hex: '#2850c8' }], strip: ['#c81e1e', '#2850c8', '#2850c8'], albums: 3, waiting: 1 })
+        case '/api/servers/1/library/stats/colours/blue':
+          return json([{ rating_key: 200, title: 'OK Computer', thumb: null, artist_title: 'Radiohead', hex: '#2850c8' }])
         case '/api/servers/1/library/stats/words':
           return json([{ word: 'Love', count: 40 }, { word: 'Karma', count: 2 }])
         default:
@@ -80,5 +84,10 @@ describe('Library stats', () => {
     expect(screen.getByText(/4 without a country \(3 still to be looked up/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^Sweden/ }))
     expect(await screen.findByRole('link', { name: 'The Knife' })).toHaveAttribute('href', '/library/artists/105')
+
+    // Cover colours: a family's covers.
+    expect(screen.getByText(/1 cover still to be looked at/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Blue: 2 albums' }))
+    expect(await screen.findByTitle('OK Computer · Radiohead')).toHaveAttribute('href', '/library/albums/200')
   })
 })
