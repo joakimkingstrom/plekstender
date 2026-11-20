@@ -56,3 +56,18 @@ export function errorMessage(error: unknown): string {
   if (error instanceof Error) return 'Something went wrong. Check your connection and try again.'
   return 'Something went wrong.'
 }
+
+/** POST a raw body (for file uploads), throwing ApiError like the typed client. */
+export async function postRaw<T>(path: string, body: BodyInit, contentType: string): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': contentType, 'X-Plekstender': '1' },
+    body,
+  })
+  const data = await res.json().catch(() => null)
+  if (!res.ok) {
+    throw new ApiError(res.status, typeof data?.detail === 'string' ? data.detail : `Request failed (${res.status})`)
+  }
+  return data as T
+}

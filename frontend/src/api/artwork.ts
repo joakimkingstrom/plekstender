@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { ApiError, api, unwrap, type Schemas } from './client'
+import { api, postRaw, unwrap, type Schemas } from './client'
 import { libraryKeys } from './library'
 
 export type ArtworkStatus = Schemas['ArtworkStatusIn']['status']
@@ -131,21 +131,6 @@ export function useBulkArtworkStatus(serverId: number) {
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: artworkKeys.all(serverId) }),
   })
-}
-
-/** POST a raw body (for file uploads), throwing ApiError like the typed client. */
-async function postRaw<T>(path: string, body: BodyInit, contentType: string): Promise<T> {
-  const res = await fetch(path, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'content-type': contentType, 'X-Plekstender': '1' },
-    body,
-  })
-  const data = await res.json().catch(() => null)
-  if (!res.ok) {
-    throw new ApiError(res.status, typeof data?.detail === 'string' ? data.detail : `Request failed (${res.status})`)
-  }
-  return data as T
 }
 
 export function useUploadImage(serverId: number) {

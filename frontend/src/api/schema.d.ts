@@ -1079,6 +1079,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gigs/import/setlistfm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Setlistfm
+         * @description The concerts the user marked as attended on setlist.fm (their profile's name).
+         */
+        post: operations["import_setlistfm_api_gigs_import_setlistfm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/import/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Csv
+         * @description Gigs from a CSV (a header row naming at least the date and artist columns).
+         */
+        post: operations["import_csv_api_gigs_import_csv_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/import/ical": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Ical
+         * @description Past events in a calendar file, as gigs.
+         */
+        post: operations["import_ical_api_gigs_import_ical_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Csv */
+        get: operations["export_csv_api_gigs_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/export.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Json */
+        get: operations["export_json_api_gigs_export_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/export.ics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Ics */
+        get: operations["export_ics_api_gigs_export_ics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/summary": {
         parameters: {
             query?: never;
@@ -2574,6 +2685,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/setlistfm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Setlistfm */
+        get: operations["get_setlistfm_api_admin_setlistfm_get"];
+        /**
+         * Put Setlistfm
+         * @description Set (after checking it with one small search) or clear the setlist.fm API key.
+         */
+        put: operations["put_setlistfm_api_admin_setlistfm_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/fonts/catalogue": {
         parameters: {
             query?: never;
@@ -3721,6 +3853,26 @@ export interface components {
              * @description The Live gig's rows.
              */
             ids: number[];
+        };
+        /** GigImportOut */
+        GigImportOut: {
+            /** Added */
+            added: number;
+            /**
+             * Updated
+             * @description Imported before: brought up to date.
+             */
+            updated: number;
+            /**
+             * Skipped
+             * @description Already there (added another way).
+             */
+            skipped: number;
+            /**
+             * Problems
+             * @description Rows that couldn't be read (the first few).
+             */
+            problems: string[];
         };
         /** GigIn */
         GigIn: {
@@ -5411,6 +5563,23 @@ export interface components {
             music_section_keys: string[];
             /** Last Connected At */
             last_connected_at: string | null;
+        };
+        /** SetlistFmImportIn */
+        SetlistFmImportIn: {
+            /** Username */
+            username: string;
+        };
+        /** SetlistFmKeyIn */
+        SetlistFmKeyIn: {
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /** SetlistFmKeyOut */
+        SetlistFmKeyOut: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source: ("settings" | "environment") | null;
         };
         /** ShrinkCoversIn */
         ShrinkCoversIn: {
@@ -8139,6 +8308,147 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+        };
+    };
+    import_setlistfm_api_gigs_import_setlistfm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetlistFmImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_csv_api_gigs_import_csv_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "text/csv": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigImportOut"];
+                };
+            };
+        };
+    };
+    import_ical_api_gigs_import_ical_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "text/calendar": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigImportOut"];
+                };
+            };
+        };
+    };
+    export_csv_api_gigs_export_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                };
+            };
+        };
+    };
+    export_json_api_gigs_export_json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    export_ics_api_gigs_export_ics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/calendar": unknown;
                 };
             };
         };
@@ -10915,6 +11225,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataThistleOut"];
+                };
+            };
+        };
+    };
+    get_setlistfm_api_admin_setlistfm_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetlistFmKeyOut"];
+                };
+            };
+        };
+    };
+    put_setlistfm_api_admin_setlistfm_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetlistFmKeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetlistFmKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

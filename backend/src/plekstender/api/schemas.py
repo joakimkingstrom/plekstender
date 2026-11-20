@@ -1560,3 +1560,23 @@ class GigsOut(BaseModel):
 
 class GigFromLiveIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=20, description="The Live gig's rows.")
+
+
+class GigImportOut(BaseModel):
+    added: int
+    updated: int = Field(description="Imported before: brought up to date.")
+    skipped: int = Field(description="Already there (added another way).")
+    problems: list[str] = Field(description="Rows that couldn't be read (the first few).")
+
+
+class SetlistFmImportIn(BaseModel):
+    username: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.\-]+$")
+
+
+class SetlistFmKeyIn(BaseModel):
+    api_key: str | None = Field(default=None, pattern=r"^[A-Za-z0-9\-]{20,64}$")
+
+
+class SetlistFmKeyOut(BaseModel):
+    configured: bool
+    source: Literal["settings", "environment"] | None

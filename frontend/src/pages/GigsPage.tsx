@@ -6,6 +6,7 @@ import {
   useGigArtists,
   useGigs,
   useGigSuggestions,
+  useImportGigs,
   useRecordLiveGig,
   useSaveGig,
   type Gig,
@@ -13,6 +14,7 @@ import {
 } from '../api/gigs'
 import { useActiveServer } from '../api/library'
 import { useStarShow } from '../api/live'
+import { FilePicker } from '../components/controls'
 import { Select } from '../components/Select'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { localDate } from '../live'
@@ -77,7 +79,86 @@ export function GigsPage() {
       ) : (
         <GigList gigs={gigs.data.gigs} />
       )}
+      <ImportExport />
     </div>
+  )
+}
+
+/** Gigs in (setlist.fm, CSV, calendar files) and out (CSV, JSON, calendar). */
+function ImportExport() {
+  const importer = useImportGigs()
+  const [username, setUsername] = useState('')
+  const result = importer.data
+  return (
+    <Card title="Import and export">
+      <div className="space-y-4 text-sm">
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (username.trim()) importer.mutate({ setlistfm: username.trim() })
+          }}
+        >
+          <label className="min-w-0 flex-1 space-y-1">
+            <span className="block font-medium">setlist.fm username</span>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="As on your setlist.fm profile"
+              className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2"
+            />
+          </label>
+          <Button type="submit" disabled={!username.trim()} busy={importer.isPending && 'setlistfm' in (importer.variables ?? {})}>
+            Import the concerts I went to
+          </Button>
+        </form>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FilePicker
+            accept=".csv,text/csv"
+            label="A CSV file"
+            hint="With a header row: date and artist at least (venue, city, country, support, festival, notes are read too)."
+            onFile={(file) => importer.mutate({ file, kind: 'csv' })}
+          />
+          <FilePicker
+            accept=".ics,text/calendar"
+            label="A calendar file (.ics)"
+            hint="Its past events, e.g. from Songkick or your own calendar."
+            onFile={(file) => importer.mutate({ file, kind: 'ical' })}
+          />
+        </div>
+        {result && (
+          <Notice>
+            Added {result.added}
+            {result.updated > 0 && `, updated ${result.updated}`}
+            {result.skipped > 0 && `, ${result.skipped} already there`}.
+            {result.problems.length > 0 && (
+              <ul className="mt-1 list-disc pl-5 text-xs">
+                {result.problems.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            )}
+          </Notice>
+        )}
+        {importer.isError && <Notice tone="error">{errorMessage(importer.error)}</Notice>}
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="text-muted">Export:</span>
+          <a href="/api/gigs/export.csv" download className="text-accent underline">
+            CSV
+          </a>
+          <a href="/api/gigs/export.json" download className="text-accent underline">
+            JSON
+          </a>
+          <a href="/api/gigs/export.ics" download className="text-accent underline">
+            Calendar (.ics)
+          </a>
+        </p>
+        <p className="text-xs text-muted">
+          No gig-tracking service lets apps add gigs for you (setlist.fm can only be read), so to take your gigs elsewhere,
+          import one of these files there.
+        </p>
+      </div>
+    </Card>
   )
 }
 

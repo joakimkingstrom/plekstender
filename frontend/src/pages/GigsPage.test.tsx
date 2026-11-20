@@ -45,6 +45,8 @@ beforeEach(() => {
         return json(['Portishead', 'Radiohead'])
       case '/api/gigs/suggestions':
         return json([suggestion])
+      case '/api/gigs/import/setlistfm':
+        return json({ added: 12, updated: 3, skipped: 1, problems: [] })
       case '/api/gigs/from-live':
         return json({ ...gigs[1], id: 4, source: 'live' }, 201)
       default:
@@ -107,5 +109,15 @@ describe('GigsPage', () => {
         url: null,
       }),
     )
+  })
+
+  it('imports from setlist.fm and offers exports', async () => {
+    renderPage()
+    fireEvent.change(await screen.findByLabelText('setlist.fm username'), { target: { value: ' joakim ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Import the concerts I went to' }))
+    expect(await screen.findByText(/Added 12, updated 3, 1 already there\./)).toBeInTheDocument()
+    expect(await calls('/api/gigs/import/setlistfm')[0].clone().json()).toEqual({ username: 'joakim' })
+    expect(screen.getByRole('link', { name: 'CSV' })).toHaveAttribute('href', '/api/gigs/export.csv')
+    expect(screen.getByRole('link', { name: 'Calendar (.ics)' })).toHaveAttribute('href', '/api/gigs/export.ics')
   })
 })

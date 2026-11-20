@@ -2,6 +2,7 @@ import { useMe } from '../api/hooks'
 import { AcoustIdKeyCard } from '../components/AcoustIdKeyCard'
 import { DataThistleCard } from '../components/DataThistleCard'
 import { JamBaseKeyCard } from '../components/JamBaseKeyCard'
+import { SetlistFmKeyCard } from '../components/SetlistFmKeyCard'
 import { TicketmasterKeyCard } from '../components/TicketmasterKeyCard'
 import { Spinner } from '../components/ui'
 import { LastFmKeyCard, ListenBrainzCard } from './ListeningSettingsPage'
@@ -25,6 +26,7 @@ export function ConnectionsPage() {
           <JamBaseKeyCard />
           <TicketmasterKeyCard />
           <DataThistleCard />
+          <SetlistFmKeyCard />
         </div>
       )}
     </div>

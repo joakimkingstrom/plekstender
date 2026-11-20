@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
@@ -33,6 +34,8 @@ from plekstender.api.schemas import (
     LastFmKeyIn,
     LastFmKeyOut,
     PopularityPreviewItem,
+    SetlistFmKeyIn,
+    SetlistFmKeyOut,
     TicketmasterKeyIn,
     TicketmasterKeyOut,
 )
@@ -52,6 +55,7 @@ from plekstender.db.instance import (
     get_jambase_usage,
     get_lastfm_api_key,
     get_library_settings,
+    get_setlistfm_api_key,
     get_ticketmaster_api_key,
     get_ticketmaster_usage,
     save_datathistle_quota,
@@ -64,6 +68,7 @@ from plekstender.db.instance import (
     set_jambase_api_key,
     set_lastfm_api_key,
     set_library_settings,
+    set_setlistfm_api_key,
     set_ticketmaster_api_key,
 )
 from plekstender.db.models import PlexServer, User, UserServer
@@ -426,6 +431,40 @@ async def delete_datathistle(db: DbDep, _: AdminDep, settings: SettingsDep) -> D
     await set_datathistle_tokens(db, settings, None)
     await db.commit()
     return await _datathistle_out(db, settings)
+
+
+@router.get("/setlistfm", response_model=SetlistFmKeyOut)
+async def get_setlistfm(db: DbDep, _: AdminDep, settings: SettingsDep) -> SetlistFmKeyOut:
+    key, source = await get_setlistfm_api_key(db, settings)
+    return SetlistFmKeyOut(configured=key is not None, source=source)
+
+
+@router.put("/setlistfm", response_model=SetlistFmKeyOut)
+async def put_setlistfm(
+    body: SetlistFmKeyIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
+) -> SetlistFmKeyOut:
+    """Set (after checking it with one small search) or clear the setlist.fm API key."""
+    if body.api_key:
+        try:
+            resp = await http.get(
+                f"{settings.setlistfm_api_url}/search/artists",
+                params={"artistName": "Radiohead", "p": 1},
+                headers={"x-api-key": body.api_key, "Accept": "application/json"},
+                timeout=20,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, "setlist.fm couldn't be reached."
+            ) from exc
+        if resp.status_code in (401, 403):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "setlist.fm didn't accept the key.")
+        if resp.status_code >= 400 and resp.status_code != 404:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, f"setlist.fm answered {resp.status_code}."
+            )
+    await set_setlistfm_api_key(db, settings, body.api_key)
+    await db.commit()
+    return await get_setlistfm(db, admin, settings)
 
 
 # --- text logo fonts -----------------------------------------------------------------------

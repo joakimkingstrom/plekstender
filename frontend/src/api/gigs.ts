@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, unwrap, type Schemas } from './client'
+import { api, postRaw, unwrap, type Schemas } from './client'
 import { liveKeys } from './live'
 
 export type Gig = Schemas['GigOut']
@@ -54,5 +54,35 @@ export function useRecordLiveGig() {
       qc.invalidateQueries({ queryKey: gigKeys.all })
       qc.invalidateQueries({ queryKey: liveKeys.all })
     },
+  })
+}
+
+export type GigImport = Schemas['GigImportOut']
+
+/** Import gigs: from setlist.fm (a username), or a CSV / iCalendar file. */
+export function useImportGigs() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (what: { setlistfm: string } | { file: File; kind: 'csv' | 'ical' }) =>
+      'setlistfm' in what
+        ? unwrap(api.POST('/api/gigs/import/setlistfm', { body: { username: what.setlistfm } }))
+        : postRaw<GigImport>(
+            `/api/gigs/import/${what.kind}`,
+            what.file,
+            what.kind === 'csv' ? 'text/csv' : 'text/calendar',
+          ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: gigKeys.all }),
+  })
+}
+
+export function useSetlistFmKey(enabled: boolean) {
+  return useQuery({ queryKey: ['admin', 'setlistfm'], enabled, queryFn: () => unwrap(api.GET('/api/admin/setlistfm')) })
+}
+
+export function useSetSetlistFmKey() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (apiKey: string | null) => unwrap(api.PUT('/api/admin/setlistfm', { body: { api_key: apiKey } })),
+    onSuccess: (data) => qc.setQueryData(['admin', 'setlistfm'], data),
   })
 }

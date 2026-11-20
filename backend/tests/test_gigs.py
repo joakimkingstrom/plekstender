@@ -208,3 +208,140 @@ async def test_gig_places(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Monk
     # The Royal Albert Hall was looked up once for both gigs; the country narrows the search.
     assert [a.get("q") or a.get("city") for a in asked].count("Royal Albert Hall, London") == 1
     assert asked[0]["countrycodes"] == "gb"
+
+
+def test_csv_dates_and_columns() -> None:
+    from plekstender.gigs.imports import parse_csv, parse_date
+
+    assert parse_date("2019-10-02") == dt.date(2019, 10, 2)
+    assert parse_date("02/10/2019") == dt.date(2019, 10, 2)  # day first
+    assert parse_date("10/25/2019") == dt.date(2019, 10, 25)  # unless it can't be
+    assert parse_date("2 Oct 2019") == dt.date(2019, 10, 2)
+    assert parse_date("October 2, 2019") == dt.date(2019, 10, 2)
+    assert parse_date("soon") is None
+    drafts, problems = parse_csv(
+        "Event Date;Headliner;Support Acts;Venue Name;Town;Country;Festival;Notes\n"
+        "02/10/2019;Portishead;Young Fathers, Kae Tempest;Royal Albert Hall;London;GB;;Brilliant\n"
+        ";;;;;;;\n"
+        "nonsense;Radiohead;;;;;;\n"
+    )
+    assert [(d.date, d.artists, d.venue, d.city, d.country, d.notes) for d in drafts] == [
+        (
+            dt.date(2019, 10, 2),
+            ["Portishead", "Young Fathers", "Kae Tempest"],
+            "Royal Albert Hall",
+            "London",
+            "GB",
+            "Brilliant",
+        ),
+    ]
+    assert problems == ["Row 4: no date or artist (nonsense)."]
+
+
+SETLISTS = {
+    1: {"type": "setlists", "itemsPerPage": 2, "page": 1, "total": 3, "setlist": [
+        {"id": "a1", "eventDate": "02-10-2019", "url": "https://www.setlist.fm/setlist/portishead/a1.html",
+         "artist": {"mbid": "8f6bd1e4", "name": "Portishead"},
+         "venue": {"id": "v-rah", "name": "Royal Albert Hall", "city": {"name": "London", "country": {"code": "GB"}, "coords": {"lat": 51.5, "long": -0.12}}}},
+        {"id": "a2", "eventDate": "02-10-2019", "artist": {"name": "Young Fathers"},
+         "venue": {"id": "v-rah", "name": "Royal Albert Hall", "city": {"name": "London", "country": {"code": "GB"}}}},
+    ]},
+    2: {"type": "setlists", "itemsPerPage": 2, "page": 2, "total": 3, "setlist": [
+        {"id": "b1", "eventDate": "24-06-2017", "artist": {"name": "Radiohead"}, "tour": {"name": "Glastonbury 2017"},
+         "venue": {"id": "v-pyr", "name": "Pyramid Stage", "city": {"name": "Pilton", "country": {"code": "GB"}}}},
+    ]},
+}  # fmt: skip
+
+
+@pytest.mark.db
+async def test_gig_imports_and_exports(app: FastAPI, plex: FakePlex) -> None:
+    import httpx
+
+    calls: list[httpx.Request] = []
+
+    def setlistfm(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("x-api-key") != "k" * 36:
+            return httpx.Response(403, json={"code": 403, "message": "Forbidden"})
+        calls.append(request)
+        if "/search/artists" in request.url.path:
+            return httpx.Response(200, json={"artist": []})
+        if "/user/joakim/attended" in request.url.path:
+            return httpx.Response(200, json=SETLISTS[int(request.url.params["p"])])
+        return httpx.Response(404, json={"code": 404, "message": "not found"})
+
+    plex.router.route(host="api.setlist.fm").mock(side_effect=setlistfm)
+    owner, _ = await owner_with_library(app, plex)
+
+    # setlist.fm: needs the admin's key; two artists' setlists of one night are one gig.
+    missing = await owner.post(
+        "/api/gigs/import/setlistfm", json={"username": "joakim"}, headers=CSRF
+    )
+    assert missing.status_code == 409
+    assert (
+        await owner.put("/api/admin/setlistfm", json={"api_key": "k" * 36}, headers=CSRF)
+    ).status_code == 200
+    first = await owner.post(
+        "/api/gigs/import/setlistfm", json={"username": "joakim"}, headers=CSRF
+    )
+    assert first.status_code == 200, first.text
+    assert first.json() == {"added": 2, "updated": 0, "skipped": 0, "problems": []}
+    assert calls[-1].headers["accept"] == "application/json"
+    gigs = {g["date"]: g for g in (await owner.get("/api/gigs")).json()["gigs"]}
+    rah = gigs["2019-10-02"]
+    assert ([a["name"] for a in rah["artists"]], rah["venue"], rah["country"], rah["source"]) == (
+        ["Portishead", "Young Fathers"], "Royal Albert Hall", "GB", "setlistfm",
+    )  # fmt: skip
+    assert rah["artists"][0]["rating_key"] == 101  # in the library
+    assert gigs["2017-06-24"]["name"] == "Glastonbury 2017"
+    again = await owner.post(
+        "/api/gigs/import/setlistfm", json={"username": "joakim"}, headers=CSRF
+    )
+    assert again.json()["added"] == 0 and again.json()["updated"] == 2
+
+    # CSV: the same night (added another way) is skipped; a new one is added.
+    csv_body = (
+        "date,artist,venue,city,country\n"
+        "2019-10-02,Portishead,Royal Albert Hall,London,GB\n"
+        "2024-05-01,Massive Attack,Brixton Academy,London,GB\n"
+    )
+    imported = await owner.post(
+        "/api/gigs/import/csv",
+        content=csv_body.encode(),
+        headers={**CSRF, "content-type": "text/csv"},
+    )
+    assert imported.json() == {"added": 1, "updated": 0, "skipped": 1, "problems": []}
+    bad = await owner.post(
+        "/api/gigs/import/csv",
+        content=b"just,some\n1,2\n",
+        headers={**CSRF, "content-type": "text/csv"},
+    )
+    assert bad.status_code == 422 and "date and an artist" in bad.json()["detail"]
+
+    # iCalendar: past events only.
+    future = (TODAY + dt.timedelta(days=60)).strftime("%Y%m%d")
+    ics = "\r\n".join([
+        "BEGIN:VCALENDAR", "VERSION:2.0",
+        "BEGIN:VEVENT", "UID:p1", "SUMMARY:Bonobo at Electric Brixton", "DTSTART;VALUE=DATE:20230311", "END:VEVENT",
+        "BEGIN:VEVENT", "UID:f1", "SUMMARY:Future Islands at Roundhouse", f"DTSTART;VALUE=DATE:{future}", "END:VEVENT",
+        "END:VCALENDAR", "",
+    ])  # fmt: skip
+    from_ics = await owner.post(
+        "/api/gigs/import/ical",
+        content=ics.encode(),
+        headers={**CSRF, "content-type": "text/calendar"},
+    )
+    assert from_ics.json()["added"] == 1
+    bonobo = [g for g in (await owner.get("/api/gigs")).json()["gigs"] if g["source"] == "ical"]
+    assert [(g["date"], g["artists"][0]["name"], g["venue"]) for g in bonobo] == [
+        ("2023-03-11", "Bonobo", "Electric Brixton"),
+    ]
+
+    # Exports.
+    csv_out = await owner.get("/api/gigs/export.csv")
+    assert csv_out.headers["content-disposition"] == 'attachment; filename="gigs.csv"'
+    lines = csv_out.text.splitlines()
+    assert lines[0].startswith("date,artists,festival,venue") and len(lines) == 5
+    assert "2019-10-02,Portishead; Young Fathers,,Royal Albert Hall,London,GB" in csv_out.text
+    assert len((await owner.get("/api/gigs/export.json")).json()["gigs"]) == 4
+    ics_out = (await owner.get("/api/gigs/export.ics")).text
+    assert ics_out.count("BEGIN:VEVENT") == 4 and "SUMMARY:Portishead + Young Fathers" in ics_out

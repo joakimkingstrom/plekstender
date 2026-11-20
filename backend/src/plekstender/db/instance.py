@@ -505,6 +505,37 @@ async def save_datathistle_quota(
     await _put(db, DATATHISTLE_USAGE_KEY, usage.model_dump(mode="json"))
 
 
+# --- setlist.fm (gig imports) --------------------------------------------------------------
+
+SETLISTFM_KEY = "setlistfm"
+SETLISTFM_PURPOSE = "instance.setlistfm_api_key"
+
+
+async def get_setlistfm_api_key(
+    db: AsyncSession, settings: Settings
+) -> tuple[str | None, Literal["settings", "environment"] | None]:
+    """The setlist.fm key: Settings page first, then SETLISTFM_API_KEY."""
+    stored = await _get(db, SETLISTFM_KEY) or {}
+    if encrypted := stored.get("api_key_enc"):
+        try:
+            return _cipher(settings).decrypt(encrypted, purpose=SETLISTFM_PURPOSE), "settings"
+        except DecryptionError:
+            pass
+    env = settings.setlistfm_api_key
+    if env and (value := env.get_secret_value().strip()):
+        return value, "environment"
+    return None, None
+
+
+async def set_setlistfm_api_key(db: AsyncSession, settings: Settings, api_key: str | None) -> None:
+    value = (
+        {"api_key_enc": _cipher(settings).encrypt(api_key, purpose=SETLISTFM_PURPOSE)}
+        if api_key
+        else {}
+    )
+    await _put(db, SETLISTFM_KEY, value)
+
+
 # --- text logo fonts ------------------------------------------------------------------------
 
 FONTS_KEY = "fonts"

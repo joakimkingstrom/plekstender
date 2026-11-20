@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     datathistle_api_url: str = "https://api.datathistle.com/v1"
     datathistle_auth_url: str = "https://auth.datathistle.com/v1"
     datathistle_daily_cap: int = 30
+    # Gigs gone to, imported from setlist.fm (an admin's free, non-commercial API key; or set
+    # on Settings → Connections, that wins).
+    setlistfm_api_key: SecretStr | None = None
+    setlistfm_api_url: str = "https://api.setlist.fm/rest/1.0"
     # Where gigs were: OpenStreetMap's Nominatim (one request a second; results shared).
     nominatim_url: str = "https://nominatim.openstreetmap.org"
     # City search for the Live tab (Open-Meteo's free geocoding, no key).
