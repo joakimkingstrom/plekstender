@@ -19,7 +19,7 @@ export function DataThistleCard() {
     <Card title="Data Thistle">
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          UK listings for the Live tab, including small local shows. Register for free at{' '}
+          UK listings for the Live tab, including small local gigs. Register for free at{' '}
           <a href="https://api.datathistle.com" target="_blank" rel="noreferrer" className="text-accent underline">
             api.datathistle.com
           </a>

@@ -61,7 +61,7 @@ export function LivePage() {
   const [editing, setEditing] = useState(false)
   return (
     <>
-      <PageTitle subtitle="Upcoming shows near you by the artists you listen to most.">Live</PageTitle>
+      <PageTitle subtitle="Upcoming gigs near you by the artists you listen to most.">Live</PageTitle>
       {settings.isPending ? (
         <Spinner />
       ) : settings.isError ? (
@@ -117,9 +117,9 @@ function Summary({ settings, onEdit }: { settings: LiveSettings; onEdit: () => v
         </p>
         <p className="text-muted" aria-live="polite">
           {busy
-            ? 'Looking up shows…'
+            ? 'Looking up gigs…'
             : settings.refreshed_at
-              ? `Updated ${formatRelative(settings.refreshed_at)}. Shows are looked up about once a day.`
+              ? `Updated ${formatRelative(settings.refreshed_at)}. Gigs are looked up about once a day.`
               : 'Not looked up yet.'}
         </p>
         {settings.refresh_status === 'failed' && settings.refresh_error && <Notice tone="warn">{settings.refresh_error}</Notice>}
@@ -304,16 +304,16 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
           <p className="text-xs text-muted">
             {listened === 0
               ? periodMode === 'all'
-                ? "You haven't played any artists yet; shows are found for the artists you play."
+                ? "You haven't played any artists yet; gigs are found for the artists you play."
                 : `You haven't played any artists in ${describePeriod(periodMonths)}.`
               : `Your ${following} most played of the ${listened} artists you've played in ${describePeriod(periodMonths)}.${
-                  following > 150 ? ' Following many artists uses more of the shared JamBase allowance, so shows are refreshed less often.' : ''
+                  following > 150 ? ' Following many artists uses more of the shared JamBase allowance, so gigs are refreshed less often.' : ''
                 }`}
           </p>
         </div>
 
         <p className="text-xs text-muted">
-          Only the place is stored, and it's used just to look up shows (about once a day).
+          Only the place is stored, and it's used just to look up gigs (about once a day).
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -346,7 +346,7 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
             <Button
               variant="ghost"
               busy={forget.isPending}
-              onClick={() => window.confirm('Forget your place, the shows and your starred shows?') && forget.mutate(undefined, { onSuccess: onDone })}
+              onClick={() => window.confirm('Forget your place, the gigs and your starred gigs?') && forget.mutate(undefined, { onSuccess: onDone })}
             >
               Forget my place
             </Button>
@@ -465,17 +465,17 @@ function Shows({ settings }: { settings: LiveSettings }) {
 
       {shows.data.shows.length === 0 ? (
         busy ? (
-          <p className="text-sm text-muted">Looking up shows…</p>
+          <p className="text-sm text-muted">Looking up gigs…</p>
         ) : settings.refreshed_at ? (
           <Card>
             <p className="text-sm text-muted">
               {range === 'starred'
-                ? 'No starred shows yet: star a show to keep it and put it in your calendar.'
+                ? 'No starred gigs yet: star a gig to keep it and put it in your calendar.'
                 : range === 'new'
-                ? 'Nothing new this past week: shows appear here for a week after they’re first found.'
+                ? 'Nothing new this past week: gigs appear here for a week after they’re first found.'
                 : artist || venue || range !== 'all'
-                ? 'No shows match these filters.'
-                : `No upcoming shows within ${settings.radius_km} km by your top ${settings.followed_artists} artists. A larger distance or more artists may find some.`}
+                ? 'No gigs match these filters.'
+                : `No upcoming gigs within ${settings.radius_km} km by your top ${settings.followed_artists} artists. A larger distance or more artists may find some.`}
             </p>
           </Card>
         ) : null
@@ -500,7 +500,7 @@ function Shows({ settings }: { settings: LiveSettings }) {
         )}
         {settings.sources.includes('ticketmaster') && (
           <a href="https://www.ticketmaster.com" target="_blank" rel="nofollow noopener noreferrer" className="underline">
-            Shows also from Ticketmaster
+            Gigs also from Ticketmaster
           </a>
         )}
         {settings.sources.includes('datathistle') && (
@@ -651,7 +651,7 @@ function CalendarCard() {
     <Card title="Your calendar">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          Star shows (☆) to keep them and add them to a calendar you subscribe to once in Apple Calendar, Google Calendar
+          Star gigs (☆) to keep them and add them to a calendar you subscribe to once in Apple Calendar, Google Calendar
           or Outlook. It stays up to date by itself.
         </p>
         {!open ? (
@@ -714,7 +714,7 @@ function FeedsCard() {
     <Card title="Calendar links">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          Add a calendar link to list its shows here too, such as your Songkick calendar (its export link, for the artists
+          Add a calendar link to list its gigs here too, such as your Songkick calendar (its export link, for the artists
           you track or your plans). It's read along with the other sources.
         </p>
         {feeds.isPending ? (

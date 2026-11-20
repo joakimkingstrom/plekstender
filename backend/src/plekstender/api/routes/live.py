@@ -208,7 +208,7 @@ async def refresh(db: DbDep, settings: SettingsDep, user: UserDep) -> LiveSettin
     if at := _available_at(live):
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
-            f"Shows were looked up recently; try again after {at:%H:%M} UTC.",
+            f"Gigs were looked up recently; try again after {at:%H:%M} UTC.",
         )
     await enqueue_live_refresh(db, user.id)
     return await _out(db, settings, user)
@@ -548,7 +548,7 @@ async def calendar_feed(token: str, db: DbDep) -> Response:
     live = await db.scalar(select(LiveSettings).where(LiveSettings.calendar_token == token))
     if live is None or len(token) < 20:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown calendar")
-    body = ical.calendar(_calendar_shows(await _starred(db, live.user_id)), "Plekstender: shows")
+    body = ical.calendar(_calendar_shows(await _starred(db, live.user_id)), "Plekstender: gigs")
     return Response(
         body,
         media_type="text/calendar; charset=utf-8",
@@ -565,7 +565,7 @@ async def show_file(show_id: int, db: DbDep, user: UserDep) -> Response:
     """One show as a calendar file, to add it to a calendar by hand."""
     row = await db.get(LiveShow, show_id)
     if row is None or row.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Show not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gig not found")
     same = list(
         await db.scalars(
             select(LiveShow).where(
@@ -578,5 +578,5 @@ async def show_file(show_id: int, db: DbDep, user: UserDep) -> Response:
     return Response(
         body,
         media_type="text/calendar; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="show-{show_id}.ics"'},
+        headers={"Content-Disposition": f'attachment; filename="gig-{show_id}.ics"'},
     )

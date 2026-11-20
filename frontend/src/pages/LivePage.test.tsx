@@ -207,7 +207,7 @@ describe('LivePage', () => {
         period_months: 6,
       })
     })
-    expect(await screen.findByText('Looking up shows…', { selector: 'p[aria-live]' })).toBeInTheDocument()
+    expect(await screen.findByText('Looking up gigs…', { selector: 'p[aria-live]' })).toBeInTheDocument()
   })
 
   it('lists upcoming shows with ticket links, the JamBase credit, and an artist filter', async () => {
@@ -227,7 +227,7 @@ describe('LivePage', () => {
     expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('href', 'https://www.jambase.com/show/radiohead')
     expect(screen.getByText('Postponed')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Powered by JamBase' })).toHaveAttribute('href', 'https://www.jambase.com')
-    expect(screen.getByRole('link', { name: 'Shows also from Ticketmaster' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Gigs also from Ticketmaster' })).toBeInTheDocument()
     // Found by both sources: Ticketmaster's own link too.
     expect(within(row).getByRole('link', { name: 'Also on Ticketmaster' })).toHaveAttribute('href', 'https://www.ticketmaster.se/event/A1')
     // A starred show can be added to a calendar by hand.

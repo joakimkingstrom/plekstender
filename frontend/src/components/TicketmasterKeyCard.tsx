@@ -14,7 +14,7 @@ export function TicketmasterKeyCard() {
     <Card title="Ticketmaster API key">
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          A second source for the Live tab: all music events near each person are read and matched against their artists.
+          A second source for the Live tab: all gigs near each person are read and matched against their artists.
           Create a free app at{' '}
           <a href="https://developer.ticketmaster.com" target="_blank" rel="noreferrer" className="text-accent underline">
             developer.ticketmaster.com

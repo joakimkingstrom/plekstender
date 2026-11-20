@@ -293,7 +293,7 @@ def parse_event(raw: Any) -> Event | None:
     ]
     return Event(
         id=str(raw["identifier"])[:64],
-        name=str(raw.get("name") or ", ".join(p.name for p in performers[:3]) or "Show"),
+        name=str(raw.get("name") or ", ".join(p.name for p in performers[:3]) or "Gig"),
         festival=raw.get("@type") == "Festival",
         start_date=start,
         start_time=time,

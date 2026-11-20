@@ -17,7 +17,7 @@ export function JamBaseKeyCard() {
     <Card title="JamBase API key">
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          Finds upcoming shows for the Live tab. The free Developer plan at{' '}
+          Finds upcoming gigs for the Live tab. The free Developer plan at{' '}
           <a href="https://data.jambase.com" target="_blank" rel="noreferrer" className="text-accent underline">
             data.jambase.com
           </a>{' '}

@@ -204,7 +204,7 @@ def parse_event(raw: Any) -> Event | None:
     )
     return Event(
         id=f"ticketmaster:{raw['id']}"[:64],
-        name=str(raw.get("name") or ", ".join(p.name for p in performers[:3]) or "Show"),
+        name=str(raw.get("name") or ", ".join(p.name for p in performers[:3]) or "Gig"),
         festival=len(performers) > 6,
         start_date=day,
         start_time=local_time[:5] if isinstance(local_time, str) and len(local_time) >= 5 else None,

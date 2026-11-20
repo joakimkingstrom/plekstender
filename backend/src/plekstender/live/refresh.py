@@ -329,7 +329,7 @@ async def refresh_user(
         runs["datathistle"] = await _run(partial(_datathistle, ctx, dt_tokens, everyone))
     errors = [run.error for run in runs.values() if run.error]
     if not runs and not only_dt:
-        errors = ["No source for shows is set up: an admin can add a JamBase or Ticketmaster "
+        errors = ["No source for gigs is set up: an admin can add a JamBase or Ticketmaster "
                   "key in Settings → Connections, or add a calendar link."]  # fmt: skip
     complete = not errors
 
@@ -467,7 +467,7 @@ async def _jambase(ctx: Context, api_key: str, run: SourceRun) -> None:
                 if not await reserve_jambase_call(db, ctx.settings.jambase_monthly_cap, ctx.now()):
                     raise Stop(
                         f"This month's JamBase requests ({ctx.settings.jambase_monthly_cap}) "
-                        "are used up; shows are looked up again next month."
+                        "are used up; gigs are looked up again next month."
                     )
             run.requests += 1
             events, pages = await jambase.events(
@@ -575,7 +575,7 @@ async def _ticketmaster(ctx: Context, api_key: str, run: SourceRun) -> None:
 async def _tm_reserve(ctx: Context, run: SourceRun) -> None:
     if run.requests >= TM_MAX_REQUESTS:
         raise Stop(
-            "There are too many shows near you to read them all from Ticketmaster; "
+            "There are too many gigs near you to read them all from Ticketmaster; "
             "a smaller distance helps."
         )
     async with ctx.sessions() as db:
@@ -729,7 +729,7 @@ async def _check_quota(ctx: Context, api_key: str, needed: int) -> None:
         raise Stop(
             "JamBase's monthly quota is nearly used up"
             + (f" (it renews {end})" if end else "")
-            + "; shows are looked up again then."
+            + "; gigs are looked up again then."
         )
 
 
