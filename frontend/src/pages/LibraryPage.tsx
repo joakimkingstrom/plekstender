@@ -15,6 +15,7 @@ import {
   useArtists,
   useTags,
   type ArtistSort,
+  type TagKind,
 } from '../api/library'
 import { ColumnChart } from '../components/charts'
 import { Artwork } from '../components/library'
@@ -23,7 +24,9 @@ import { useLibraryServer } from '../components/useLibraryServer'
 import { AlbumFiles, ArtistFiles } from '../components/MusicFiles'
 import { ArtistNfo } from '../components/NfoCards'
 import { TagHistory } from '../components/TagEditor'
-import { Badge, Card, Notice, Spinner } from '../components/ui'
+import { TagChips } from '../components/TagChip'
+import { Segmented } from '../components/Segmented'
+import { Card, Notice, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
 
 const SORTS: { value: ArtistSort; label: string }[] = [
@@ -71,7 +74,7 @@ export function LibraryPage() {
             />
             <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
           </div>
-          <GenreChips serverId={active!.id} selected={tag} onSelect={setTag} />
+          <TagFilter serverId={active!.id} selected={tag} onSelect={setTag} />
           <ArtistGrid serverId={active!.id} q={deferredQuery} sort={sort} tag={tag} />
         </>
       )}
@@ -79,7 +82,13 @@ export function LibraryPage() {
   )
 }
 
-function GenreChips({
+const FILTER_KINDS: [TagKind, string][] = [
+  ['genre', 'Genres'],
+  ['style', 'Styles'],
+  ['mood', 'Moods'],
+]
+
+function TagFilter({
   serverId,
   selected,
   onSelect,
@@ -88,26 +97,46 @@ function GenreChips({
   selected: number | null
   onSelect: (id: number | null) => void
 }) {
-  const tags = useTags(serverId, 'genre')
-  if (!tags.data?.length) return null
+  const [kind, setKind] = useState<TagKind>('genre')
+  const tags = useTags(serverId, kind)
+  const label = FILTER_KINDS.find(([k]) => k === kind)?.[1] ?? ''
+  const chosen = tags.data?.find((t) => t.id === selected)
   return (
-    <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by genre">
-      {tags.data.slice(0, 24).map((t) => {
-        const on = t.id === selected
-        return (
-          <button
-            key={t.id}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onSelect(on ? null : t.id)}
-            className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${
-              on ? 'border-accent bg-accent text-on-accent' : 'border-border text-muted hover:text-text'
-            }`}
-          >
-            {t.name}
-          </button>
-        )
-      })}
+    <div className="mb-5 flex items-start gap-3">
+      <Segmented
+        label="Filter by"
+        value={kind}
+        options={FILTER_KINDS}
+        onChange={(k) => {
+          setKind(k)
+          onSelect(null)
+        }}
+        className="shrink-0"
+      />
+      <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label={`Filter by ${label.toLowerCase()}`}>
+        {tags.data?.length === 0 && <span className="py-1 text-xs text-muted">No {label.toLowerCase()} yet.</span>}
+        {tags.data?.slice(0, 40).map((t) => {
+          const on = t.id === selected
+          return (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onSelect(on ? null : t.id)}
+              className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${
+                on ? 'border-accent bg-accent text-on-accent' : 'border-border text-muted hover:text-text'
+              } ${kind === 'mood' ? 'italic' : ''}`}
+            >
+              {t.name}
+            </button>
+          )
+        })}
+      </div>
+      {chosen && (
+        <Link to={`/library/tags/${chosen.id}`} className="shrink-0 py-1 text-xs text-accent hover:underline">
+          {chosen.name} page →
+        </Link>
+      )}
     </div>
   )
 }
@@ -219,21 +248,6 @@ function TrackList({
         </li>
       ))}
     </ol>
-  )
-}
-
-function TagBadges({ tags }: { tags: Schemas['TagOut'][] }) {
-  if (!tags.length) return null
-  const order = ['genre', 'style', 'mood', 'country']
-  const sorted = [...tags].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {sorted.map((t) => (
-        <Badge key={t.id} tone={t.kind === 'genre' ? 'accent' : 'muted'}>
-          {t.name}
-        </Badge>
-      ))}
-    </div>
   )
 }
 
@@ -413,7 +427,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
             <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(a.plays)} plays</span></Tooltip>
             {a.popularity !== null && <Tooltip content="Sum of the Last.fm listeners of the artist's top songs"><span>Popularity {formatCompact(a.popularity)}</span></Tooltip>}
           </div>
-          <TagBadges tags={a.tags} />
+          <TagChips tags={a.tags} />
           <Summary text={a.summary} />
         </div>
       </div>
@@ -519,7 +533,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
             {al.critic_rating !== null && <span>Critics {al.critic_rating.toFixed(1)}/10</span>}
             <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(al.plays)} plays</span></Tooltip>
           </div>
-          <TagBadges tags={al.tags} />
+          <TagChips tags={al.tags} />
           <Summary text={al.summary} />
         </div>
       </div>

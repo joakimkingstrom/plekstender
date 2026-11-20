@@ -18,6 +18,12 @@ class Rules(BaseModel):
     top_percent: int | None = Field(
         default=None, ge=1, le=100, description="Only each artist's most popular N% of songs."
     )
+    tags: list[int] = Field(
+        default_factory=list,
+        max_length=50,
+        description="Only songs whose album or artist has one of these genres, styles or "
+        "moods (always applies, whatever `op` says).",
+    )
 
 
 class Definition(BaseModel):

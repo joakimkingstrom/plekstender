@@ -122,6 +122,8 @@ function Rater({ serverId }: { serverId: number }) {
       : settings.order
   const queue = useRateQueue(serverId, settings.kind, settings.pool, order, keep, settings.tag)
   const genres = useTags(serverId, 'genre')
+  const styles = useTags(serverId, 'style')
+  const moods = useTags(serverId, 'mood')
   const rateMutation = useRate(serverId)
   const undoMutation = useUndoRating(serverId)
   const [overrides, setOverrides] = useState<Overrides>({})
@@ -205,12 +207,14 @@ function Rater({ serverId }: { serverId: number }) {
           className={`${optionsOpen ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2 md:flex md:w-auto`}
         >
           <Select
-            label="Genre"
+            label="Genre, style or mood"
             value={settings.tag ?? 0}
             onChange={(tag) => update({ tag: tag || null })}
             options={[
               { value: 0, label: 'All genres' },
-              ...(genres.data ?? []).map((g) => ({ value: g.id, label: g.name })),
+              ...(genres.data ?? []).map((g) => ({ value: g.id, label: g.name, group: 'Genres' })),
+              ...(styles.data ?? []).map((g) => ({ value: g.id, label: g.name, group: 'Styles' })),
+              ...(moods.data ?? []).map((g) => ({ value: g.id, label: g.name, group: 'Moods' })),
             ]}
           />
           <Select

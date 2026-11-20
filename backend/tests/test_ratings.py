@@ -279,6 +279,11 @@ async def test_queue_genre_filter(app: FastAPI, plex: FakePlex) -> None:
         100,
         102,
     ]
+    # Moods and styles too; an artist matches through an album's tags (Paranoid is only
+    # on OK Computer).
+    moods = (await owner.get(f"/api/servers/{sid}/library/tags", params={"kind": "mood"})).json()
+    paranoid = next(t["id"] for t in moods if t["name"] == "Paranoid")
+    assert await queue(owner, sid, kind="artist", pool="all", tag_id=paranoid, limit=50) == [100]
 
 
 @pytest.mark.db

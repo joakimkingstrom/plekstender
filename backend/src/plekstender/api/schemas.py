@@ -252,6 +252,24 @@ class AlbumSummary(BaseModel):
     )
 
 
+class TagAlbum(AlbumSummary):
+    artist_rating_key: int | None
+    artist_title: str | None
+
+
+class TagDetail(BaseModel):
+    """A genre's, style's or mood's page."""
+
+    id: int
+    kind: str
+    name: str
+    artist_count: int
+    album_count: int
+    artists: list[ArtistSummary] = Field(description="Tagged themselves or on an album.")
+    albums: list[TagAlbum]
+    related: list[TagOut] = Field(description="Tags often on the same artists and albums.")
+
+
 class TrackOut(BaseModel):
     rating_key: int
     title: str

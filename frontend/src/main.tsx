@@ -29,6 +29,7 @@ import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { AppearancePage, FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
+import { TagPage } from './pages/TagPage'
 import { GigsLayout, LibraryLayout, PlaylistRedirect } from './pages/Sections'
 
 const queryClient = new QueryClient({
@@ -63,6 +64,7 @@ const router = createBrowserRouter([
       },
       { path: 'library/artists/:key', element: <ArtistPage /> },
       { path: 'library/albums/:key', element: <AlbumPage /> },
+      { path: 'library/tags/:id', element: <TagPage /> },
       {
         path: 'gigs',
         element: <GigsLayout />,

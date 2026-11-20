@@ -109,11 +109,11 @@ describe('Playlists', () => {
           definition: {
             artists: [100, 101],
             tracks: [],
-            rules: { min_rating: null, include_unrated: true, top_percent: null, op: 'AND' },
+            rules: { min_rating: null, include_unrated: true, top_percent: null, op: 'AND', tags: [] },
             limit: 100,
             order: 'random',
           },
-          display: { genres: [] },
+          display: { genres: [], tags: [] },
         },
       ]),
     )

@@ -100,13 +100,17 @@ _ARTISTS = """
 _BASE: dict[str, str] = {"track": _TRACKS, "album": _ALBUMS, "artist": _ARTISTS}
 
 # Genres (and other tags) live on artists and albums; songs inherit their album's tags,
-# then their artist's.
+# then their artist's, and artists their albums' (where Plex puts most styles and moods).
 _TAG_FILTER = """
     AND EXISTS (
         SELECT 1 FROM item_tags it
         WHERE it.server_id = :server_id AND it.tag_id = :tag_id
-          AND it.rating_key IN (
-              items.rating_key, items.album_rating_key, items.artist_key
+          AND (
+              it.rating_key IN (items.rating_key, items.album_rating_key, items.artist_key)
+              OR it.rating_key IN (
+                  SELECT al.rating_key FROM albums al
+                  WHERE al.server_id = :server_id AND al.artist_rating_key = items.rating_key
+              )
           )
     )
 """

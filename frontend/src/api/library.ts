@@ -12,6 +12,7 @@ import { localTimeZone } from './stats'
 
 export type ArtistSort = 'title' | 'popularity' | 'plays' | 'rating' | 'added'
 export type TagKind = 'genre' | 'mood' | 'style' | 'country'
+export type TagSort = 'plays' | 'rating' | 'year' | 'name'
 
 export const libraryKeys = {
   sync: (serverId: number) => ['servers', serverId, 'sync'] as const,
@@ -19,6 +20,7 @@ export const libraryKeys = {
   artists: (serverId: number, q: string, sort: ArtistSort, tag: number | null) =>
     ['servers', serverId, 'library', 'artists', { q, sort, tag }] as const,
   tags: (serverId: number, kind: TagKind) => ['servers', serverId, 'library', 'tags', kind] as const,
+  tag: (serverId: number, id: number, sort: TagSort) => ['servers', serverId, 'library', 'tag', id, sort] as const,
   artist: (serverId: number, key: number) => ['servers', serverId, 'library', 'artist', key] as const,
   album: (serverId: number, key: number) => ['servers', serverId, 'library', 'album', key] as const,
 }
@@ -168,5 +170,19 @@ export function useAlbum(serverId: number, key: number) {
           params: { path: { server_id: serverId, rating_key: key }, query: { tz: localTimeZone() } },
         }),
       ),
+  })
+}
+
+/** A genre's, style's or mood's page: its artists and albums, and related tags. */
+export function useTag(serverId: number, id: number, sort: TagSort) {
+  return useQuery({
+    queryKey: libraryKeys.tag(serverId, id, sort),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/tags/{tag_id}', {
+          params: { path: { server_id: serverId, tag_id: id }, query: { sort } },
+        }),
+      ),
+    placeholderData: keepPreviousData,
   })
 }

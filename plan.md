@@ -613,10 +613,10 @@ The menus had grown one page at a time; this tidies them before Phase 13 adds mo
 
 ### Phase 13 — Genres, styles and moods; tag editing in bulk (from `.todo.md`, 19 Nov 2026)
 Plex gives albums one or two broad genres (often "Pop/Rock") but many **styles** ("Art Rock", "Prog-Rock") and **moods** ("Witty", "Laid-Back/Mellow") from its own metadata. Plekstender already mirrors them (`tags`, kinds genre / style / mood / country); they just aren't used yet.
-- [ ] Every genre, style and mood chip is a link to a page for it: the artists and albums with it (sortable by your plays, rating, year), with related styles (often found together) and a "make a playlist" shortcut. Chips show their kind (genre in amber as now; styles and moods told apart).
-- [ ] Library: filter by style and mood as well as genre.
-- [ ] Playlists: styles and moods as sources and filters, like genres.
-- [ ] Rate: choose songs by style or mood too.
+- [x] Every genre, style, mood and country chip links to its page (/library/tags/:id): the artists with it (on themselves or one of their albums) and the albums with it, sorted by your plays, your rating, year or name (the first 240 of each); "Often found with": the genres, styles and moods most often on the same artists and albums; "Make a playlist" opens the builder with its top 10 artists, the tag as a rule and its name. Chips show their kind: genres in the accent colour, styles outlined, moods soft and italic.
+- [x] Library: a Genres / Styles / Moods switch above the filter chips (the 40 most common each, counted by artist, an artist counting through their albums' tags), with a link to the chosen one's page.
+- [x] Playlists: styles as a source alongside genres and moods; a rule "Only with" these genres, styles or moods (the song's album or artist has one; always applies, whatever "Combine" says; chosen songs are always kept).
+- [x] Rate: choose by genre, style or mood (artists match through their albums' tags too).
 - [ ] Tag editor: more fields when editing an album's tags. *The note in `.todo.md` breaks off ("It'd be great …"): which fields? Likely candidates: composer, original date, release country, label / catalogue number, disc count, comments, the MusicBrainz IDs.*
 - [ ] Library → **Tag editing** tab: browse artists and albums with what's off about their files (differs from Plex, no MusicBrainz ID, missing tags, not in Plex), select several, and act on all of them: look up MusicBrainz releases album by album (a queue: each album's best match proposed, confirmed one by one or accepted together when it's a clear match), write Plex's metadata, rename. Each album is its own edit in the history.
 

@@ -1,6 +1,6 @@
 import { PlaylistImport } from '../components/PlaylistImport'
-import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useTags } from '../api/library'
 import {
@@ -285,11 +285,16 @@ type Draft = {
   limit: number
   order: Order
   genres: string[]
+  /** Only songs whose album or artist has one of these. */
+  tags: RuleTag[]
 }
+
+type RuleTag = { id: number; name: string; kind: string }
 
 function draftFrom(p: PlaylistDetail | null): Draft {
   const d = p?.definition as Definition | undefined
-  const display = (p?.display ?? {}) as { genres?: string[] }
+  const display = (p?.display ?? {}) as { genres?: string[]; tags?: RuleTag[] }
+  const ruleTags = d?.rules?.tags ?? []
   return {
     name: p?.name ?? '',
     description: p?.description ?? '',
@@ -303,6 +308,8 @@ function draftFrom(p: PlaylistDetail | null): Draft {
     limit: d ? (d.limit ?? 0) : 100,
     order: d?.order ?? 'random',
     genres: display.genres ?? [],
+    // Names come from the display copy; a tag without one still filters.
+    tags: ruleTags.map((id) => display.tags?.find((t) => t.id === id) ?? { id, name: `#${id}`, kind: 'genre' }),
   }
 }
 
@@ -316,6 +323,7 @@ function definitionOf(draft: Draft): Definition | null {
       include_unrated: draft.includeUnrated,
       top_percent: draft.topPercent || null,
       op: draft.op,
+      tags: draft.tags.map((t) => t.id),
     },
     limit: draft.limit || null,
     order: draft.order,
@@ -346,12 +354,36 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
         description: draft.description.trim() || null,
         schedule: draft.schedule,
         definition: def,
-        display: { genres: draft.genres },
+        display: { genres: draft.genres, tags: draft.tags },
       },
       { onSuccess: () => navigate('/library/playlists') },
     )
   }
   const canSave = draft.name.trim().length > 0 && definitionOf(draft) !== null
+
+  // From a tag page ("Make a playlist"): its top artists, only songs with the tag.
+  const [params] = useSearchParams()
+  const started = useRef(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  useEffect(() => {
+    const tagId = Number(params.get('tag'))
+    if (initial || !tagId || started.current) return
+    started.current = true
+    const name = params.get('name') ?? ''
+    const kind = params.get('kind') ?? 'genre'
+    fetchTagArtists(serverId, tagId)
+      .then((artists) => {
+        addArtists(artists)
+        setDraft((d) => ({
+          ...d,
+          name: d.name || name,
+          genres: name && !d.genres.includes(name) ? [...d.genres, name] : d.genres,
+          tags: d.tags.some((t) => t.id === tagId) ? d.tags : [...d.tags, { id: tagId, name, kind }],
+        }))
+      })
+      .catch((e: unknown) => setStartError(errorMessage(e)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, from the address it opened with
+  }, [])
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
@@ -361,13 +393,14 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
             addArtists(artists)
             setDraft((d) => (d.genres.includes(name) ? d : { ...d, genres: [...d.genres, name] }))
           }} />
+          {startError && <Notice tone="error">{startError}</Notice>}
           <Chosen draft={draft} serverId={serverId} set={set} />
         </Card>
         {(draft.artists.length > 0 || draft.tracks.length > 0) && (
           <Suggestions serverId={serverId} draft={draft} onArtist={(a) => addArtists([a])} onTrack={addTrack} />
         )}
         <Card title="2. Keep">
-          <Rules draft={draft} set={set} />
+          <Rules draft={draft} set={set} serverId={serverId} />
         </Card>
         <Card title="3. Save to Plex">
           <div className="space-y-3">
@@ -431,13 +464,15 @@ function StartFrom({
   const q = useDebounced(query.trim(), 250)
   const results = usePlaylistSearch(serverId, q)
   const genres = useTags(serverId, 'genre')
+  const styles = useTags(serverId, 'style')
   const moods = useTags(serverId, 'mood')
   const [genreError, setGenreError] = useState<string | null>(null)
   const [loadingGenre, setLoadingGenre] = useState(false)
 
   const tagOptions = [
-    { value: 0, label: 'Add a genre or mood’s top artists…' },
+    { value: 0, label: 'Add a genre, style or mood’s top artists…' },
     ...(genres.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Genres' })),
+    ...(styles.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Styles' })),
     ...(moods.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Moods' })),
   ]
   const pickTag = async (id: number) => {
@@ -469,7 +504,7 @@ function StartFrom({
           aria-label="Search artists and songs"
           className="min-w-0 flex-1 basis-56 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
         />
-        <Select label="Genre or mood" className="max-w-full" value={0} options={tagOptions} onChange={(id) => void pickTag(id)} />
+        <Select label="Genre, style or mood" className="max-w-full" value={0} options={tagOptions} onChange={(id) => void pickTag(id)} />
         {loadingGenre && <Spinner small />}
       </div>
       {genreError && <Notice tone="warn">{genreError}</Notice>}
@@ -730,10 +765,11 @@ function SuggestionRow({ title, children }: { title: string; children: ReactNode
   )
 }
 
-function Rules({ draft, set }: { draft: Draft; set: (patch: Partial<Draft>) => void }) {
+function Rules({ draft, set, serverId }: { draft: Draft; set: (patch: Partial<Draft>) => void; serverId: number }) {
   const both = draft.minRating !== null && draft.topPercent > 0
   return (
     <div className="space-y-4 text-sm">
+      <TagRule serverId={serverId} tags={draft.tags} onChange={(tags) => set({ tags })} />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="w-40 font-medium">Your rating at least</span>
         <StarRating value={draft.minRating} onChange={(minRating) => set({ minRating })} label="Minimum rating" />
@@ -797,6 +833,51 @@ function Rules({ draft, set }: { draft: Draft; set: (patch: Partial<Draft>) => v
       <p className="text-xs text-muted">
         Songs released more than once (remasters, compilations) count once. Chosen songs are always kept.
       </p>
+    </div>
+  )
+}
+
+/** "Only songs with these genres, styles or moods" (on their album or artist). */
+function TagRule({ serverId, tags, onChange }: { serverId: number; tags: RuleTag[]; onChange: (tags: RuleTag[]) => void }) {
+  const genres = useTags(serverId, 'genre')
+  const styles = useTags(serverId, 'style')
+  const moods = useTags(serverId, 'mood')
+  const have = new Set(tags.map((t) => t.id))
+  const groups: [string, Schemas['TagOut'][] | undefined][] = [
+    ['Genres', genres.data],
+    ['Styles', styles.data],
+    ['Moods', moods.data],
+  ]
+  const all = groups.flatMap(([group, list]) => (list ?? []).filter((t) => !have.has(t.id)).map((t) => ({ ...t, group })))
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <span className="w-40 font-medium">Only with</span>
+      {tags.map((t) => (
+        <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-accent/15 py-0.5 pl-2.5 pr-1 text-xs font-medium text-accent">
+          {t.name}
+          <button
+            type="button"
+            onClick={() => onChange(tags.filter((x) => x.id !== t.id))}
+            aria-label={`Remove ${t.name}`}
+            className="rounded-full px-1 hover:bg-accent/20"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <Select
+        label="Only songs with a genre, style or mood"
+        size="sm"
+        value={0}
+        onChange={(id) => {
+          const t = all.find((x) => x.id === id)
+          if (t) onChange([...tags, { id: t.id, name: t.name, kind: t.kind }])
+        }}
+        options={[
+          { value: 0, label: tags.length ? 'Or…' : 'Any genre, style or mood' },
+          ...all.map((t) => ({ value: t.id, label: t.name, group: t.group })),
+        ]}
+      />
     </div>
   )
 }

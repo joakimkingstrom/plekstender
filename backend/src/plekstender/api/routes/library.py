@@ -26,6 +26,8 @@ from plekstender.api.schemas import (
     ItemListensOut,
     SimilarArtistOut,
     SongListens,
+    TagAlbum,
+    TagDetail,
     TagOut,
     TrackOut,
     YearListens,
@@ -116,13 +118,7 @@ async def list_artists(
     if q:
         filters.append(Artist.title.ilike(_like(q), escape="\\"))
     if tag is not None:
-        filters.append(
-            Artist.rating_key.in_(
-                select(ItemTag.rating_key).where(
-                    ItemTag.server_id == us.server_id, ItemTag.tag_id == tag
-                )
-            )
-        )
+        filters.append(artist_has_tag(us.server_id, tag))
 
     orders: dict[str, list[Any]] = {
         "title": [func.lower(func.coalesce(Artist.title_sort, Artist.title))],
@@ -152,29 +148,199 @@ async def list_artists(
     )
 
 
+def artist_has_tag(server_id: int, tag_id: int) -> ColumnElement[bool]:
+    """The artist has the tag, or one of their albums has it. Plex puts most styles and
+    moods on albums, so an artist's own tags alone would miss them."""
+    tagged = select(ItemTag.rating_key).where(
+        ItemTag.server_id == server_id, ItemTag.tag_id == tag_id
+    )
+    return Artist.rating_key.in_(tagged) | Artist.rating_key.in_(
+        select(Album.artist_rating_key).where(
+            Album.server_id == server_id, Album.rating_key.in_(tagged)
+        )
+    )
+
+
+TagKind = Literal["genre", "mood", "style", "country"]
+TAG_KINDS: tuple[str, ...] = ("genre", "style", "mood", "country")
+
+
 @router.get("/library/tags", response_model=list[TagOut])
 async def list_tags(
     server_id: int,
     db: DbDep,
     user: UserDep,
-    kind: Literal["genre", "mood", "style", "country"] = "genre",
+    kind: TagKind = "genre",
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[TagOut]:
-    """Tags used by artists in your libraries, most common first."""
+    """Tags of the artists in your libraries (on the artist or one of their albums),
+    counted by artist, most common first."""
     us = await get_user_server(db, user, server_id)
     state, cond, where = visible(Artist, user.id, us)
+    # Each artist's own tags, plus their albums' tags, as (artist, tag) pairs.
+    own = select(ItemTag.rating_key.label("artist_key"), ItemTag.tag_id).where(
+        ItemTag.server_id == us.server_id
+    )
+    via_albums = (
+        select(Album.artist_rating_key.label("artist_key"), ItemTag.tag_id)
+        .join(
+            ItemTag,
+            and_(ItemTag.server_id == Album.server_id, ItemTag.rating_key == Album.rating_key),
+        )
+        .where(Album.server_id == us.server_id, Album.artist_rating_key.is_not(None))
+    )
+    pairs = own.union(via_albums).subquery()
     count = func.count(Artist.rating_key)
     rows = await db.execute(
         select(Tag.id, Tag.kind, Tag.name, count)
-        .join(ItemTag, ItemTag.tag_id == Tag.id)
+        .join(pairs, pairs.c.tag_id == Tag.id)
         .join(
-            Artist,
-            and_(Artist.server_id == ItemTag.server_id, Artist.rating_key == ItemTag.rating_key),
+            Artist, and_(Artist.server_id == Tag.server_id, Artist.rating_key == pairs.c.artist_key)
         )
         .join(state, cond)
         .where(*where, Tag.server_id == us.server_id, Tag.kind == kind)
         .group_by(Tag.id)
         .order_by(count.desc(), Tag.name)
+        .limit(limit)
+    )
+    return [TagOut(id=i, kind=k, name=n, count=c) for i, k, n, c in rows.all()]
+
+
+TagSort = Literal["plays", "rating", "year", "name"]
+TAG_PAGE_LIMIT = 240
+
+
+@router.get("/library/tags/{tag_id}", response_model=TagDetail)
+async def get_tag(
+    server_id: int, tag_id: int, db: DbDep, user: UserDep, sort: TagSort = "plays"
+) -> TagDetail:
+    """A genre's, style's or mood's page: the artists and albums with it, and the tags
+    most often found with it."""
+    us = await get_user_server(db, user, server_id)
+    tag = await db.get(Tag, tag_id)
+    if tag is None or tag.server_id != us.server_id or tag.kind not in TAG_KINDS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tag not found")
+
+    # Artists: tagged themselves or on an album.
+    state, cond, where = visible(Artist, user.id, us)
+    artist_filters = (*where, artist_has_tag(us.server_id, tag_id))
+    name = func.lower(func.coalesce(Artist.title_sort, Artist.title))
+    artist_orders: dict[str, list[Any]] = {
+        "plays": [plays_of(state).desc(), Artist.popularity.desc().nulls_last()],
+        "rating": [state.user_rating.desc().nulls_last(), plays_of(state).desc()],
+        "year": [name],
+        "name": [name],
+    }
+    artist_total = await db.scalar(
+        select(func.count()).select_from(Artist).join(state, cond).where(*artist_filters)
+    )
+    artist_rows = await db.execute(
+        select(Artist, state.user_rating, plays_of(state), _album_count(user.id, us))
+        .join(state, cond)
+        .where(*artist_filters)
+        .order_by(*artist_orders[sort], Artist.rating_key)
+        .limit(TAG_PAGE_LIMIT)
+    )
+
+    # Albums: tagged themselves.
+    a_state, a_cond, a_where = visible(Album, user.id, us)
+    album_filters = (
+        *a_where,
+        Album.rating_key.in_(
+            select(ItemTag.rating_key).where(
+                ItemTag.server_id == us.server_id, ItemTag.tag_id == tag_id
+            )
+        ),
+    )
+    album_orders: dict[str, list[Any]] = {
+        "plays": [plays_of(a_state).desc(), Album.popularity.desc().nulls_last()],
+        "rating": [a_state.user_rating.desc().nulls_last(), plays_of(a_state).desc()],
+        "year": [Album.year.desc().nulls_last(), Album.title],
+        "name": [func.lower(func.coalesce(Album.title_sort, Album.title))],
+    }
+    album_total = await db.scalar(
+        select(func.count()).select_from(Album).join(a_state, a_cond).where(*album_filters)
+    )
+    owner = aliased(Artist)
+    album_rows = (
+        await db.execute(
+            select(Album, a_state.user_rating, plays_of(a_state), owner.title)
+            .join(a_state, a_cond)
+            .outerjoin(
+                owner,
+                and_(
+                    owner.server_id == Album.server_id,
+                    owner.rating_key == Album.artist_rating_key,
+                ),
+            )
+            .where(*album_filters)
+            .order_by(*album_orders[sort], Album.rating_key)
+            .limit(TAG_PAGE_LIMIT)
+        )
+    ).all()
+    types = await _release_types(db, us.server_id, [a.rating_key for a, *_ in album_rows])
+
+    return TagDetail(
+        id=tag.id,
+        kind=tag.kind,
+        name=tag.name,
+        artist_count=artist_total or 0,
+        album_count=album_total or 0,
+        artists=[_artist_summary(r) for r in artist_rows.all()],
+        albums=[
+            TagAlbum(
+                rating_key=a.rating_key,
+                title=a.title,
+                year=a.year,
+                thumb=a.thumb,
+                popularity=a.popularity,
+                critic_rating=a.critic_rating,
+                track_count=a.track_count,
+                user_rating=rating,
+                plays=plays,
+                release_type=types.get(a.rating_key, "Album"),
+                artist_rating_key=a.artist_rating_key,
+                artist_title=artist_title,
+            )
+            for a, rating, plays, artist_title in album_rows
+        ],
+        related=await _related_tags(db, user.id, us, tag_id),
+    )
+
+
+async def _related_tags(
+    db: DbDep, user_id: int, us: UserServer, tag_id: int, limit: int = 16
+) -> list[TagOut]:
+    """Genres, styles and moods most often on the same artists and albums as this tag
+    (the ones you can see), with how many items share them."""
+    other = aliased(ItemTag)
+    mine = aliased(ItemTag)
+    shared = func.count(other.rating_key)
+    rows = await db.execute(
+        select(Tag.id, Tag.kind, Tag.name, shared)
+        .select_from(mine)
+        .join(
+            other,
+            and_(other.server_id == mine.server_id, other.rating_key == mine.rating_key),
+        )
+        .join(Tag, Tag.id == other.tag_id)
+        .join(
+            UserItemState,
+            and_(
+                UserItemState.user_id == user_id,
+                UserItemState.server_id == mine.server_id,
+                UserItemState.rating_key == mine.rating_key,
+                UserItemState.section_key.in_(us.music_section_keys),
+            ),
+        )
+        .where(
+            mine.server_id == us.server_id,
+            mine.tag_id == tag_id,
+            other.tag_id != tag_id,
+            Tag.kind.in_(("genre", "style", "mood")),
+        )
+        .group_by(Tag.id)
+        .order_by(shared.desc(), Tag.name)
         .limit(limit)
     )
     return [TagOut(id=i, kind=k, name=n, count=c) for i, k, n, c in rows.all()]

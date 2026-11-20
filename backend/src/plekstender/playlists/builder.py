@@ -21,7 +21,12 @@ _SONGS = """
                al.thumb,
                max(s.user_rating) OVER song AS rating,
                row_number() OVER (song ORDER BY al.year NULLS LAST, t.rating_key) AS release,
-               t.rating_key = ANY(:tracks) AS chosen
+               t.rating_key = ANY(:tracks) AS chosen,
+               cardinality(CAST(:tags AS integer[])) = 0 OR EXISTS (
+                   SELECT 1 FROM item_tags it
+                   WHERE it.server_id = t.server_id AND it.tag_id = ANY(CAST(:tags AS integer[]))
+                     AND it.rating_key IN (t.album_rating_key, t.artist_rating_key)
+               ) AS tagged
         FROM tracks t
         JOIN user_item_state s
           ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
@@ -58,6 +63,8 @@ def _passes(row: Any, d: Definition) -> bool:
     if row.chosen:
         return True
     r = d.rules
+    if not row.tagged:
+        return False
     checks = []
     if r.min_rating is not None:
         checks.append(
@@ -84,6 +91,7 @@ async def matching_songs(
             "sections": sections,
             "artists": d.artists,
             "tracks": d.tracks,
+            "tags": d.rules.tags,
         },
     )
     songs = [
@@ -166,7 +174,7 @@ async def search(
 async def top_artists_for_tag(
     db: AsyncSession, *, user_id: int, server_id: int, sections: list[str], tag_id: int
 ) -> list[Any]:
-    """A genre's or mood's top 10 artists (tagged themselves or on an album), by your
+    """A genre's, style's or mood's top 10 artists (tagged themselves or on an album), by your
     plays and then popularity."""
     rows = await db.execute(
         text(

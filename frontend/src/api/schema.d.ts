@@ -226,9 +226,31 @@ export interface paths {
         };
         /**
          * List Tags
-         * @description Tags used by artists in your libraries, most common first.
+         * @description Tags of the artists in your libraries (on the artist or one of their albums),
+         *     counted by artist, most common first.
          */
         get: operations["list_tags_api_servers__server_id__library_tags_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tag
+         * @description A genre's, style's or mood's page: the artists and albums with it, and the tags
+         *     most often found with it.
+         */
+        get: operations["get_tag_api_servers__server_id__library_tags__tag_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5809,6 +5831,11 @@ export interface components {
              * @description Only each artist's most popular N% of songs.
              */
             top_percent?: number | null;
+            /**
+             * Tags
+             * @description Only songs whose album or artist has one of these genres, styles or moods (always applies, whatever `op` says).
+             */
+            tags?: number[];
         };
         /** ScrobbleTargetIn */
         ScrobbleTargetIn: {
@@ -6168,6 +6195,37 @@ export interface components {
             /** Full Days */
             full_days: number;
         };
+        /** TagAlbum */
+        TagAlbum: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Popularity */
+            popularity: number | null;
+            /** Critic Rating */
+            critic_rating: number | null;
+            /** Track Count */
+            track_count: number | null;
+            /** User Rating */
+            user_rating: number | null;
+            /** Plays */
+            plays: number;
+            /**
+             * Release Type
+             * @description Album, EP, Single, Compilation, Live, Soundtrack… (from Plex's tags).
+             * @default Album
+             */
+            release_type: string;
+            /** Artist Rating Key */
+            artist_rating_key: number | null;
+            /** Artist Title */
+            artist_title: string | null;
+        };
         /** TagChangeOut */
         TagChangeOut: {
             /** Id */
@@ -6250,6 +6308,34 @@ export interface components {
              * @description The first 200 (big edits are listed in part).
              */
             changes: components["schemas"]["TagChangeOut"][];
+        };
+        /**
+         * TagDetail
+         * @description A genre's, style's or mood's page.
+         */
+        TagDetail: {
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Artist Count */
+            artist_count: number;
+            /** Album Count */
+            album_count: number;
+            /**
+             * Artists
+             * @description Tagged themselves or on an album.
+             */
+            artists: components["schemas"]["ArtistSummary"][];
+            /** Albums */
+            albums: components["schemas"]["TagAlbum"][];
+            /**
+             * Related
+             * @description Tags often on the same artists and albums.
+             */
+            related: components["schemas"]["TagOut"][];
         };
         /** TagEditChange */
         TagEditChange: {
@@ -7014,6 +7100,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tag_api_servers__server_id__library_tags__tag_id__get: {
+        parameters: {
+            query?: {
+                sort?: "plays" | "rating" | "year" | "name";
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                tag_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagDetail"];
                 };
             };
             /** @description Validation Error */
