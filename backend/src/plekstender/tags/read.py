@@ -22,17 +22,21 @@ TEXT_FIELDS = (
     "title", "artist", "album", "albumartist", "date", "originaldate", "composer",
     "tracknumber", "discnumber", "musicbrainz_trackid", "musicbrainz_albumid",
     "musicbrainz_artistid", "musicbrainz_albumartistid", "musicbrainz_releasegroupid",
-    "musicbrainz_releasetrackid", "releasecountry", "rating",
+    "musicbrainz_releasetrackid", "releasecountry", "rating", "label", "catalognumber",
+    "barcode",
 )  # fmt: skip
 LIST_FIELDS = ("genre",)
 # Bumped when more fields are read: the next scan re-reads every file once.
-READER = 4
+READER = 5
+# The reader version that started describing embedded covers.
+COVERS_READER = 4
 # The fields each reader version added: a file read by an older reader may have them without
 # Plekstender knowing (until it's read again).
 ADDED = {
     2: frozenset({"musicbrainz_releasetrackid", "releasecountry"}),
     3: frozenset({"rating"}),
     4: frozenset(),  # embedded covers described (not a tag)
+    5: frozenset({"label", "catalognumber", "barcode"}),  # and MP4 composers
 }
 
 

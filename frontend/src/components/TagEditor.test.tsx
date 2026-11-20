@@ -88,4 +88,43 @@ describe('Editing tags', () => {
       expect(await post![0].clone().json()).toEqual({ set_id: 7 })
     })
   })
+
+  it('edits the release details and per-song composer under More fields', async () => {
+    const fetch = vi.fn(async (input: Request) => {
+      const url = new URL(input.url)
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+      if (url.pathname === '/api/servers/1/files/albums/200')
+        return json({ scanned: true, tracks: [row(300, 11, 'Airbag', 1, { label: 'Parlophone' }), row(301, 12, 'Paranoid Android', 2, { label: 'Parlophone' })] })
+      if (url.pathname === '/api/servers/1/files/summary')
+        return json({ mapped: true, tag_editing: true, files: 2, matched: 2, errors: 0, active: null, last: null })
+      if (url.pathname === '/api/servers/1/files/changes') return json([])
+      if (url.pathname === '/api/servers/1/files/edits') return json({ ...history[0], id: 8, status: 'queued', changes: [] }, 201)
+      return json({ detail: 'Not found' }, 404)
+    })
+    vi.stubGlobal('fetch', fetch)
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <AlbumFiles serverId={1} albumKey={200} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit tags' }))
+    expect(screen.queryByLabelText('Label')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^More fields/ }))
+    expect(screen.getByLabelText('Label')).toHaveValue('Parlophone')
+    fireEvent.change(screen.getByLabelText('Catalogue number'), { target: { value: 'NODATA 02' } })
+    fireEvent.change(screen.getByLabelText('Composer of Airbag'), { target: { value: 'Thom Yorke' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review 3 changes' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Write these changes to the files?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Write 3 changes' }))
+    await vi.waitFor(async () => {
+      const post = fetch.mock.calls.find(([r]) => new URL(r.url).pathname.endsWith('/files/edits'))
+      expect((await post![0].clone().json()).changes).toEqual([
+        { file_id: 11, field: 'catalognumber', value: 'NODATA 02' },
+        { file_id: 11, field: 'composer', value: 'Thom Yorke' },
+        { file_id: 12, field: 'catalognumber', value: 'NODATA 02' },
+      ])
+    })
+  })
 })

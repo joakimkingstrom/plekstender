@@ -6345,7 +6345,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "title" | "artist" | "album" | "albumartist" | "date" | "genre" | "tracknumber" | "discnumber" | "composer";
+            field: "title" | "artist" | "album" | "albumartist" | "date" | "genre" | "tracknumber" | "discnumber" | "composer" | "originaldate" | "releasecountry" | "label" | "catalognumber" | "barcode" | "musicbrainz_albumid" | "musicbrainz_releasegroupid" | "musicbrainz_albumartistid";
             /**
              * Value
              * @description New value; a list for genre; null removes the tag.

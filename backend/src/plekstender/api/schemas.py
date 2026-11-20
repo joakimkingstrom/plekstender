@@ -1006,7 +1006,9 @@ class TagEditChange(BaseModel):
     file_id: int
     field: Literal[
         "title", "artist", "album", "albumartist", "date", "genre",
-        "tracknumber", "discnumber", "composer",
+        "tracknumber", "discnumber", "composer", "originaldate", "releasecountry",
+        "label", "catalognumber", "barcode", "musicbrainz_albumid",
+        "musicbrainz_releasegroupid", "musicbrainz_albumartistid",
     ]  # fmt: skip
     value: TagValue = Field(description="New value; a list for genre; null removes the tag.")
 

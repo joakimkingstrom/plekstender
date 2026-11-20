@@ -44,7 +44,7 @@ from plekstender.tags.pictures import (
     sha1,
     thumbnail,
 )
-from plekstender.tags.read import READER
+from plekstender.tags.read import COVERS_READER
 from plekstender.tags.rename import MoveError, _within
 
 log = logging.getLogger(__name__)
@@ -128,7 +128,7 @@ def _apply_picture(
     except PictureError as exc:
         raise Skip("failed", str(exc)) from exc
     current = sha1(found[0]) if found else None
-    known = media.reader >= READER  # scanned before covers were described: whatever is there
+    known = media.reader >= COVERS_READER  # scanned before covers were described: whatever is there
     if known and current != change.old_value:
         raise Skip("conflict", "The file's cover changed since it was scanned (scan again).")
     data = _source(root, data_dir, change.new_value, plex, found[0] if found else None)

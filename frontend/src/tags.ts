@@ -14,6 +14,14 @@ export const FIELD_LABELS: Record<TagField, string> = {
   tracknumber: 'Track',
   discnumber: 'Disc',
   composer: 'Composer',
+  originaldate: 'Original date',
+  releasecountry: 'Release country',
+  label: 'Label',
+  catalognumber: 'Catalogue number',
+  barcode: 'Barcode',
+  musicbrainz_albumid: 'MusicBrainz release ID',
+  musicbrainz_releasegroupid: 'MusicBrainz release group ID',
+  musicbrainz_albumartistid: 'MusicBrainz album artist ID',
 }
 
 /** Every tag Plekstender writes (MusicBrainz's too), for history and previews. */
@@ -39,6 +47,18 @@ export function fieldLabel(field: string): string {
 /** Fields set for the whole album at once, and per song. */
 export const ALBUM_FIELDS: TagField[] = ['album', 'albumartist', 'date', 'genre']
 export const SONG_FIELDS: TagField[] = ['tracknumber', 'title', 'artist']
+/** Under "More fields": the release's details (Picard's tags) and, per song, disc and composer. */
+export const MORE_ALBUM_FIELDS: TagField[] = [
+  'originaldate',
+  'releasecountry',
+  'label',
+  'catalognumber',
+  'barcode',
+  'musicbrainz_albumid',
+  'musicbrainz_releasegroupid',
+  'musicbrainz_albumartistid',
+]
+export const MORE_SONG_FIELDS: TagField[] = ['discnumber', 'composer']
 
 export function showValue(value: TagValue | undefined): string {
   if (value === null || value === undefined || value === '') return '(none)'
@@ -111,7 +131,7 @@ export type PlannedChange = TagEdit & { path: string; songTitle: string; old: Ta
 export function plannedChanges(files: EditableFile[], draft: Draft): PlannedChange[] {
   const out: PlannedChange[] = []
   for (const file of files) {
-    for (const field of [...ALBUM_FIELDS, ...SONG_FIELDS]) {
+    for (const field of [...ALBUM_FIELDS, ...MORE_ALBUM_FIELDS, ...SONG_FIELDS, ...MORE_SONG_FIELDS]) {
       const typed = draft.album[field] ?? draft.songs[file.file_id]?.[field]
       if (typed === undefined) continue
       const old = parseValue(field, asText(file.tags[field]))

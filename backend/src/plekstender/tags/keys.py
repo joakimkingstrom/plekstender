@@ -1,5 +1,6 @@
 """Easy-interface keys mutagen lacks, registered so every format reads and writes the same
-field names: Picard's MP4 freeform atoms for some MusicBrainz tags, and "rating".
+field names: Picard's MP4 freeform atoms for some MusicBrainz and release tags, the MP4
+composer atom, "label" in ID3 (the publisher frame, as Picard writes it), and "rating".
 
 Ratings are kept as 0-100 (Plex's 0-10 times ten: 90 is 4½ stars). In FLAC, Ogg and M4A files
 that's a RATING tag as is; MP3s use POPM, with the byte values MusicBee and Windows Media
@@ -19,6 +20,9 @@ FREEFORM = {
     "musicbrainz_releasetrackid": "MusicBrainz Release Track Id",
     "originaldate": "ORIGINALDATE",
     "rating": "RATING",
+    "label": "LABEL",
+    "catalognumber": "CATALOGNUMBER",
+    "barcode": "BARCODE",
 }
 POPM_EMAIL = "Windows Media Player 9 Series"
 # Plex's 0-10 (half stars) -> POPM's 0-255.
@@ -64,5 +68,9 @@ def _popm_delete(id3: Any, key: str) -> None:
 for _key, _name in FREEFORM.items():
     if _key not in EasyMP4Tags.Get:
         EasyMP4Tags.RegisterFreeformKey(_key, _name)
+if "composer" not in EasyMP4Tags.Get:
+    EasyMP4Tags.RegisterTextKey("composer", "\xa9wrt")
+if "label" not in EasyID3.Get:
+    EasyID3.RegisterTextKey("label", "TPUB")
 if "rating" not in EasyID3.Get:
     EasyID3.RegisterKey("rating", _popm_get, _popm_set, _popm_delete)

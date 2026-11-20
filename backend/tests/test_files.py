@@ -635,6 +635,42 @@ def test_popm_bytes_from_other_players() -> None:
     ]
 
 
+RELEASE_FIELDS = {
+    "composer": "Thom Yorke",
+    "originaldate": "1997-05-21",
+    "releasecountry": "GB",
+    "label": "Parlophone",
+    "catalognumber": "NODATA 02",
+    "barcode": "724385522925",
+    "musicbrainz_albumid": "b1392450-e666-3926-a536-22c65f834433",
+    "musicbrainz_releasegroupid": "b1392450-e666-3926-a536-22c65f834433",
+    "musicbrainz_albumartistid": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+}
+
+
+@pytest.mark.parametrize("fmt", ["mp3", "flac", "m4a"])
+def test_release_fields_in_each_format(tmp_path: Path, fmt: str) -> None:
+    """The tag editor's extra fields are written and read back the same way in every format
+    (the tags Picard uses)."""
+    from mutagen.id3 import ID3
+
+    from plekstender.tags.write import Planned as Change
+    from plekstender.tags.write import apply
+
+    path = tmp_path / f"song.{fmt}"
+    make_audio(path, fmt)
+    changes = [Change(i, f, None, v) for i, (f, v) in enumerate(RELEASE_FIELDS.items())]
+    assert {o.status for o in apply(path, changes)} == {"applied"}
+    tags = read_file(path)["tags"]
+    assert {f: tags.get(f) for f in RELEASE_FIELDS} == RELEASE_FIELDS
+    if fmt == "mp3":
+        id3 = ID3(path)
+        assert str(id3["TPUB"]) == "Parlophone"
+        assert str(id3["TXXX:CATALOGNUMBER"]) == "NODATA 02"
+    elif fmt == "flac":
+        assert FLAC(path)["label"] == ["Parlophone"]
+
+
 @pytest.mark.db
 async def test_writing_your_ratings_to_files(app: FastAPI, plex: FakePlex, music: Path) -> None:
     from plekstender.worker import apply_tag_changes, scan_music_files

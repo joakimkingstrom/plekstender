@@ -6,6 +6,8 @@ import {
   ALBUM_FIELDS,
   FIELD_LABELS,
   MB_PAGES,
+  MORE_ALBUM_FIELDS,
+  MORE_SONG_FIELDS,
   fieldLabel,
   SONG_FIELDS,
   asText,
@@ -51,7 +53,9 @@ export function TagEditor({
   )
   const [draft, setDraft] = useState<Draft>({ album: {}, songs: {} })
   const [reviewing, setReviewing] = useState(false)
+  const [more, setMore] = useState(false)
   const changes = plannedChanges(files, draft)
+  const songFields = more ? [...SONG_FIELDS, ...MORE_SONG_FIELDS] : SONG_FIELDS
 
   const setAlbum = (field: TagField, value: string) => setDraft((d) => ({ ...d, album: { ...d.album, [field]: value } }))
   const setSong = (fileId: number, field: TagField, value: string) =>
@@ -100,19 +104,44 @@ export function TagEditor({
           </label>
         ))}
       </div>
+      <button
+        type="button"
+        aria-expanded={more}
+        onClick={() => setMore((m) => !m)}
+        className="text-sm font-medium text-accent hover:underline"
+      >
+        {more ? 'Fewer fields' : 'More fields'}: release details, MusicBrainz IDs, disc and composer
+      </button>
+      {more && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {MORE_ALBUM_FIELDS.map((field) => (
+            <label key={field} className="block text-sm">
+              <span className="mb-1 block font-medium">{FIELD_LABELS[field]}</span>
+              <input
+                value={draft.album[field] ?? common(files, field)}
+                placeholder={common(files, field) ? undefined : files.some((f) => f.tags[field]) ? 'Differs per song' : 'None'}
+                onChange={(e) => setAlbum(field, e.target.value)}
+                className={`${input} ${field.startsWith('musicbrainz_') ? 'font-mono text-xs' : ''}`}
+              />
+            </label>
+          ))}
+        </div>
+      )}
       <div className="-mx-5 overflow-x-auto px-5">
-        <table className="w-full min-w-[36rem] text-sm">
+        <table className={`w-full text-sm ${more ? 'min-w-[48rem]' : 'min-w-[36rem]'}`}>
           <thead className="text-left text-xs uppercase tracking-wider text-muted">
             <tr>
               <th className="w-20 px-1 pb-2 font-semibold">{FIELD_LABELS.tracknumber}</th>
               <th className="px-1 pb-2 font-semibold">{FIELD_LABELS.title}</th>
               <th className="px-1 pb-2 font-semibold">{FIELD_LABELS.artist}</th>
+              {more && <th className="w-16 px-1 pb-2 font-semibold">{FIELD_LABELS.discnumber}</th>}
+              {more && <th className="px-1 pb-2 font-semibold">{FIELD_LABELS.composer}</th>}
             </tr>
           </thead>
           <tbody>
             {files.map((f) => (
               <tr key={f.file_id}>
-                {SONG_FIELDS.map((field) => (
+                {songFields.map((field) => (
                   <td key={field} className="px-1 py-1">
                     <input
                       aria-label={`${FIELD_LABELS[field]} of ${f.title}`}
