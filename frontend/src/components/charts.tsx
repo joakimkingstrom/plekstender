@@ -327,3 +327,99 @@ export function Heatmap({
     </div>
   )
 }
+
+/** Single-series line over a soft area, for running totals (one hue, no legend: the card
+ * title names it). Hover or touch shows a crosshair and the value. */
+export function AreaChart({
+  points,
+  unit,
+  height = 200,
+  caption,
+}: {
+  points: ColumnPoint[]
+  unit: (n: number) => string
+  height?: number
+  caption: string
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>()
+  const [hover, setHover] = useState<number | null>(null)
+  const max = Math.max(0, ...points.map((p) => p.value))
+  const step = niceStep(max)
+  const top = step * 2
+  const plotW = Math.max(0, width - AXIS_W - 8)
+  const plotH = height - AXIS_H - TOP
+  const x = (i: number) => AXIS_W + (points.length > 1 ? (i / (points.length - 1)) * plotW : plotW / 2)
+  const y = (v: number) => TOP + plotH - (v / top) * plotH
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join('')
+  const area = points.length ? `${line}L${x(points.length - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z` : ''
+  // Axis labels where the label text changes (years), spaced at least ~56px apart.
+  const ticks: number[] = []
+  points.forEach((p, i) => {
+    if ((i === 0 || p.axis !== points[i - 1].axis) && (ticks.length === 0 || x(i) - x(ticks.at(-1)!) >= 56)) ticks.push(i)
+  })
+  const pick = (clientX: number, box: DOMRect) => {
+    if (points.length === 0 || plotW <= 0) return
+    const t = (clientX - box.left - AXIS_W) / plotW
+    setHover(Math.max(0, Math.min(points.length - 1, Math.round(t * (points.length - 1)))))
+  }
+  const hovered = hover !== null ? points[hover] : null
+
+  return (
+    <div ref={ref} className="relative" onMouseLeave={() => setHover(null)}>
+      {width > 0 && (
+        <svg
+          width={width}
+          height={height}
+          role="img"
+          aria-label={caption}
+          className="block touch-pan-y"
+          onMouseMove={(e) => pick(e.clientX, e.currentTarget.getBoundingClientRect())}
+          onTouchMove={(e) => pick(e.touches[0].clientX, e.currentTarget.getBoundingClientRect())}
+          onTouchStart={(e) => pick(e.touches[0].clientX, e.currentTarget.getBoundingClientRect())}
+        >
+          {[0, step, top].map((tick) => (
+            <g key={tick}>
+              <line x1={AXIS_W} x2={width} y1={y(tick)} y2={y(tick)} stroke="var(--color-border)" strokeWidth={1} />
+              <text x={AXIS_W - 8} y={y(tick)} dy="0.32em" textAnchor="end" className="fill-muted text-[11px] tabular-nums">
+                {tick >= 10_000 ? formatCompact(tick) : formatCount(tick)}
+              </text>
+            </g>
+          ))}
+          <path d={area} fill="var(--color-chart)" opacity={0.15} />
+          <path d={line} fill="none" stroke="var(--color-chart)" strokeWidth={2} strokeLinejoin="round" />
+          {ticks.map((i) => (
+            <text key={i} x={x(i)} y={height - 6} textAnchor="middle" className="fill-muted text-[11px]">
+              {points[i].axis}
+            </text>
+          ))}
+          {hovered && hover !== null && (
+            <g pointerEvents="none">
+              <line x1={x(hover)} x2={x(hover)} y1={TOP} y2={y(0)} stroke="var(--color-muted)" strokeWidth={1} strokeDasharray="3 3" />
+              <circle cx={x(hover)} cy={y(hovered.value)} r={4} fill="var(--color-chart)" stroke="var(--color-surface)" strokeWidth={2} />
+            </g>
+          )}
+        </svg>
+      )}
+      {hovered && hover !== null && (
+        <div
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-xs shadow-lg"
+          style={{ left: Math.min(Math.max(x(hover), 60), width - 60), top: Math.max(y(hovered.value) - 10, 40) }}
+        >
+          <div className="text-muted">{hovered.label}</div>
+          <div className="font-medium tabular-nums">{unit(hovered.value)}</div>
+        </div>
+      )}
+      <table className="sr-only">
+        <caption>{caption}</caption>
+        <tbody>
+          {points.map((p, i) => (
+            <tr key={i}>
+              <th scope="row">{p.label}</th>
+              <td>{unit(p.value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}

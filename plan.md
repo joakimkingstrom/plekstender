@@ -625,12 +625,12 @@ Plex gives albums one or two broad genres (often "Pop/Rock") but many **styles**
   Each album is its own edit in the history, undone from its page. Artists aren't listed separately: an artist's albums are.
 
 ### Phase 14 — Library stats (from `.todo.md`)
-The Library page gets tabs (Browse, Stats, Tag editing).
+Library → Stats (a tab next to Library; Tag editing is its own tab since Phase 13). Counts only what the person's Plex account can see.
 - [ ] Where artists are from: a world map (like the listens map), from Plex's artist country, else MusicBrainz (the artist's area, looked up once per artist at 1 request a second and kept). Click a country for its artists.
-- [ ] The library over time: total tracks (and albums, artists) by when they were added to Plex (`addedAt`), as a growing line.
-- [ ] Music by decade: albums released per decade; click a decade for its years, a year for its months (from the release date; albums with only a year are counted as "month unknown").
+- [x] The library over time: running totals of tracks, albums or artists at the end of each month (every month from the first to the last), by when they were added to Plex, as a line over a soft area with a crosshair tooltip. Totals as three tiles above.
+- [x] Music by decade: albums per decade; click a decade for its years, a year for its months and albums (from the release date; albums with only a year are counted as "?"). Albums without a year are left out and counted in the note.
 - [ ] Cover colours: each album cover's main colour (worker, from a small thumbnail: a few minutes for ~7k albums, then only new albums), shown as a colour spectrum with the covers behind each colour.
-- [ ] Word clouds of the most common words in artist, album and song names (common words like "the" and "and" left out, several languages).
+- [x] Word clouds of the 100 most common words in song, album and artist names: each name counts a word once, a song released more than once counts once, words in brackets ("(2011 Remaster)", "[feat. …]") are left out, and so are stop words in English, Swedish, German, French, Spanish, Italian, Dutch and Portuguese plus title clutter ("remastered", "live", "edit"…). Sized on a square-root scale, scattered in a stable order.
 
 ### Phase 15 — A fuller Home page (from `.todo.md`)
 - [ ] Remove "Coming up".

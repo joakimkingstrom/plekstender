@@ -200,6 +200,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Library Stats
+         * @description Totals, the library's growth (by when things were added to Plex, month by month)
+         *     and albums per decade (by release year).
+         */
+        get: operations["library_stats_api_servers__server_id__library_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/stats/released": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Released
+         * @description A decade's albums by year, or a year's by month (albums with only a year count as
+         *     "month unknown", month 0), with the year's albums listed.
+         */
+        get: operations["released_api_servers__server_id__library_stats_released_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/stats/words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Name Words
+         * @description The most common words in artist, album or song names (in how many names each is).
+         */
+        get: operations["name_words_api_servers__server_id__library_stats_words_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/artists": {
         parameters: {
             query?: never;
@@ -3747,6 +3809,16 @@ export interface components {
             /** Refresh Token */
             refresh_token: string;
         };
+        /** DecadeCount */
+        DecadeCount: {
+            /**
+             * Decade
+             * @description The decade's first year (or the year, or the month 0-12).
+             */
+            decade: number;
+            /** Albums */
+            albums: number;
+        };
         /** Definition */
         Definition: {
             /** Artists */
@@ -4331,6 +4403,20 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** GrowthPoint */
+        GrowthPoint: {
+            /**
+             * Month
+             * @description "2019-03"
+             */
+            month: string;
+            /** Artists */
+            artists: number;
+            /** Albums */
+            albums: number;
+            /** Tracks */
+            tracks: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -4684,6 +4770,24 @@ export interface components {
              * @default 7
              */
             full_days: number;
+        };
+        /** LibraryStatsOut */
+        LibraryStatsOut: {
+            /** Artists */
+            artists: number;
+            /** Albums */
+            albums: number;
+            /** Tracks */
+            tracks: number;
+            /**
+             * Growth
+             * @description Running totals at the end of each month, by when items were added to Plex.
+             */
+            growth: components["schemas"]["GrowthPoint"][];
+            /** Decades */
+            decades: components["schemas"]["DecadeCount"][];
+            /** Undated Albums */
+            undated_albums: number;
         };
         /** ListenBrainzImportIn */
         ListenBrainzImportIn: {
@@ -5880,6 +5984,34 @@ export interface components {
             /** User Rating */
             user_rating: number | null;
         };
+        /** ReleasedAlbum */
+        ReleasedAlbum: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+            /** Released */
+            released: string | null;
+            /** Artist Title */
+            artist_title: string | null;
+            /** Plays */
+            plays: number;
+        };
+        /** ReleasedOut */
+        ReleasedOut: {
+            /**
+             * Buckets
+             * @description A decade's years, or a year's months (0: only the year is known).
+             */
+            buckets: components["schemas"]["DecadeCount"][];
+            /**
+             * Albums
+             * @description The year's albums (when a year is asked).
+             */
+            albums: components["schemas"]["ReleasedAlbum"][];
+        };
         /** RenameIn */
         RenameIn: {
             /**
@@ -6806,6 +6938,13 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** WordCount */
+        WordCount: {
+            /** Word */
+            word: string;
+            /** Count */
+            count: number;
+        };
         /** WorkerHealth */
         WorkerHealth: {
             /** Healthy */
@@ -7181,6 +7320,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    library_stats_api_servers__server_id__library_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    released_api_servers__server_id__library_stats_released_get: {
+        parameters: {
+            query?: {
+                decade?: number | null;
+                year?: number | null;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleasedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    name_words_api_servers__server_id__library_stats_words_get: {
+        parameters: {
+            query?: {
+                kind?: "artist" | "album" | "track";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WordCount"][];
                 };
             };
             /** @description Validation Error */

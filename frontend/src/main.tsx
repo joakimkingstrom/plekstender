@@ -16,6 +16,7 @@ import { ExportPage } from './pages/ExportPage'
 import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
+import { LibraryStatsPage } from './pages/LibraryStatsPage'
 import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
 import { LivePage } from './pages/LivePage'
 import { GameSettingsPage } from './pages/GameSettingsPage'
@@ -56,6 +57,7 @@ const router = createBrowserRouter([
         element: <LibraryLayout />,
         children: [
           { index: true, element: <LibraryPage /> },
+          { path: 'stats', element: <LibraryStatsPage /> },
           { path: 'playlists', element: <PlaylistsPage /> },
           { path: 'playlists/new', element: <PlaylistEditorPage /> },
           { path: 'playlists/:id', element: <PlaylistEditorPage /> },

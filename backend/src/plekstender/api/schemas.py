@@ -1756,3 +1756,47 @@ class MbBestOut(BaseModel):
     changes: int = Field(description="Tags that writing it would change.")
     clear: bool = Field(description="Sure enough to accept with the other clear matches.")
     note: str | None = Field(description="Why it isn't a clear match.")
+
+
+class GrowthPoint(BaseModel):
+    month: str = Field(description='"2019-03"')
+    artists: int
+    albums: int
+    tracks: int
+
+
+class DecadeCount(BaseModel):
+    decade: int = Field(description="The decade's first year (or the year, or the month 0-12).")
+    albums: int
+
+
+class LibraryStatsOut(BaseModel):
+    artists: int
+    albums: int
+    tracks: int
+    growth: list[GrowthPoint] = Field(
+        description="Running totals at the end of each month, by when items were added to Plex."
+    )
+    decades: list[DecadeCount]
+    undated_albums: int
+
+
+class ReleasedAlbum(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+    released: dt.date | None
+    artist_title: str | None
+    plays: int
+
+
+class ReleasedOut(BaseModel):
+    buckets: list[DecadeCount] = Field(
+        description="A decade's years, or a year's months (0: only the year is known)."
+    )
+    albums: list[ReleasedAlbum] = Field(description="The year's albums (when a year is asked).")
+
+
+class WordCount(BaseModel):
+    word: str
+    count: int

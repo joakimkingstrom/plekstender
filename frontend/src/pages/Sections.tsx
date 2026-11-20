@@ -21,6 +21,7 @@ export function LibraryLayout() {
         className={focus ? 'max-md:hidden' : ''}
         tabs={[
           { to: '/library', label: 'Library', end: true },
+          { to: '/library/stats', label: 'Stats' },
           { to: '/library/playlists', label: 'Playlists' },
           { to: '/library/rate', label: 'Rate' },
           ...(active?.is_owner
