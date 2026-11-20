@@ -856,6 +856,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/playlists/import/spotify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Spotify
+         * @description Read a public Spotify playlist (its link) and match its songs, like a file.
+         */
+        post: operations["preview_spotify_api_servers__server_id__playlists_import_spotify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/playlists/import": {
         parameters: {
             query?: never;
@@ -2799,6 +2819,27 @@ export interface paths {
          * @description Set (after checking it with one small search) or clear the setlist.fm API key.
          */
         put: operations["put_setlistfm_api_admin_setlistfm_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/spotify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Spotify */
+        get: operations["get_spotify_api_admin_spotify_get"];
+        /**
+         * Put Spotify
+         * @description Set (after signing in with it) or clear the Spotify app used to read playlist links.
+         */
+        put: operations["put_spotify_api_admin_spotify_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5929,6 +5970,30 @@ export interface components {
             upload_id?: string | null;
             text?: components["schemas"]["TextLogo"] | null;
         };
+        /** SpotifyAppIn */
+        SpotifyAppIn: {
+            /** Client Id */
+            client_id?: string | null;
+            /** Client Secret */
+            client_secret?: string | null;
+        };
+        /** SpotifyAppOut */
+        SpotifyAppOut: {
+            /** Configured */
+            configured: boolean;
+            /** Source */
+            source: ("settings" | "environment") | null;
+            /**
+             * Client Id
+             * @description Not secret: shown so the app can be recognised.
+             */
+            client_id: string | null;
+        };
+        /** SpotifyImportIn */
+        SpotifyImportIn: {
+            /** Url */
+            url: string;
+        };
         /** StatsActivityOut */
         StatsActivityOut: {
             /**
@@ -8166,6 +8231,41 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistImportPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_spotify_api_servers__server_id__playlists_import_spotify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpotifyImportIn"];
             };
         };
         responses: {
@@ -11720,6 +11820,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetlistFmKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_spotify_api_admin_spotify_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpotifyAppOut"];
+                };
+            };
+        };
+    };
+    put_spotify_api_admin_spotify_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpotifyAppIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpotifyAppOut"];
                 };
             };
             /** @description Validation Error */

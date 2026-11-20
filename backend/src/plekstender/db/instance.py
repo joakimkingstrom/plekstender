@@ -536,6 +536,47 @@ async def set_setlistfm_api_key(db: AsyncSession, settings: Settings, api_key: s
     await _put(db, SETLISTFM_KEY, value)
 
 
+# --- Spotify (playlist imports) ------------------------------------------------------------
+
+SPOTIFY_KEY = "spotify"
+SPOTIFY_PURPOSE = "instance.spotify_secret"
+
+
+async def get_spotify_app(
+    db: AsyncSession, settings: Settings
+) -> tuple[str, str, Literal["settings", "environment"]] | None:
+    """The Spotify app's client ID and secret: Settings page first, then the environment."""
+    stored = await _get(db, SPOTIFY_KEY) or {}
+    if stored.get("client_id") and stored.get("secret_enc"):
+        try:
+            secret = _cipher(settings).decrypt(stored["secret_enc"], purpose=SPOTIFY_PURPOSE)
+            return str(stored["client_id"]), secret, "settings"
+        except DecryptionError:
+            pass
+    env_secret = settings.spotify_client_secret
+    if (
+        settings.spotify_client_id
+        and env_secret
+        and (value := env_secret.get_secret_value().strip())
+    ):
+        return settings.spotify_client_id.strip(), value, "environment"
+    return None
+
+
+async def set_spotify_app(
+    db: AsyncSession, settings: Settings, client_id: str | None, secret: str | None
+) -> None:
+    value = (
+        {
+            "client_id": client_id,
+            "secret_enc": _cipher(settings).encrypt(secret, purpose=SPOTIFY_PURPOSE),
+        }
+        if client_id and secret
+        else {}
+    )
+    await _put(db, SPOTIFY_KEY, value)
+
+
 # --- text logo fonts ------------------------------------------------------------------------
 
 FONTS_KEY = "fonts"

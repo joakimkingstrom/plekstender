@@ -99,3 +99,92 @@ async def test_import_a_playlist(app: FastAPI, plex: FakePlex) -> None:
         headers={**CSRF, "content-type": "text/csv"},
     )
     assert bad.status_code == 422
+
+
+def test_spotify_links() -> None:
+    from plekstender.playlists.spotify import SpotifyError, playlist_id
+
+    assert (
+        playlist_id("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc")
+        == "37i9dQZF1DXcBWIGoYBM5M"
+    )
+    assert playlist_id("spotify:playlist:5NbFgVpdA1t4D0sgH7QZ0o") == "5NbFgVpdA1t4D0sgH7QZ0o"
+    with pytest.raises(SpotifyError):
+        playlist_id("https://open.spotify.com/album/1DFixLWuPkv3KT3TnV35m3")
+
+
+@pytest.mark.db
+async def test_import_from_spotify(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import base64
+
+    import httpx
+
+    from plekstender.playlists import spotify
+
+    monkeypatch.setattr(spotify, "_token", None)
+    app_id, secret = "a" * 32, "b" * 32
+
+    def token(request: httpx.Request) -> httpx.Response:
+        expected = base64.b64encode(f"{app_id}:{secret}".encode()).decode()
+        if request.headers["authorization"] != f"Basic {expected}":
+            return httpx.Response(400, json={"error": "invalid_client"})
+        return httpx.Response(
+            200, json={"access_token": "tok", "token_type": "Bearer", "expires_in": 3600}
+        )
+
+    pid = "5NbFgVpdA1t4D0sgH7QZ0o"
+    page2 = f"https://api.spotify.com/v1/playlists/{pid}/tracks?offset=100&limit=100"
+
+    def api(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Bearer tok"
+        path = request.url.path
+        if path == f"/v1/playlists/{pid}":
+            return httpx.Response(200, json={"name": "Sunday"})
+        if path == f"/v1/playlists/{pid}/tracks" and request.url.params.get("offset") != "100":
+            return httpx.Response(200, json={"next": page2, "items": [
+                {"is_local": False, "track": {"type": "track", "name": "Karma Police", "duration_ms": 264000,
+                                              "artists": [{"name": "Radiohead"}], "album": {"name": "OK Computer"}}},
+                {"is_local": True, "track": {"type": "track", "name": "My Demo", "artists": [{"name": "Me"}]}},
+                {"is_local": False, "track": {"type": "episode", "name": "A Podcast"}},
+            ]})  # fmt: skip
+        if path == f"/v1/playlists/{pid}/tracks":
+            return httpx.Response(200, json={"next": None, "items": [
+                {"is_local": False, "track": {"type": "track", "name": "Glory Box", "duration_ms": 301000,
+                                              "artists": [{"name": "Portishead"}], "album": {"name": "Dummy"}}},
+            ]})  # fmt: skip
+        return httpx.Response(404, json={"error": {"status": 404, "message": "Resource not found"}})
+
+    plex.router.post("https://accounts.spotify.com/api/token").mock(side_effect=token)
+    plex.router.route(host="api.spotify.com").mock(side_effect=api)
+    owner, sid = await owner_with_library(app, plex)
+    url = f"https://open.spotify.com/playlist/{pid}?si=x"
+
+    missing = await owner.post(
+        f"/api/servers/{sid}/playlists/import/spotify", json={"url": url}, headers=CSRF
+    )
+    assert missing.status_code == 409
+    wrong = await owner.put(
+        "/api/admin/spotify", json={"client_id": app_id, "client_secret": "c" * 32}, headers=CSRF
+    )
+    assert wrong.status_code == 400
+    saved = await owner.put(
+        "/api/admin/spotify", json={"client_id": app_id, "client_secret": secret}, headers=CSRF
+    )
+    assert saved.json() == {"configured": True, "source": "settings", "client_id": app_id}
+
+    preview = await owner.post(
+        f"/api/servers/{sid}/playlists/import/spotify", json={"url": url}, headers=CSRF
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert (body["name"], body["total"], body["matched"]) == ("Sunday", 2, 2)
+    assert [s["match"]["rating_key"] for s in body["songs"]] == [301, 304]
+
+    gone = await owner.post(
+        f"/api/servers/{sid}/playlists/import/spotify",
+        json={"url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"},
+        headers=CSRF,
+    )
+    assert gone.status_code == 422 and "editorial or algorithmic" in gone.json()["detail"]

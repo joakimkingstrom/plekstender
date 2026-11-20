@@ -36,6 +36,8 @@ from plekstender.api.schemas import (
     PopularityPreviewItem,
     SetlistFmKeyIn,
     SetlistFmKeyOut,
+    SpotifyAppIn,
+    SpotifyAppOut,
     TicketmasterKeyIn,
     TicketmasterKeyOut,
 )
@@ -56,6 +58,7 @@ from plekstender.db.instance import (
     get_lastfm_api_key,
     get_library_settings,
     get_setlistfm_api_key,
+    get_spotify_app,
     get_ticketmaster_api_key,
     get_ticketmaster_usage,
     save_datathistle_quota,
@@ -69,6 +72,7 @@ from plekstender.db.instance import (
     set_lastfm_api_key,
     set_library_settings,
     set_setlistfm_api_key,
+    set_spotify_app,
     set_ticketmaster_api_key,
 )
 from plekstender.db.models import PlexServer, User, UserServer
@@ -465,6 +469,39 @@ async def put_setlistfm(
     await set_setlistfm_api_key(db, settings, body.api_key)
     await db.commit()
     return await get_setlistfm(db, admin, settings)
+
+
+@router.get("/spotify", response_model=SpotifyAppOut)
+async def get_spotify(db: DbDep, _: AdminDep, settings: SettingsDep) -> SpotifyAppOut:
+    app = await get_spotify_app(db, settings)
+    return SpotifyAppOut(
+        configured=app is not None,
+        source=app[2] if app else None,
+        client_id=app[0] if app else None,
+    )
+
+
+@router.put("/spotify", response_model=SpotifyAppOut)
+async def put_spotify(
+    body: SpotifyAppIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
+) -> SpotifyAppOut:
+    """Set (after signing in with it) or clear the Spotify app used to read playlist links."""
+    from plekstender.playlists import spotify
+
+    if body.client_id and body.client_secret:
+        try:
+            await spotify.access_token(
+                http, body.client_id, body.client_secret, settings.spotify_accounts_url
+            )
+        except spotify.SpotifyError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    elif body.client_id or body.client_secret:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter both the client ID and secret."
+        )
+    await set_spotify_app(db, settings, body.client_id, body.client_secret)
+    await db.commit()
+    return await get_spotify(db, admin, settings)
 
 
 # --- text logo fonts -----------------------------------------------------------------------

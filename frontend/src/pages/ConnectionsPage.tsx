@@ -4,6 +4,7 @@ import { DataThistleCard } from '../components/DataThistleCard'
 import { JamBaseKeyCard } from '../components/JamBaseKeyCard'
 import { ScrobbleServicesCard } from '../components/ScrobbleServicesCard'
 import { SetlistFmKeyCard } from '../components/SetlistFmKeyCard'
+import { SpotifyAppCard } from '../components/SpotifyAppCard'
 import { TicketmasterKeyCard } from '../components/TicketmasterKeyCard'
 import { Spinner } from '../components/ui'
 import { LastFmKeyCard, ListenBrainzCard } from './ListeningSettingsPage'
@@ -29,6 +30,7 @@ export function ConnectionsPage() {
           <TicketmasterKeyCard />
           <DataThistleCard />
           <SetlistFmKeyCard />
+          <SpotifyAppCard />
         </div>
       )}
     </div>

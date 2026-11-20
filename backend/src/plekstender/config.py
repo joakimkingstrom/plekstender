@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     # on Settings → Connections, that wins).
     setlistfm_api_key: SecretStr | None = None
     setlistfm_api_url: str = "https://api.setlist.fm/rest/1.0"
+    # Playlist imports from Spotify links: an admin's Spotify app (client credentials; or
+    # set on Settings → Connections, that wins).
+    spotify_client_id: str | None = None
+    spotify_client_secret: SecretStr | None = None
+    spotify_accounts_url: str = "https://accounts.spotify.com/api/token"
+    spotify_api_url: str = "https://api.spotify.com/v1"
     # Where gigs were: OpenStreetMap's Nominatim (one request a second; results shared).
     nominatim_url: str = "https://nominatim.openstreetmap.org"
     # City search for the Live tab (Open-Meteo's free geocoding, no key).

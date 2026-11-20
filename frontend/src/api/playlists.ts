@@ -160,3 +160,23 @@ export function useCreatePlaylistImport(serverId: number) {
       unwrap(api.POST('/api/servers/{server_id}/playlists/import', { params: { path: { server_id: serverId } }, body })),
   })
 }
+
+/** Read a public Spotify playlist (its link) and match its songs. */
+export function usePreviewSpotifyImport(serverId: number) {
+  return useMutation({
+    mutationFn: (url: string) =>
+      unwrap(api.POST('/api/servers/{server_id}/playlists/import/spotify', { params: { path: { server_id: serverId } }, body: { url } })),
+  })
+}
+
+export function useSpotifyApp(enabled: boolean) {
+  return useQuery({ queryKey: ['admin', 'spotify'], enabled, queryFn: () => unwrap(api.GET('/api/admin/spotify')) })
+}
+
+export function useSetSpotifyApp() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['SpotifyAppIn']) => unwrap(api.PUT('/api/admin/spotify', { body })),
+    onSuccess: (data) => qc.setQueryData(['admin', 'spotify'], data),
+  })
+}

@@ -24,6 +24,7 @@ beforeEach(() => {
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     if (url.pathname.endsWith('/import/preview')) return json(preview)
+    if (url.pathname.endsWith('/import/spotify')) return json({ ...preview, name: 'Sunday' })
     if (url.pathname.endsWith('/playlists/import')) return json({ plex_playlist_key: 9, songs: 1 }, 201)
     return json({ detail: 'Not found' }, 404)
   })
@@ -55,5 +56,18 @@ describe('Importing a playlist', () => {
     expect(await screen.findByText('Made “Road trip” in Plex with 1 song.')).toBeInTheDocument()
     const sent = fetchMock.mock.calls.map(([r]) => r).find((r): r is Request => typeof r !== 'string')!
     expect(await sent.clone().json()).toEqual({ name: 'Road trip', rating_keys: [301] })
+  })
+
+  it('reads a Spotify playlist link the same way', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlaylistImport serverId={1} />
+      </QueryClientProvider>,
+    )
+    fireEvent.change(screen.getByLabelText('Spotify playlist link'), { target: { value: ' https://open.spotify.com/playlist/abc ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read it' }))
+    expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('Sunday')
+    const sent = fetchMock.mock.calls.map(([r]) => r).find((r): r is Request => typeof r !== 'string')!
+    expect(await sent.clone().json()).toEqual({ url: 'https://open.spotify.com/playlist/abc' })
   })
 })

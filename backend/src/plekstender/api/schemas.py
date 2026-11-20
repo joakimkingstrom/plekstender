@@ -1670,3 +1670,18 @@ class PlaylistImportIn(BaseModel):
 class PlaylistImportOut(BaseModel):
     plex_playlist_key: int
     songs: int
+
+
+class SpotifyAppIn(BaseModel):
+    client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{20,64}$")
+    client_secret: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{20,64}$")
+
+
+class SpotifyAppOut(BaseModel):
+    configured: bool
+    source: Literal["settings", "environment"] | None
+    client_id: str | None = Field(description="Not secret: shown so the app can be recognised.")
+
+
+class SpotifyImportIn(BaseModel):
+    url: str = Field(min_length=10, max_length=500)

@@ -31,9 +31,11 @@ from plekstender.api.schemas import (
     PlaylistSuggestionsOut,
     SeedArtist,
     SeedTrack,
+    SpotifyImportIn,
 )
+from plekstender.db.instance import get_spotify_app
 from plekstender.db.models import Playlist, Track, UserServer
-from plekstender.playlists import builder, imports
+from plekstender.playlists import builder, imports, spotify
 from plekstender.playlists.definition import Definition
 from plekstender.playlists.service import (
     BATCH,
@@ -364,7 +366,13 @@ async def preview_import(
         name, entries = imports.parse(filename, body.decode("utf-8-sig", errors="replace"))
     except imports.PlaylistFileError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-    matches = await imports.match(db, user.id, us, entries)
+    return await _preview(db, user.id, us, name, entries)
+
+
+async def _preview(
+    db: DbDep, user_id: int, us: UserServer, name: str | None, entries: list[imports.Entry]
+) -> PlaylistImportPreviewOut:
+    matches = await imports.match(db, user_id, us, entries)
     songs = [
         PlaylistImportSong(
             index=i,
@@ -379,6 +387,38 @@ async def preview_import(
     return PlaylistImportPreviewOut(
         name=name, total=len(songs), matched=sum(1 for s in songs if s.match), songs=songs
     )
+
+
+@router.post(
+    "/import/spotify",
+    response_model=PlaylistImportPreviewOut,
+    dependencies=[rate_limit("playlist-import", 30, 60)],
+)
+async def preview_spotify(
+    server_id: int,
+    body: SpotifyImportIn,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+) -> PlaylistImportPreviewOut:
+    """Read a public Spotify playlist (its link) and match its songs, like a file."""
+    us = await get_user_server(db, user, server_id)
+    app = await get_spotify_app(db, settings)
+    if app is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Spotify isn't set up: an admin can add a Spotify app in Settings → Connections.",
+        )
+    try:
+        pid = spotify.playlist_id(body.url)
+        token = await spotify.access_token(http, app[0], app[1], settings.spotify_accounts_url)
+        name, entries = await spotify.read_playlist(http, token, pid, settings.spotify_api_url)
+    except spotify.SpotifyError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    if not entries:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That playlist has no songs.")
+    return await _preview(db, user.id, us, name, entries)
 
 
 @router.post(
