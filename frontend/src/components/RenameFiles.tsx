@@ -2,27 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { errorMessage } from '../api/client'
 import { DEFAULT_TEMPLATE, useApplyRenames, usePlanRenames, useRenamePlan, type RenamePlan } from '../api/files'
 import { formatCount } from '../format'
+import { storedTemplate, storeTemplate } from '../renameTemplate'
 import { Dialog } from './Dialog'
 import { Button, Notice, Spinner } from './ui'
 
-const STORED = 'plekstender.renameTemplate'
 const FIELDS = ['albumartist', 'artist', 'album', 'year', 'title', 'track', 'disc', 'genre']
-
-function storedTemplate(): string {
-  try {
-    return localStorage.getItem(STORED) || DEFAULT_TEMPLATE
-  } catch {
-    return DEFAULT_TEMPLATE
-  }
-}
-
-function storeTemplate(template: string) {
-  try {
-    localStorage.setItem(STORED, template)
-  } catch {
-    // private mode: the default next time
-  }
-}
 
 /**
  * Renaming an album's or an artist's files from a template: a dry run lists every move

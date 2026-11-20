@@ -589,6 +589,74 @@ async def test_applying_a_musicbrainz_release(
     assert again["changes"] == 0  # the re-read files now hold every MusicBrainz tag
 
 
+@pytest.mark.db
+async def test_tag_editing_tab(
+    app: FastAPI, plex: FakePlex, music: Path, mb: FakeMusicBrainz
+) -> None:
+    """Albums whose files need a look, and MusicBrainz's best match for each."""
+    from plekstender.worker import apply_tag_changes, scan_music_files
+
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    # OK Computer: Karma Police's title differs from Plex; no file has a release ID.
+    page = (await owner.get(f"{base}/albums")).json()
+    assert [(a["title"], a["artist_title"], a["files"]) for a in page["items"]] == [
+        ("OK Computer", "Radiohead", 2)
+    ]
+    [ok] = page["items"]
+    assert (ok["differs"], ok["differing_fields"], ok["no_mbid"], ok["missing"]) == (
+        1,
+        ["title"],
+        2,
+        0,
+    )
+    assert page["counts"] == {"any": 1, "differs": 1, "no_mbid": 1, "missing": 0, "errors": 0}
+    assert page["not_in_plex"] == 1  # extra/demo.mp3
+    missing = (await owner.get(f"{base}/albums", params={"issue": "missing"})).json()
+    assert missing["items"] == []
+    assert (await owner.get(f"{base}/albums", params={"q": "radio"})).json()["total"] == 1
+    assert (await owner.get(f"{base}/albums", params={"q": "nothing"})).json()["total"] == 0
+
+    # Found by searching: both files match, but the release has 12 tracks, so it's
+    # proposed, not a clear match.
+    best = (await owner.post(f"{base}/albums/200/musicbrainz/best", headers=CSRF)).json()
+    assert best["release"]["id"] == RELEASE_ID
+    assert (best["source"], best["files"], best["matched"], best["changes"]) == (
+        "search",
+        2,
+        2,
+        17,
+    )
+    assert best["clear"] is False
+    assert best["note"] == "The release has 12 tracks; the album has 2 files."
+    assert mb.searches == ['release:"OK Computer" AND artist:"Radiohead"']
+
+    # Written: the release ID in the files is used next time (no search).
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    written = (
+        await owner.post(
+            f"{base}/albums/200/musicbrainz", json={"release_id": RELEASE_ID}, headers=CSRF
+        )
+    ).json()
+    await apply_tag_changes.func(set_id=written["id"])
+    best = (await owner.post(f"{base}/albums/200/musicbrainz/best", headers=CSRF)).json()
+    assert (best["source"], best["changes"]) == ("tags", 0)
+    assert len(mb.searches) == 1
+    page = (await owner.get(f"{base}/albums")).json()
+    assert page["counts"]["no_mbid"] == 0
+
+    friend, _ = await sign_in(app, plex, "friend-token")
+    assert (await friend.get(f"{base}/albums")).status_code in (403, 404)
+
+
 # --- Ratings in the files --------------------------------------------------------------------
 
 

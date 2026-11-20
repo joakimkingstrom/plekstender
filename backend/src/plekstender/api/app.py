@@ -35,6 +35,7 @@ from plekstender.api.routes import (
     stats,
     statuses,
     sync,
+    tag_editing,
 )
 from plekstender.config import Settings, get_settings
 from plekstender.db import get_engine
@@ -86,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         files,
         file_artwork,
         identify,
+        tag_editing,
         renames,
         scrobblers,
         artwork,

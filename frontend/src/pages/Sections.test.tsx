@@ -49,11 +49,11 @@ function renderAt(path: string) {
 }
 
 describe('Library and Gigs', () => {
-  it('has tabs for the library, playlists, rating and (owners) artwork', async () => {
+  it('has tabs for the library, playlists, rating and (owners) artwork and tag editing', async () => {
     renderAt('/library/playlists')
     expect(await screen.findByRole('link', { name: 'Artwork' })).toHaveAttribute('href', '/library/artwork')
     const tabs = screen.getByRole('navigation', { name: 'Library' })
-    expect([...tabs.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Library', 'Playlists', 'Rate', 'Artwork'])
+    expect([...tabs.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Library', 'Playlists', 'Rate', 'Artwork', 'Tag editing'])
     expect(screen.getByRole('link', { name: 'Playlists' })).toHaveAttribute('aria-current', 'page')
   })
 
@@ -62,6 +62,7 @@ describe('Library and Gigs', () => {
     renderAt('/library')
     expect(await screen.findByRole('link', { name: 'Rate' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Artwork' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Tag editing' })).not.toBeInTheDocument()
   })
 
   it('has Upcoming and Been to under Gigs', () => {

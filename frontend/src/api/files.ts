@@ -436,3 +436,78 @@ export function useShrinkCovers(serverId: number) {
     ),
   )
 }
+
+// --- Library → Tag editing: albums that need a look, fixed several at a time ---------------------
+
+export type AlbumIssue = 'any' | 'differs' | 'no_mbid' | 'missing' | 'errors' | 'all'
+export type AlbumIssues = Schemas['AlbumIssues']
+export type MbBest = Schemas['MbBestOut']
+
+export function useAlbumIssues(serverId: number, issue: AlbumIssue, q: string, offset: number, limit = 50) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'album-issues', { issue, q, offset, limit }],
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/albums', {
+          params: { path: { server_id: serverId }, query: { issue, q: q || undefined, offset, limit } },
+        }),
+      ),
+  })
+}
+
+/** Plain calls for the bulk actions, which go through albums one at a time. */
+export const bulk = {
+  best: (serverId: number, albumKey: number) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/albums/{album_key}/musicbrainz/best', {
+        params: { path: { server_id: serverId, album_key: albumKey } },
+      }),
+    ),
+  applyRelease: (serverId: number, albumKey: number, releaseId: string) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/albums/{album_key}/musicbrainz', {
+        params: { path: { server_id: serverId, album_key: albumKey } },
+        body: { release_id: releaseId },
+      }),
+    ),
+  plexPreview: (serverId: number, albumKey: number) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/plex-sync/preview', {
+        params: { path: { server_id: serverId } },
+        body: { scope: 'album', key: albumKey },
+      }),
+    ),
+  plexWrite: (serverId: number, albumKey: number) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/plex-sync', {
+        params: { path: { server_id: serverId } },
+        body: { scope: 'album', key: albumKey },
+      }),
+    ),
+  planRenames: (serverId: number, albumKey: number, template: string) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/renames', {
+        params: { path: { server_id: serverId } },
+        body: { scope: 'album', key: albumKey, template },
+      }),
+    ),
+  renamePlan: (serverId: number, jobId: number) =>
+    unwrap(
+      api.GET('/api/servers/{server_id}/files/renames/{job_id}', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+      }),
+    ),
+  applyRenames: (serverId: number, jobId: number) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/renames/{job_id}/apply', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+      }),
+    ),
+}
+
+/** After bulk writes: the lists, album pages and history show what changed. */
+export function useRefreshFiles(serverId: number) {
+  const qc = useQueryClient()
+  return () => qc.invalidateQueries({ queryKey: filesKeys.all(serverId) })
+}

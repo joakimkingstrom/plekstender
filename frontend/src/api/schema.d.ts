@@ -1832,6 +1832,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Album Issues
+         * @description Albums with scanned files, and what's off about them: files whose tags differ from
+         *     Plex's metadata, without a MusicBrainz release ID, missing a title, artist, album or
+         *     track number, or that couldn't be read. Sorted by artist, then year.
+         */
+        get: operations["album_issues_api_servers__server_id__files_albums_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/{album_key}/musicbrainz/best": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Best Release
+         * @description MusicBrainz's most likely release for an album's files, and whether it's a clear
+         *     match: every file matched to a track of a release with as many tracks, found by the
+         *     release ID already in the files, by sound (most files), or by a near-certain search.
+         *     Nothing is written.
+         */
+        post: operations["best_release_api_servers__server_id__files_albums__album_key__musicbrainz_best_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/renames": {
         parameters: {
             query?: never;
@@ -3237,6 +3282,79 @@ export interface components {
             scanned: boolean;
             /** Tracks */
             tracks: components["schemas"]["TrackFileOut"][];
+        };
+        /**
+         * AlbumIssues
+         * @description An album with scanned files, and how many of them need a look, per kind.
+         */
+        AlbumIssues: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Artist Rating Key */
+            artist_rating_key: number | null;
+            /** Artist Title */
+            artist_title: string | null;
+            /** Files */
+            files: number;
+            /**
+             * Differs
+             * @description Files whose tags differ from Plex's metadata.
+             */
+            differs: number;
+            /**
+             * Differing Fields
+             * @description Which fields differ, in any file.
+             */
+            differing_fields: string[];
+            /**
+             * No Mbid
+             * @description Files without a MusicBrainz release ID.
+             */
+            no_mbid: number;
+            /**
+             * Missing
+             * @description Files without a title, artist, album or track number.
+             */
+            missing: number;
+            /**
+             * Errors
+             * @description Files whose tags couldn't be read.
+             */
+            errors: number;
+        };
+        /** AlbumIssuesPage */
+        AlbumIssuesPage: {
+            /** Items */
+            items: components["schemas"]["AlbumIssues"][];
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /**
+             * Albums
+             * @description Albums with scanned files.
+             */
+            albums: number;
+            /**
+             * Counts
+             * @description Albums with each kind of issue (and any).
+             */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Not In Plex
+             * @description Readable files that aren't a Plex track.
+             */
+            not_in_plex: number;
         };
         /** AlbumSummary */
         AlbumSummary: {
@@ -4995,6 +5113,40 @@ export interface components {
             } | null;
             /** Fields */
             fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
+        };
+        /**
+         * MbBestOut
+         * @description MusicBrainz's most likely release for an album's files.
+         */
+        MbBestOut: {
+            release: components["schemas"]["MbReleaseSummary"] | null;
+            /**
+             * Source
+             * @description Found by the release ID in the files, by sound, or by searching.
+             */
+            source: ("tags" | "sound" | "search") | null;
+            /** Files */
+            files: number;
+            /**
+             * Matched
+             * @description Files matched to one of the release's tracks.
+             */
+            matched: number;
+            /**
+             * Changes
+             * @description Tags that writing it would change.
+             */
+            changes: number;
+            /**
+             * Clear
+             * @description Sure enough to accept with the other clear matches.
+             */
+            clear: boolean;
+            /**
+             * Note
+             * @description Why it isn't a clear match.
+             */
+            note: string | null;
         };
         /** MbFieldChange */
         MbFieldChange: {
@@ -10001,6 +10153,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MbReleaseSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    album_issues_api_servers__server_id__files_albums_get: {
+        parameters: {
+            query?: {
+                issue?: "any" | "differs" | "no_mbid" | "missing" | "errors" | "all";
+                q?: string | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumIssuesPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    best_release_api_servers__server_id__files_albums__album_key__musicbrainz_best_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MbBestOut"];
                 };
             };
             /** @description Validation Error */

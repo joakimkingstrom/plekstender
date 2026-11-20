@@ -1715,3 +1715,44 @@ class ConnectionStatus(BaseModel):
     )
     detail: str | None = None
     link: str | None = Field(default=None, description="Where it's set up or fixed.")
+
+
+class AlbumIssues(BaseModel):
+    """An album with scanned files, and how many of them need a look, per kind."""
+
+    rating_key: int
+    title: str
+    year: int | None
+    thumb: str | None
+    artist_rating_key: int | None
+    artist_title: str | None
+    files: int
+    differs: int = Field(description="Files whose tags differ from Plex's metadata.")
+    differing_fields: list[str] = Field(description="Which fields differ, in any file.")
+    no_mbid: int = Field(description="Files without a MusicBrainz release ID.")
+    missing: int = Field(description="Files without a title, artist, album or track number.")
+    errors: int = Field(description="Files whose tags couldn't be read.")
+
+
+class AlbumIssuesPage(BaseModel):
+    items: list[AlbumIssues]
+    total: int
+    offset: int
+    limit: int
+    albums: int = Field(description="Albums with scanned files.")
+    counts: dict[str, int] = Field(description="Albums with each kind of issue (and any).")
+    not_in_plex: int = Field(description="Readable files that aren't a Plex track.")
+
+
+class MbBestOut(BaseModel):
+    """MusicBrainz's most likely release for an album's files."""
+
+    release: MbReleaseSummary | None
+    source: Literal["tags", "sound", "search"] | None = Field(
+        description="Found by the release ID in the files, by sound, or by searching."
+    )
+    files: int
+    matched: int = Field(description="Files matched to one of the release's tracks.")
+    changes: int = Field(description="Tags that writing it would change.")
+    clear: bool = Field(description="Sure enough to accept with the other clear matches.")
+    note: str | None = Field(description="Why it isn't a clear match.")

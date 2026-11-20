@@ -29,6 +29,7 @@ import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { AppearancePage, FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
+import { TagEditingPage } from './pages/TagEditingPage'
 import { TagPage } from './pages/TagPage'
 import { GigsLayout, LibraryLayout, PlaylistRedirect } from './pages/Sections'
 
@@ -60,6 +61,7 @@ const router = createBrowserRouter([
           { path: 'playlists/:id', element: <PlaylistEditorPage /> },
           { path: 'rate', element: <RatePage /> },
           { path: 'artwork', element: <ArtworkPage /> },
+          { path: 'tag-editing', element: <TagEditingPage /> },
         ],
       },
       { path: 'library/artists/:key', element: <ArtistPage /> },
