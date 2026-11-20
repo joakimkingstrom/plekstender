@@ -1606,3 +1606,30 @@ class GigStatsOut(BaseModel):
     years: list[GigYear] = Field(description="Every year from the first gig's to the last's.")
     months: list[int] = Field(description="Gigs in each month, January first.")
     seasons: dict[str, int] = Field(description="winter, spring, summer, autumn (by hemisphere).")
+
+
+ScrobbleService = Literal["maloja", "koito", "multi-scrobbler", "listenbrainz-other", "librefm"]
+
+
+class ScrobbleTargetIn(BaseModel):
+    service: ScrobbleService
+    url: str | None = Field(default=None, max_length=500, description="The server's address.")
+    token: str | None = Field(default=None, max_length=500, description="ListenBrainz-compatible.")
+    username: str | None = Field(default=None, max_length=100, description="Libre.fm.")
+    password: str | None = Field(
+        default=None, max_length=200, description="Libre.fm: used once to sign in, not kept."
+    )
+
+
+class ScrobbleTargetOut(BaseModel):
+    id: int
+    service: ScrobbleService
+    label: str
+    url: str
+    username: str | None
+    enabled_at: dt.datetime
+    sent: int
+    pending: int
+    last_submitted_at: dt.datetime | None
+    paused: bool
+    error: str | None

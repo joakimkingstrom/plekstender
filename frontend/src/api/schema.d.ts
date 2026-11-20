@@ -1786,6 +1786,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/scrobblers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Targets */
+        get: operations["list_targets_api_scrobblers_get"];
+        put?: never;
+        /**
+         * Add Target
+         * @description Add a service (checking the token, or signing in to Libre.fm once). Adding one that's
+         *     there already (same address) replaces its token and resumes it where it stopped.
+         */
+        post: operations["add_target_api_scrobblers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scrobblers/{target_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Target */
+        delete: operations["remove_target_api_scrobblers__target_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -5587,6 +5626,65 @@ export interface components {
              * @description Only each artist's most popular N% of songs.
              */
             top_percent?: number | null;
+        };
+        /** ScrobbleTargetIn */
+        ScrobbleTargetIn: {
+            /**
+             * Service
+             * @enum {string}
+             */
+            service: "maloja" | "koito" | "multi-scrobbler" | "listenbrainz-other" | "librefm";
+            /**
+             * Url
+             * @description The server's address.
+             */
+            url?: string | null;
+            /**
+             * Token
+             * @description ListenBrainz-compatible.
+             */
+            token?: string | null;
+            /**
+             * Username
+             * @description Libre.fm.
+             */
+            username?: string | null;
+            /**
+             * Password
+             * @description Libre.fm: used once to sign in, not kept.
+             */
+            password?: string | null;
+        };
+        /** ScrobbleTargetOut */
+        ScrobbleTargetOut: {
+            /** Id */
+            id: number;
+            /**
+             * Service
+             * @enum {string}
+             */
+            service: "maloja" | "koito" | "multi-scrobbler" | "listenbrainz-other" | "librefm";
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+            /** Username */
+            username: string | null;
+            /**
+             * Enabled At
+             * Format: date-time
+             */
+            enabled_at: string;
+            /** Sent */
+            sent: number;
+            /** Pending */
+            pending: number;
+            /** Last Submitted At */
+            last_submitted_at: string | null;
+            /** Paused */
+            paused: boolean;
+            /** Error */
+            error: string | null;
         };
         /** SectionOut */
         SectionOut: {
@@ -9549,6 +9647,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TagChangeSetOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_targets_api_scrobblers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScrobbleTargetOut"][];
+                };
+            };
+        };
+    };
+    add_target_api_scrobblers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScrobbleTargetIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScrobbleTargetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_target_api_scrobblers__target_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -962,3 +962,29 @@ class GigPlace(Base):
     longitude: Mapped[float | None] = mapped_column(Float)
     precision: Mapped[str | None] = mapped_column(String(8))  # venue | city | None (not found)
     looked_up_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class ScrobbleTarget(Base):
+    """Another service a user's new Plex plays are sent to: a ListenBrainz-compatible
+    server (Maloja, Koito, Multi-Scrobbler…) or Libre.fm (or another GNU FM server)."""
+
+    __tablename__ = "scrobble_targets"
+    __table_args__ = (UniqueConstraint("user_id", "kind", "api_url"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # listenbrainz | librefm (the protocol)
+    # What was picked: maloja | koito | multi-scrobbler | listenbrainz-other | librefm
+    service: Mapped[str] = mapped_column(String(24))
+    api_url: Mapped[str] = mapped_column(Text)
+    # The token (ListenBrainz-compatible) or session key (Libre.fm), encrypted.
+    token_enc: Mapped[str] = mapped_column(Text)
+    username: Mapped[str | None] = mapped_column(String(255))
+    # Only plays that started from this time on are sent.
+    enabled_at: Mapped[dt.datetime]
+    submitted_through_id: Mapped[int] = mapped_column(BigInteger, default=0)
+    sent_count: Mapped[int] = mapped_column(default=0)
+    last_submitted_at: Mapped[dt.datetime | None]
+    last_error: Mapped[str | None] = mapped_column(Text)
+    paused: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())

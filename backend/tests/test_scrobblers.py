@@ -1,0 +1,213 @@
+# ruff: noqa: S324 (MD5 is what the Last.fm-style sign-in uses)
+"""More scrobble services: ListenBrainz-compatible servers and Libre.fm."""
+
+from __future__ import annotations
+
+import datetime as dt
+import hashlib
+from urllib.parse import parse_qs
+
+import httpx
+import pytest
+from fastapi import FastAPI
+from sqlalchemy import select
+
+from plekstender.config import get_settings
+from plekstender.db import get_sessionmaker
+from plekstender.db.models import Listen, ScrobbleTarget, User
+from plekstender.history import scrobblers
+from tests.fakes import CSRF, FakePlex, sign_in
+from tests.test_sync import connect, owner_with_library, run_queued_syncs
+
+MALOJA = "https://maloja.example/apis/listenbrainz"
+KOITO = "https://koito.example/apis/listenbrainz"
+LIBREFM = "https://libre.fm/2.0/"
+
+
+def test_addresses() -> None:
+    assert (
+        scrobblers.listenbrainz_base("https://m.example/apis/listenbrainz/1/")
+        == "https://m.example/apis/listenbrainz"
+    )
+    assert (
+        scrobblers.listenbrainz_base("http://ms.local:9078/1/submit-listens")
+        == "http://ms.local:9078"
+    )
+    with pytest.raises(scrobblers.ScrobblerError):
+        scrobblers.listenbrainz_base("maloja.local")
+    assert scrobblers.librefm_base(None) == LIBREFM
+    assert scrobblers.librefm_base("https://gnufm.example/2.0") == "https://gnufm.example/2.0/"
+
+
+class FakeServers:
+    def __init__(self, plex: FakePlex) -> None:
+        self.maloja: list[dict] = []
+        self.koito: list[dict] = []
+        self.librefm: list[dict[str, list[str]]] = []
+        self.librefm_sessions_valid = True
+        r = plex.router
+        r.get(f"{MALOJA}/1/validate-token").mock(return_value=httpx.Response(404))  # not there
+        r.post(f"{MALOJA}/1/submit-listens").mock(side_effect=self._maloja)
+        r.get(f"{KOITO}/1/validate-token").mock(side_effect=self._koito_validate)
+        r.post(f"{KOITO}/1/submit-listens").mock(side_effect=self._koito)
+        r.post(LIBREFM).mock(side_effect=self._librefm)
+
+    def _maloja(self, request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Token maloja-key"
+        self.maloja.append(__import__("json").loads(request.content))
+        return httpx.Response(200, json={"status": "ok"})
+
+    def _koito_validate(self, request: httpx.Request) -> httpx.Response:
+        ok = request.headers["authorization"] == "Token koito-key"
+        return httpx.Response(200, json={"valid": ok, "user_name": "joakim" if ok else None})
+
+    def _koito(self, request: httpx.Request) -> httpx.Response:
+        self.koito.append(__import__("json").loads(request.content))
+        return httpx.Response(200, json={"status": "ok"})
+
+    def _librefm(self, request: httpx.Request) -> httpx.Response:
+        form = parse_qs(request.content.decode())
+        assert len(form["api_key"][0]) == 32 and len(form["api_sig"][0]) == 32
+        method = form["method"][0]
+        if method == "auth.getMobileSession":
+            expected = hashlib.md5(
+                ("joakim" + hashlib.md5(b"s3cret").hexdigest()).encode()
+            ).hexdigest()
+            if form["authToken"][0] != expected:
+                return httpx.Response(
+                    200, json={"error": 4, "message": "Invalid authentication token supplied"}
+                )
+            return httpx.Response(
+                200, json={"session": {"name": "Joakim", "key": "sk-123", "subscriber": 0}}
+            )
+        if method == "track.scrobble":
+            if not self.librefm_sessions_valid or form["sk"][0] != "sk-123":
+                return httpx.Response(200, json={"error": 9, "message": "Invalid session key"})
+            self.librefm.append(form)
+            return httpx.Response(
+                200, json={"scrobbles": {"@attr": {"accepted": "2", "ignored": "0"}}}
+            )
+        return httpx.Response(200, json={"error": 3, "message": "Invalid method"})
+
+
+async def add_plays(user_id: int, count: int) -> None:
+    now = dt.datetime.now(dt.UTC)
+    async with get_sessionmaker()() as db:
+        for i in range(count):
+            db.add(Listen(
+                user_id=user_id, listened_at=now + dt.timedelta(minutes=i), source="plex",
+                artist_name="Radiohead", track_name=f"Song {i}", album_name="OK Computer",
+                artist_key="radiohead", track_key=f"song {i}", duration_ms=240_000,
+            ))  # fmt: skip
+        await db.commit()
+
+
+async def send(user_id: int) -> dict:
+    async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
+        return await scrobblers.submit_targets(db, http, get_settings(), user_id)
+
+
+@pytest.mark.db
+async def test_scrobble_services(app: FastAPI, plex: FakePlex) -> None:
+    servers = FakeServers(plex)
+    owner, _ = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        user_id = await db.scalar(select(User.id).where(User.username == "owner"))
+        assert user_id
+
+    # Maloja doesn't answer validate-token: added without an account name.
+    maloja = await owner.post(
+        "/api/scrobblers",
+        json={"service": "maloja", "url": MALOJA + "/1", "token": "maloja-key"},
+        headers=CSRF,
+    )
+    assert maloja.status_code == 201, maloja.text
+    assert (maloja.json()["url"], maloja.json()["username"], maloja.json()["label"]) == (
+        MALOJA,
+        None,
+        "Maloja",
+    )
+    # Koito says whose token it is, and refuses a wrong one.
+    wrong = await owner.post(
+        "/api/scrobblers", json={"service": "koito", "url": KOITO, "token": "nope"}, headers=CSRF
+    )
+    assert wrong.status_code == 400 and "didn't accept" in wrong.json()["detail"]
+    koito = await owner.post(
+        "/api/scrobblers",
+        json={"service": "koito", "url": KOITO, "token": "koito-key"},
+        headers=CSRF,
+    )
+    assert koito.json()["username"] == "joakim"
+    # Libre.fm: signed in once with the password, which isn't kept.
+    bad = await owner.post(
+        "/api/scrobblers",
+        json={"service": "librefm", "username": "joakim", "password": "nope"},
+        headers=CSRF,
+    )
+    assert bad.status_code == 400 and "Invalid authentication" in bad.json()["detail"]
+    libre = await owner.post(
+        "/api/scrobblers",
+        json={"service": "librefm", "username": "joakim", "password": "s3cret"},
+        headers=CSRF,
+    )
+    assert libre.status_code == 201 and libre.json()["username"] == "Joakim"
+    async with get_sessionmaker()() as db:
+        stored = list(await db.scalars(select(ScrobbleTarget.token_enc)))
+        assert not any("s3cret" in t or "sk-123" in t or "maloja-key" in t for t in stored)
+
+    # New plays go to all three.
+    await add_plays(user_id, 2)
+    results = await send(user_id)
+    assert [r.sent for r in results.values()] == [2, 2, 2]
+    assert [p["track_metadata"]["track_name"] for p in servers.maloja[0]["payload"]] == [
+        "Song 0",
+        "Song 1",
+    ]
+    assert servers.koito[0]["listen_type"] == "import"
+    form = servers.librefm[0]
+    assert (form["artist[0]"], form["track[1]"], form["album[0]"], form["duration[0]"]) == (
+        ["Radiohead"], ["Song 1"], ["OK Computer"], ["240"],
+    )  # fmt: skip
+    listed = (await owner.get("/api/scrobblers")).json()
+    assert [(t["service"], t["sent"], t["pending"], t["paused"]) for t in listed] == [
+        ("maloja", 2, 0, False), ("koito", 2, 0, False), ("librefm", 2, 0, False),
+    ]  # fmt: skip
+
+    # Libre.fm drops the session: that one pauses, the others carry on.
+    servers.librefm_sessions_valid = False
+    await add_plays(user_id, 1)
+    await send(user_id)
+    listed = {t["service"]: t for t in (await owner.get("/api/scrobblers")).json()}
+    assert (
+        listed["librefm"]["paused"] and "Libre.fm rejected the token" in listed["librefm"]["error"]
+    )
+    assert listed["maloja"]["sent"] == 3 and listed["librefm"]["pending"] == 1
+    # Signing in again resumes it where it stopped.
+    servers.librefm_sessions_valid = True
+    again = await owner.post(
+        "/api/scrobblers",
+        json={"service": "librefm", "username": "joakim", "password": "s3cret"},
+        headers=CSRF,
+    )
+    assert (
+        again.status_code == 201
+        and again.json()["id"] == libre.json()["id"]
+        and not again.json()["paused"]
+    )
+    await send(user_id)
+    assert {t["service"]: t["sent"] for t in (await owner.get("/api/scrobblers")).json()}[
+        "librefm"
+    ] == 3
+
+    # Someone else's are their own.
+    friend, _ = await sign_in(app, plex, "friend-token")
+    await connect(friend)
+    await run_queued_syncs()
+    assert (await friend.get("/api/scrobblers")).json() == []
+    assert (
+        await friend.delete(f"/api/scrobblers/{maloja.json()['id']}", headers=CSRF)
+    ).status_code == 404
+    assert (
+        await owner.delete(f"/api/scrobblers/{maloja.json()['id']}", headers=CSRF)
+    ).status_code == 204
+    assert len((await owner.get("/api/scrobblers")).json()) == 2

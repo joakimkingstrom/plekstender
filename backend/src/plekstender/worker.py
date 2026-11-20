@@ -30,6 +30,7 @@ from plekstender.db.models import (
     LiveSettings,
     Playlist,
     PlexServer,
+    ScrobbleTarget,
     SyncRun,
     TagChangeSet,
     UserSectionSync,
@@ -43,6 +44,7 @@ from plekstender.history.listenbrainz_import import run_listenbrainz_import
 from plekstender.history.listenbrainz_send import run_listenbrainz_send
 from plekstender.history.places import fill_places, refresh_public_addresses
 from plekstender.history.plex_capture import capture_plays
+from plekstender.history.scrobblers import submit_targets
 from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
 from plekstender.playlists.service import build as build_playlist_in_plex
 from plekstender.previews import trim_cache as trim_preview_cache
@@ -322,21 +324,29 @@ async def submit_listenbrainz(user_id: int) -> None:
         get_sessionmaker()() as db,
     ):
         result = await submit_pending(db, http, get_settings(), user_id)
+        # The other scrobble services (Maloja, Koito, Libre.fm…), each on its own.
+        others = await submit_targets(db, http, get_settings(), user_id)
     if result.sent or result.skipped:
         log.info(
             "ListenBrainz: sent %d, skipped %d for user %s", result.sent, result.skipped, user_id
         )
     if result.error:
         log.warning("ListenBrainz submission for user %s: %s", user_id, result.error)
+    for target_id, other in others.items():
+        if other.error:
+            log.warning("Scrobble target %s for user %s: %s", target_id, user_id, other.error)
 
 
 async def enqueue_listenbrainz(user_ids: list[int] | None = None) -> int:
-    """Queue ListenBrainz submission for these users (default: everyone linked)."""
+    """Queue scrobbling (ListenBrainz and the other services) for these users (default:
+    everyone with somewhere to send plays)."""
     async with get_sessionmaker()() as db:
         query = select(ListenBrainzLink.user_id).where(ListenBrainzLink.paused.is_(False))
+        others = select(ScrobbleTarget.user_id).where(ScrobbleTarget.paused.is_(False))
         if user_ids is not None:
             query = query.where(ListenBrainzLink.user_id.in_(user_ids))
-        linked = list(await db.scalars(query))
+            others = others.where(ScrobbleTarget.user_id.in_(user_ids))
+        linked = sorted(set(await db.scalars(query)) | set(await db.scalars(others)))
     for user_id in linked:
         try:
             await submit_listenbrainz.configure(
