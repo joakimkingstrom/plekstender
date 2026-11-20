@@ -9,6 +9,7 @@ from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from plekstender.api.deps import DbDep, UserDep
+from plekstender.api.routes.auth import load_preferences
 from plekstender.api.schemas import NotificationOut, NotificationsOut, NotificationsReadIn
 from plekstender.db.models import Notification, NotificationState, User
 
@@ -19,8 +20,10 @@ KEEP_FIXED = dt.timedelta(days=3)
 
 
 def _theirs(user: User) -> ColumnElement[bool]:
+    """Your own, and the instance's for admins who want them (Profile → Notifications)."""
     mine = Notification.user_id == user.id
-    return or_(mine, Notification.user_id.is_(None)) if user.is_admin else mine
+    wants_instance = user.is_admin and load_preferences(user).instance_notifications
+    return or_(mine, Notification.user_id.is_(None)) if wants_instance else mine
 
 
 async def _visible(db: DbDep, user: User) -> list[tuple[Notification, NotificationState | None]]:

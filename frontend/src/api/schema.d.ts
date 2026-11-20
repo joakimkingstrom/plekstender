@@ -89,6 +89,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profile
+         * @description The profile page: who you are here, and a few numbers.
+         */
+        get: operations["profile_api_auth_me_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me/preferences": {
         parameters: {
             query?: never;
@@ -6150,6 +6170,23 @@ export interface components {
              */
             phone_start: "rate" | "home";
             game?: components["schemas"]["GameSettings"];
+            /**
+             * Theme
+             * @description Light or dark on every device; None: each browser's own choice.
+             */
+            theme?: ("dark" | "light") | null;
+            /**
+             * Achievements
+             * @description Achievements and their pop-ups.
+             * @default true
+             */
+            achievements: boolean;
+            /**
+             * Instance Notifications
+             * @description Admins: notifications about this Plekstender's services.
+             * @default true
+             */
+            instance_notifications: boolean;
         };
         /** PreviewOut */
         PreviewOut: {
@@ -6181,6 +6218,39 @@ export interface components {
             ok: boolean;
             /** Error */
             error: string | null;
+        };
+        /** ProfileOut */
+        ProfileOut: {
+            /** Username */
+            username: string;
+            /** Email */
+            email: string | null;
+            /** Thumb Url */
+            thumb_url: string | null;
+            /** Is Admin */
+            is_admin: boolean;
+            /**
+             * Joined At
+             * Format: date-time
+             */
+            joined_at: string;
+            /** Servers */
+            servers: components["schemas"]["ProfileServer"][];
+            /** Scrobbles */
+            scrobbles: number;
+            /** First Listen At */
+            first_listen_at: string | null;
+            /** Ratings */
+            ratings: number;
+            /** Gigs */
+            gigs: number;
+        };
+        /** ProfileServer */
+        ProfileServer: {
+            /** Name */
+            name: string;
+            /** Is Owner */
+            is_owner: boolean;
         };
         /** RateItemOut */
         RateItemOut: {
@@ -7575,6 +7645,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+        };
+    };
+    profile_api_auth_me_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
                 };
             };
         };

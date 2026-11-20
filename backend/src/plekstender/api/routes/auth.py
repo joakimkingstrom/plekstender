@@ -18,7 +18,14 @@ from plekstender.api.deps import (
     UserDep,
 )
 from plekstender.api.ratelimit import rate_limit
-from plekstender.api.schemas import PinCheckOut, PinStartOut, Preferences, UserOut
+from plekstender.api.schemas import (
+    PinCheckOut,
+    PinStartOut,
+    Preferences,
+    ProfileOut,
+    ProfileServer,
+    UserOut,
+)
 from plekstender.auth.access import AccessDecision, decide_access, decide_bootstrap
 from plekstender.auth.sessions import (
     PIN_COOKIE,
@@ -30,7 +37,7 @@ from plekstender.auth.sessions import (
 )
 from plekstender.config import AccessMode
 from plekstender.db.instance import get_access_settings
-from plekstender.db.models import PlexServer, User
+from plekstender.db.models import Gig, Listen, PlexServer, User, UserItemState, UserServer
 from plekstender.plex.tv import PlexAccount, PlexError, PlexTvClient
 
 log = logging.getLogger(__name__)
@@ -186,6 +193,39 @@ async def logout(request: Request, response: Response, db: DbDep, settings: Sett
 @router.get("/me", response_model=UserOut)
 async def me(user: UserDep) -> UserOut:
     return user_out(user)
+
+
+@router.get("/me/profile", response_model=ProfileOut)
+async def profile(db: DbDep, user: UserDep) -> ProfileOut:
+    """The profile page: who you are here, and a few numbers."""
+    servers = await db.scalars(
+        select(UserServer).where(UserServer.user_id == user.id).order_by(UserServer.id)
+    )
+    listens = (
+        await db.execute(
+            select(func.count(), func.min(Listen.listened_at)).where(
+                Listen.user_id == user.id, Listen.duplicate_of.is_(None)
+            )
+        )
+    ).one()
+    ratings = await db.scalar(
+        select(func.count()).where(
+            UserItemState.user_id == user.id, UserItemState.user_rating.is_not(None)
+        )
+    )
+    gigs = await db.scalar(select(func.count()).where(Gig.user_id == user.id))
+    return ProfileOut(
+        username=user.username,
+        email=user.email,
+        thumb_url=user.thumb_url,
+        is_admin=user.is_admin,
+        joined_at=user.created_at,
+        servers=[ProfileServer(name=us.server.name, is_owner=us.is_owner) for us in servers],
+        scrobbles=listens[0],
+        first_listen_at=listens[1],
+        ratings=ratings or 0,
+        gigs=gigs or 0,
+    )
 
 
 @router.put("/me/preferences", response_model=UserOut)

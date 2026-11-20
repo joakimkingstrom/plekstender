@@ -236,6 +236,9 @@ const DEFAULT_PREFERENCES: Schemas["Preferences"] = {
   accent: null,
   skip_threshold: 80,
   phone_start: "rate",
+  theme: null,
+  achievements: true,
+  instance_notifications: true,
 };
 
 /** Change some preferences (the rest stay as saved). */

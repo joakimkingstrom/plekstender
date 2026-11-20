@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { useLogout, useMe } from '../api/hooks'
+import { useLogout, useMe, useSetPreferences } from '../api/hooks'
 import { useOnline } from '../online'
 import { InstallPrompt } from './InstallPrompt'
 import { applyAccent } from '../accent'
@@ -58,6 +58,12 @@ export function Layout() {
   // The user's accent colour, worked out for the current theme.
   useEffect(() => applyAccent(accent, theme), [accent, theme])
   useAppTime(Boolean(me))
+  // A theme saved to the account wins over this browser's own choice.
+  const savedTheme = me?.preferences?.theme ?? null
+  useEffect(() => {
+    if (savedTheme) setTheme(savedTheme)
+  }, [savedTheme, setTheme])
+  const savePreferences = useSetPreferences()
 
   if (isPending) {
     return <PageLoader />
@@ -118,14 +124,21 @@ export function Layout() {
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              onClick={() => {
+                const next = theme === 'dark' ? 'light' : 'dark'
+                setTheme(next)
+                // Saved to the account too when the account has a theme (Profile → Theme).
+                if (savedTheme) savePreferences.mutate({ theme: next })
+              }}
               className="rounded-lg px-2 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-text"
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
             >
               {theme === 'dark' ? '☀' : '☾'}
             </button>
             <NotificationBell isAdmin={me.is_admin} />
-            <Avatar url={me.thumb_url} name={me.username} />
+            <NavLink to="/profile" aria-label="Your profile" className="rounded-full focus-visible:outline-2">
+              <Avatar url={me.thumb_url} name={me.username} />
+            </NavLink>
             <button
               type="button"
               className="hidden rounded-lg px-2 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-text sm:block"

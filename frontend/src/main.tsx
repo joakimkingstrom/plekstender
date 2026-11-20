@@ -24,12 +24,13 @@ import { GigsPage } from './pages/GigsPage'
 import { MapPage } from './pages/MapPage'
 import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
+import { ProfilePage } from './pages/ProfilePage'
 import { RatingsPage } from './pages/RatingsPage'
 import { RewindPage } from './pages/RewindPage'
 import { ScoresPage } from './pages/ScoresPage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
-import { AppearancePage, FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
+import { FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
 import { TagEditingPage } from './pages/TagEditingPage'
 import { TagPage } from './pages/TagPage'
@@ -111,7 +112,7 @@ const router = createBrowserRouter([
           { path: 'users', element: <UsersPage /> },
           { path: 'connections', element: <Navigate to="/settings/scrobbling" replace /> },
           { path: 'export', element: <ExportPage /> },
-          { path: 'appearance', element: <AppearancePage /> },
+          { path: 'appearance', element: <Navigate to="/profile" replace /> },
           { path: 'artwork', element: <Navigate to="/settings/fonts/offered" replace /> },
           { path: 'fonts', element: <FontsSettingsPage /> },
           { path: 'fonts/:part', element: <FontsSettingsPage /> },
@@ -122,6 +123,7 @@ const router = createBrowserRouter([
         ],
       },
       { path: 'admin', element: <Navigate to="/settings" replace /> },
+      { path: 'profile', element: <ProfilePage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

@@ -32,7 +32,6 @@ function settingsGroups(owner: boolean, admin: boolean): Group[] {
         { to: '/settings', label: 'Servers', end: true },
         { to: '/settings/scrobbling', label: 'Scrobbling' },
         { to: '/settings/listening', label: 'Listening history' },
-        { to: '/settings/appearance', label: 'Appearance' },
         { to: '/settings/game', label: 'Guess the intro' },
         { to: '/settings/export', label: 'Export & import' },
       ],

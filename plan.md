@@ -656,9 +656,9 @@ Tell people when something they rely on stops working, before they notice it the
 - [ ] Later: email or push (the app is installable) for the serious ones, per person.
 
 ### Phase 18 — Profile (20 Nov 2026)
-- [ ] A profile page (from the avatar in the header): name and picture from Plex, when you joined, your servers, a few numbers (scrobbles, ratings, gigs).
-- [ ] Personal preferences in one place: appearance (accent colour, already saved per account; and the light / dark theme, which is per browser today and moves to the account too), what the app opens on (Home or Rate on a phone), achievements on or off (Phase 19), notification choices (Phase 17).
-- [ ] Settings → Appearance moves here (Settings keeps what concerns servers, services and admin).
+- [x] A profile page (/profile, from the avatar in the header): name, picture and email from Plex, when you joined, admin badge; scrobbles, ratings and gigs been to (each linking to its page) and how far back your history goes; your servers (yours or shared with you).
+- [x] Personal preferences in one place: the accent colour and what the app opens on a phone (moved from Settings → Appearance, which now leads here); the theme on the account (dark or light on every device, or per device as before: the header's ☀ / ☾ then saves to the account too when it has a theme); achievements on or off (Phase 19); for admins, whether to get the instance's notifications (Phase 17).
+- [x] Settings → Appearance moved here (Settings keeps servers, services and admin).
 
 ### Phase 19 — Achievements (20 Nov 2026)
 Small, silly rewards. Every one has a name from music lore, a badge, and a humorous message; unlocking one pops up a short celebration (confetti / a spinning record; calmer with reduced motion).

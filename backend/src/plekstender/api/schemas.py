@@ -48,6 +48,13 @@ class Preferences(BaseModel):
         default="rate", description="The page the app opens on, on a phone."
     )
     game: GameSettings = Field(default_factory=GameSettings)
+    theme: Literal["dark", "light"] | None = Field(
+        default=None, description="Light or dark on every device; None: each browser's own choice."
+    )
+    achievements: bool = Field(default=True, description="Achievements and their pop-ups.")
+    instance_notifications: bool = Field(
+        default=True, description="Admins: notifications about this Plekstender's services."
+    )
 
 
 class UserOut(BaseModel):
@@ -1932,3 +1939,21 @@ class NotificationsOut(BaseModel):
 
 class NotificationsReadIn(BaseModel):
     ids: list[int] | None = Field(default=None, description="Left out: all of them.")
+
+
+class ProfileServer(BaseModel):
+    name: str
+    is_owner: bool
+
+
+class ProfileOut(BaseModel):
+    username: str
+    email: str | None
+    thumb_url: str | None
+    is_admin: bool
+    joined_at: dt.datetime
+    servers: list[ProfileServer]
+    scrobbles: int
+    first_listen_at: dt.datetime | None
+    ratings: int
+    gigs: int
