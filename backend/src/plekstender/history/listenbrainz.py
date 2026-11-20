@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 from sqlalchemy import func, select
@@ -52,6 +52,9 @@ class ListenBrainzClient:
             )
         data = resp.json()
         return str(data["user_name"]) if data.get("valid") and data.get("user_name") else None
+
+    async def send(self, listens: list[Listen]) -> None:
+        await self.submit([listen_payload(listen) for listen in listens])
 
     async def submit(self, listens: list[dict[str, Any]]) -> None:
         listen_type = "single" if len(listens) == 1 else "import"
@@ -102,7 +105,23 @@ def listen_payload(listen: Listen) -> dict[str, Any]:
     return {"listened_at": int(listen.listened_at.timestamp()), "track_metadata": metadata}
 
 
-def pending_filter(link: ListenBrainzLink) -> tuple[Any, ...]:
+class SendState(Protocol):
+    """Where sending to a service stands (a ListenBrainz link or another scrobble target)."""
+
+    user_id: int
+    enabled_at: dt.datetime
+    submitted_through_id: int
+    sent_count: int
+    last_submitted_at: dt.datetime | None
+    last_error: str | None
+    paused: bool
+
+
+class Sender(Protocol):
+    async def send(self, listens: list[Listen]) -> None: ...
+
+
+def pending_filter(link: SendState) -> tuple[Any, ...]:
     """Listens still to send: the user's own Plex plays since scrobbling was turned on."""
     return (
         Listen.user_id == link.user_id,
@@ -114,7 +133,7 @@ def pending_filter(link: ListenBrainzLink) -> tuple[Any, ...]:
     )
 
 
-async def count_pending(db: AsyncSession, link: ListenBrainzLink) -> int:
+async def count_pending(db: AsyncSession, link: SendState) -> int:
     return await db.scalar(select(func.count()).where(*pending_filter(link))) or 0
 
 
@@ -133,36 +152,46 @@ async def submit_pending(
     A listen ListenBrainz refuses (HTTP 400) is skipped so it can't block the rest. A
     rejected token pauses scrobbling; other failures are retried on the next run.
     """
-    result = SubmitResult()
     link = await db.get(ListenBrainzLink, user_id)
     if link is None or link.paused:
-        return result
+        return SubmitResult()
     cipher = TokenCipher(settings.derive_key("token-encryption"))
     client = ListenBrainzClient(
         http, settings.listenbrainz_api_url, cipher.decrypt(link.token_enc, purpose=TOKEN_PURPOSE)
     )
+    return await send_pending(db, link, client, "ListenBrainz")
+
+
+async def send_pending(
+    db: AsyncSession, state: SendState, client: Sender, service: str
+) -> SubmitResult:
+    """Send a user's unsent Plex plays to a service, oldest first, in batches.
+
+    A listen the service refuses (status 400) is skipped so it can't block the rest. A
+    rejected token (401) pauses sending; other failures are retried on the next run.
+    """
+    result = SubmitResult()
 
     def handled(listen: Listen, sent: bool) -> None:
-        assert link is not None
-        link.submitted_through_id = listen.id
+        state.submitted_through_id = listen.id
         if sent:
-            link.sent_count += 1
+            state.sent_count += 1
             result.sent += 1
-            link.last_submitted_at = dt.datetime.now(dt.UTC)
+            state.last_submitted_at = dt.datetime.now(dt.UTC)
         else:
             result.skipped += 1
 
     while True:
         batch = list(
             await db.scalars(
-                select(Listen).where(*pending_filter(link)).order_by(Listen.id).limit(BATCH)
+                select(Listen).where(*pending_filter(state)).order_by(Listen.id).limit(BATCH)
             )
         )
         if not batch:
             break
         try:
             try:
-                await client.submit([listen_payload(listen) for listen in batch])
+                await client.send(batch)
                 for listen in batch:
                     handled(listen, sent=True)
             except ListenBrainzError as exc:
@@ -171,24 +200,27 @@ async def submit_pending(
                 # Find the listen(s) it refuses by sending them one at a time.
                 for listen in batch:
                     try:
-                        await client.submit([listen_payload(listen)])
+                        await client.send([listen])
                         handled(listen, sent=True)
                     except ListenBrainzError as single:
                         if single.status != 400:
                             raise
-                        log.warning("ListenBrainz refused listen %s: %s", listen.id, single)
+                        log.warning("%s refused listen %s: %s", service, listen.id, single)
                         handled(listen, sent=False)
         except ListenBrainzError as exc:
-            link.last_error = str(exc)
+            state.last_error = str(exc)
             if exc.status == 401:
-                link.paused = True
-                link.last_error = (
-                    "ListenBrainz rejected the token, so scrobbling is paused. "
+                state.paused = True
+                state.last_error = (
+                    f"{service} rejected the token, so scrobbling is paused. "
+                    "Add it again with a new token to resume."
+                    if service != "ListenBrainz"
+                    else "ListenBrainz rejected the token, so scrobbling is paused. "
                     "Paste a new token to resume."
                 )
-            result.error = link.last_error
+            result.error = state.last_error
             await db.commit()
             return result
-        link.last_error = None
+        state.last_error = None
         await db.commit()
     return result
