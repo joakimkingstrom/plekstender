@@ -597,6 +597,18 @@ History → Gigs: the gigs each person went to ("gigs" is the site's word for ev
 - [x] 12b. Import playlists from files (Playlists → "Import a playlist"): CSV (Exportify's and TuneMyMusic's columns, and most others: title, artist(s), album, a duration in ms or m:ss, the playlist's name), M3U / M3U8 (`#EXTINF` "Artist - Title", else "Artist - Title" or …/Artist/Album/NN - Title file names) and JSPF (ListenBrainz). Songs matched to the library on the server: the same normalised title by one of their artists (or the album artist), preferring the same album and the closest length; else a lone same-title song within 4 s (shown as "likely"). The review lists the matches (each can be left out) and the songs not found; the playlist is made in Plex under the user's account, songs in order.
 - [x] 12c. Spotify links: a public playlist's link (open.spotify.com/playlist/… or spotify:playlist:…) read with Spotify's Web API (an admin's app on Settings → Connections, checked by signing in; client credentials, no one's Spotify account involved; 100 songs a page, local files and podcasts left out), then matched and reviewed like a file. Spotify doesn't let new apps read its own editorial or algorithmic playlists: those are explained when refused.
 
+### Phase 12½ — Navigation and Settings layout (20 Nov 2026)
+The menus had grown one page at a time; this tidies them before Phase 13 adds more.
+- [ ] Main menu: Home, Library, History, Gigs, Settings (five, so the phone's bottom bar has room).
+- [ ] Library page with tabs: Library (the artists and albums), Playlists, Rate, Artwork (server owners). Artist and album pages stay under /library. Old addresses (/rate, /artwork, /playlists…) lead to the new ones.
+- [ ] Gigs (was Live) with tabs: Upcoming (the Live page) and Been to (the gig history, moved out of History, with its stats and map). /live and /history/gigs lead there.
+- [ ] History: "Listens" becomes "Scrobbles" (/history/scrobbles; /history/listens leads there).
+- [ ] Settings in a grouped sidebar (a section picker on phones):
+  - You: Servers · Scrobbling (ListenBrainz and the other services) · Listening history (Plex plays, imports, skips, deleting) · Appearance · Guess the intro · Export & import.
+  - Library (server owners): Music files.
+  - Admin: Users & access · Library tuning · Text logo fonts · Services (every key and app, grouped by what it's for: Gigs — JamBase, Ticketmaster, Data Thistle, setlist.fm; History — Last.fm; Playlists — Spotify; Artwork — fanart.tv; Music files — AcoustID).
+  - The old Connections page leads to Scrobbling.
+
 ### Phase 13 — Genres, styles and moods; tag editing in bulk (from `.todo.md`, 19 Nov 2026)
 Plex gives albums one or two broad genres (often "Pop/Rock") but many **styles** ("Art Rock", "Prog-Rock") and **moods** ("Witty", "Laid-Back/Mellow") from its own metadata. Plekstender already mirrors them (`tags`, kinds genre / style / mood / country); they just aren't used yet.
 - [ ] Every genre, style and mood chip is a link to a page for it: the artists and albums with it (sortable by your plays, rating, year), with related styles (often found together) and a "make a playlist" shortcut. Chips show their kind (genre in amber as now; styles and moods told apart).
