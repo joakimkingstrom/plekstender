@@ -2424,6 +2424,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Covers
+         * @description Albums and their covers: by default those that most need a better one (no cover
+         *     first, then the smallest), leaving out ones marked as fine.
+         */
+        get: operations["list_covers_api_servers__server_id__artwork_albums_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/albums/{rating_key}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Candidates
+         * @description Covers for the album from one source (with a note when there are none).
+         */
+        get: operations["candidates_api_servers__server_id__artwork_albums__rating_key__candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/albums/{rating_key}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description The cover as it would be saved (its size in X-Image-Width and X-Image-Height).
+         */
+        post: operations["preview_api_servers__server_id__artwork_albums__rating_key__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/albums/{rating_key}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply
+         * @description Make the cover the album's poster in Plex.
+         */
+        post: operations["apply_api_servers__server_id__artwork_albums__rating_key__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/albums/{rating_key}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Keep
+         * @description Mark the cover as fine as it is (or not): kept ones leave the lists to improve.
+         */
+        put: operations["keep_api_servers__server_id__artwork_albums__rating_key__keep_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/artists": {
         parameters: {
             query?: never;
@@ -3381,6 +3482,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/tidal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Tidal */
+        get: operations["get_tidal_api_admin_tidal_get"];
+        /**
+         * Put Tidal
+         * @description Set (after Tidal accepts them) or remove the Tidal app's client ID and secret, used
+         *     for album covers.
+         */
+        put: operations["put_tidal_api_admin_tidal_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/acoustid": {
         parameters: {
             query?: never;
@@ -3879,6 +4002,60 @@ export interface components {
             /** Hex */
             hex: string;
         };
+        /** AlbumCoverKeepIn */
+        AlbumCoverKeepIn: {
+            /** Kept */
+            kept: boolean;
+        };
+        /** AlbumCoverOut */
+        AlbumCoverOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string | null;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /**
+             * Width
+             * @description The cover's size in Plex, once measured.
+             */
+            width: number | null;
+            /** Height */
+            height: number | null;
+            /**
+             * State
+             * @description missing: no cover (or one that can't be read); low: under 600 px on its shorter side; unchecked: not measured yet.
+             * @enum {string}
+             */
+            state: "missing" | "low" | "ok" | "unchecked";
+            /**
+             * Kept
+             * @description Marked as fine as it is: left out of the lists to improve.
+             */
+            kept: boolean;
+            /** Source */
+            source: string | null;
+            /** Applied At */
+            applied_at: string | null;
+        };
+        /** AlbumCoverPage */
+        AlbumCoverPage: {
+            /** Items */
+            items: components["schemas"]["AlbumCoverOut"][];
+            /** Total */
+            total: number;
+            /**
+             * Counts
+             * @description missing and low (not counting kept ones), ok, unchecked, kept.
+             */
+            counts: {
+                [key: string]: number;
+            };
+        };
         /** AlbumDetail */
         AlbumDetail: {
             /** Rating Key */
@@ -4315,6 +4492,11 @@ export interface components {
             width: number | null;
             /** Height */
             height: number | null;
+            /**
+             * Up To
+             * @description Size not known: at most this many pixels a side.
+             */
+            up_to?: number | null;
         };
         /** CandidatesOut */
         CandidatesOut: {
@@ -4459,6 +4641,15 @@ export interface components {
             listens: number;
             /** Listening Ms */
             listening_ms: number;
+        };
+        /** CoverRenderIn */
+        CoverRenderIn: {
+            source: components["schemas"]["SourceSpec"];
+            /**
+             * Square
+             * @default false
+             */
+            square: boolean;
         };
         /** DataThistleOut */
         DataThistleOut: {
@@ -7911,6 +8102,23 @@ export interface components {
              * @description Plekstender stops at this many requests a day.
              */
             cap: number;
+        };
+        /**
+         * TidalIn
+         * @description Both to set, neither to remove.
+         */
+        TidalIn: {
+            /** Client Id */
+            client_id?: string | null;
+            /** Client Secret */
+            client_secret?: string | null;
+        };
+        /** TidalOut */
+        TidalOut: {
+            /** Configured */
+            configured: boolean;
+            /** Client Id */
+            client_id: string | null;
         };
         /** TopItemOut */
         TopItemOut: {
@@ -12434,6 +12642,184 @@ export interface operations {
             };
         };
     };
+    list_covers_api_servers__server_id__artwork_albums_get: {
+        parameters: {
+            query?: {
+                show?: "needs" | "missing" | "low" | "all";
+                q?: string | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumCoverPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    candidates_api_servers__server_id__artwork_albums__rating_key__candidates_get: {
+        parameters: {
+            query: {
+                source: "coverartarchive" | "deezer" | "itunes" | "tidal" | "fanart" | "plex" | "search";
+                /** @description Web search: own words. */
+                q?: string | null;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidatesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_servers__server_id__artwork_albums__rating_key__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverRenderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_api_servers__server_id__artwork_albums__rating_key__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverRenderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumCoverOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    keep_api_servers__server_id__artwork_albums__rating_key__keep_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlbumCoverKeepIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_artists_api_servers__server_id__artwork_artists_get: {
         parameters: {
             query?: {
@@ -14173,6 +14559,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FanartKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tidal_api_admin_tidal_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TidalOut"];
+                };
+            };
+        };
+    };
+    put_tidal_api_admin_tidal_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TidalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TidalOut"];
                 };
             };
             /** @description Validation Error */

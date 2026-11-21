@@ -40,8 +40,11 @@ from plekstender.api.schemas import (
     SpotifyAppOut,
     TicketmasterKeyIn,
     TicketmasterKeyOut,
+    TidalIn,
+    TidalOut,
 )
 from plekstender.artwork.catalogue import catalogue, find
+from plekstender.artwork.covers import check_tidal
 from plekstender.artwork.sources import SourceError, fanart_logos
 from plekstender.artwork.text import FontError, check_font
 from plekstender.db.instance import (
@@ -62,6 +65,7 @@ from plekstender.db.instance import (
     get_spotify_app,
     get_ticketmaster_api_key,
     get_ticketmaster_usage,
+    get_tidal_client,
     save_datathistle_quota,
     save_jambase_quota,
     set_access_settings,
@@ -75,6 +79,7 @@ from plekstender.db.instance import (
     set_setlistfm_api_key,
     set_spotify_app,
     set_ticketmaster_api_key,
+    set_tidal_client,
 )
 from plekstender.db.models import PlexServer, User, UserServer
 from plekstender.history import scrobblers
@@ -304,6 +309,33 @@ async def put_fanart(
     await set_fanart_api_key(db, settings, body.api_key)
     await db.commit()
     return await get_fanart(db, admin, settings)
+
+
+@router.get("/tidal", response_model=TidalOut)
+async def get_tidal(db: DbDep, _: AdminDep, settings: SettingsDep) -> TidalOut:
+    client = await get_tidal_client(db, settings)
+    return TidalOut(configured=client is not None, client_id=client[0] if client else None)
+
+
+@router.put("/tidal", response_model=TidalOut)
+async def put_tidal(
+    body: TidalIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
+) -> TidalOut:
+    """Set (after Tidal accepts them) or remove the Tidal app's client ID and secret, used
+    for album covers."""
+    if bool(body.client_id) != bool(body.client_secret):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter both the client ID and the secret."
+        )
+    client = (body.client_id, body.client_secret) if body.client_id and body.client_secret else None
+    if client:
+        try:
+            await check_tidal(http, settings, client)
+        except SourceError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await set_tidal_client(db, settings, client)
+    await db.commit()
+    return await get_tidal(db, admin, settings)
 
 
 @router.get("/acoustid", response_model=AcoustIdKeyOut)

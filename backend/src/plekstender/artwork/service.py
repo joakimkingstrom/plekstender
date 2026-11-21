@@ -141,14 +141,14 @@ async def candidates(
 
 
 async def cached_search(
-    db: AsyncSession, http: httpx.AsyncClient, searxng_url: str, query: str
+    db: AsyncSession, http: httpx.AsyncClient, searxng_url: str, query: str, kind: str = "logo"
 ) -> list[Candidate]:
-    key = query.strip().lower()
+    key = query.strip().lower() if kind == "logo" else f"{kind}:{query.strip().lower()}"
     cached = await db.get(ImageSearchCache, key)
     if cached is not None and cached.created_at > dt.datetime.now(dt.UTC) - SEARCH_TTL:
         return [Candidate(**c) for c in cached.results]
     try:
-        found = await sources.search_images(http, searxng_url, query)
+        found = await sources.search_images(http, searxng_url, query, kind=kind)
     except SourceError as exc:
         raise ArtworkError(str(exc)) from exc
     stmt = insert(ImageSearchCache).values(query=key, results=[c.__dict__ for c in found])

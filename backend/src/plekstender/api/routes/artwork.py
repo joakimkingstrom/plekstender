@@ -51,8 +51,10 @@ from plekstender.artwork import images, packs
 from plekstender.artwork import service as art
 from plekstender.artwork.catalogue import find
 from plekstender.artwork.images import ImageError, Transform
+from plekstender.artwork.sources import Candidate
 from plekstender.artwork.text import FontError, render_preview
 from plekstender.artwork.text import font_path as font_file
+from plekstender.config import Settings
 from plekstender.db.instance import get_fonts
 from plekstender.db.models import (
     Artist,
@@ -293,6 +295,13 @@ async def get_candidates(
         found, note = await art.candidates(db, http, settings, client, artist, source)
     except art.ArtworkError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return candidates_out(settings, server_id, found, note)
+
+
+def candidates_out(
+    settings: Settings, server_id: int, found: list[Candidate], note: str | None
+) -> CandidatesOut:
+    """Candidates as the app gets them: signed references, thumbnails through the server."""
     out = []
     for c in found:
         token = art.sign_ref(settings, c.url)
@@ -307,6 +316,7 @@ async def get_candidates(
                 likes=c.likes,
                 width=c.width,
                 height=c.height,
+                up_to=c.extra.get("up_to"),
             )
         )
     return CandidatesOut(candidates=out, note=note)

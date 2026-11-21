@@ -709,3 +709,11 @@ Plekstender's own history makes this optional: the ratings queues and stats alre
 - [x] Home → Status: a summary ("All working" / "1 needs a look" / "1 not working"), then tiles grouped as Plekstender, Yours and Services on this Plekstender; each with its account or server underneath, a meter for services with a request limit (admins), and "Fix" where it needs one. The API gives `subtitle` and `usage` instead of names like "Plex: Home".
 - [x] A new achievement pops up as its trading card, flipping over from its back in front of the page (with confetti and a shine; just appears with reduced motion).
 - [x] Gigs → Upcoming: a "🎟 Got tickets" filter (`/api/live/shows?tickets=true`).
+
+### Album covers (21 Nov)
+- [x] Library → Artwork gets sub-tabs: Artist images and **Album covers** (server owners).
+- [x] Every cover in Plex is measured by the worker (only the start of each image is read; every 10 minutes, and right away when the tab finds unmeasured ones; again when a cover changes), in `album_covers`.
+- [x] The list shows what most needs a better cover: none (or unreadable) first, then the smallest. Low resolution means under 600 px on the shorter side. Filters: needs a better one, no cover, low resolution, all; search by album or artist. "It's fine as it is" keeps an album out of these lists.
+- [x] Sources, all open (no Apple developer account): Deezer's public search (1000 px), Apple's iTunes search (asked for at 3000 px), the Cover Art Archive (by Plex's MBID, else the release group found on MusicBrainz by title and artist, kept), Tidal (a free developer app's client ID and secret, set by an admin under Settings → Services → Artwork; search, then the albums' cover art with each file's size), fanart.tv album covers (the instance key), Plex's own posters, web search (SearXNG, own words allowed; square, big images ranked first) and uploads. Results for the same album and artist come first (a title inside the other counts: "OKNOTOK" / "OKNOTOK 1997 2017").
+- [x] Preview with both sizes, crop to a square, at most 3000 px (JPEG), saved to Plex as the album's poster; its size is recorded straight away.
+- [ ] Later: Tidal's animated covers (its artworks include VIDEO ones), cover.jpg in album folders, Tidal playlist import.

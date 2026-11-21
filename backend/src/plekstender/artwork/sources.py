@@ -1,4 +1,4 @@
-"""Where logo candidates come from: fanart.tv, MusicBrainz (to find an MBID), SearXNG."""
+"""Where image candidates come from: fanart.tv, MusicBrainz (to find an MBID), SearXNG."""
 
 from __future__ import annotations
 
@@ -87,8 +87,10 @@ _mb_last = 0.0
 MB_INTERVAL = 1.1  # MusicBrainz allows one request per second
 
 
-async def musicbrainz_artist_id(http: httpx.AsyncClient, base_url: str, name: str) -> str | None:
-    """The MBID of the artist with exactly this (normalised) name, if MusicBrainz is sure."""
+async def musicbrainz_search(
+    http: httpx.AsyncClient, base_url: str, entity: str, query: str, limit: int = 5
+) -> dict[str, Any]:
+    """A MusicBrainz search, at most one request a second (as it asks)."""
     global _mb_last
     async with _mb_lock:
         wait = MB_INTERVAL - (time.monotonic() - _mb_last)
@@ -96,8 +98,8 @@ async def musicbrainz_artist_id(http: httpx.AsyncClient, base_url: str, name: st
             await asyncio.sleep(wait)
         try:
             resp = await http.get(
-                f"{base_url.rstrip('/')}/artist",
-                params={"query": f'artist:"{name}"', "fmt": "json", "limit": 5},
+                f"{base_url.rstrip('/')}/{entity}",
+                params={"query": query, "fmt": "json", "limit": limit},
                 headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
                 timeout=20,
             )
@@ -107,8 +109,20 @@ async def musicbrainz_artist_id(http: httpx.AsyncClient, base_url: str, name: st
             _mb_last = time.monotonic()
     if resp.status_code != 200:
         raise SourceError(f"MusicBrainz is unavailable (HTTP {resp.status_code}).")
+    data = resp.json()
+    return data if isinstance(data, dict) else {}
+
+
+def lucene(text: str) -> str:
+    """Text for a quoted MusicBrainz search term."""
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+async def musicbrainz_artist_id(http: httpx.AsyncClient, base_url: str, name: str) -> str | None:
+    """The MBID of the artist with exactly this (normalised) name, if MusicBrainz is sure."""
+    data = await musicbrainz_search(http, base_url, "artist", f'artist:"{lucene(name)}"')
     wanted = normalise_artist(name)
-    for artist in resp.json().get("artists") or []:
+    for artist in data.get("artists") or []:
         if (
             int(artist.get("score") or 0) >= 90
             and normalise_artist(artist.get("name", "")) == wanted
@@ -128,12 +142,29 @@ BAD_DOMAINS = (
 )  # fmt: skip
 
 
-def _score(result: dict[str, Any]) -> int:
+COVER_HINTS = ("cover", "album", "front", "artwork")
+
+
+def _size(result: dict[str, Any]) -> tuple[int, int] | None:
+    if match := re.match(r"(\d+)\s*x\s*(\d+)", str(result.get("resolution") or "")):
+        return int(match.group(1)), int(match.group(2))
+    return None
+
+
+def _score(result: dict[str, Any], kind: str = "logo") -> int:
     url = str(result.get("img_src") or "")
     text = f"{result.get('title') or ''} {url}".lower()
-    score = sum(2 for hint in GOOD_HINTS if hint in text)
-    if url.lower().split("?")[0].endswith((".png", ".svg", ".webp")):
-        score += 3
+    if kind == "cover":
+        # Covers: square and big first.
+        score = sum(2 for hint in COVER_HINTS if hint in text)
+        if size := _size(result):
+            w, h = size
+            score += 3 if abs(w - h) <= max(w, h) * 0.03 else -2
+            score += 3 if min(w, h) >= 1000 else 1 if min(w, h) >= 600 else -2
+    else:
+        score = sum(2 for hint in GOOD_HINTS if hint in text)
+        if url.lower().split("?")[0].endswith((".png", ".svg", ".webp")):
+            score += 3
     host = (urlsplit(str(result.get("url") or url)).hostname or "").lower()
     if any(bad in host for bad in BAD_DOMAINS):
         score -= 10
@@ -141,7 +172,7 @@ def _score(result: dict[str, Any]) -> int:
 
 
 async def search_images(
-    http: httpx.AsyncClient, searxng_url: str, query: str, limit: int = 40
+    http: httpx.AsyncClient, searxng_url: str, query: str, limit: int = 40, kind: str = "logo"
 ) -> list[Candidate]:
     try:
         resp = await http.get(
@@ -161,12 +192,10 @@ async def search_images(
             continue
         seen.add(url)
         results.append(result)
-    results.sort(key=_score, reverse=True)
+    results.sort(key=lambda r: _score(r, kind), reverse=True)
     out = []
     for result in results[:limit]:
-        width = height = None
-        if match := re.match(r"(\d+)\s*x\s*(\d+)", str(result.get("resolution") or "")):
-            width, height = int(match.group(1)), int(match.group(2))
+        width, height = _size(result) or (None, None)
         thumb = result.get("thumbnail_src")
         out.append(
             Candidate(

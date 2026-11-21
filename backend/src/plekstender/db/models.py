@@ -302,6 +302,31 @@ class AlbumColour(Base):
     checked_at: Mapped[dt.datetime]
 
 
+class AlbumCover(Base):
+    """An album cover's size in Plex (measured by the worker, for Library → Artwork →
+    Album covers), and what's been done about it."""
+
+    __tablename__ = "album_covers"
+
+    server_id: Mapped[int] = mapped_column(
+        ForeignKey("plex_servers.id", ondelete="CASCADE"), primary_key=True
+    )
+    rating_key: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # The Plex image measured (a new one is measured again); null size: unreadable.
+    thumb: Mapped[str | None] = mapped_column(Text)
+    width: Mapped[int | None]
+    height: Mapped[int | None]
+    checked_at: Mapped[dt.datetime | None]
+    # MusicBrainz release group found by name (when Plex has no MBID for the album).
+    mbid: Mapped[str | None] = mapped_column(String(64))
+    # "This one's fine": left out of the lists of covers to improve.
+    kept: Mapped[bool] = mapped_column(default=False)
+    source: Mapped[str | None] = mapped_column(String(32))
+    source_url: Mapped[str | None] = mapped_column(Text)
+    applied_at: Mapped[dt.datetime | None]
+    applied_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+
 class SimilarArtist(Base):
     __tablename__ = "similar_artists"
     __table_args__ = (PrimaryKeyConstraint("server_id", "artist_rating_key", "position"),)

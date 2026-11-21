@@ -624,6 +624,9 @@ class CandidateOut(BaseModel):
     likes: int | None
     width: int | None
     height: int | None
+    up_to: int | None = Field(
+        default=None, description="Size not known: at most this many pixels a side."
+    )
 
 
 class CandidatesOut(BaseModel):
@@ -678,6 +681,51 @@ class FanartKeyIn(BaseModel):
 class AcoustIdKeyOut(BaseModel):
     configured: bool
     source: Literal["settings", "environment"] | None
+
+
+AlbumCoverState = Literal["missing", "low", "ok", "unchecked"]
+AlbumCoverFilter = Literal["needs", "missing", "low", "all"]
+
+
+class AlbumCoverOut(BaseModel):
+    rating_key: int
+    title: str
+    artist: str | None
+    year: int | None
+    thumb: str | None
+    width: int | None = Field(description="The cover's size in Plex, once measured.")
+    height: int | None
+    state: AlbumCoverState = Field(
+        description="missing: no cover (or one that can't be read); low: under 600 px on its "
+        "shorter side; unchecked: not measured yet."
+    )
+    kept: bool = Field(description="Marked as fine as it is: left out of the lists to improve.")
+    source: str | None
+    applied_at: dt.datetime | None
+
+
+class AlbumCoverPage(BaseModel):
+    items: list[AlbumCoverOut]
+    total: int
+    counts: dict[str, int] = Field(
+        description="missing and low (not counting kept ones), ok, unchecked, kept."
+    )
+
+
+class AlbumCoverKeepIn(BaseModel):
+    kept: bool
+
+
+class TidalOut(BaseModel):
+    configured: bool
+    client_id: str | None
+
+
+class TidalIn(BaseModel):
+    """Both to set, neither to remove."""
+
+    client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{8,64}$")
+    client_secret: str | None = Field(default=None, min_length=8, max_length=200)
 
 
 class AcoustIdKeyIn(BaseModel):

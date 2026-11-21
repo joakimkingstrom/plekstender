@@ -220,6 +220,39 @@ async def set_acoustid_api_key(db: AsyncSession, settings: Settings, api_key: st
     await _put(db, ACOUSTID_KEY, value)
 
 
+# --- Tidal (album covers) ------------------------------------------------------------------
+
+TIDAL_KEY = "tidal"
+TIDAL_PURPOSE = "instance.tidal_client"
+
+
+async def get_tidal_client(db: AsyncSession, settings: Settings) -> tuple[str, str] | None:
+    """Tidal's client ID and secret (a free app on Tidal's developer platform), from the
+    Settings page."""
+    stored = await _get(db, TIDAL_KEY) or {}
+    client_id, encrypted = stored.get("client_id"), stored.get("client_secret_enc")
+    if not client_id or not encrypted:
+        return None
+    try:
+        return str(client_id), _cipher(settings).decrypt(encrypted, purpose=TIDAL_PURPOSE)
+    except DecryptionError:
+        return None
+
+
+async def set_tidal_client(
+    db: AsyncSession, settings: Settings, client: tuple[str, str] | None
+) -> None:
+    value = (
+        {
+            "client_id": client[0],
+            "client_secret_enc": _cipher(settings).encrypt(client[1], purpose=TIDAL_PURPOSE),
+        }
+        if client
+        else {}
+    )
+    await _put(db, TIDAL_KEY, value)
+
+
 # --- JamBase (Live) -------------------------------------------------------------------------
 
 JAMBASE_KEY = "jambase"

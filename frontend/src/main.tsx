@@ -67,6 +67,7 @@ const router = createBrowserRouter([
           { path: 'rate', element: <RatePage /> },
           { path: 'discover', element: <DiscoverPage /> },
           { path: 'artwork', element: <ArtworkPage /> },
+          { path: 'artwork/albums', element: <ArtworkPage /> },
           { path: 'tag-editing', element: <TagEditingPage /> },
         ],
       },

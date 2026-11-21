@@ -8,6 +8,7 @@ import { ScrobbleServicesCard } from '../components/ScrobbleServicesCard'
 import { SetlistFmKeyCard } from '../components/SetlistFmKeyCard'
 import { SpotifyAppCard } from '../components/SpotifyAppCard'
 import { TicketmasterKeyCard } from '../components/TicketmasterKeyCard'
+import { TidalCard } from '../components/TidalCard'
 import { LastFmKeyCard } from '../components/LastFmKeyCard'
 import { Notice, Spinner } from '../components/ui'
 import { SERVICE_KINDS, type ServiceKind } from '../settingsSections'
@@ -52,7 +53,12 @@ const CARDS: Record<ServiceKind, () => ReactNode> = {
     </>
   ),
   playlists: () => <SpotifyAppCard />,
-  artwork: () => <FanartKeyCard />,
+  artwork: () => (
+    <>
+      <FanartKeyCard />
+      <TidalCard />
+    </>
+  ),
   files: () => <AcoustIdKeyCard />,
 }
 

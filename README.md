@@ -59,6 +59,7 @@ Open your Plekstender address in Safari and choose **Share → Add to Home Scree
 ### Optional settings
 
 - **fanart.tv:** artist logos need a free API key (Settings → Services, or `FANART_API_KEY`).
+- **Album covers:** Deezer, iTunes and the Cover Art Archive need nothing; Tidal needs a free app's client ID and secret from [developer.tidal.com](https://developer.tidal.com) (Settings → Services → Artwork).
 - **Last.fm import and scrobbling:** import needs an API key, scrobbling to Last.fm needs its shared secret too (Settings → Scrobbling, or `LASTFM_API_KEY` and `LASTFM_SHARED_SECRET`). From 1 December 2026, Last.fm only allows this with a Last.fm Pro subscriber's key.
 - **Identifying files by sound:** needs a free AcoustID application key (register one at [acoustid.org/new-application](https://acoustid.org/new-application); Settings → Services, or `ACOUSTID_API_KEY`). The Docker image includes Chromaprint's `fpcalc`; elsewhere, install it or set `FPCALC_PATH`.
 - **Gigs (upcoming):** needs a JamBase Data API key (the free Developer plan at [data.jambase.com](https://data.jambase.com) is for non-commercial use; Settings → Services, or `JAMBASE_API_KEY`). It has 1,000 requests a month and bills requests past that, so Plekstender stops at `JAMBASE_MONTHLY_CAP` (default 900) and spreads each person's daily refresh over the month. Places are searched with Open-Meteo's free geocoding (only the typed text is sent).

@@ -747,6 +747,35 @@ async def find_cover_colours(timestamp: int) -> None:
         log.info("Worked out %d album covers' colours", done)
 
 
+@app.task(queue="maintenance", queueing_lock="cover-sizes")
+async def measure_cover_sizes() -> None:
+    """Measure album covers not measured yet, or changed (Library → Artwork → Album covers).
+    Only the start of each image is read."""
+    from plekstender.artwork.covers import measure_covers  # (import cycle)
+
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        done = await measure_covers(db, http, get_settings())
+    if done:
+        log.info("Measured %d album covers", done)
+
+
+async def enqueue_cover_sizes() -> None:
+    try:
+        await measure_cover_sizes.configure(queueing_lock="cover-sizes").defer_async()
+    except AlreadyEnqueued:
+        pass
+
+
+@app.periodic(cron="*/10 * * * *", periodic_id="cover-sizes")
+@app.task(queue="maintenance", queueing_lock="cover-sizes-sweep")
+async def measure_cover_sizes_sweep(timestamp: int) -> None:
+    """Every 10 minutes: measure new or changed album covers."""
+    await enqueue_cover_sizes()
+
+
 @app.periodic(cron="*/5 * * * *", periodic_id="check-notifications")
 @app.task(queue="maintenance", queueing_lock="check-notifications")
 async def check_notifications(timestamp: int) -> None:

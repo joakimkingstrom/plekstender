@@ -5,7 +5,7 @@ import { Lightbox, Zoomable } from '../components/Lightbox'
 import { ColorPicker, FilePicker, Slider } from '../components/controls'
 import { Select } from '../components/Select'
 import { Tooltip } from '../components/Tooltip'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import {
   artworkKeys,
   useApplyArtwork,
@@ -28,6 +28,8 @@ import { useMe } from '../api/hooks'
 import { Artwork } from '../components/library'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
+import { TabNav } from '../components/TabNav'
+import { AlbumCovers } from './AlbumCoversPage'
 import { formatRelative } from '../format'
 
 type Artist = Schemas['ArtworkArtistOut']
@@ -61,19 +63,33 @@ const DEFAULT_TRANSFORM: Transform = {
   background: '#000000',
 }
 
+/** Library → Artwork: artist images and album covers, each its own sub-tab. */
 export function ArtworkPage() {
   const { active, blocker } = useLibraryServer()
   const me = useMe()
+  const albums = useLocation().pathname.replace(/\/$/, '').endsWith('/artwork/albums')
   return (
     <>
+      <TabNav
+        label="Artwork"
+        tabs={[
+          { to: '/library/artwork', label: 'Artist images', end: true },
+          { to: '/library/artwork/albums', label: 'Album covers' },
+        ]}
+      />
       <p className="mb-4 text-sm text-muted">
-        Replace artist photos with logos. Changes are saved to Plex for everyone using the server.
+        {albums
+          ? 'Find albums without a cover or with a blurry one, and replace them from Deezer, iTunes, the Cover Art Archive, Tidal, fanart.tv or the web. '
+          : 'Replace artist photos with logos. '}
+        Changes are saved to Plex for everyone using the server.
       </p>
       {blocker ??
         (!active!.is_owner ? (
           <Notice>
-            Only the owner of {active!.name} can change artist images.
+            Only the owner of {active!.name} can change {albums ? 'album covers' : 'artist images'}.
           </Notice>
+        ) : albums ? (
+          <AlbumCovers serverId={active!.id} />
         ) : (
           <ArtworkEditor serverId={active!.id} isAdmin={Boolean(me.data?.is_admin)} />
         ))}

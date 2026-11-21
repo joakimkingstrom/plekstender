@@ -15,6 +15,7 @@ from plekstender.api.middleware import CSRFMiddleware, RateLimiter, SecurityHead
 from plekstender.api.routes import (
     achievements,
     admin,
+    album_covers,
     artwork,
     auth,
     discover,
@@ -98,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tag_editing,
         renames,
         scrobblers,
+        album_covers,  # before artwork: /artwork/albums isn't an artist
         artwork,
         export,
         live,

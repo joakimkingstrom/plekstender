@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     fanart_api_key: SecretStr | None = None
     fanart_api_url: str = "https://webservice.fanart.tv/v3"
     musicbrainz_api_url: str = "https://musicbrainz.org/ws/2"
+    # Album covers (Library → Artwork → Album covers): open APIs, no keys (Tidal's is set on
+    # Settings by an admin).
+    coverartarchive_url: str = "https://coverartarchive.org"
+    itunes_api_url: str = "https://itunes.apple.com"
+    deezer_api_url: str = "https://api.deezer.com"
+    tidal_api_url: str = "https://openapi.tidal.com/v2"
+    tidal_auth_url: str = "https://auth.tidal.com/v1/oauth2/token"
     # Image search (SearXNG with JSON output), e.g. http://searxng:8080. None = off.
     searxng_url: str | None = None
     # Writable directory for downloaded fonts, uploads and exports.

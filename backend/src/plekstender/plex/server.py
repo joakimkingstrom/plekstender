@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+from PIL import ImageFile
 from pydantic import BaseModel, Field
 
 from plekstender.config import Settings
@@ -227,6 +228,45 @@ class PlexServerClient:
         if not content_type.startswith("image/"):
             raise PlexError("photo transcoder returned a non-image response")
         return resp.content, content_type
+
+    async def image(self, path: str, max_bytes: int = 40 * 1024 * 1024) -> bytes:
+        """An image as Plex has it (full size, e.g. an album's cover), not transcoded."""
+        resp = await self._request(
+            path, accept_json=False, request_timeout=httpx.Timeout(60.0, connect=5.0)
+        )
+        if len(resp.content) > max_bytes:
+            raise PlexError("the image is too large")
+        return resp.content
+
+    async def image_size(self, path: str, max_bytes: int = 4 * 1024 * 1024) -> tuple[int, int]:
+        """An image's width and height, read from the start of the file (a cover's header
+        is in its first few kilobytes), without downloading all of it."""
+        headers = plex_headers(self._settings, self._token)
+        headers["Accept"] = "image/*"
+        parser = ImageFile.Parser()
+        read = 0
+        async with self._http.stream(
+            "GET",
+            f"{self._base}{path}",
+            headers=headers,
+            timeout=API_TIMEOUT,
+            follow_redirects=False,
+        ) as resp:
+            if resp.status_code == 401:
+                raise PlexAuthError("server rejected the token", 401)
+            if resp.is_error or resp.is_redirect:
+                raise PlexError(f"server returned HTTP {resp.status_code}", resp.status_code)
+            async for chunk in resp.aiter_bytes():
+                try:
+                    parser.feed(chunk)
+                except Exception as exc:  # Pillow raises many kinds for broken images
+                    raise PlexError("not an image Plekstender can read") from exc
+                if parser.image is not None:
+                    return parser.image.size
+                read += len(chunk)
+                if read > max_bytes:
+                    break
+        raise PlexError("not an image Plekstender can read")
 
     async def refresh_folder(self, section_key: str, path: str | None) -> None:
         """Ask Plex to rescan one folder of a library (after its files' tags changed), or
