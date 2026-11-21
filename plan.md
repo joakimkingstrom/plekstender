@@ -636,7 +636,7 @@ Library → Stats (a tab next to Library; Tag editing is its own tab since Phase
 - [x] Remove "Coming up".
 - [x] Your listening at a glance: this week's listens (against the week before), the last 30 days' listens, artists and time, the current and longest streak, and a column chart of the last 30 days; top 5 artists and albums of the last 30 days with bars; the latest 6 ratings. A short note instead when there's no history yet.
 - [x] Recently added albums or artists (12, newest first; `GET /library/recent`).
-- [x] Gigs coming up: the next 4 from the Gigs page, or a prompt to set a place there.
+- [x] Gigs coming up: the gigs you've got tickets for ("Gigs you've got tickets for", the next 4, and how many more), or when there are none the next 4 from the Gigs page, or a prompt to set a place there. (21 Nov: tickets first.)
 - The library sync, Servers and Status cards stay below.
 
 ### Phase 16 — Rewind (from `.todo.md`)

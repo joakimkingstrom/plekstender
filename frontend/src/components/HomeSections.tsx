@@ -193,11 +193,38 @@ export function RecentlyAdded({ serverId }: { serverId: number }) {
 }
 
 /** The next few gigs from the Gigs page (when a place is set). */
+/** The gigs you've got tickets for; when there are none, the gigs coming up near you. */
 export function UpcomingGigs({ serverId }: { serverId: number | null }) {
   const settings = useLiveSettings()
   const placed = Boolean(settings.data?.place_name)
+  const starred = useLiveShows({ starred: true }, false)
   const shows = useLiveShows({}, false)
-  if (settings.isPending || !settings.data) return null
+  if (settings.isPending || !settings.data || starred.isPending) return null
+  const ticketed = (starred.data?.shows ?? []).filter((show) => show.got_ticket)
+  const allGigs = (
+    <Link to="/gigs" className={more}>
+      All gigs
+    </Link>
+  )
+  if (ticketed.length)
+    return (
+      <Card title="Gigs you've got tickets for" action={allGigs}>
+        <ul className="-mx-3 divide-y divide-border">
+          {ticketed.slice(0, 4).map((show) => (
+            <GigRow key={show.id} show={show} serverId={serverId} />
+          ))}
+        </ul>
+        {ticketed.length > 4 && (
+          <p className="mt-2 text-sm text-muted">
+            And {ticketed.length - 4} more on{' '}
+            <Link to="/gigs" className="text-accent hover:underline">
+              Gigs
+            </Link>
+            .
+          </p>
+        )}
+      </Card>
+    )
   if (!placed)
     return (
       <Card title="Gigs coming up">
@@ -212,14 +239,7 @@ export function UpcomingGigs({ serverId }: { serverId: number | null }) {
     )
   const list = shows.data?.shows ?? []
   return (
-    <Card
-      title="Gigs coming up"
-      action={
-        <Link to="/gigs" className={more}>
-          All gigs
-        </Link>
-      }
-    >
+    <Card title="Gigs coming up" action={allGigs}>
       {shows.isPending ? (
         <Spinner />
       ) : list.length === 0 ? (
