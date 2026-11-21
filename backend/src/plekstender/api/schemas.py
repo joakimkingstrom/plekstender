@@ -1908,11 +1908,13 @@ class RewindItem(BaseModel):
     rating_key: int | None = Field(description="Library artist or album (songs: the album).")
     thumb: str | None
     colour: str | None = Field(description="The album cover's main colour, if known.")
+    track_key: int | None = Field(default=None, description="Songs: the library song (to play).")
 
 
 class RewindRepeat(BaseModel):
     name: str
     artist: str
+    track_key: int | None = Field(default=None, description="The library song (to play).")
     runs: int = Field(description="Times it was played two or more times in a row.")
     longest: int = Field(description="The most times in a row.")
     shortest: int = Field(description="The fewest times in a row (of those runs).")

@@ -238,7 +238,14 @@ async def get_clip(
             return Clip(path, intro.leading_silence_ms)
         if not track.part_key:
             raise PreviewError("Plex has no file for this song.")
-        silence = await make_clip(settings, client, track.part_key, path)
+        # Making a clip takes seconds (up to FFMPEG_TIMEOUT, and waits its turn): don't hold
+        # a database connection meanwhile, or a few at once can run the pool dry.
+        await db.commit()
+        try:
+            silence = await make_clip(settings, client, track.part_key, path)
+        except OSError as exc:  # (disk full, ffmpeg missing, a file moved underneath)
+            log.warning("preview of %s failed: %s", track.rating_key, exc)
+            raise PreviewError("The preview couldn't be made.") from exc
         stmt = insert(TrackIntro).values(
             server_id=track.server_id,
             rating_key=track.rating_key,

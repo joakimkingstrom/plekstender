@@ -6,8 +6,9 @@ import datetime as dt
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.api.deps import DbDep, UserDep
 from plekstender.api.routes.servers import get_user_server
@@ -20,23 +21,70 @@ from plekstender.api.schemas import (
     RewindOut,
     RewindRepeat,
 )
-from plekstender.db.models import AppTime
+from plekstender.db.models import AppTime, Artist, Track
 from plekstender.history import rewind, stats
 from plekstender.history.stats import Top
+from plekstender.sync.parse import normalise_artist, normalise_title
 
 router = APIRouter(prefix="/api", tags=["stats"])
 MAX_DAYS = 366 * 10
 DAY_SECONDS = 86_400
 
 
-def _repeat(song: rewind.RepeatSong) -> RewindRepeat:
+def _repeat(song: rewind.RepeatSong, track_key: int | None = None) -> RewindRepeat:
     return RewindRepeat(
         name=song.name,
         artist=song.artist,
         runs=song.runs,
         longest=song.longest,
         shortest=song.shortest,
+        track_key=track_key,
     )
+
+
+async def _song_keys(
+    db: AsyncSession, server_id: int | None, songs: list[tuple[str | None, str, int | None]]
+) -> list[int | None]:
+    """The library songs for (artist, title, album) triples, so Rewind can play them: the
+    same title on that album, or else by that artist (as album or song artist)."""
+    if server_id is None or not songs:
+        return [None] * len(songs)
+    titles = {normalise_title(title) for _, title, _ in songs}
+    rows = await db.execute(
+        select(
+            Track.rating_key,
+            Track.title_norm,
+            Track.album_rating_key,
+            Track.original_title,
+            Artist.title,
+        )
+        .outerjoin(
+            Artist,
+            (Artist.server_id == Track.server_id) & (Artist.rating_key == Track.artist_rating_key),
+        )
+        .where(
+            Track.server_id == server_id,
+            Track.title_norm.in_(titles),
+            Track.part_key.is_not(None),
+        )
+        .order_by(Track.popularity.desc().nulls_last(), Track.rating_key)
+    )
+    found = rows.all()
+    out: list[int | None] = []
+    for artist, title, album in songs:
+        norm, who = normalise_title(title), normalise_artist(artist or "")
+        same = [r for r in found if r[1] == norm]
+        on_album = next((r[0] for r in same if album is not None and r[2] == album), None)
+        by_artist = next(
+            (
+                r[0]
+                for r in same
+                if who and who in {normalise_artist(r[3] or ""), normalise_artist(r[4] or "")}
+            ),
+            None,
+        )
+        out.append(on_album or by_artist)
+    return out
 
 
 def _items(items: list[Top], colours: dict[int, str]) -> list[RewindItem]:
@@ -78,6 +126,18 @@ async def get_rewind(
         dt.datetime.combine(end + dt.timedelta(days=1), dt.time(), zone), dt.datetime.now(dt.UTC)
     )
     r = await rewind.build(db, user.id, library, begin, finish, zone)
+    # The songs Rewind can play: its top songs and the ones on repeat.
+    keys = await _song_keys(
+        db,
+        library,
+        [(t.artist, t.name, t.rating_key) for t in r.top_tracks]
+        + [(s.artist, s.name, None) for s in r.repeats]
+        + ([(r.longest_repeat.artist, r.longest_repeat.name, None)] if r.longest_repeat else []),
+    )
+    top_tracks = _items(r.top_tracks, r.colours)
+    for item, key in zip(top_tracks, keys, strict=False):
+        item.track_key = key
+    repeat_keys = keys[len(top_tracks) :]
     return RewindOut(
         start=start,
         end=end,
@@ -89,7 +149,7 @@ async def get_rewind(
         tracks=r.tracks,
         top_artists=_items(r.top_artists, r.colours),
         top_albums=_items(r.top_albums, r.colours),
-        top_tracks=_items(r.top_tracks, r.colours),
+        top_tracks=top_tracks,
         new_artists=_items(r.new_artists, r.colours),
         new_albums=_items(r.new_albums, r.colours),
         new_releases=_items(r.new_releases, r.colours),
@@ -102,8 +162,10 @@ async def get_rewind(
         genre_parts=[
             RewindGenreTime(when=g.when, genre=g.genre, share=g.share) for g in r.genre_parts
         ],
-        repeats=[_repeat(s) for s in r.repeats],
-        longest_repeat=_repeat(r.longest_repeat) if r.longest_repeat else None,
+        repeats=[_repeat(s, k) for s, k in zip(r.repeats, repeat_keys, strict=False)],
+        longest_repeat=_repeat(r.longest_repeat, repeat_keys[len(r.repeats)])
+        if r.longest_repeat
+        else None,
         game=RewindGame(**r.game) if r.game else None,
         app_seconds=r.app_seconds,
     )

@@ -1,7 +1,85 @@
 import { useEffect, useRef, useState } from 'react'
-import { useGameSearch, type GameMode, type GameSearchItem } from '../api/game'
-import type { Feedback, GuessResult } from '../game'
+import { Link } from 'react-router'
+import { fetchRound, useGameSearch, type GameMode, type GameSearchItem } from '../api/game'
+import { ARTIST_BONUS, PENALTY, SHOW_ARTIST, useGameSettings, type Feedback, type GuessResult } from '../game'
 import { Artwork } from './library'
+import { Button } from './ui'
+
+const WHAT: Record<GameMode, string> = { track: 'the song', album: 'the album it’s from', artist: 'the artist' }
+
+/**
+ * Before the first round on a phone: how the game works, and a Start button. (The tap also
+ * lets the phone play the music; the first song is prepared while this is read.)
+ */
+export function GameIntro({
+  serverId,
+  mode,
+  firstKey,
+  onStart,
+  onCancel,
+}: {
+  serverId: number
+  mode: GameMode
+  firstKey: number | null
+  onStart: () => void
+  onCancel: () => void
+}) {
+  const settings = useGameSettings()
+  useEffect(() => {
+    if (firstKey !== null) void fetchRound(serverId, mode, firstKey).catch(() => undefined)
+  }, [serverId, mode, firstKey])
+  const seconds = settings.round_seconds
+  const guesses = settings.max_guesses
+  return (
+    <section className="mx-auto max-w-md space-y-4 rounded-2xl border border-border bg-surface p-5" aria-labelledby="game-intro">
+      <h2 id="game-intro" className="font-display text-2xl font-bold">
+        <span className="text-accent">♪</span> Guess the intro
+      </h2>
+      <p className="text-sm">
+        A song from your library starts playing with its card hidden. Name {WHAT[mode]} before the time runs out.
+      </p>
+      <ul className="space-y-2 text-sm text-muted">
+        <li>
+          <span className="font-semibold text-text">Type to guess.</span>{' '}
+          {mode === 'track'
+            ? 'Pick the artist first to narrow it down to their songs, or type the title.'
+            : mode === 'album'
+              ? 'Pick the album from the suggestions.'
+              : 'Pick the artist from the suggestions.'}
+        </li>
+        <li>
+          <span className="font-semibold text-text">
+            {seconds} seconds, {guesses > 0 ? `${guesses} ${guesses === 1 ? 'guess' : 'guesses'}` : 'any number of guesses'}.
+          </span>{' '}
+          A wrong guess costs {PENALTY} seconds.
+        </li>
+        <li>
+          <span className="font-semibold text-text">Clues come as the clock runs down:</span> the cover comes into focus
+          {mode !== 'artist' && `, and the artist shows after ${Math.round(seconds * SHOW_ARTIST)} seconds`}.
+        </li>
+        <li>
+          <span className="font-semibold text-text">Points:</span> the seconds left when you get it
+          {mode !== 'artist' && `, plus ${ARTIST_BONUS} for the right artist`}. Then rate it and swipe on.
+        </li>
+      </ul>
+      <div className="flex items-center gap-2 pt-1">
+        <Button variant="primary" className="flex-1 py-3 text-base" onClick={onStart}>
+          ▶ Start
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
+          Not now
+        </Button>
+      </div>
+      <p className="text-xs text-muted">
+        Round length, guesses and more:{' '}
+        <Link to="/settings/game" className="underline hover:text-text">
+          Settings → Guess the intro
+        </Link>
+        .
+      </p>
+    </section>
+  )
+}
 
 /** The round's time bar over the card. */
 export function RoundClock({ elapsed, length, loading }: { elapsed: number; length: number; loading: boolean }) {

@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, unwrap, type Schemas } from './client'
+import { api, ApiError, unwrap, type Schemas } from './client'
 
 export type GameMode = Schemas['GameCheckIn']['mode']
 export type GameRound = Schemas['GameRoundOut']
@@ -20,11 +20,18 @@ export function fetchRound(serverId: number, mode: GameMode, ratingKey: number):
   const key = `${serverId}:${mode}:${ratingKey}`
   let round = rounds.get(key)
   if (!round) {
-    round = unwrap(
-      api.GET('/api/servers/{server_id}/game/round', {
-        params: { path: { server_id: serverId }, query: { mode, rating_key: ratingKey } },
-      }),
-    )
+    const get = () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/game/round', {
+          params: { path: { server_id: serverId }, query: { mode, rating_key: ratingKey } },
+        }),
+      )
+    // A hiccup (the server busy making clips, a dropped connection) gets one more try.
+    round = get().catch(async (e: unknown) => {
+      if (e instanceof ApiError && e.status < 500) throw e
+      await new Promise((r) => setTimeout(r, 1500))
+      return get()
+    })
     round.catch(() => rounds.delete(key))
     rounds.set(key, round)
     if (rounds.size > 50) rounds.delete(rounds.keys().next().value!)

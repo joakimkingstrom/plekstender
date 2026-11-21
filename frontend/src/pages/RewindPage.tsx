@@ -3,8 +3,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { api, errorMessage, unwrap, type Schemas } from '../api/client'
+import type { GameMode } from '../api/game'
 import { imageUrl, useActiveServer } from '../api/library'
 import { localTimeZone } from '../api/stats'
+import { playSample, stopAudio, unlockAudio, useAudio } from '../audio'
 import { DatePicker } from '../components/DatePicker'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatListeningTime } from '../format'
@@ -116,7 +118,27 @@ const PARTS: Record<string, string> = { night: 'at night', morning: 'in the morn
 const clockTime = (h: number) => new Date(2026, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 const hourName = (h: number) => new Date(2026, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' })
 
-type Slide = { key: string; colour: string; body: ReactNode }
+/** A song for a slide: an artist's or album's popular one, or the song itself. */
+type Music = { mode: GameMode; key: number }
+type Slide = { key: string; colour: string; body: ReactNode; music?: Music }
+
+const tune = (mode: GameMode, key: number | null | undefined): Music | undefined => (key ? { mode, key } : undefined)
+
+const SOUND_KEY = 'plekstender.rewind.sound'
+function readSound(): boolean {
+  try {
+    return localStorage.getItem(SOUND_KEY) === 'on'
+  } catch {
+    return false
+  }
+}
+function saveSound(on: boolean) {
+  try {
+    localStorage.setItem(SOUND_KEY, on ? 'on' : 'off')
+  } catch {
+    // storage unavailable: the choice lasts for this Rewind
+  }
+}
 
 /** The full-screen story: one card at a time, coloured by the period's album covers. */
 function RewindStory({ range, onClose }: { range: Range; onClose: () => void }) {
@@ -128,6 +150,28 @@ function RewindStory({ range, onClose }: { range: Range; onClose: () => void }) 
   const slides = useMemo(() => (rewind.data ? buildSlides(rewind.data, range, serverId) : []), [rewind.data, range, serverId])
   const last = slides.length - 1
   const go = useCallback((step: number) => setIndex((i) => Math.max(0, Math.min(last, i + step))), [last])
+
+  // Music (optional, off until asked for): each slide's song, or the last one's carrying on.
+  const [sound, setSound] = useState(readSound)
+  const audio = useAudio()
+  const hasMusic = serverId !== null && slides.some((sl) => sl.music)
+  const music = useMemo(() => {
+    for (let i = index; i >= 0; i--) if (slides[i]?.music) return slides[i].music
+    return undefined
+  }, [slides, index])
+  const musicMode = music?.mode
+  const musicKey = music?.key
+  useEffect(() => {
+    if (!sound || serverId === null || !musicMode || !musicKey) return
+    void playSample(serverId, musicMode, musicKey)
+  }, [sound, serverId, musicMode, musicKey])
+  useEffect(() => () => stopAudio(), [])
+  const toggleSound = () => {
+    if (sound) stopAudio()
+    else unlockAudio() // a tap: lets iPhones play the songs
+    saveSound(!sound)
+    setSound(!sound)
+  }
 
   useEffect(() => {
     closeButton.current?.focus()
@@ -168,33 +212,46 @@ function RewindStory({ range, onClose }: { range: Range; onClose: () => void }) 
             <span key={s.key} className={`h-1 flex-1 rounded-full ${i <= index ? 'bg-white' : 'bg-white/30'}`} />
           ))}
         </div>
+        {hasMusic && (
+          <button
+            type="button"
+            onClick={toggleSound}
+            aria-pressed={sound}
+            aria-label={sound ? 'Turn the music off' : 'Play music'}
+            title={sound ? 'Turn the music off' : 'Play the songs and artists as you go'}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold hover:bg-white/15 ${sound ? 'bg-white/20' : ''}`}
+          >
+            <SpeakerIcon on={sound} className={`size-5 ${sound && audio.status === 'loading' ? 'animate-pulse' : ''}`} />
+            <span className="max-sm:sr-only">{sound ? 'Music on' : 'Music'}</span>
+          </button>
+        )}
         <button ref={closeButton} type="button" onClick={onClose} aria-label="Close Rewind" className="rounded-full p-2 text-2xl leading-none hover:bg-white/15">
           ×
         </button>
       </div>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-6">
+      {/* Scrolls when a slide is taller than the screen (centred with auto margins, so the
+          top stays reachable). A tap on the left third goes back, anywhere else on. */}
+      <div
+        className="flex min-h-0 flex-1 cursor-pointer flex-col overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-6"
+        onClick={(e) => {
+          if (slides.length < 2 || (e.target as HTMLElement).closest('a, button')) return
+          const box = e.currentTarget.getBoundingClientRect()
+          go(e.clientX - box.left < box.width / 3 ? -1 : 1)
+        }}
+      >
         {rewind.isPending ? (
-          <Spinner />
+          <div className="m-auto">
+            <Spinner />
+          </div>
         ) : rewind.isError ? (
-          <div className="max-w-md">
+          <div className="m-auto max-w-md">
             <Notice tone="error">{errorMessage(rewind.error)}</Notice>
           </div>
         ) : slide ? (
-          <div
-            key={slide.key}
-            className="pointer-events-none relative z-10 w-full max-w-xl motion-safe:animate-[rewind-in_500ms_ease-out] [&_a]:pointer-events-auto"
-            aria-live="polite"
-          >
+          <div key={slide.key} className="mx-auto my-auto w-full max-w-xl motion-safe:animate-[rewind-in_500ms_ease-out]" aria-live="polite">
             {slide.body}
           </div>
         ) : null}
-        {/* Tap the left third to go back, the rest to go on. */}
-        {slides.length > 1 && (
-          <>
-            <button type="button" aria-hidden tabIndex={-1} onClick={() => go(-1)} className="absolute inset-y-0 left-0 w-1/3 cursor-w-resize" />
-            <button type="button" aria-hidden tabIndex={-1} onClick={() => go(1)} className="absolute inset-y-0 right-0 w-2/3 cursor-e-resize" />
-          </>
-        )}
       </div>
       <div className="flex items-center justify-between gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <button type="button" onClick={() => go(-1)} disabled={index === 0} className="rounded-full px-4 py-2 text-sm font-semibold hover:bg-white/15 disabled:opacity-40">
@@ -218,18 +275,27 @@ function RewindStory({ range, onClose }: { range: Range; onClose: () => void }) 
   )
 }
 
+function SpeakerIcon({ on, className }: { on: boolean; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" />
+      {on ? <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /> : <path d="m16 9 5 6m0-6-5 6" />}
+    </svg>
+  )
+}
+
 function Heading({ kicker, children }: { kicker: string; children: ReactNode }) {
   return (
     <>
-      <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-white/75">{kicker}</p>
-      <h2 className="mb-6 font-display text-4xl font-bold leading-tight sm:text-5xl">{children}</h2>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-white/75 sm:text-sm">{kicker}</p>
+      <h2 className="mb-4 font-display text-3xl font-bold leading-tight sm:mb-6 sm:text-5xl">{children}</h2>
     </>
   )
 }
 
 function Cover({ serverId, item, round = false, big = false }: { serverId: number | null; item: Item; round?: boolean; big?: boolean }) {
   const src = serverId !== null ? imageUrl(serverId, item.thumb, big ? 600 : 128) : null
-  const size = big ? 'size-40 sm:size-52' : 'size-12'
+  const size = big ? 'size-32 sm:size-52' : 'size-10 sm:size-12'
   return src ? (
     <img src={src} alt="" className={`${size} shrink-0 object-cover shadow-lg ${round ? 'rounded-full' : 'rounded-md'}`} />
   ) : (
@@ -239,16 +305,16 @@ function Cover({ serverId, item, round = false, big = false }: { serverId: numbe
 
 function Ranked({ items, serverId, round = false, unit = 'listens' }: { items: Item[]; serverId: number | null; round?: boolean; unit?: string }) {
   return (
-    <ol className="space-y-3">
+    <ol className="space-y-2 sm:space-y-3">
       {items.map((item, i) => (
         <li key={`${item.name}-${item.artist}`} className="flex items-center gap-3">
-          <span className="w-6 text-right font-display text-2xl font-bold text-white/70">{i + 1}</span>
+          <span className="w-5 text-right font-display text-xl font-bold text-white/70 sm:w-6 sm:text-2xl">{i + 1}</span>
           <Cover serverId={serverId} item={item} round={round} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-lg font-semibold">{item.name}</span>
+            <span className="block truncate text-base font-semibold sm:text-lg">{item.name}</span>
             {item.artist && <span className="block truncate text-sm text-white/75">{item.artist}</span>}
           </span>
-          <span className="shrink-0 text-sm text-white/80 tabular-nums">
+          <span className="shrink-0 text-xs text-white/80 tabular-nums sm:text-sm">
             {formatCount(item.listens)} {unit}
           </span>
         </li>
@@ -319,6 +385,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
   }
   slides.push({
     key: 'intro',
+    music: tune('track', r.top_tracks[0]?.track_key),
     body: (
       <>
         <Heading kicker="Rewind">{range.label}</Heading>
@@ -334,6 +401,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
   if (topArtist)
     slides.push({
       key: 'artists',
+      music: tune('artist', topArtist.rating_key),
       body: (
         <>
           <Heading kicker="Your top artist">{topArtist.name}</Heading>
@@ -347,6 +415,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
   if (r.top_albums.length)
     slides.push({
       key: 'albums',
+      music: tune('album', r.top_albums[0].rating_key),
       body: (
         <>
           <Heading kicker="Your top albums">{r.top_albums[0].name}</Heading>
@@ -357,6 +426,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
   if (r.top_tracks.length)
     slides.push({
       key: 'songs',
+      music: tune('track', r.top_tracks[0].track_key),
       body: (
         <>
           <Heading kicker="Your top songs">{r.top_tracks[0].name}</Heading>
@@ -367,12 +437,19 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
   if (r.new_artists.length || r.new_albums.length)
     slides.push({
       key: 'new',
+      music: tune('artist', r.new_artists[0]?.rating_key) ?? tune('album', r.new_albums[0]?.rating_key),
       body: (
         <>
           <Heading kicker="New obsessions">First heard, then on and on</Heading>
-          {r.new_artists.length > 0 && <Ranked items={r.new_artists} serverId={serverId} round />}
+          {r.new_artists.length > 0 && (
+            <>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-white/60">Artists</p>
+              <Ranked items={r.new_artists} serverId={serverId} round />
+            </>
+          )}
           {r.new_albums.length > 0 && (
-            <div className="mt-6">
+            <div className={r.new_artists.length ? 'mt-5' : ''}>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-white/60">Albums</p>
               <Ranked items={r.new_albums} serverId={serverId} />
             </div>
           )}
@@ -382,6 +459,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
   if (r.new_releases.length)
     slides.push({
       key: 'releases',
+      music: tune('album', r.new_releases[0].rating_key),
       body: (
         <>
           <Heading kicker="Fresh out">The new releases you played most</Heading>
@@ -445,6 +523,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
   if (r.longest_repeat)
     slides.push({
       key: 'repeat',
+      music: tune('track', r.longest_repeat.track_key),
       body: (
         <>
           <Heading kicker="On repeat">

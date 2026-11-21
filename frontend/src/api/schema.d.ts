@@ -6882,6 +6882,11 @@ export interface components {
              * @description The album cover's main colour, if known.
              */
             colour: string | null;
+            /**
+             * Track Key
+             * @description Songs: the library song (to play).
+             */
+            track_key?: number | null;
         };
         /** RewindOut */
         RewindOut: {
@@ -6961,6 +6966,11 @@ export interface components {
             name: string;
             /** Artist */
             artist: string;
+            /**
+             * Track Key
+             * @description The library song (to play).
+             */
+            track_key?: number | null;
             /**
              * Runs
              * @description Times it was played two or more times in a row.

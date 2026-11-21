@@ -68,6 +68,7 @@ async def test_rewind(app: FastAPI, plex: FakePlex) -> None:
     ok = r["top_albums"][0]
     assert (ok["name"], ok["rating_key"], ok["colour"]) == ("OK Computer", 200, "#2850c8")
     assert r["top_tracks"][0]["name"] == "Paranoid Android"
+    assert r["top_tracks"][0]["track_key"] == 300  # the library song, to play
     # Radiohead was first heard this week, 13 times; Portishead earlier.
     assert [a["name"] for a in r["new_artists"]] == ["Radiohead"]
     assert [a["name"] for a in r["new_albums"]] == ["OK Computer"]
@@ -82,6 +83,7 @@ async def test_rewind(app: FastAPI, plex: FakePlex) -> None:
         ("Karma Police", 1, 2, 2),
     ]
     assert r["longest_repeat"]["longest"] == 10
+    assert r["longest_repeat"]["track_key"] == 300 and r["repeats"][1]["track_key"] == 301
     assert r["game"] is None
     assert r["app_seconds"] == 120
 

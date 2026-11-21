@@ -17,7 +17,7 @@ import {
 import { Artwork, Stars } from '../components/library'
 import { Mark } from '../components/Mark'
 import { PlayButton } from '../components/PlayButton'
-import { GuessBox, RoundClock } from '../components/IntroGame'
+import { GameIntro, GuessBox, RoundClock } from '../components/IntroGame'
 import { useGameSettings, useIntroRound } from '../game'
 import { fetchSample, useAddToGamePlaylist, useGameStats } from '../api/game'
 import { playSample, stopAudio, unlockAudio } from '../audio'
@@ -100,6 +100,10 @@ export function RatePage() {
 
 function Rater({ serverId }: { serverId: number }) {
   const [settings, setSettings] = useState<Settings>(loadSettings)
+  // On a phone the game opens with how it works and a Start tap (which also lets iPhones
+  // play the music); elsewhere it starts straight away.
+  const [gameStarted, setGameStarted] = useState(false)
+  const phone = typeof window !== 'undefined' && !window.matchMedia?.('(min-width: 768px)').matches
   const update = (patch: Partial<Settings>) => {
     const next = { ...settings, ...patch }
     setSettings(next)
@@ -257,6 +261,7 @@ function Rater({ serverId }: { serverId: number }) {
                 aria-pressed={settings.game}
                 onClick={() => {
                   unlockAudio() // a tap: lets the game play sound on iPhones
+                  setGameStarted(false)
                   update({ game: !settings.game })
                 }}
                 className={`rounded-lg border px-3 py-[7px] text-sm font-medium ${
@@ -303,6 +308,17 @@ function Rater({ serverId }: { serverId: number }) {
             </p>
           </Card>
         )
+      ) : settings.layout === 'swipe' && settings.game && phone && !gameStarted ? (
+        <GameIntro
+          serverId={serverId}
+          mode={settings.kind}
+          firstKey={props.queue.items[0]?.rating_key ?? null}
+          onStart={() => {
+            unlockAudio()
+            setGameStarted(true)
+          }}
+          onCancel={() => update({ game: false })}
+        />
       ) : settings.layout === 'swipe' ? (
         <SwipeView
           {...props}
@@ -518,6 +534,11 @@ function SwipeView({
       )}
       {round.error && game && <Notice tone="error">{round.error}</Notice>}
       {guessing && <RoundClock elapsed={round.elapsed} length={round.length} loading={round.phase === 'loading'} />}
+      {game && round.phase === 'blocked' && (
+        <Button variant="primary" className="w-full py-3" onClick={round.resume}>
+          ▶ Tap to play the song
+        </Button>
+      )}
       {hint && !game && (
         <p className="text-center text-xs text-muted">
           Swipe right for 2½–5 stars, left for 2–½, down to skip. The further you swipe, the higher or lower.

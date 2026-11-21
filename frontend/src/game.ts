@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { playClip, stopAudio, type Preview } from './audio'
+import { blockedByBrowser, interrupted, playClip, stopAudio, type Preview } from './audio'
 import { errorMessage, type Schemas } from './api/client'
 import { checkGuess, fetchRound, useRecordResult, type GameMode, type GameSearchItem } from './api/game'
 import { useMe } from './api/hooks'
@@ -24,12 +24,13 @@ export const PENALTY = 3
 /** Song and album modes: points for naming the right artist (also when the round is lost). */
 export const ARTIST_BONUS = 3
 /** The artist shows from this share of the round (song and album modes). */
-const SHOW_ARTIST = 0.6
+export const SHOW_ARTIST = 0.6
 /** Album and artist modes: the playing song's title, as a hint, from this share. */
 const SHOW_SONG = 0.67
 const MAX_BLUR = 28
 
-type Phase = 'loading' | 'playing' | 'won' | 'lost' | 'skipped' | 'error'
+// blocked: the song is ready but the browser wants a tap before it plays (iPhones).
+type Phase = 'loading' | 'blocked' | 'playing' | 'won' | 'lost' | 'skipped' | 'error'
 export type Feedback = { tone: 'good' | 'bad'; text: string } | null
 type Round = {
   key: string
@@ -99,6 +100,17 @@ export function useIntroRound({
     unplayable.current = onUnplayable
   })
 
+  /** The music has started: so does the clock. */
+  const begin = (preview: Preview, songTitle: string | null) => {
+    const started = performance.now()
+    setNow(started)
+    setRound({ ...fresh(key), phase: 'playing', preview, songTitle, startedAt: started })
+  }
+  const beginRef = useRef(begin)
+  useEffect(() => {
+    beginRef.current = begin
+  })
+
   // Start the round when the card comes up (and prepare the next card's).
   useEffect(() => {
     if (!active) return
@@ -112,11 +124,19 @@ export function useIntroRound({
           return
         }
         const preview = r.preview
-        await playClip(`game:${key}`, preview)
+        const songTitle = r.song_title ?? null
+        try {
+          await playClip(`game:${key}`, preview)
+        } catch (e) {
+          if (cancelled || interrupted(e)) return // another song took over: not a problem
+          if (blockedByBrowser(e)) {
+            setRound({ ...fresh(key), phase: 'blocked', preview, songTitle })
+            return
+          }
+          throw e
+        }
         if (cancelled) return
-        const started = performance.now()
-        setNow(started)
-        setRound({ ...fresh(key), phase: 'playing', preview, songTitle: r.song_title ?? null, startedAt: started })
+        beginRef.current(preview, songTitle)
       })
       .catch((e: unknown) => {
         if (!cancelled) setRound({ ...fresh(key), phase: 'error', error: errorMessage(e) })
@@ -137,7 +157,7 @@ export function useIntroRound({
   const elapsed =
     current.phase === 'playing'
       ? Math.min(length, (now - current.startedAt) / 1000 + current.penalty)
-      : current.phase === 'loading'
+      : current.phase === 'loading' || current.phase === 'blocked'
         ? 0
         : length
   const bonus = (found: boolean) => (mode !== 'artist' && found ? ARTIST_BONUS : 0)
@@ -214,7 +234,7 @@ export function useIntroRound({
     return { correct: false, artistCorrect }
   }
 
-  const playing = current.phase === 'playing' || current.phase === 'loading'
+  const playing = current.phase === 'playing' || current.phase === 'loading' || current.phase === 'blocked'
   const guessesLeft = settings.max_guesses > 0 ? Math.max(0, settings.max_guesses - current.guesses) : null
   return {
     phase: current.phase,
@@ -230,9 +250,20 @@ export function useIntroRound({
     session,
     guess,
     giveUp: () => current.phase === 'playing' && finish(false, bonus(current.artistFound)),
+    /** After `blocked`: play the song from this tap. */
+    resume: () => {
+      const { preview, songTitle } = current
+      if (current.phase !== 'blocked' || !preview) return
+      playClip(`game:${key}`, preview).then(
+        () => begin(preview, songTitle),
+        (e: unknown) => {
+          if (!interrupted(e)) update({ phase: 'error', error: errorMessage(e) })
+        },
+      )
+    },
     /** What the card may show right now. The answer's title only once the round is over. */
     reveal: {
-      blur: current.phase === 'loading' ? MAX_BLUR : playing ? MAX_BLUR * (1 - elapsed / length) : 0,
+      blur: current.phase === 'loading' || current.phase === 'blocked' ? MAX_BLUR : playing ? MAX_BLUR * (1 - elapsed / length) : 0,
       artist: !playing || (mode !== 'artist' && elapsed >= length * SHOW_ARTIST),
       title: !playing,
       /** Album and artist modes: the song playing, late in the round (and afterwards). */

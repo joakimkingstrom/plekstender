@@ -114,6 +114,12 @@ describe('Guess the intro', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     )
+    // On a phone: how it works first, and a Start tap (which lets iPhones play the music).
+    const intro = await screen.findByRole('region', { name: '♪ Guess the intro' })
+    expect(intro).toHaveTextContent('Name the song before the time runs out.')
+    expect(intro).toHaveTextContent('30 seconds, 3 guesses.')
+    expect(intro).toHaveTextContent('the artist shows after 18 seconds')
+    fireEvent.click(screen.getByRole('button', { name: '▶ Start' }))
     // The song plays with the card hidden; no stars until it's answered.
     expect(await screen.findByRole('heading', { name: '? ? ?' })).toBeInTheDocument()
     expect(screen.queryByRole('slider', { name: 'Rate Airbag' })).not.toBeInTheDocument()
@@ -150,6 +156,35 @@ describe('Guess the intro', () => {
   })
 })
 
+describe('Guess the intro on an iPhone', () => {
+  it('asks for a tap when the phone won\'t play without one, instead of failing', async () => {
+    let refuse = true
+    // (The app keeps one audio element: refuse its first song, as an iPhone would after a slow load.)
+    const play = FakeAudio.prototype.play
+    const spy = vi.spyOn(FakeAudio.prototype, 'play').mockImplementation(function (this: FakeAudio) {
+      if (refuse && this.src.includes('/clip/')) {
+        refuse = false
+        return Promise.reject(Object.assign(new Error('Not allowed'), { name: 'NotAllowedError' }))
+      }
+      return play.call(this)
+    })
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <RatePage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '▶ Start' }))
+    const tap = await screen.findByRole('button', { name: '▶ Tap to play the song' })
+    expect(screen.queryByText(/Something went wrong/)).not.toBeInTheDocument()
+    fireEvent.click(tap)
+    await screen.findByText(/^\d+ s$/) // the clock runs: the song plays
+    expect(screen.queryByRole('button', { name: '▶ Tap to play the song' })).not.toBeInTheDocument()
+    spy.mockRestore()
+  })
+})
+
 describe('Guess the intro settings', () => {
   it('ends the round when the guesses run out, and says nothing about the artist when asked not to', async () => {
     game = { max_guesses: 1, artist_feedback: false }
@@ -160,6 +195,7 @@ describe('Guess the intro settings', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     )
+    fireEvent.click(await screen.findByRole('button', { name: '▶ Start' }))
     expect(await screen.findByRole('heading', { name: '? ? ?' })).toBeInTheDocument()
     expect(await screen.findByText('1 guess left')).toBeInTheDocument()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Your guess' }), { target: { value: 'rad' } })

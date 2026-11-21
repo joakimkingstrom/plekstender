@@ -58,16 +58,35 @@ function silentWav(): string {
   return `data:audio/wav;base64,${btoa(binary)}`
 }
 
+// iOS lets an audio element play without a tap once it has played after one.
+let unlocked = false
+let unlocking: Promise<void> | null = null
+
 /** Call from a tap before playing later without one (iOS). */
 export function unlockAudio() {
+  if (unlocked || unlocking) return
   const el = element()
-  if (el.src) return
-  // A moment of silence, played and paused at once.
+  // A moment of silence, played and paused at once. A clip mustn't replace it before that
+  // play has started, or the unlock never happens (see playClip).
   el.src = silentWav()
-  void el.play().then(
-    () => el.pause(),
+  unlocking = el.play().then(
+    () => {
+      unlocked = true
+      el.pause()
+    },
     () => undefined,
   )
+  void unlocking.finally(() => (unlocking = null))
+}
+
+/** The browser refused to play without a tap (iOS, after a slow load). */
+export function blockedByBrowser(e: unknown): boolean {
+  return e instanceof Error && e.name === 'NotAllowedError'
+}
+
+/** The play was cut short by another one (or a stop): nothing went wrong. */
+export function interrupted(e: unknown): boolean {
+  return e instanceof Error && e.name === 'AbortError'
 }
 
 export function previewInfo(serverId: number, ratingKey: number): Promise<Preview> {
@@ -84,11 +103,13 @@ export function previewInfo(serverId: number, ratingKey: number): Promise<Previe
 export async function playClip(key: string, preview: Preview, seconds?: number): Promise<void> {
   const el = element()
   set({ key, status: 'loading', error: null })
+  if (unlocking) await unlocking
   const start = preview.start_ms / 1000
   el.src = start > 0 ? `${preview.url}#t=${start.toFixed(2)}` : preview.url
   stopAt = seconds ? start + seconds : null
   try {
     await el.play()
+    unlocked = true
     if (state.key !== key) return // something else started meanwhile
     set({ status: 'playing' })
   } catch (e) {
