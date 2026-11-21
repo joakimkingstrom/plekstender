@@ -244,33 +244,40 @@ function CoverEditor({
         <Card>
           <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Where from">
             {TABS.map(([key, label]) => (
-              <button
+              // The star: the default source (filled), or make this one the default.
+              <span
                 key={key}
-                type="button"
-                role="tab"
-                aria-selected={tab === key}
-                onClick={() => setTab(key)}
-                className={`shrink-0 border-b-2 px-3 pb-2 text-sm font-medium ${tab === key ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'}`}
+                role="presentation"
+                className={`group flex shrink-0 items-center border-b-2 pb-2 ${tab === key ? 'border-accent' : 'border-transparent'}`}
               >
-                {label}
-              </button>
-            ))}
-          </div>
-          {tab !== 'upload' && (
-            <div className="-mt-2 mb-3 flex justify-end text-xs">
-              {tab === opensOn ? (
-                <span className="text-muted">★ Default source</span>
-              ) : (
                 <button
                   type="button"
-                  className="text-muted hover:text-text"
-                  onClick={() => savePreferences.mutate({ cover_source: tab })}
+                  role="tab"
+                  aria-selected={tab === key}
+                  onClick={() => setTab(key)}
+                  className={`pl-3 text-sm font-medium ${key === 'upload' ? 'pr-3' : 'pr-1'} ${tab === key ? 'text-text' : 'text-muted hover:text-text'}`}
                 >
-                  ☆ Set as default source
+                  {label}
                 </button>
-              )}
-            </div>
-          )}
+                {key !== 'upload' &&
+                  (key === opensOn ? (
+                    <span className="pr-3 text-sm text-accent" title="Default source" aria-label="Default source">
+                      ★
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => savePreferences.mutate({ cover_source: key })}
+                      title="Set as default source"
+                      aria-label={`Set ${label} as default source`}
+                      className={`pr-3 text-sm text-muted hover:text-accent focus-visible:opacity-100 ${tab === key ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                    >
+                      ☆
+                    </button>
+                  ))}
+              </span>
+            ))}
+          </div>
           {tab === 'upload' ? (
             <CoverUpload serverId={serverId} onUploaded={(id) => choose({ kind: 'upload', upload_id: id })} />
           ) : tab === 'search' ? (
