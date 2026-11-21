@@ -133,9 +133,9 @@ describe('Album covers', () => {
     await vi.waitFor(() => expect(requests('/api/auth/me')).not.toHaveLength(0))
     fireEvent.click(await screen.findByRole('button', { name: /OK Computer OKNOTOK/ }))
     expect(await screen.findByRole('tab', { name: 'iTunes', selected: true })).toBeInTheDocument()
-    expect(screen.getByText('★ Albums open on iTunes')).toBeInTheDocument()
+    expect(screen.getByText('★ Default source')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Cover Art Archive' }))
-    fireEvent.click(screen.getByRole('button', { name: '☆ Open albums on Cover Art Archive' }))
+    fireEvent.click(screen.getByRole('button', { name: '☆ Set as default source' }))
     await vi.waitFor(async () => {
       const [put] = requests('/api/auth/me/preferences').at(-1) ?? []
       expect(await (put as Request).clone().json()).toMatchObject({ cover_source: 'coverartarchive' })

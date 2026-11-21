@@ -42,7 +42,6 @@ const TABS: [Tab, string][] = [
   ['search', 'Web search'],
   ['upload', 'Upload'],
 ]
-const TAB_NAME = Object.fromEntries(TABS) as Record<Tab, string>
 const SOURCE_NAME: Record<string, string> = {
   coverartarchive: 'Cover Art Archive',
   deezer: 'Deezer',
@@ -260,14 +259,14 @@ function CoverEditor({
           {tab !== 'upload' && (
             <div className="-mt-2 mb-3 flex justify-end text-xs">
               {tab === opensOn ? (
-                <span className="text-muted">★ Albums open on {TAB_NAME[tab]}</span>
+                <span className="text-muted">★ Default source</span>
               ) : (
                 <button
                   type="button"
                   className="text-muted hover:text-text"
                   onClick={() => savePreferences.mutate({ cover_source: tab })}
                 >
-                  ☆ Open albums on {TAB_NAME[tab]}
+                  ☆ Set as default source
                 </button>
               )}
             </div>
