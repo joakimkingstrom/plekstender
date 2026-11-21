@@ -89,7 +89,7 @@ describe('AppearancePage', () => {
     expect(await screen.findByRole('radio', { name: 'Blue' })).toHaveAttribute('aria-checked', 'true')
     await vi.waitFor(async () => {
       const put = fetchMock.mock.calls.find(([r]) => r.method === 'PUT')
-      expect(await put![0].clone().json()).toEqual({ accent: '#3e63dd', skip_threshold: 80, phone_start: 'rate', theme: null, achievements: true, instance_notifications: true })
+      expect(await put![0].clone().json()).toEqual({ accent: '#3e63dd', skip_threshold: 80, phone_start: 'rate', theme: null, achievements: true, instance_notifications: true, cover_source: 'deezer' })
     })
   })
 })

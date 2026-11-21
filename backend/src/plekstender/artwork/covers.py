@@ -14,6 +14,7 @@ import datetime as dt
 import io
 import logging
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -474,6 +475,7 @@ MEASURE_CANDIDATES = 6  # at once
 BEST_MIN = 1000  # px on the shorter side, for a best match
 BEST_SQUARE = 1.05  # longer side / shorter side, at most (a little is cropped away)
 BEST_ORDER = ("itunes", "tidal", "coverartarchive", "deezer")  # when sizes are equal
+BEST_SOURCES = ("deezer", "itunes", "tidal", "coverartarchive")
 
 
 async def measure_candidates(
@@ -514,9 +516,11 @@ async def best_match(
     tidal_client: tuple[str, str] | None,
     cover: AlbumCover,
     album: AlbumRef,
+    use: Sequence[str] = BEST_SOURCES,
 ) -> tuple[BestMatch | None, list[str]]:
     """The biggest cover of this very album on Deezer, iTunes, Tidal and the Cover Art
-    Archive that is at least BEST_MIN square. Also says which sources couldn't be asked."""
+    Archive (those in `use`) that is at least BEST_MIN square. Also says which sources
+    couldn't be asked."""
     problems: list[str] = []
 
     async def caa() -> list[Candidate]:
@@ -526,12 +530,14 @@ async def best_match(
         found = await cover_art_archive(http, settings.coverartarchive_url, mbids)
         return [c for c in found if c.extra.get("front")][:1]
 
-    asks: dict[str, Any] = {
-        "deezer": deezer(http, settings.deezer_api_url, album),
-        "itunes": itunes(http, settings.itunes_api_url, album),
-        "coverartarchive": caa(),
-    }
-    if tidal_client:
+    asks: dict[str, Any] = {}
+    if "deezer" in use:
+        asks["deezer"] = deezer(http, settings.deezer_api_url, album)
+    if "itunes" in use:
+        asks["itunes"] = itunes(http, settings.itunes_api_url, album)
+    if "coverartarchive" in use:
+        asks["coverartarchive"] = caa()
+    if tidal_client and "tidal" in use:
         asks["tidal"] = tidal(http, settings, tidal_client, album)
     results = await asyncio.gather(*asks.values(), return_exceptions=True)
     picked: list[BestMatch] = []
@@ -681,12 +687,13 @@ async def apply_best(
     album: Album,
     artist: str | None,
     user_id: int,
+    use: Sequence[str] = BEST_SOURCES,
 ) -> BestOutcome:
     """Find the best match (see best_match) and save it to Plex, unless the cover there is
     already at least as big."""
     row = await cover_row(db, album)
     match, problems = await best_match(
-        db, http, settings, tidal_client, row, AlbumRef(album.title, artist, album.mbid)
+        db, http, settings, tidal_client, row, AlbumRef(album.title, artist, album.mbid), use
     )
     if match is None:
         return BestOutcome("not_found", problems=problems)
@@ -710,6 +717,7 @@ async def run_best_covers(
     from plekstender.db.models import Artist
 
     keys = [int(k) for k in job.params.get("rating_keys") or []]
+    use = [s for s in job.params.get("sources") or BEST_SOURCES if s in BEST_SOURCES]
     client = client_for(settings, http, us)
     tidal_client = await get_tidal_client(db, settings)
     stats = {"applied": 0, "not_found": 0, "already": 0, "failed": 0, **job.stats}
@@ -728,7 +736,7 @@ async def run_best_covers(
             try:
                 result = await apply_best(
                     db, http, settings, client, tidal_client, album,
-                    artist.title if artist else None, us.user_id,
+                    artist.title if artist else None, us.user_id, use,
                 )  # fmt: skip
                 stats[result.outcome] += 1
             except (CoverError, SourceError, FetchError) as exc:

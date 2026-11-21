@@ -303,8 +303,33 @@ async def test_best_match(
     await measure()
     base = f"/api/servers/{sid}/artwork/albums"
 
+    # The sources to use, and the one albums open on, are the user's preferences.
+    me = (await owner.get("/api/auth/me")).json()["preferences"]
+    assert (me["cover_source"], me["best_cover_sources"]) == (
+        "deezer", ["deezer", "itunes", "tidal", "coverartarchive"],
+    )  # fmt: skip
+    prefs = {**me, "cover_source": "itunes", "best_cover_sources": ["deezer", "coverartarchive"]}
+    saved = await owner.put("/api/auth/me/preferences", json=prefs, headers=CSRF)
+    assert saved.json()["preferences"]["cover_source"] == "itunes"
+    none_chosen = {**prefs, "best_cover_sources": []}
+    assert (
+        await owner.put("/api/auth/me/preferences", json=none_chosen, headers=CSRF)
+    ).status_code == 422
+    # Without iTunes: the archive's 1200 px front cover.
+    archive = (await owner.post(f"{base}/201/best", headers=CSRF)).json()
+    assert (archive["outcome"], archive["source"], archive["width"]) == (
+        "applied",
+        "coverartarchive",
+        1200,
+    )
+    await owner.put(
+        "/api/auth/me/preferences",
+        json={**prefs, "best_cover_sources": ["deezer", "itunes", "coverartarchive"]},
+        headers=CSRF,
+    )
+
     # OKNOTOK: Deezer has only the 1997-2017 edition (not this album); iTunes has it at
-    # 1400 px, the archive at 1200: iTunes wins.
+    # 1400 px, the archive at 1200: iTunes wins (bigger than the 1200 px one saved).
     best = (await owner.post(f"{base}/201/best", headers=CSRF)).json()
     assert (best["outcome"], best["source"], best["width"], best["height"]) == (
         "applied", "itunes", 1400, 1400,
@@ -323,7 +348,9 @@ async def test_best_match(
     assert (none["outcome"], none["cover"], none["source"]) == ("not_found", None, None)
 
     # Every album the list shows, in the background.
-    started = await owner.post(f"{base}/best", json={"show": "needs"}, headers=CSRF)
+    started = await owner.post(
+        f"{base}/best", json={"show": "needs", "sources": ["deezer", "itunes"]}, headers=CSRF
+    )
     assert started.status_code == 201, started.text
     job = started.json()
     assert job["kind"] == "covers"

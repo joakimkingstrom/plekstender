@@ -14,6 +14,7 @@ from sqlalchemy import and_, case, false, func, or_, select
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.routes.artwork import candidates_out, job_out, owner_server, start_job
+from plekstender.api.routes.auth import load_preferences
 from plekstender.api.routes.library import _like, visible
 from plekstender.api.routes.servers import server_client
 from plekstender.api.schemas import (
@@ -419,6 +420,7 @@ async def apply_best(
         result = await covers.apply_best(
             db, http, settings, server_client(us, cipher, settings, http),
             await get_tidal_client(db, settings), album, artist, user.id,
+            load_preferences(user).best_cover_sources,
         )  # fmt: skip
     except (CoverError, FetchError) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
@@ -471,7 +473,10 @@ async def start_best(
     )
     if not keys:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No albums to look for.")
-    job = await start_job(db, us, "covers", {"rating_keys": keys, "show": body.show})
+    sources = body.sources or load_preferences(user).best_cover_sources
+    job = await start_job(
+        db, us, "covers", {"rating_keys": keys, "show": body.show, "sources": list(sources)}
+    )
     return job_out(server_id, job)
 
 

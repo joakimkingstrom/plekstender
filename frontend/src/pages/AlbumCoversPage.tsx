@@ -10,10 +10,12 @@ import {
   useStartBestCovers,
   type AlbumCover,
   type BestOutcome,
+  type BestSource,
   type CoverFilter,
   type CoverSource,
 } from '../api/albumCovers'
 import { useArtworkJobs, useUploadImage, type SourceSpec } from '../api/artwork'
+import { useMe, useSetPreferences } from '../api/hooks'
 import { errorMessage } from '../api/client'
 import { imageUrl } from '../api/library'
 import { FilePicker } from '../components/controls'
@@ -40,6 +42,7 @@ const TABS: [Tab, string][] = [
   ['search', 'Web search'],
   ['upload', 'Upload'],
 ]
+const TAB_NAME = Object.fromEntries(TABS) as Record<Tab, string>
 const SOURCE_NAME: Record<string, string> = {
   coverartarchive: 'Cover Art Archive',
   deezer: 'Deezer',
@@ -174,7 +177,10 @@ function CoverEditor({
   onBack: () => void
   onSaved: (album: AlbumCover) => void
 }) {
-  const [tab, setTab] = useState<Tab>('deezer')
+  const me = useMe()
+  const savePreferences = useSetPreferences()
+  const opensOn = me.data?.preferences?.cover_source ?? 'deezer'
+  const [tab, setTab] = useState<Tab>(opensOn)
   const [source, setSource] = useState<SourceSpec | null>(null)
   const [square, setSquare] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -235,7 +241,7 @@ function CoverEditor({
       {best.isError && <Notice tone="error">{errorMessage(best.error)}</Notice>}
       {found && <Notice>{bestText(found)}</Notice>}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_20rem]">
+      <div className="space-y-4">
         <Card>
           <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Where from">
             {TABS.map(([key, label]) => (
@@ -251,6 +257,21 @@ function CoverEditor({
               </button>
             ))}
           </div>
+          {tab !== 'upload' && (
+            <div className="-mt-2 mb-3 flex justify-end text-xs">
+              {tab === opensOn ? (
+                <span className="text-muted">★ Albums open on {TAB_NAME[tab]}</span>
+              ) : (
+                <button
+                  type="button"
+                  className="text-muted hover:text-text"
+                  onClick={() => savePreferences.mutate({ cover_source: tab })}
+                >
+                  ☆ Open albums on {TAB_NAME[tab]}
+                </button>
+              )}
+            </div>
+          )}
           {tab === 'upload' ? (
             <CoverUpload serverId={serverId} onUploaded={(id) => choose({ kind: 'upload', upload_id: id })} />
           ) : tab === 'search' ? (
@@ -272,12 +293,12 @@ function CoverEditor({
         </Card>
 
         <Card title="Preview">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid max-w-3xl grid-cols-2 gap-4">
             <figure className="space-y-1">
               <Zoomable image={album.thumb ? { src: imageUrl(serverId, album.thumb, 1000)!, alt: `Current cover of ${album.title}` } : null}>
-                <Artwork serverId={serverId} path={album.thumb} title={album.title} size={400} className="w-full" />
+                <Artwork serverId={serverId} path={album.thumb} title={album.title} size={1000} className="w-full" />
               </Zoomable>
-              <figcaption className="text-center text-xs text-muted">Now{now ? ` · ${now}` : ''}</figcaption>
+              <figcaption className="text-center text-sm text-muted">Now{now ? ` · ${now}` : ''}</figcaption>
             </figure>
             <figure className="space-y-1">
               <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
@@ -287,7 +308,7 @@ function CoverEditor({
                   </Zoomable>
                 )}
                 {!source && (
-                  <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-muted">Choose a cover</span>
+                  <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-sm text-muted">Choose a cover above</span>
                 )}
                 {preview.loading && (
                   <span className="absolute inset-0 flex items-center justify-center bg-bg/40">
@@ -295,7 +316,7 @@ function CoverEditor({
                   </span>
                 )}
               </div>
-              <figcaption className="text-center text-xs text-muted">New{preview.width ? ` · ${size(preview.width, preview.height)}` : ''}</figcaption>
+              <figcaption className="text-center text-sm text-muted">New{preview.width ? ` · ${size(preview.width, preview.height)}` : ''}</figcaption>
             </figure>
           </div>
           {preview.error && (
@@ -360,9 +381,21 @@ function bestText(out: BestOutcome): string {
 }
 
 /** The best match for every album listed, in the background (a few seconds an album). */
+const BEST_SOURCES: [BestSource, string][] = [
+  ['deezer', 'Deezer'],
+  ['itunes', 'iTunes'],
+  ['tidal', 'Tidal (when set up)'],
+  ['coverartarchive', 'Cover Art Archive'],
+]
+
 function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exclude<CoverFilter, 'all'>; q: string; count: number }) {
   const jobs = useArtworkJobs(serverId)
   const start = useStartBestCovers(serverId)
+  const me = useMe()
+  const savePreferences = useSetPreferences()
+  const saved = me.data?.preferences?.best_cover_sources ?? BEST_SOURCES.map(([k]) => k)
+  const [chosen, setChosen] = useState<BestSource[] | null>(null)
+  const sources = chosen ?? saved
   const [confirming, setConfirming] = useState(false)
   const latest = jobs.data?.find((j) => j.kind === 'covers')
   const running = latest && (latest.status === 'queued' || latest.status === 'running')
@@ -382,15 +415,35 @@ function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exc
       ) : confirming ? (
         <div className="space-y-2">
           <p>
-            Look for a cover for {count === 1 ? 'the album' : `all ${formatCount(count)} albums`} listed that is {BEST_RULE}, on
-            Deezer, iTunes, Tidal and the Cover Art Archive, and save the biggest to Plex? Albums without one are left alone.
-            It takes a few seconds an album.
+            Look for a cover for {count === 1 ? 'the album' : `all ${formatCount(count)} albums`} listed that is {BEST_RULE}, and
+            save the biggest to Plex? Albums without one are left alone. It takes a few seconds an album.
           </p>
+          <fieldset className="space-y-1">
+            <legend className="mb-1 text-xs font-medium text-muted">Look on</legend>
+            {BEST_SOURCES.map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={sources.includes(key)}
+                  onChange={(e) =>
+                    setChosen(e.target.checked ? BEST_SOURCES.map(([k]) => k).filter((k) => k === key || sources.includes(k)) : sources.filter((k) => k !== key))
+                  }
+                  className="accent-[var(--color-accent)]"
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
           <div className="flex gap-2">
             <Button
               variant="primary"
               busy={start.isPending}
-              onClick={() => start.mutate({ show, q: q || undefined }, { onSettled: () => setConfirming(false) })}
+              disabled={sources.length === 0}
+              onClick={() => {
+                // Remembered (on the account), and used by "Apply best match" on one album too.
+                if (chosen && chosen.join() !== saved.join()) savePreferences.mutate({ best_cover_sources: chosen })
+                start.mutate({ show, q: q || undefined, sources }, { onSettled: () => setConfirming(false) })
+              }}
             >
               Apply to {formatCount(count)}
             </Button>

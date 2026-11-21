@@ -106,6 +106,7 @@ export function useApplyCover(serverId: number) {
 }
 
 export type BestOutcome = Schemas['AlbumBestOut']
+export type BestSource = NonNullable<Schemas['BestCoversJobIn']['sources']>[number]
 
 /** The best match (this very album, at least 1000 × 1000) found and saved to Plex. */
 export function useApplyBest(serverId: number) {
@@ -127,7 +128,7 @@ export function useApplyBest(serverId: number) {
 export function useStartBestCovers(serverId: number) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: { show: Exclude<CoverFilter, 'all'>; q?: string }) =>
+    mutationFn: (body: Schemas['BestCoversJobIn']) =>
       unwrap(api.POST('/api/servers/{server_id}/artwork/albums/best', { params: { path: { server_id: serverId } }, body })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['servers', serverId, 'artwork', 'jobs'] }),
   })

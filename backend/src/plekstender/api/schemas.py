@@ -30,6 +30,10 @@ class GameSettings(BaseModel):
     )
 
 
+BestCoverSource = Literal["deezer", "itunes", "tidal", "coverartarchive"]
+BEST_COVER_SOURCES: tuple[BestCoverSource, ...] = ("deezer", "itunes", "tidal", "coverartarchive")
+
+
 class Preferences(BaseModel):
     """Per-user settings, stored on the account so they follow the user across devices."""
 
@@ -57,6 +61,15 @@ class Preferences(BaseModel):
     achievements: bool = Field(default=True, description="Achievements and their pop-ups.")
     instance_notifications: bool = Field(
         default=True, description="Admins: notifications about this Plekstender's services."
+    )
+    cover_source: Literal[
+        "deezer", "itunes", "coverartarchive", "tidal", "fanart", "plex", "search"
+    ] = Field(default="deezer", description="Album covers: the source an album opens on.")
+    best_cover_sources: list[BestCoverSource] = Field(
+        default_factory=lambda: list(BEST_COVER_SOURCES),
+        min_length=1,
+        max_length=4,
+        description="Album covers: where a best match may come from.",
     )
 
 
@@ -764,6 +777,12 @@ class BestCoversJobIn(BaseModel):
         default="needs", description="The albums listed with this filter (and search)."
     )
     q: str | None = Field(default=None, max_length=200)
+    sources: list[BestCoverSource] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=4,
+        description="Where matches may come from; None: the user's preference.",
+    )
 
 
 class FanartJobIn(BaseModel):

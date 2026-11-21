@@ -4592,6 +4592,11 @@ export interface components {
             show: "needs" | "missing" | "low";
             /** Q */
             q?: string | null;
+            /**
+             * Sources
+             * @description Where matches may come from; None: the user's preference.
+             */
+            sources?: ("deezer" | "itunes" | "tidal" | "coverartarchive")[] | null;
         };
         /** CandidateOut */
         CandidateOut: {
@@ -7015,6 +7020,18 @@ export interface components {
              * @default true
              */
             instance_notifications: boolean;
+            /**
+             * Cover Source
+             * @description Album covers: the source an album opens on.
+             * @default deezer
+             * @enum {string}
+             */
+            cover_source: "deezer" | "itunes" | "coverartarchive" | "tidal" | "fanart" | "plex" | "search";
+            /**
+             * Best Cover Sources
+             * @description Album covers: where a best match may come from.
+             */
+            best_cover_sources?: ("deezer" | "itunes" | "tidal" | "coverartarchive")[];
         };
         /** PreviewOut */
         PreviewOut: {
