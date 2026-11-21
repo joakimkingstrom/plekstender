@@ -241,7 +241,7 @@ function CoverEditor({
       {best.isError && <Notice tone="error">{errorMessage(best.error)}</Notice>}
       {found && <Notice>{bestText(found)}</Notice>}
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem] xl:items-start">
         <Card>
           <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Where from">
             {TABS.map(([key, label]) => (
@@ -292,8 +292,9 @@ function CoverEditor({
           )}
         </Card>
 
-        <Card title="Preview">
-          <div className="grid max-w-3xl grid-cols-2 gap-4">
+        {/* Next to the covers found on a wide screen, and kept in view while scrolling them. */}
+        <Card title="Preview" className="xl:sticky xl:top-[4.5rem] xl:max-h-[calc(100dvh-5.5rem)] xl:overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-1">
             <figure className="space-y-1">
               <Zoomable image={album.thumb ? { src: imageUrl(serverId, album.thumb, 1000)!, alt: `Current cover of ${album.title}` } : null}>
                 <Artwork serverId={serverId} path={album.thumb} title={album.title} size={1000} className="w-full" />
