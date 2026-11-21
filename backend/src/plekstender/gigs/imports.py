@@ -49,6 +49,8 @@ class Draft:
     source: str = "csv"
     source_ref: str | None = None
     extra_refs: list[str] = field(default_factory=list)
+    # What was played, per artist: [{"artist", "url", "songs": [{"name", "cover", "tape"}]}].
+    setlists: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -71,11 +73,58 @@ def _ref(*parts: object) -> str:
 # --- setlist.fm ----------------------------------------------------------------------------
 
 
+MAX_SONGS = 150
+# A setlist's page: https://www.setlist.fm/setlist/radiohead/2017/pyramid-stage-…-63de4613.html
+SETLIST_URL = re.compile(r"setlist\.fm/setlist/(?:[^?#]*?-)?([0-9a-f]{6,10})\.html", re.IGNORECASE)
+
+
+def setlist_id(url: str) -> str | None:
+    """The setlist's ID in a setlist.fm link, if it is one."""
+    found = SETLIST_URL.search(url or "")
+    return found[1].lower() if found else None
+
+
+async def _setlistfm_get(
+    http: httpx.AsyncClient, url: str, api_key: str, params: dict[str, Any] | None = None
+) -> Any:
+    """One request to setlist.fm's API: the JSON, or None for "not found"."""
+    try:
+        resp = await http.get(
+            url,
+            params=params,
+            headers={"x-api-key": api_key, "Accept": "application/json", "User-Agent": USER_AGENT},
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise ImportError_(f"setlist.fm couldn't be reached ({exc.__class__.__name__}).") from exc
+    if resp.status_code == 404:
+        return None
+    if resp.status_code in (401, 403):
+        raise ImportError_("setlist.fm didn't accept the API key.")
+    if resp.status_code == 429:
+        raise ImportError_("setlist.fm asked to slow down; try again in a minute.")
+    if resp.status_code >= 400:
+        raise ImportError_(f"setlist.fm answered {resp.status_code}.")
+    return resp.json()
+
+
+def _join(by_event: dict[str, Draft], draft: Draft) -> None:
+    """Another artist's setlist of the same night: one gig, one more act."""
+    key = draft.source_ref or ""
+    if key not in by_event:
+        by_event[key] = draft
+        return
+    known = by_event[key]
+    known.artists += [a for a in draft.artists if a not in known.artists]
+    have = {s["artist"] for s in known.setlists}
+    known.setlists += [s for s in draft.setlists if s["artist"] not in have]
+
+
 async def setlistfm_attended(
     http: httpx.AsyncClient, base_url: str, api_key: str, username: str
 ) -> list[Draft]:
     """The concerts a setlist.fm user went to (one setlist per artist per concert, joined
-    into one gig per date and venue)."""
+    into one gig per date and venue), with what each artist played."""
     by_event: dict[str, Draft] = {}
     last = 0.0
     for page in range(1, SETLISTFM_PAGES + 1):
@@ -83,45 +132,20 @@ async def setlistfm_attended(
         if wait > 0:
             await asyncio.sleep(wait)
         last = time.monotonic()
-        try:
-            resp = await http.get(
-                f"{base_url}/user/{username}/attended",
-                params={"p": page},
-                headers={
-                    "x-api-key": api_key,
-                    "Accept": "application/json",
-                    "User-Agent": USER_AGENT,
-                },
-                timeout=30,
-            )
-        except httpx.HTTPError as exc:
-            raise ImportError_(
-                f"setlist.fm couldn't be reached ({exc.__class__.__name__})."
-            ) from exc
-        if resp.status_code == 404:
+        body = await _setlistfm_get(
+            http, f"{base_url}/user/{username}/attended", api_key, {"p": page}
+        )
+        if body is None:
             if page == 1:
                 raise ImportError_(
                     f"setlist.fm has no user {username!r} (or they've been to nothing)."
                 )
             break
-        if resp.status_code in (401, 403):
-            raise ImportError_("setlist.fm didn't accept the API key.")
-        if resp.status_code == 429:
-            raise ImportError_("setlist.fm asked to slow down; try again in a minute.")
-        if resp.status_code >= 400:
-            raise ImportError_(f"setlist.fm answered {resp.status_code}.")
-        body = resp.json()
         setlists = body.get("setlist") or [] if isinstance(body, dict) else []
         for item in setlists:
             draft = _setlist(item)
-            if draft is None:
-                continue
-            key = draft.source_ref or ""
-            if key in by_event:
-                known = by_event[key]
-                known.artists += [a for a in draft.artists if a not in known.artists]
-            else:
-                by_event[key] = draft
+            if draft is not None:
+                _join(by_event, draft)
         total = body.get("total") if isinstance(body, dict) else None
         per_page = body.get("itemsPerPage") if isinstance(body, dict) else None
         if not setlists or (
@@ -129,6 +153,57 @@ async def setlistfm_attended(
         ):
             break
     return list(by_event.values())
+
+
+async def setlistfm_gig(http: httpx.AsyncClient, base_url: str, api_key: str, url: str) -> Draft:
+    """A gig from a link to one of its setlists: the night's details, and the whole bill
+    (the other setlists from that date and venue), headliners (the longest sets) first."""
+    sid = setlist_id(url)
+    if sid is None:
+        raise ImportError_("That isn't a link to a setlist on setlist.fm.")
+    item = await _setlistfm_get(http, f"{base_url}/setlist/{sid}", api_key)
+    draft = _setlist(item) if item is not None else None
+    if draft is None:
+        raise ImportError_("setlist.fm has no setlist at that link.")
+    by_event = {draft.source_ref or "": draft}
+    venue_id = (item.get("venue") or {}).get("id")
+    if venue_id:
+        await asyncio.sleep(SETLISTFM_INTERVAL)
+        found = await _setlistfm_get(
+            http,
+            f"{base_url}/search/setlists",
+            api_key,
+            {"date": item.get("eventDate"), "venueId": venue_id},
+        )
+        for other in (found or {}).get("setlist") or [] if isinstance(found, dict) else []:
+            if isinstance(other, dict) and other.get("id") != item.get("id"):
+                more = _setlist(other)
+                if more is not None and more.date == draft.date:
+                    _join(by_event, more)
+    sizes = {s["artist"]: len(s["songs"]) for s in draft.setlists}
+    draft.artists.sort(key=lambda a: -sizes.get(a, 0))  # stable: the linked one first of equals
+    draft.setlists.sort(key=lambda s: -len(s["songs"]))
+    draft.url = url
+    return draft
+
+
+def _songs(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """The songs of a setlist, in order, across its sets and encores."""
+    sets = (item.get("sets") or {}).get("set") if isinstance(item.get("sets"), dict) else None
+    out: list[dict[str, Any]] = []
+    for part in sets if isinstance(sets, list) else []:
+        for song in (part.get("song") or []) if isinstance(part, dict) else []:
+            name = _clean(song.get("name")) if isinstance(song, dict) else None
+            if not name:
+                continue
+            entry: dict[str, Any] = {"name": name}
+            cover = (song.get("cover") or {}).get("name")
+            if cover:
+                entry["cover"] = _clean(cover)
+            if song.get("tape"):
+                entry["tape"] = True  # played from a recording, not live
+            out.append(entry)
+    return out[:MAX_SONGS]
 
 
 def _setlist(item: Any) -> Draft | None:
@@ -147,6 +222,8 @@ def _setlist(item: Any) -> Draft | None:
     country = (city.get("country") or {}).get("code")
     tour = (item.get("tour") or {}).get("name")
     venue_ref = venue.get("id") or _ref(venue.get("name"), city.get("name"))
+    url = item.get("url") if isinstance(item.get("url"), str) else None
+    songs = _songs(item)
     return Draft(
         date=day,
         artists=[artist],
@@ -154,9 +231,10 @@ def _setlist(item: Any) -> Draft | None:
         city=_clean(city.get("name")),
         country=str(country).upper()[:2] if country else None,
         name=_clean(tour) if tour and len(str(tour)) < 120 else None,
-        url=item.get("url") if isinstance(item.get("url"), str) else None,
+        url=url,
         source="setlistfm",
         source_ref=f"{day.isoformat()}:{venue_ref}"[:128],
+        setlists=[{"artist": artist, "url": url, "songs": songs}] if songs else [],
     )
 
 
@@ -335,6 +413,11 @@ async def store(db: AsyncSession, user_id: int, drafts: list[Draft]) -> ImportRe
             for attr in ("venue", "city", "country", "name", "url"):
                 if getattr(known, attr) is None and getattr(draft, attr):
                     setattr(known, attr, getattr(draft, attr))
+            if draft.setlists:
+                fresh = {s["artist"] for s in draft.setlists}
+                known.setlists = [
+                    s for s in known.setlists if s["artist"] not in fresh
+                ] + draft.setlists
             result.updated += 1
             continue
         signature = (draft.date, (draft.venue or "").lower(), normalise_artist(artists[0]["name"]))
@@ -351,6 +434,7 @@ async def store(db: AsyncSession, user_id: int, drafts: list[Draft]) -> ImportRe
             notes=draft.notes,
             url=draft.url,
             artists=artists,
+            setlists=draft.setlists,
             source=draft.source,
             source_ref=draft.source_ref,
         )

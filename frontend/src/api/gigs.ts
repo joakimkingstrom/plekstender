@@ -19,6 +19,27 @@ export function useGigs(year: number | null, artist: string) {
   })
 }
 
+export type GigSetlist = Schemas['GigSetlist']
+
+/** A link to a setlist on setlist.fm (the form looks those up). */
+export const SETLIST_LINK = /setlist\.fm\/setlist\/(?:[^?#]*?-)?[0-9a-f]{6,10}\.html/i
+
+/** A gig as setlist.fm has it, from a link to one of its setlists. */
+export function useSetlistLookup() {
+  return useMutation({
+    mutationFn: (url: string) => unwrap(api.POST('/api/gigs/setlistfm/lookup', { body: { url } })),
+  })
+}
+
+/** The gigs you've been to where a library artist played (for their page). */
+export function useArtistPastGigs(serverId: number, ratingKey: number) {
+  return useQuery({
+    queryKey: [...gigKeys.all, 'artist', serverId, ratingKey],
+    queryFn: () =>
+      unwrap(api.GET('/api/gigs/artist/{server_id}/{rating_key}', { params: { path: { server_id: serverId, rating_key: ratingKey } } })),
+  })
+}
+
 export function useGigArtists() {
   return useQuery({ queryKey: [...gigKeys.all, 'artists'], queryFn: () => unwrap(api.GET('/api/gigs/artists')) })
 }

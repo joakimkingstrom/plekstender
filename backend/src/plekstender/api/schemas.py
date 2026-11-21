@@ -291,6 +291,7 @@ class TrackOut(BaseModel):
     album_title: str | None
     album_thumb: str | None
     listens: int = Field(default=0, description="Your listens of this song (all sources).")
+    seen_live: int = Field(default=0, description="Gigs you've been to where it was played.")
 
 
 class SimilarArtistOut(BaseModel):
@@ -1547,6 +1548,18 @@ class GigArtistOut(BaseModel):
     rating_key: int | None = None
 
 
+class GigSong(BaseModel):
+    name: str = Field(max_length=300)
+    cover: str | None = Field(default=None, max_length=300, description="Whose song it is.")
+    tape: bool = Field(default=False, description="Played from a recording, not live.")
+
+
+class GigSetlist(BaseModel):
+    artist: str = Field(max_length=300)
+    url: str | None = Field(default=None, max_length=2000)
+    songs: list[GigSong] = Field(max_length=150)
+
+
 class GigIn(BaseModel):
     date: dt.date
     artists: list[str] = Field(min_length=1, max_length=50)
@@ -1556,6 +1569,7 @@ class GigIn(BaseModel):
     country: str | None = Field(default=None, pattern=r"^[A-Za-z]{2}$")
     notes: str | None = Field(default=None, max_length=4000)
     url: str | None = Field(default=None, max_length=2000, pattern=r"^https?://")
+    setlists: list[GigSetlist] = Field(default_factory=list, max_length=50)
 
 
 class GigOut(BaseModel):
@@ -1570,8 +1584,26 @@ class GigOut(BaseModel):
     place_precision: Literal["venue", "city"] | None
     notes: str | None
     artists: list[GigArtistOut]
+    setlists: list[GigSetlist] = []
     source: str
     url: str | None
+
+
+class SetlistLookupIn(BaseModel):
+    url: str = Field(max_length=2000, pattern=r"^https?://")
+
+
+class SetlistLookupOut(BaseModel):
+    """A gig as setlist.fm has it, to fill in the form."""
+
+    date: dt.date
+    name: str | None
+    venue: str | None
+    city: str | None
+    country: str | None
+    artists: list[str]
+    url: str
+    setlists: list[GigSetlist]
 
 
 class GigYear(BaseModel):

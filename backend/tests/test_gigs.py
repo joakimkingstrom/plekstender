@@ -242,7 +242,8 @@ SETLISTS = {
     1: {"type": "setlists", "itemsPerPage": 2, "page": 1, "total": 3, "setlist": [
         {"id": "a1", "eventDate": "02-10-2019", "url": "https://www.setlist.fm/setlist/portishead/a1.html",
          "artist": {"mbid": "8f6bd1e4", "name": "Portishead"},
-         "venue": {"id": "v-rah", "name": "Royal Albert Hall", "city": {"name": "London", "country": {"code": "GB"}, "coords": {"lat": 51.5, "long": -0.12}}}},
+         "venue": {"id": "v-rah", "name": "Royal Albert Hall", "city": {"name": "London", "country": {"code": "GB"}, "coords": {"lat": 51.5, "long": -0.12}}},
+         "sets": {"set": [{"song": [{"name": "Glory Box"}, {"name": "Roads"}]}]}},
         {"id": "a2", "eventDate": "02-10-2019", "artist": {"name": "Young Fathers"},
          "venue": {"id": "v-rah", "name": "Royal Albert Hall", "city": {"name": "London", "country": {"code": "GB"}}}},
     ]},
@@ -292,6 +293,10 @@ async def test_gig_imports_and_exports(app: FastAPI, plex: FakePlex) -> None:
         ["Portishead", "Young Fathers"], "Royal Albert Hall", "GB", "setlistfm",
     )  # fmt: skip
     assert rah["artists"][0]["rating_key"] == 101  # in the library
+    assert rah["setlists"] == [
+        {"artist": "Portishead", "url": "https://www.setlist.fm/setlist/portishead/a1.html",
+         "songs": [{"name": "Glory Box", "cover": None, "tape": False}, {"name": "Roads", "cover": None, "tape": False}]},
+    ]  # fmt: skip
     assert gigs["2017-06-24"]["name"] == "Glastonbury 2017"
     again = await owner.post(
         "/api/gigs/import/setlistfm", json={"username": "joakim"}, headers=CSRF
@@ -391,3 +396,105 @@ def test_gig_stats() -> None:
         "summer": 2,
         "autumn": 1,
     }  # Sydney's January is summer
+
+
+SETLIST_PAGE = (
+    "https://www.setlist.fm/setlist/radiohead/2017/worthy-farm-pilton-england-63de4613.html"
+)
+RADIOHEAD_SET = {
+    "id": "63de4613",
+    "eventDate": "24-06-2017",
+    "url": SETLIST_PAGE,
+    "artist": {"name": "Radiohead"},
+    "tour": {"name": "Glastonbury 2017"},
+    "venue": {
+        "id": "v-wf",
+        "name": "Worthy Farm",
+        "city": {"name": "Pilton", "country": {"code": "GB"}},
+    },
+    "sets": {
+        "set": [
+            {
+                "song": [
+                    {"name": "Daydreaming"},
+                    {"name": "Paranoid Android"},
+                    {"name": "Intro", "tape": True},
+                ]
+            },
+            {"encore": 1, "song": [{"name": "Karma Police"}, {"name": "Creep", "cover": None}]},
+        ]
+    },
+}
+SUPPORT_SET = {
+    "id": "aa11", "eventDate": "24-06-2017", "artist": {"name": "Support Act"},
+    "venue": {"id": "v-wf", "name": "Worthy Farm", "city": {"name": "Pilton", "country": {"code": "GB"}}},
+    "sets": {"set": [{"song": [{"name": "Opener"}, {"name": "Lithium", "cover": {"name": "Nirvana"}}]}]},
+}  # fmt: skip
+
+
+@pytest.mark.db
+async def test_gig_from_a_setlist_link(app: FastAPI, plex: FakePlex) -> None:
+    import httpx
+
+    asked: list[httpx.Request] = []
+
+    def setlistfm(request: httpx.Request) -> httpx.Response:
+        asked.append(request)
+        if request.url.path.endswith("/setlist/63de4613"):
+            return httpx.Response(200, json=RADIOHEAD_SET)
+        if request.url.path.endswith("/search/setlists"):
+            return httpx.Response(200, json={"setlist": [RADIOHEAD_SET, SUPPORT_SET]})
+        return httpx.Response(404, json={"code": 404})
+
+    plex.router.route(host="api.setlist.fm").mock(side_effect=setlistfm)
+    owner, sid = await owner_with_library(app, plex)
+    await owner.put("/api/admin/setlistfm", json={"api_key": "k" * 36}, headers=CSRF)
+
+    bad = await owner.post(
+        "/api/gigs/setlistfm/lookup", json={"url": "https://example.com/x"}, headers=CSRF
+    )
+    assert bad.status_code == 422
+    found = await owner.post("/api/gigs/setlistfm/lookup", json={"url": SETLIST_PAGE}, headers=CSRF)
+    assert found.status_code == 200, found.text
+    gig = found.json()
+    # The night's details and the whole bill (from that date and venue), headliner first.
+    assert (gig["date"], gig["venue"], gig["city"], gig["country"], gig["name"], gig["url"]) == (
+        "2017-06-24", "Worthy Farm", "Pilton", "GB", "Glastonbury 2017", SETLIST_PAGE,
+    )  # fmt: skip
+    assert gig["artists"] == ["Radiohead", "Support Act"]
+    assert [s["name"] for s in gig["setlists"][0]["songs"]] == [
+        "Daydreaming", "Paranoid Android", "Intro", "Karma Police", "Creep",
+    ]  # fmt: skip
+    assert gig["setlists"][0]["songs"][2]["tape"] is True
+    assert gig["setlists"][1]["songs"][1]["cover"] == "Nirvana"
+    search = asked[-1]
+    assert search.url.params["date"] == "24-06-2017" and search.url.params["venueId"] == "v-wf"
+
+    saved = await owner.post(
+        "/api/gigs",
+        json={
+            k: gig[k]
+            for k in ("date", "artists", "name", "venue", "city", "country", "url", "setlists")
+        },
+        headers=CSRF,
+    )
+    assert saved.status_code == 201, saved.text
+    assert len(saved.json()["setlists"]) == 2
+
+    # On the artist's page: the gigs they played at, and songs seen live marked.
+    gigs = (await owner.get(f"/api/gigs/artist/{sid}/100")).json()
+    assert [g["venue"] for g in gigs] == ["Worthy Farm"]
+    assert (await owner.get(f"/api/gigs/artist/{sid}/101")).json() == []  # Portishead: no
+    album = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
+    assert {t["title"]: t["seen_live"] for t in album["tracks"]} == {
+        "Paranoid Android": 1, "Karma Police": 1,
+    }  # fmt: skip
+    remaster = (await owner.get(f"/api/servers/{sid}/library/albums/201")).json()
+    seen = {t["title"]: t["seen_live"] for t in remaster["tracks"]}
+    assert seen["Karma Police (Remastered)"] == 1  # the same song
+    assert sum(seen.values()) == 1
+    artist = (await owner.get(f"/api/servers/{sid}/library/artists/100")).json()
+    top = {t["title"]: t["seen_live"] for t in artist["top_tracks"]}
+    assert top["Paranoid Android"] == 1 and sum(top.values()) == len(
+        [t for t in top if t.startswith(("Paranoid Android", "Karma Police"))]
+    )

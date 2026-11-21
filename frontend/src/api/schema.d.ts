@@ -1426,6 +1426,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gigs/setlistfm/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Setlistfm Lookup
+         * @description A gig from a link to one of its setlists on setlist.fm: date, venue, tour, the
+         *     whole bill (headliners first) and what each artist played.
+         */
+        post: operations["setlistfm_lookup_api_gigs_setlistfm_lookup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/artist/{server_id}/{rating_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Artist Gigs
+         * @description The gigs you've been to where a library artist played, newest first (matched by the
+         *     library link, or by name for gigs added before the artist was in the library).
+         */
+        get: operations["artist_gigs_api_gigs_artist__server_id___rating_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gigs/import/setlistfm": {
         parameters: {
             query?: never;
@@ -4714,6 +4756,8 @@ export interface components {
             notes?: string | null;
             /** Url */
             url?: string | null;
+            /** Setlists */
+            setlists?: components["schemas"]["GigSetlist"][];
         };
         /** GigOut */
         GigOut: {
@@ -4742,10 +4786,40 @@ export interface components {
             notes: string | null;
             /** Artists */
             artists: components["schemas"]["GigArtistOut"][];
+            /**
+             * Setlists
+             * @default []
+             */
+            setlists: components["schemas"]["GigSetlist"][];
             /** Source */
             source: string;
             /** Url */
             url: string | null;
+        };
+        /** GigSetlist */
+        GigSetlist: {
+            /** Artist */
+            artist: string;
+            /** Url */
+            url?: string | null;
+            /** Songs */
+            songs: components["schemas"]["GigSong"][];
+        };
+        /** GigSong */
+        GigSong: {
+            /** Name */
+            name: string;
+            /**
+             * Cover
+             * @description Whose song it is.
+             */
+            cover?: string | null;
+            /**
+             * Tape
+             * @description Played from a recording, not live.
+             * @default false
+             */
+            tape: boolean;
         };
         /** GigStatsOut */
         GigStatsOut: {
@@ -6947,6 +7021,36 @@ export interface components {
             /** Source */
             source: ("settings" | "environment") | null;
         };
+        /** SetlistLookupIn */
+        SetlistLookupIn: {
+            /** Url */
+            url: string;
+        };
+        /**
+         * SetlistLookupOut
+         * @description A gig as setlist.fm has it, to fill in the form.
+         */
+        SetlistLookupOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Name */
+            name: string | null;
+            /** Venue */
+            venue: string | null;
+            /** City */
+            city: string | null;
+            /** Country */
+            country: string | null;
+            /** Artists */
+            artists: string[];
+            /** Url */
+            url: string;
+            /** Setlists */
+            setlists: components["schemas"]["GigSetlist"][];
+        };
         /** ShrinkCoversIn */
         ShrinkCoversIn: {
             /**
@@ -7514,6 +7618,12 @@ export interface components {
              * @default 0
              */
             listens: number;
+            /**
+             * Seen Live
+             * @description Gigs you've been to where it was played.
+             * @default 0
+             */
+            seen_live: number;
         };
         /**
          * Transform
@@ -10295,6 +10405,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+        };
+    };
+    setlistfm_lookup_api_gigs_setlistfm_lookup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetlistLookupIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetlistLookupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artist_gigs_api_gigs_artist__server_id___rating_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

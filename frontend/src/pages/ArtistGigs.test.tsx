@@ -54,11 +54,27 @@ beforeEach(() => {
         case '/api/servers/1/library/artists/100':
           return json({
             rating_key: 100, title: 'Radiohead', thumb: null, popularity: null, user_rating: null, plays: 5,
-            album_count: 0, summary: null, art: null, tags: [], similar: [], albums: [], top_tracks: [],
+            album_count: 0, summary: null, art: null, tags: [], similar: [], albums: [],
+            top_tracks: [
+              { rating_key: 300, title: 'Paranoid Android', original_title: null, disc: 1, number: 2, duration_ms: 1000, popularity: null, user_rating: null, plays: 0, album_rating_key: 200, album_title: 'OK Computer', album_thumb: null, listens: 0, seen_live: 2 },
+              { rating_key: 301, title: 'Airbag', original_title: null, disc: 1, number: 1, duration_ms: 1000, popularity: null, user_rating: null, plays: 0, album_rating_key: 200, album_title: 'OK Computer', album_thumb: null, listens: 0, seen_live: 0 },
+            ],
             your_listens: { listens: 0, first_at: null, last_at: null, years: [], songs: [], artist_keys: [], album_key: null },
           })
         case '/api/live/artists/1/100/gigs':
           return json(gigs)
+        case '/api/gigs/artist/1/100':
+          return json([
+            {
+              id: 3, date: '2017-06-24', name: 'Glastonbury 2017', venue: 'Pyramid Stage', city: 'Pilton', country: 'GB',
+              latitude: null, longitude: null, place_precision: null, notes: null, source: 'setlistfm', url: null,
+              artists: [{ name: 'Radiohead', server_id: 1, rating_key: 100 }, { name: 'Young Fathers', server_id: null, rating_key: null }],
+              setlists: [{ artist: 'Radiohead', url: 'https://www.setlist.fm/setlist/x-63de4613.html', songs: [
+                { name: 'Paranoid Android', cover: null, tape: false },
+                { name: 'Intro', cover: null, tape: true },
+              ] }],
+            },
+          ])
         default:
           return json({ detail: 'Not found' }, 404)
       }
@@ -99,5 +115,19 @@ describe('Gigs on artist pages', () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(screen.queryByText('Upcoming gigs')).not.toBeInTheDocument()
     expect(screen.queryByRole('img', { name: 'Upcoming gig' })).not.toBeInTheDocument()
+  })
+
+  it("lists the gigs you've been to, with the setlist, and marks songs seen live", async () => {
+    renderArtist()
+    const heading = await screen.findByRole('heading', { name: "Gigs you've been to" })
+    const card = heading.closest('section, div')!.parentElement!
+    expect(within(card).getByText('Glastonbury 2017 · Pyramid Stage')).toBeInTheDocument()
+    expect(within(card).getByText('Pilton · with Young Fathers')).toBeInTheDocument()
+    within(card).getByRole('button', { name: 'Setlist (2 songs)' }).click()
+    expect(await within(card).findByText('(tape)')).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'On setlist.fm' })).toBeInTheDocument()
+    // The popular songs: seen live twice, and one not.
+    expect(screen.getByText(/Seen live 2×/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Seen live/)).toHaveLength(1)
   })
 })

@@ -1,3 +1,4 @@
+import { useArtistPastGigs } from '../api/gigs'
 import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
@@ -228,7 +229,10 @@ function TrackList({
             {showAlbum ? i + 1 : (t.number ?? '')}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate">{t.title}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="truncate">{t.title}</span>
+              {t.seen_live > 0 && <SeenLive times={t.seen_live} />}
+            </span>
             {(showAlbum || t.original_title) && (
               <span className="block truncate text-xs text-muted">
                 {[t.original_title, showAlbum ? t.album_title : null].filter(Boolean).join(' · ')}
@@ -248,6 +252,86 @@ function TrackList({
         </li>
       ))}
     </ol>
+  )
+}
+
+/** A song you've heard played at a gig you went to. */
+function SeenLive({ times }: { times: number }) {
+  const what = times === 1 ? 'a gig you went to' : `${formatCount(times)} gigs you went to`
+  return (
+    <Tooltip content={`Played at ${what}`} className="shrink-0">
+      <span className="rounded-full bg-accent/15 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-accent">
+        Seen live{times > 1 ? ` ${formatCount(times)}×` : ''}
+        <span className="sr-only">: played at {what}</span>
+      </span>
+    </Tooltip>
+  )
+}
+
+const folded = (name: string) => name.toLowerCase().replace(/^the\s+/, '').trim()
+
+/** The gigs you've been to where this artist played, each with what they played. */
+function PastGigs({ serverId, artistKey, name }: { serverId: number; artistKey: number; name: string }) {
+  const gigs = useArtistPastGigs(serverId, artistKey)
+  const [open, setOpen] = useState<number | null>(null)
+  if (!gigs.data?.length) return null
+  return (
+    <Card
+      title="Gigs you've been to"
+      action={
+        <Link to="/gigs" className="text-sm text-accent hover:underline">
+          All gigs
+        </Link>
+      }
+    >
+      <ul className="divide-y divide-border">
+        {gigs.data.map((g) => {
+          const setlist = g.setlists.find((s) => folded(s.artist) === folded(name))
+          const others = g.artists.filter((a) => folded(a.name) !== folded(name)).map((a) => a.name)
+          return (
+            <li key={g.id} className="py-2.5 text-sm">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                <span className="font-semibold">{[g.name, g.venue].filter(Boolean).join(' · ') || 'A gig'}</span>
+                <span className="text-xs text-muted tabular-nums">{formatDate(g.date)}</span>
+              </div>
+              <p className="text-xs text-muted">
+                {[g.city, others.length ? `with ${others.slice(0, 4).join(', ')}${others.length > 4 ? '…' : ''}` : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+              {setlist && setlist.songs.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    aria-expanded={open === g.id}
+                    onClick={() => setOpen(open === g.id ? null : g.id)}
+                    className="mt-1 text-xs text-accent hover:underline"
+                  >
+                    {open === g.id ? 'Hide the setlist' : `Setlist (${setlist.songs.length} ${setlist.songs.length === 1 ? 'song' : 'songs'})`}
+                  </button>
+                  {open === g.id && (
+                    <ol className="mt-1 list-decimal space-y-0.5 pl-6 text-xs">
+                      {setlist.songs.map((song, i) => (
+                        <li key={i} className={song.tape ? 'text-muted' : ''}>
+                          {song.name}
+                          {song.cover && <span className="text-muted"> ({song.cover} cover)</span>}
+                          {song.tape && <span className="text-muted"> (tape)</span>}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {open === g.id && setlist.url && (
+                    <a href={setlist.url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-muted underline">
+                      On setlist.fm
+                    </a>
+                  )}
+                </>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
   )
 }
 
@@ -450,6 +534,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
               </ul>
             </Card>
           )}
+          <PastGigs serverId={serverId} artistKey={artistKey} name={a.title} />
           {a.top_tracks.length > 0 && (
             <Card title="Most popular songs">
               <TrackList serverId={serverId} tracks={a.top_tracks} showAlbum showListens={a.your_listens.listens > 0} />

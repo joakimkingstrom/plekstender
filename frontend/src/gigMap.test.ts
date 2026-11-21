@@ -5,7 +5,7 @@ import { gigPlaces, mapStyle, pinCount, pinOffsets } from './gigMap'
 const gig = (id: number, venue: string, lat: number | null, lon: number | null): Gig => ({
   id, date: `2020-01-0${id}`, name: null, venue, city: 'London', country: 'GB', latitude: lat, longitude: lon,
   place_precision: lat == null ? null : 'venue', notes: null, artists: [{ name: 'X', server_id: null, rating_key: null }],
-  source: 'manual', url: null,
+  setlists: [], source: 'manual', url: null,
 })  // prettier-ignore
 
 describe('gig map', () => {

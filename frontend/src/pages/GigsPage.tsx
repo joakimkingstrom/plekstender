@@ -9,8 +9,11 @@ import {
   useImportGigs,
   useRecordLiveGig,
   useSaveGig,
+  useSetlistLookup,
+  SETLIST_LINK,
   type Gig,
   type GigIn,
+  type GigSetlist,
 } from '../api/gigs'
 import { useActiveServer } from '../api/library'
 import { useStarShow } from '../api/live'
@@ -307,6 +310,7 @@ const field = 'w-full rounded-lg border border-border bg-surface-2 px-3 py-2 tex
 
 function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
   const save = useSaveGig()
+  const lookup = useSetlistLookup()
   const [date, setDate] = useState(gig?.date ?? '')
   const [artists, setArtists] = useState(gig?.artists.map((a) => a.name).join('\n') ?? '')
   const [name, setName] = useState(gig?.name ?? '')
@@ -315,6 +319,8 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
   const [country, setCountry] = useState(gig?.country ?? '')
   const [notes, setNotes] = useState(gig?.notes ?? '')
   const [url, setUrl] = useState(gig?.url ?? '')
+  const [setlists, setSetlists] = useState<GigSetlist[]>(gig?.setlists ?? [])
+  const [filled, setFilled] = useState<string | null>(null)
   const names = artists.split('\n').map((a) => a.trim()).filter(Boolean)
   const dateId = useId()
   const valid = Boolean(date) && names.length > 0 && (!country || /^[A-Za-z]{2}$/.test(country)) && (!url || /^https?:\/\//.test(url))
@@ -327,6 +333,32 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
     country: country || null,
     notes: notes || null,
     url: url || null,
+    setlists,
+  }
+  /** Fill the form in from a setlist.fm link: the night, the whole bill and the setlists. */
+  const fillIn = (link: string) =>
+    lookup.mutate(link, {
+      onSuccess: (found) => {
+        setDate(found.date)
+        setArtists(found.artists.join('\n'))
+        setName(found.name ?? '')
+        setVenue(found.venue ?? '')
+        setCity(found.city ?? '')
+        setCountry(found.country ?? '')
+        setSetlists(found.setlists)
+        const songs = found.setlists.reduce((n, s) => n + s.songs.length, 0)
+        setFilled(
+          `Filled in from setlist.fm: ${found.artists.length} ${found.artists.length === 1 ? 'artist' : 'artists'}` +
+            (songs ? ` and ${songs} ${songs === 1 ? 'song' : 'songs'} played` : '') +
+            '. Check it over, then save.',
+        )
+      },
+    })
+  const onUrl = (next: string) => {
+    setUrl(next)
+    setFilled(null)
+    // A setlist.fm link pasted in: fill the rest in straight away.
+    if (SETLIST_LINK.test(next) && !SETLIST_LINK.test(url)) fillIn(next)
   }
   return (
     <Card title={gig ? 'Edit the gig' : 'Add a gig'}>
@@ -337,6 +369,25 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
           if (valid) save.mutate({ id: gig?.id, gig: body }, { onSuccess: onDone })
         }}
       >
+        <div className="space-y-1 text-sm sm:col-span-2">
+          <label htmlFor={`${dateId}-link`} className="block font-medium">
+            Link (setlist, tickets…)
+          </label>
+          <div className="flex gap-2">
+            <input id={`${dateId}-link`} type="url" value={url} onChange={(e) => onUrl(e.target.value)} placeholder="https://" className={field} />
+            {SETLIST_LINK.test(url) && (
+              <Button type="button" variant="ghost" busy={lookup.isPending} onClick={() => fillIn(url)} className="shrink-0">
+                Fill in from setlist.fm
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted">
+            {lookup.isPending
+              ? 'Looking it up on setlist.fm…'
+              : filled ?? 'Paste a setlist.fm link to fill in the rest: the date, the venue, everyone on the bill and what they played.'}
+          </p>
+          {lookup.isError && <Notice tone="error">{errorMessage(lookup.error)}</Notice>}
+        </div>
         <div className="space-y-1 text-sm">
           <span id={dateId} className="block font-medium">
             Date
@@ -369,10 +420,18 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
           <span className="block font-medium">Notes</span>
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={field} />
         </label>
-        <label className="space-y-1 text-sm sm:col-span-2">
-          <span className="block font-medium">Link (setlist, tickets…)</span>
-          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" className={field} />
-        </label>
+        {setlists.length > 0 && (
+          <div className="text-sm sm:col-span-2">
+            <p className="font-medium">Setlists</p>
+            <p className="text-muted">
+              {setlists.map((s) => `${s.artist} (${s.songs.length} ${s.songs.length === 1 ? 'song' : 'songs'})`).join(', ')}. The
+              songs in your library are marked as seen live.{' '}
+              <button type="button" className="text-accent hover:underline" onClick={() => setSetlists([])}>
+                Remove
+              </button>
+            </p>
+          </div>
+        )}
         <div className="flex gap-2 sm:col-span-2">
           <Button type="submit" variant="primary" disabled={!valid} busy={save.isPending}>
             Save

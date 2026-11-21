@@ -54,6 +54,15 @@ beforeEach(() => {
           months: [0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0],
           seasons: { winter: 0, spring: 0, summer: 1, autumn: 1 },
         })
+      case '/api/gigs/setlistfm/lookup':
+        return json({
+          date: '2017-06-24', name: 'Glastonbury 2017', venue: 'Worthy Farm', city: 'Pilton', country: 'GB',
+          artists: ['Radiohead', 'Support Act'], url: 'https://www.setlist.fm/setlist/x-63de4613.html',
+          setlists: [
+            { artist: 'Radiohead', url: null, songs: [{ name: 'Paranoid Android', cover: null, tape: false }, { name: 'Creep', cover: null, tape: false }] },
+            { artist: 'Support Act', url: null, songs: [{ name: 'Opener', cover: null, tape: false }] },
+          ],
+        })
       case '/api/gigs/import/setlistfm':
         return json({ added: 12, updated: 3, skipped: 1, problems: [] })
       case '/api/gigs/from-live':
@@ -134,8 +143,27 @@ describe('GigsPage', () => {
         country: 'GB',
         notes: null,
         url: null,
+        setlists: [],
       }),
     )
+  })
+
+  it('fills a gig in from a setlist.fm link', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a gig' }))
+    const link = 'https://www.setlist.fm/setlist/radiohead/2017/worthy-farm-pilton-england-63de4613.html'
+    fireEvent.change(screen.getByLabelText('Link (setlist, tickets…)'), { target: { value: link } })
+    expect(await screen.findByText(/Filled in from setlist\.fm: 2 artists and 3 songs played/)).toBeInTheDocument()
+    expect(await calls('/api/gigs/setlistfm/lookup')[0].clone().json()).toEqual({ url: link })
+    expect(screen.getByLabelText(/^Artists/)).toHaveValue('Radiohead\nSupport Act')
+    expect(screen.getByLabelText('Venue')).toHaveValue('Worthy Farm')
+    expect(screen.getByText(/Radiohead \(2 songs\), Support Act \(1 song\)/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await vi.waitFor(async () => {
+      const saved = await calls('/api/gigs')[0]?.clone().json()
+      expect(saved).toMatchObject({ date: '2017-06-24', name: 'Glastonbury 2017', country: 'GB', url: link })
+      expect(saved.setlists.map((s: { artist: string }) => s.artist)).toEqual(['Radiohead', 'Support Act'])
+    })
   })
 
   it('imports from setlist.fm and offers exports', async () => {

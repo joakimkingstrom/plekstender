@@ -43,6 +43,7 @@ from plekstender.db.models import (
     UserItemState,
     UserServer,
 )
+from plekstender.gigs.seen_live import seen_live, times_seen
 from plekstender.history import stats
 from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import normalise_artist, normalise_title
@@ -551,6 +552,17 @@ def _with_listens(
     return tracks
 
 
+async def _with_seen_live(
+    db: DbDep, user_id: int, tracks: list[TrackOut], artist: str | None
+) -> list[TrackOut]:
+    """Marks the songs played at gigs the user went to (by the album's or the song's artist)."""
+    seen = await seen_live(db, user_id)
+    if seen:
+        for track in tracks:
+            track.seen_live = times_seen(seen, [artist, track.original_title], track.title)
+    return tracks
+
+
 async def _title_norms(db: DbDep, server_id: int, keys: list[int]) -> dict[int, str]:
     if not keys:
         return {}
@@ -611,7 +623,9 @@ async def get_artist(
         tags=await _tags_for(db, us.server_id, rating_key),
         similar=[SimilarArtistOut(name=n, rating_key=in_library.get(n.lower())) for n in names],
         albums=await _albums(db, user.id, us, Album.artist_rating_key == rating_key),
-        top_tracks=_with_listens(top_tracks, titles, listens),
+        top_tracks=await _with_seen_live(
+            db, user.id, _with_listens(top_tracks, titles, listens), artist.title
+        ),
         your_listens=_listens_out(listens),
     )
 
@@ -657,8 +671,11 @@ async def get_album(
         artist_rating_key=album.artist_rating_key,
         artist_title=artist.title if artist else None,
         tags=await _tags_for(db, us.server_id, rating_key),
-        tracks=_with_listens(
-            tracks, {t.rating_key: t.title_norm for t, _, _ in track_rows}, listens
+        tracks=await _with_seen_live(
+            db,
+            user.id,
+            _with_listens(tracks, {t.rating_key: t.title_norm for t, _, _ in track_rows}, listens),
+            artist.title if artist else None,
         ),
         your_listens=_listens_out(listens),
     )

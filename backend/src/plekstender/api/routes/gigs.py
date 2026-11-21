@@ -12,6 +12,7 @@ from sqlalchemy import extract, func, select
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.routes.live import _show
+from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
     GigFromLiveIn,
     GigImportOut,
@@ -22,13 +23,16 @@ from plekstender.api.schemas import (
     GigYear,
     LiveShowOut,
     SetlistFmImportIn,
+    SetlistLookupIn,
+    SetlistLookupOut,
 )
 from plekstender.db.instance import get_setlistfm_api_key
-from plekstender.db.models import Gig, LiveShow
+from plekstender.db.models import Artist, Gig, LiveShow
 from plekstender.gigs import imports
 from plekstender.gigs.service import gig_from_live, library_matcher, link_artists, live_refs
 from plekstender.gigs.stats import gig_stats
 from plekstender.live.merge import merge
+from plekstender.sync.parse import normalise_artist
 from plekstender.worker import enqueue_gig_places
 
 router = APIRouter(prefix="/api/gigs", tags=["gigs"])
@@ -98,6 +102,7 @@ def _apply(gig: Gig, body: GigIn, artists: list[dict[str, object]]) -> None:
     gig.notes = (body.notes or "").strip() or None
     gig.url = body.url
     gig.artists = artists
+    gig.setlists = [s.model_dump() for s in body.setlists]
     if place_changed:  # looked up again (see gigs.places)
         gig.latitude = gig.longitude = gig.place_precision = None
 
@@ -204,6 +209,58 @@ async def _stored(
     return GigImportOut(
         added=result.added, updated=result.updated, skipped=result.skipped, problems=problems[:20]
     )
+
+
+@router.post(
+    "/setlistfm/lookup",
+    response_model=SetlistLookupOut,
+    dependencies=[rate_limit("gigs-setlist-lookup", 20, 60)],
+)
+async def setlistfm_lookup(
+    body: SetlistLookupIn, db: DbDep, user: UserDep, settings: SettingsDep, http: HttpDep
+) -> SetlistLookupOut:
+    """A gig from a link to one of its setlists on setlist.fm: date, venue, tour, the
+    whole bill (headliners first) and what each artist played."""
+    key, _ = await get_setlistfm_api_key(db, settings)
+    if not key:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "setlist.fm isn't set up: an admin can add an API key in Settings → Services.",
+        )
+    if imports.setlist_id(body.url) is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "That isn't a link to a setlist on setlist.fm."
+        )
+    try:
+        draft = await imports.setlistfm_gig(http, settings.setlistfm_api_url, key, body.url)
+    except imports.ImportError_ as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return SetlistLookupOut.model_validate(
+        {**draft.__dict__, "url": draft.url or body.url}, from_attributes=False
+    )
+
+
+@router.get("/artist/{server_id}/{rating_key}", response_model=list[GigOut])
+async def artist_gigs(server_id: int, rating_key: int, db: DbDep, user: UserDep) -> list[GigOut]:
+    """The gigs you've been to where a library artist played, newest first (matched by the
+    library link, or by name for gigs added before the artist was in the library)."""
+    us = await get_user_server(db, user, server_id)
+    artist = await db.get(Artist, (us.server_id, rating_key))
+    if artist is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Artist not found")
+    name = normalise_artist(artist.title)
+    gigs = await db.scalars(
+        select(Gig).where(Gig.user_id == user.id).order_by(Gig.date.desc(), Gig.id.desc())
+    )
+    return [
+        gig_out(g)
+        for g in gigs
+        if any(
+            (a.get("server_id") == us.server_id and a.get("rating_key") == rating_key)
+            or normalise_artist(a["name"]) == name
+            for a in g.artists
+        )
+    ]
 
 
 @router.post(

@@ -1029,6 +1029,11 @@ class Gig(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     # On the bill, the first ones the headliners: [{"name", "server_id", "rating_key"}].
     artists: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # What was played, per artist (from setlist.fm): [{"artist", "url", "songs": [{"name",
+    # "cover", "tape"}]}]. Songs in the library played here are "seen live".
+    setlists: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
     # Where it came from: manual | live | setlistfm | csv | ical; and its ID there.
     source: Mapped[str] = mapped_column(String(16), default="manual")
     source_ref: Mapped[str | None] = mapped_column(String(128))

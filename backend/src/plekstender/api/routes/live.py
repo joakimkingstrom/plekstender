@@ -19,6 +19,7 @@ from sqlalchemy import ColumnElement, delete, func, or_, select, update
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
+from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
     LiveArtistCount,
     LiveArtistOut,
@@ -305,16 +306,20 @@ async def artist_gigs(
     server_id: int, rating_key: int, db: DbDep, user: UserDep
 ) -> list[LiveShowOut]:
     """One library artist's upcoming gigs (for their page)."""
-    match = LiveShow.artists.contains([{"server_id": server_id, "rating_key": rating_key}])
+    us = await get_user_server(db, user, server_id)
+    match = LiveShow.artists.contains([{"server_id": us.server_id, "rating_key": rating_key}])
     return await _upcoming(db, user.id, None, None, match)
 
 
 @router.get("/artists/{server_id}", response_model=list[int])
 async def artists_with_gigs(server_id: int, db: DbDep, user: UserDep) -> list[int]:
     """The library artists (rating keys) with an upcoming gig, to mark their pictures."""
+    us = await get_user_server(db, user, server_id)
     keys: set[int] = set()
     for show in await _upcoming(db, user.id):
-        keys.update(a.rating_key for a in show.artists if a.server_id == server_id and a.rating_key)
+        keys.update(
+            a.rating_key for a in show.artists if a.server_id == us.server_id and a.rating_key
+        )
     return sorted(keys)
 
 
