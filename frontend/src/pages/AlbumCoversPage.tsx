@@ -6,6 +6,7 @@ import {
   useApplyCover,
   useCoverCandidates,
   useCoverPreview,
+  useCoverSources,
   useKeepCover,
   useStartBestCovers,
   type AlbumCover,
@@ -179,7 +180,11 @@ function CoverEditor({
   const me = useMe()
   const savePreferences = useSetPreferences()
   const opensOn = me.data?.preferences?.cover_source ?? 'deezer'
-  const [tab, setTab] = useState<Tab>(opensOn)
+  const usable = useUsableSources(serverId)
+  const tabs = TABS.filter(([key]) => key === 'upload' || usable.includes(key))
+  const [picked, setTab] = useState<Tab>(opensOn)
+  // Only sources that are set up: the default (or the first) when the one picked isn't.
+  const tab: Tab = tabs.some(([k]) => k === picked) ? picked : tabs.some(([k]) => k === opensOn) ? opensOn : tabs[0][0]
   const [source, setSource] = useState<SourceSpec | null>(null)
   const [square, setSquare] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -243,7 +248,7 @@ function CoverEditor({
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem] xl:items-start">
         <Card>
           <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Where from">
-            {TABS.map(([key, label]) => (
+            {tabs.map(([key, label]) => (
               // The star: the default source (filled), or make this one the default.
               <span
                 key={key}
@@ -391,18 +396,28 @@ function bestText(out: BestOutcome): string {
 const BEST_SOURCES: [BestSource, string][] = [
   ['deezer', 'Deezer'],
   ['itunes', 'iTunes'],
-  ['tidal', 'Tidal (when set up)'],
+  ['tidal', 'Tidal'],
   ['coverartarchive', 'Cover Art Archive'],
 ]
+
+// Needing nothing set up: what's offered until the server says which are usable.
+const OPEN_SOURCES: CoverSource[] = ['deezer', 'itunes', 'coverartarchive', 'plex']
+
+function useUsableSources(serverId: number): CoverSource[] {
+  return useCoverSources(serverId).data?.sources ?? OPEN_SOURCES
+}
 
 function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exclude<CoverFilter, 'all'>; q: string; count: number }) {
   const jobs = useArtworkJobs(serverId)
   const start = useStartBestCovers(serverId)
   const me = useMe()
   const savePreferences = useSetPreferences()
+  const usable = useUsableSources(serverId)
+  const offered = BEST_SOURCES.filter(([key]) => usable.includes(key))
   const saved = me.data?.preferences?.best_cover_sources ?? BEST_SOURCES.map(([k]) => k)
   const [chosen, setChosen] = useState<BestSource[] | null>(null)
-  const sources = chosen ?? saved
+  // Only the ones set up are offered (and asked for).
+  const sources = (chosen ?? saved).filter((k) => usable.includes(k))
   const [confirming, setConfirming] = useState(false)
   const latest = jobs.data?.find((j) => j.kind === 'covers')
   const running = latest && (latest.status === 'queued' || latest.status === 'running')
@@ -427,13 +442,13 @@ function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exc
           </p>
           <fieldset className="space-y-1">
             <legend className="mb-1 text-xs font-medium text-muted">Look on</legend>
-            {BEST_SOURCES.map(([key, label]) => (
+            {offered.map(([key, label]) => (
               <label key={key} className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={sources.includes(key)}
                   onChange={(e) =>
-                    setChosen(e.target.checked ? BEST_SOURCES.map(([k]) => k).filter((k) => k === key || sources.includes(k)) : sources.filter((k) => k !== key))
+                    setChosen(e.target.checked ? offered.map(([k]) => k).filter((k) => k === key || sources.includes(k)) : sources.filter((k) => k !== key))
                   }
                   className="accent-[var(--color-accent)]"
                 />
@@ -448,7 +463,9 @@ function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exc
               disabled={sources.length === 0}
               onClick={() => {
                 // Remembered (on the account), and used by "Apply best match" on one album too.
-                if (chosen && chosen.join() !== saved.join()) savePreferences.mutate({ best_cover_sources: chosen })
+                // Ones not set up now keep their saved choice, for when they are.
+                const keep = BEST_SOURCES.map(([k]) => k).filter((k) => (usable.includes(k) ? sources.includes(k) : saved.includes(k)))
+                if (chosen && keep.join() !== saved.join()) savePreferences.mutate({ best_cover_sources: keep })
                 start.mutate({ show, q: q || undefined, sources }, { onSettled: () => setConfirming(false) })
               }}
             >

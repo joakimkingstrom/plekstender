@@ -17,6 +17,7 @@ from plekstender.api.routes.artwork import candidates_out, job_out, owner_server
 from plekstender.api.routes.auth import load_preferences
 from plekstender.api.routes.library import _like, visible
 from plekstender.api.routes.servers import server_client
+from plekstender.api.routes.statuses import searxng_healthy
 from plekstender.api.schemas import (
     AlbumBestOut,
     AlbumCoverFilter,
@@ -206,6 +207,28 @@ def _cover_out(album: Album, artist: str | None, row: AlbumCover) -> AlbumCoverO
         source=row.source,
         applied_at=row.applied_at,
     )
+
+
+class CoverSourcesOut(BaseModel):
+    sources: list[CoverSource]
+
+
+@router.get("/sources", response_model=CoverSourcesOut)
+async def cover_sources(
+    server_id: int, db: DbDep, user: UserDep, settings: SettingsDep, http: HttpDep
+) -> CoverSourcesOut:
+    """The sources that can be used here: the open ones always; Tidal and fanart.tv once an
+    admin has set them up (checked when saved); web search while SearXNG answers."""
+    await owner_server(db, user, server_id)
+    found: list[CoverSource] = ["deezer", "itunes", "coverartarchive"]
+    if await get_tidal_client(db, settings) is not None:
+        found.append("tidal")
+    if (await get_fanart_api_key(db, settings))[0]:
+        found.append("fanart")
+    found.append("plex")
+    if settings.searxng_url and await searxng_healthy(http, settings.searxng_url):
+        found.append("search")
+    return CoverSourcesOut(sources=found)
 
 
 NO_MBID = "MusicBrainz doesn't know this album by its name and artist, so {} can't be searched."

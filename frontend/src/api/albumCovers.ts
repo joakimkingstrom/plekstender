@@ -36,6 +36,16 @@ export function useAlbumCovers(serverId: number, show: CoverFilter, q: string) {
   })
 }
 
+/** The sources usable here (Tidal and fanart.tv once set up, web search while it answers). */
+export function useCoverSources(serverId: number) {
+  return useQuery({
+    queryKey: [...keys.all(serverId), 'sources'],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/artwork/albums/sources', { params: { path: { server_id: serverId } } })),
+  })
+}
+
 export function useCoverCandidates(serverId: number, key: number, source: CoverSource, q = '') {
   return useQuery({
     queryKey: keys.candidates(serverId, key, source, q),

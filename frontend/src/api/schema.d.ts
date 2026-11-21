@@ -2487,6 +2487,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/albums/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cover Sources
+         * @description The sources that can be used here: the open ones always; Tidal and fanart.tv once an
+         *     admin has set them up (checked when saved); web search while SearXNG answers.
+         */
+        get: operations["cover_sources_api_servers__server_id__artwork_albums_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/albums/{rating_key}/candidates": {
         parameters: {
             query?: never;
@@ -4776,6 +4797,11 @@ export interface components {
              * @default false
              */
             square: boolean;
+        };
+        /** CoverSourcesOut */
+        CoverSourcesOut: {
+            /** Sources */
+            sources: ("coverartarchive" | "deezer" | "itunes" | "tidal" | "fanart" | "plex" | "search")[];
         };
         /** DataThistleOut */
         DataThistleOut: {
@@ -12928,6 +12954,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumCoverPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cover_sources_api_servers__server_id__artwork_albums_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverSourcesOut"];
                 };
             };
             /** @description Validation Error */

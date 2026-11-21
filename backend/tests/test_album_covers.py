@@ -208,6 +208,9 @@ async def test_album_covers(
     # Tidal: needs an admin's client ID and secret (checked with Tidal).
     tidal = (await owner.get(f"{album}/candidates", params={"source": "tidal"})).json()
     assert tidal["candidates"] == [] and "Tidal isn't set up" in tidal["note"]
+    # The sources offered: the open ones, and the ones set up (not Tidal yet, nor web search).
+    offered = (await owner.get(f"{base}/sources")).json()["sources"]
+    assert offered == ["deezer", "itunes", "coverartarchive", "plex"]
     wrong = await owner.put(
         "/api/admin/tidal",
         json={"client_id": "tidalclient1", "client_secret": "nope-nope"},
@@ -220,6 +223,7 @@ async def test_album_covers(
         headers=CSRF,
     )
     assert ok.json() == {"configured": True, "client_id": "tidalclient1"}
+    assert "tidal" in (await owner.get(f"{base}/sources")).json()["sources"]
     tidal = (await owner.get(f"{album}/candidates", params={"source": "tidal"})).json()
     assert [(c["label"], c["width"]) for c in tidal["candidates"]] == [
         ("OK Computer OKNOTOK 1997 2017 · Radiohead", 1280)

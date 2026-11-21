@@ -10,12 +10,14 @@ const counts = { missing: 1, low: 1, ok: 2, unchecked: 0, kept: 0 }
 
 let jobs: unknown[] = []
 let prefs: Record<string, unknown> = {}
+let usable: string[] = []
 let fetchMock: ReturnType<typeof vi.fn<(input: Request | string, init?: RequestInit) => Promise<Response>>>
 const requests = (path: string) =>
   fetchMock.mock.calls.filter(([input]) => new URL(typeof input === 'string' ? input : input.url, 'http://localhost').pathname === path)
 
 beforeEach(() => {
   jobs = []
+  usable = ['deezer', 'itunes', 'coverartarchive', 'tidal', 'fanart', 'plex', 'search']
   prefs = { accent: null, skip_threshold: 80, phone_start: 'rate', cover_source: 'deezer', best_cover_sources: ['deezer', 'itunes', 'tidal', 'coverartarchive'] }
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:cover', revokeObjectURL: () => undefined }))
   fetchMock = vi.fn(async (input: Request | string) => {
@@ -33,6 +35,8 @@ beforeEach(() => {
         })  // prettier-ignore
       case '/api/servers/1/artwork/albums/201/preview':
         return new Response(new Blob(['jpeg']), { headers: { 'content-type': 'image/jpeg', 'x-image-width': '1000', 'x-image-height': '1000' } })
+      case '/api/servers/1/artwork/albums/sources':
+        return json({ sources: usable })
       case '/api/auth/me':
         if ((input as Request).method === 'PUT') return json({ id: 1, username: 'joakim', preferences: await (input as Request).clone().json() })
         return json({ id: 1, username: 'joakim', email: null, thumb_url: null, is_admin: true, preferences: { ...prefs } })
@@ -151,6 +155,35 @@ describe('Album covers', () => {
     await vi.waitFor(async () => {
       const [put] = requests('/api/auth/me/preferences').at(-1) ?? []
       expect(await (put as Request).clone().json()).toMatchObject({ cover_source: 'coverartarchive', best_cover_sources: ['itunes', 'tidal', 'coverartarchive'] })
+    })
+  })
+
+  it('offers only the sources that are set up', async () => {
+    usable = ['deezer', 'itunes', 'coverartarchive', 'plex'] // no Tidal, fanart.tv or web search
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <AlbumCovers serverId={1} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await vi.waitFor(() => expect(requests('/api/servers/1/artwork/albums/sources')).not.toHaveLength(0))
+    fireEvent.click(await screen.findByRole('button', { name: /OK Computer OKNOTOK/ }))
+    await vi.waitFor(() =>
+      expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Deezer', 'iTunes', 'Cover Art Archive', 'Plex', 'Upload']),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply best matches' }))
+    expect(screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Deezer', 'iTunes', 'Cover Art Archive'])
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Deezer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to 2' }))
+    await vi.waitFor(() => expect(requests('/api/servers/1/artwork/albums/best')).toHaveLength(1))
+    const [started] = requests('/api/servers/1/artwork/albums/best')[0]
+    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', sources: ['itunes', 'coverartarchive'] })
+    // Tidal stays chosen for when it's set up.
+    await vi.waitFor(async () => {
+      const [put] = requests('/api/auth/me/preferences').at(-1) ?? []
+      expect(await (put as Request).clone().json()).toMatchObject({ best_cover_sources: ['itunes', 'tidal', 'coverartarchive'] })
     })
   })
 })
