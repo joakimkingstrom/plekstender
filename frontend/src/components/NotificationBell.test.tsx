@@ -15,6 +15,7 @@ beforeEach(() => {
       const url = new URL(input.url)
       const json = (body: unknown, status = 200) =>
         new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+      if (url.pathname === '/api/servers') return json([])
       if (input.method === 'POST') {
         posted.push(`${url.pathname} ${await input.text()}`)
         return json(null, 204)

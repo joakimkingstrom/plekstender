@@ -9,7 +9,6 @@ import { SPIN_MS, SPIN_SCALE } from '../brand'
 import { Mark } from './Mark'
 import { Avatar, Button } from './ui'
 import { useAppTime } from '../appTime'
-import { JobToast } from './JobToast'
 import { NotificationBell } from './NotificationBell'
 import { AchievementCelebration } from './Achievements'
 
@@ -166,7 +165,6 @@ export function Layout() {
         <Outlet />
       </main>
       <AchievementCelebration enabled={me.preferences?.achievements !== false} />
-      <JobToast />
 
       {/* Mobile bottom navigation */}
       <nav
