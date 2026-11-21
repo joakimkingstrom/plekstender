@@ -32,6 +32,7 @@ import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
+import { DiscoverPage } from './pages/DiscoverPage'
 import { TagEditingPage } from './pages/TagEditingPage'
 import { TagPage } from './pages/TagPage'
 import { GigsLayout, LibraryLayout, PlaylistRedirect } from './pages/Sections'
@@ -64,6 +65,7 @@ const router = createBrowserRouter([
           { path: 'playlists/new', element: <PlaylistEditorPage /> },
           { path: 'playlists/:id', element: <PlaylistEditorPage /> },
           { path: 'rate', element: <RatePage /> },
+          { path: 'discover', element: <DiscoverPage /> },
           { path: 'artwork', element: <ArtworkPage /> },
           { path: 'tag-editing', element: <TagEditingPage /> },
         ],

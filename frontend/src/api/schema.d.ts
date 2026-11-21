@@ -364,6 +364,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Artists To Add
+         * @description Artists not in the library that Plex names as similar to the most library artists
+         *     (then by your listens to them). `hidden`: the ones you've hidden instead.
+         */
+        get: operations["artists_to_add_api_servers__server_id__library_discover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/discover/hidden": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hide
+         * @description Stop suggesting an artist (for you, on every server).
+         */
+        post: operations["hide_api_servers__server_id__library_discover_hidden_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/discover/hidden/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unhide
+         * @description Suggest an artist again.
+         */
+        delete: operations["unhide_api_servers__server_id__library_discover_hidden__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/artists": {
         parameters: {
             query?: never;
@@ -3929,6 +3990,40 @@ export interface components {
             /** Limit */
             limit: number;
         };
+        /** ArtistSuggestionOut */
+        ArtistSuggestionOut: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Similar To
+             * @description Library artists Plex names it as similar to.
+             */
+            similar_to: number;
+            /**
+             * Sources
+             * @description Some of them, most played first.
+             */
+            sources: components["schemas"]["SuggestionSourceOut"][];
+            /**
+             * Listens
+             * @description Your listens to it (scrobbles count too).
+             */
+            listens: number;
+        };
+        /** ArtistSuggestionsOut */
+        ArtistSuggestionsOut: {
+            /** Items */
+            items: components["schemas"]["ArtistSuggestionOut"][];
+            /** Total */
+            total: number;
+            /**
+             * Hidden
+             * @description How many you've hidden.
+             */
+            hidden: number;
+        };
         /** ArtistSummary */
         ArtistSummary: {
             /** Rating Key */
@@ -4951,6 +5046,13 @@ export interface components {
             /** Database */
             database: boolean;
             worker: components["schemas"]["WorkerHealth"];
+        };
+        /** HideSuggestionIn */
+        HideSuggestionIn: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
         };
         /** IdentifyApplyIn */
         IdentifyApplyIn: {
@@ -7272,6 +7374,13 @@ export interface components {
             /** Tracks */
             tracks: number;
         };
+        /** SuggestionSourceOut */
+        SuggestionSourceOut: {
+            /** Name */
+            name: string;
+            /** Rating Key */
+            rating_key: number;
+        };
         /** SyncIn */
         SyncIn: {
             /**
@@ -8424,6 +8533,104 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AlbumColourOut"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artists_to_add_api_servers__server_id__library_discover_get: {
+        parameters: {
+            query?: {
+                hidden?: boolean;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistSuggestionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hide_api_servers__server_id__library_discover_hidden_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HideSuggestionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unhide_api_servers__server_id__library_discover_hidden__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

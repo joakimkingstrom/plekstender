@@ -4,8 +4,8 @@ import { TabNav } from '../components/TabNav'
 import { PageTitle } from '../components/ui'
 import { ServerPicker } from './LibraryPage'
 
-/** Library: the artists and albums, and what's done with them (playlists, rating, artwork,
- * tag editing). */
+/** Library: the artists and albums, and what's done with them (playlists, rating, artists
+ * to add, artwork, tag editing). */
 export function LibraryLayout() {
   const { servers, active, choose } = useActiveServer()
   // Rate fills a phone's screen on its own (see Layout), so the title and tabs step aside.
@@ -26,6 +26,7 @@ export function LibraryLayout() {
           { to: '/library/rate', label: 'Rate' },
           ...(active?.is_owner
             ? [
+                { to: '/library/discover', label: 'Discover' },
                 { to: '/library/artwork', label: 'Artwork' },
                 { to: '/library/tag-editing', label: 'Tag editing' },
               ]

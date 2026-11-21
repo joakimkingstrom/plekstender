@@ -49,11 +49,11 @@ function renderAt(path: string) {
 }
 
 describe('Library and Gigs', () => {
-  it('has tabs for the library, playlists, rating and (owners) artwork and tag editing', async () => {
+  it('has tabs for the library, playlists, rating and (owners) discover, artwork and tag editing', async () => {
     renderAt('/library/playlists')
     expect(await screen.findByRole('link', { name: 'Artwork' })).toHaveAttribute('href', '/library/artwork')
     const tabs = screen.getByRole('navigation', { name: 'Library' })
-    expect([...tabs.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Library', 'Stats', 'Playlists', 'Rate', 'Artwork', 'Tag editing'])
+    expect([...tabs.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Library', 'Stats', 'Playlists', 'Rate', 'Discover', 'Artwork', 'Tag editing'])
     expect(screen.getByRole('link', { name: 'Playlists' })).toHaveAttribute('aria-current', 'page')
   })
 

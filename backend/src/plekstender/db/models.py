@@ -677,6 +677,18 @@ class NotificationState(Base):
     dismissed_at: Mapped[dt.datetime | None]
 
 
+class HiddenSuggestion(Base):
+    """An artist someone doesn't want suggested for their library (Library → Artists to add)."""
+
+    __tablename__ = "hidden_suggestions"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "artist_key"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    artist_key: Mapped[str] = mapped_column(Text)  # normalise_artist(name)
+    name: Mapped[str] = mapped_column(String(255))
+    hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
 class UserAchievement(Base):
     """An achievement a person unlocked (see plekstender.achievements), and when they saw
     its celebration."""

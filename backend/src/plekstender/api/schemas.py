@@ -2034,3 +2034,27 @@ class AchievementsSettings(BaseModel):
     enabled: bool = Field(
         description="Achievements on for everyone (each person can still turn them off)."
     )
+
+
+class SuggestionSourceOut(BaseModel):
+    name: str
+    rating_key: int
+
+
+class ArtistSuggestionOut(BaseModel):
+    key: str
+    name: str
+    similar_to: int = Field(description="Library artists Plex names it as similar to.")
+    sources: list[SuggestionSourceOut] = Field(description="Some of them, most played first.")
+    listens: int = Field(description="Your listens to it (scrobbles count too).")
+
+
+class ArtistSuggestionsOut(BaseModel):
+    items: list[ArtistSuggestionOut]
+    total: int
+    hidden: int = Field(description="How many you've hidden.")
+
+
+class HideSuggestionIn(BaseModel):
+    key: str = Field(max_length=300)
+    name: str = Field(max_length=255)

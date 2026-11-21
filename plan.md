@@ -628,6 +628,9 @@ Plex gives albums one or two broad genres (often "Pop/Rock") but many **styles**
   - Rename: the album pages' template (remembered per browser), a dry run per album (moves, what can't move, where they go), then moved.
   Each album is its own edit in the history, undone from its page. Artists aren't listed separately: an artist's albums are.
 
+### Library → Discover (21 Nov 2026)
+- [x] Artists to add (owners' tab): artists not in the library that Plex lists as "similar" to the library's artists, ranked by how many library artists list them, then by the person's own listens to them (scrobbles count even for artists not in the library). Each with the library artists it's like (most played first, linked) and a Last.fm link. Hide ones you don't want (`hidden_suggestions`, per person, on every server); a Hidden view brings them back.
+
 ### Phase 14 — Library stats (from `.todo.md`)
 Library → Stats (a tab next to Library; Tag editing is its own tab since Phase 13). Counts only what the person's Plex account can see.
 - [x] Where artists are from: the listens map's world map counting artists, zooming by continent; a country (on the map or in the top-12 row under it) lists its artists, most played first. The country is Plex's (its country tag, names mapped to ISO codes, old names like "Soviet Union" or "England" included), else MusicBrainz's: the worker looks up artists Plex has no country for, hourly, 300 a run at one every two seconds (half MusicBrainz's limit, leaving room for the tag editor), by MusicBrainz ID, else by name (only an exact, 100-score match whose namesakes agree). The artist's country, else their area's or begin area's. Kept in `artist_areas` (shared by servers; "not found" retried after 90 days). The note under the map says how many are placed and how many are still to be looked up.
