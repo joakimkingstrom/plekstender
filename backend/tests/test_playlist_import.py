@@ -188,3 +188,125 @@ async def test_import_from_spotify(
         headers=CSRF,
     )
     assert gone.status_code == 422 and "editorial or algorithmic" in gone.json()["detail"]
+
+
+def test_tidal_links() -> None:
+    from plekstender.tidal import TidalError, duration_ms, playlist_id
+
+    pid = "0d5165ae-81e3-4864-ab7c-2cd0b03f3f1b"
+    assert playlist_id(f"https://tidal.com/browse/playlist/{pid}?u") == pid
+    assert playlist_id(f"https://listen.tidal.com/playlist/{pid.upper()}") == pid
+    assert playlist_id(f"tidal.com/playlist/{pid}") == pid
+    with pytest.raises(TidalError):
+        playlist_id("https://tidal.com/browse/album/77")
+    assert duration_ms("PT4M24S") == 264_000
+    assert duration_ms("PT1H0M1.5S") == 3_601_500
+    assert duration_ms(None) is None and duration_ms("PT") is None
+
+
+@pytest.mark.db
+async def test_import_from_tidal(app: FastAPI, plex: FakePlex) -> None:
+    import base64
+
+    import httpx
+
+    from plekstender import tidal
+
+    tidal._tokens.clear()
+    pid = "0d5165ae-81e3-4864-ab7c-2cd0b03f3f1b"
+    asked: list[httpx.Request] = []
+
+    def token(request: httpx.Request) -> httpx.Response:
+        expected = "Basic " + base64.b64encode(b"tidalclient1:tidal-secret").decode()
+        if request.headers["authorization"] != expected:
+            return httpx.Response(401, json={"error": "invalid_client"})
+        return httpx.Response(200, json={"access_token": "tidal-tok", "expires_in": 3600})
+
+    def track(
+        tid: str, title: str, duration: str, artist: str, album: str, version: str | None = None
+    ) -> dict:
+        return {"id": tid, "type": "tracks", "attributes": {"title": title, "duration": duration, "version": version},
+                "relationships": {"artists": {"data": [{"id": f"ar-{artist}", "type": "artists"}]},
+                                  "albums": {"data": [{"id": f"al-{album}", "type": "albums"}]}}}  # fmt: skip
+
+    tracks = {
+        "1": track("1", "Karma Police", "PT4M24S", "Radiohead", "OK Computer"),
+        "2": track("2", "Glory Box", "PT5M1S", "Portishead", "Dummy"),
+        "3": track("3", "Not In The Library", "PT3M", "Somebody", "X", version="Live"),
+    }
+
+    def api(request: httpx.Request) -> httpx.Response:
+        asked.append(request)
+        assert request.headers["authorization"] == "Bearer tidal-tok"
+        path, params = request.url.path, request.url.params
+        if path == f"/v2/playlists/{pid}":
+            return httpx.Response(
+                200,
+                json={"data": {"id": pid, "type": "playlists", "attributes": {"name": "Sunday"}}},
+            )
+        if path == f"/v2/playlists/{pid}/relationships/items" and not params.get("page[cursor]"):
+            return httpx.Response(200, json={
+                "data": [{"id": "1", "type": "tracks"}, {"id": "9", "type": "videos"}],
+                "links": {"self": "/x", "next": f"/playlists/{pid}/relationships/items?page[cursor]=abc"},
+            })  # fmt: skip
+        if path == f"/v2/playlists/{pid}/relationships/items":
+            assert params["page[cursor]"] == "abc"
+            return httpx.Response(200, json={
+                "data": [{"id": "2", "type": "tracks"}, {"id": "3", "type": "tracks"}], "links": {"self": "/x"},
+            })  # fmt: skip
+        if path == "/v2/tracks":
+            ids = params.get_list("filter[id]")
+            assert sorted(params.get_list("include")) == ["albums", "artists"]
+            found = [tracks[i] for i in ids if i in tracks]
+            artists = {r["id"] for t in found for r in t["relationships"]["artists"]["data"]}
+            albums = {r["id"] for t in found for r in t["relationships"]["albums"]["data"]}
+            return httpx.Response(200, json={"data": found, "included": [
+                *({"id": a, "type": "artists", "attributes": {"name": a[3:]}} for a in artists),
+                *({"id": a, "type": "albums", "attributes": {"title": a[3:]}} for a in albums),
+            ]})  # fmt: skip
+        return httpx.Response(404, json={"errors": [{"status": "404"}]})
+
+    plex.router.post("https://auth.tidal.com/v1/oauth2/token").mock(side_effect=token)
+    plex.router.route(host="openapi.tidal.com").mock(side_effect=api)
+    owner, sid = await owner_with_library(app, plex)
+    url = f"https://tidal.com/browse/playlist/{pid}"
+
+    missing = await owner.post(
+        f"/api/servers/{sid}/playlists/import/tidal", json={"url": url}, headers=CSRF
+    )
+    assert missing.status_code == 409 and "Tidal isn't set up" in missing.json()["detail"]
+    saved = await owner.put(
+        "/api/admin/tidal",
+        json={"client_id": "tidalclient1", "client_secret": "tidal-secret"},
+        headers=CSRF,
+    )
+    assert saved.status_code == 200, saved.text
+
+    preview = await owner.post(
+        f"/api/servers/{sid}/playlists/import/tidal", json={"url": url}, headers=CSRF
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert (body["name"], body["total"], body["matched"]) == ("Sunday", 3, 2)
+    assert [s["match"] and s["match"]["rating_key"] for s in body["songs"]] == [301, 304, None]
+    assert [(s["title"], s["artist"], s["album"]) for s in body["songs"]][2] == (
+        "Not In The Library (Live)",
+        "Somebody",
+        "X",
+    )
+    # The tracks are looked up together (up to 20 at a time), after the playlist's pages.
+    [lookup] = [r for r in asked if r.url.path == "/v2/tracks"]
+    assert lookup.url.params.get_list("filter[id]") == ["1", "2", "3"]
+
+    private = await owner.post(
+        f"/api/servers/{sid}/playlists/import/tidal",
+        json={"url": "https://tidal.com/playlist/11111111-2222-3333-4444-555555555555"},
+        headers=CSRF,
+    )
+    assert private.status_code == 422 and "private" in private.json()["detail"]
+    album = await owner.post(
+        f"/api/servers/{sid}/playlists/import/tidal",
+        json={"url": "https://tidal.com/browse/album/77"},
+        headers=CSRF,
+    )
+    assert album.status_code == 422 and "isn't a Tidal playlist link" in album.json()["detail"]

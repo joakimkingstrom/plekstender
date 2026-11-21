@@ -453,6 +453,12 @@ _SKIP_GROUPS = {
 }
 
 
+# A short play is a skip only when another song started on the same player right after it
+# stopped: pausing, or stopping with nothing after, isn't one. The watcher looks every 10 s,
+# so a play is last seen up to that long before it really stopped.
+SKIP_GAP = dt.timedelta(seconds=30)
+
+
 async def skipped(
     db: AsyncSession,
     user_id: int,
@@ -463,28 +469,39 @@ async def skipped(
     threshold: int,
     limit: int = 10,
 ) -> list[Skipped]:
-    """Most skipped songs / albums / artists: plays seen live where less than `threshold`
-    percent of the track was heard (from the session watcher)."""
+    """Most skipped songs / albums / artists, from the session watcher: plays where less than
+    `threshold` percent of the track was heard and another song started straight after
+    (within SKIP_GAP, on the same player)."""
     key, name, artist, thumb = _SKIP_GROUPS[kind]
     query = text(
         f"""
+        WITH plays AS (
+            SELECT ps.rating_key,
+                   ps.max_offset_ms * 100 < ps.duration_ms * :threshold AND EXISTS (
+                       SELECT 1 FROM play_sessions nx
+                       WHERE nx.user_id = ps.user_id AND nx.id <> ps.id
+                         AND nx.rating_key <> ps.rating_key
+                         AND nx.client IS NOT DISTINCT FROM ps.client
+                         AND nx.started_at BETWEEN ps.ended_at - interval '10 seconds'
+                                               AND ps.ended_at + :gap
+                   ) AS skipped
+            FROM play_sessions ps
+            WHERE ps.user_id = :user_id AND ps.server_id = :server_id
+              AND ps.ended_at IS NOT NULL AND ps.duration_ms > 0
+              AND ps.started_at < :end
+              AND (CAST(:start AS timestamptz) IS NULL OR ps.started_at >= :start)
+        )
         SELECT {key} AS rating_key, min({name}) AS name, min({artist}) AS artist,
                min({thumb}) AS thumb,
-               count(*) FILTER (
-                   WHERE ps.max_offset_ms * 100 < ps.duration_ms * :threshold
-               ) AS skips,
+               count(*) FILTER (WHERE p.skipped) AS skips,
                count(*) AS plays
-        FROM play_sessions ps
-        JOIN tracks t ON t.server_id = ps.server_id AND t.rating_key = ps.rating_key
+        FROM plays p
+        JOIN tracks t ON t.server_id = :server_id AND t.rating_key = p.rating_key
         LEFT JOIN albums al ON al.server_id = t.server_id AND al.rating_key = t.album_rating_key
         LEFT JOIN artists ar ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
-        WHERE ps.user_id = :user_id AND ps.server_id = :server_id
-          AND ps.ended_at IS NOT NULL AND ps.duration_ms > 0
-          AND ps.started_at < :end
-          AND (CAST(:start AS timestamptz) IS NULL OR ps.started_at >= :start)
-          AND {key} IS NOT NULL
+        WHERE {key} IS NOT NULL
         GROUP BY {key}
-        HAVING count(*) FILTER (WHERE ps.max_offset_ms * 100 < ps.duration_ms * :threshold) > 0
+        HAVING count(*) FILTER (WHERE p.skipped) > 0
         ORDER BY skips DESC, plays DESC, min({name})
         LIMIT :limit
         """  # noqa: S608 - constant SQL fragments
@@ -497,6 +514,7 @@ async def skipped(
             "start": start,
             "end": end,
             "threshold": threshold,
+            "gap": SKIP_GAP,
             "limit": limit,
         },
     )

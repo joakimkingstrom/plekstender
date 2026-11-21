@@ -9,9 +9,11 @@ import httpx
 import pytest
 import respx
 from fastapi import FastAPI
+from sqlalchemy import select
 
 from plekstender.config import get_settings
 from plekstender.db import get_sessionmaker
+from plekstender.db.models import PlaySession
 from plekstender.history import geo, places, sessions
 from plekstender.worker import capture_connections
 from tests.fakes import CSRF, FakePlex, sign_in
@@ -68,16 +70,31 @@ async def test_watcher_records_skips_players_and_places(app: FastAPI, plex: Fake
     friend_play = lib.playing(2, 304, 100_000, "s2", lan=False, address="81.2.69.142")
     lib.now_playing = [owner_play, friend_play]
     await poll()
-    lib.now_playing = [{**owner_play, "viewOffset": 60_000}]  # the friend stopped
+    lib.now_playing = [{**owner_play, "viewOffset": 60_000}]  # the friend paused
     await poll()
-    lib.now_playing = []  # the owner skipped at 1:00 of 4:00
+    # The owner skipped at 1:00 of 4:00 (the next song started), and the friend carried on.
+    next_song = lib.playing(1, 301, 2_000, "s3", lan=True, address="192.168.1.20")
+    lib.now_playing = [next_song, {**friend_play, "viewOffset": 110_000, "sessionKey": "s4"}]
     await poll()
+    lib.now_playing = []  # both stopped, nothing after: not skips
+    await poll()
+    async with get_sessionmaker()() as db:
+        plays = (
+            await db.execute(
+                select(PlaySession.rating_key, PlaySession.max_offset_ms).order_by(PlaySession.id)
+            )
+        ).all()
+    # The friend's pause and carrying on is one play.
+    assert [tuple(p) for p in plays] == [(300, 60_000), (304, 110_000), (301, 2_000)]
 
     skipped = (await owner.get("/api/stats/skips", params={"server_id": sid, "range": "7d"})).json()
     assert (skipped["threshold"], skipped["watching"]) == (80, True)
     assert [(i["name"], i["artist"], i["skips"], i["plays"]) for i in skipped["items"]] == [
         ("Paranoid Android", "Radiohead", 1, 1)
     ]
+    friend_sid = (await friend.get("/api/servers")).json()[0]["id"]
+    friends = await friend.get("/api/stats/skips", params={"server_id": friend_sid})
+    assert friends.json()["items"] == [], friends.text
     by_artist = (
         await owner.get("/api/stats/skips", params={"server_id": sid, "kind": "artist"})
     ).json()

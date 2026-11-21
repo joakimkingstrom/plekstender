@@ -52,7 +52,12 @@ const CARDS: Record<ServiceKind, () => ReactNode> = {
       <SetlistFmKeyCard />
     </>
   ),
-  playlists: () => <SpotifyAppCard />,
+  playlists: () => (
+    <>
+      <SpotifyAppCard />
+      <TidalCard />
+    </>
+  ),
   artwork: () => (
     <>
       <FanartKeyCard />

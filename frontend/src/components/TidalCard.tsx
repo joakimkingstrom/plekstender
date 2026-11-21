@@ -5,7 +5,7 @@ import { Button, Card, Notice, Spinner } from './ui'
 
 const field = 'w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm'
 
-/** Tidal's catalogue for album covers (admins): a free app's client ID and secret. */
+/** Tidal's catalogue for album covers and playlist links (admins): a free app's client ID and secret. */
 export function TidalCard() {
   const tidal = useTidal(true)
   const save = useSetTidal()
@@ -17,7 +17,9 @@ export function TidalCard() {
     <Card title="Tidal">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          Album covers from Tidal’s catalogue (Library → Artwork → Album covers). Make a free app at{' '}
+          Album covers from Tidal’s catalogue (Library → Artwork → Album covers) and importing public Tidal playlists from
+          their links (Playlists). The same app is used for both, so it shows under Services → Playlists and Artwork. Make
+          a free app at{' '}
           <a href="https://developer.tidal.com" target="_blank" rel="noreferrer" className="text-accent underline">
             developer.tidal.com
           </a>{' '}

@@ -158,9 +158,9 @@ async def instance_connections(
         "fanart.tv", (await get_fanart_api_key(db, settings))[0] is not None, f"{SERVICES}/artwork"
     )
     simple(
-        "Tidal (album covers)",
+        "Tidal",
         await get_tidal_client(db, settings) is not None,
-        f"{SERVICES}/artwork",
+        f"{SERVICES}/playlists",
     )
     simple(
         "AcoustID", (await get_acoustid_api_key(db, settings))[0] is not None, f"{SERVICES}/files"

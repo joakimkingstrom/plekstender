@@ -8,7 +8,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from plekstender import acoustid
+from plekstender import acoustid, tidal
 from plekstender.api.deps import AdminDep, DbDep, HttpDep, SettingsDep
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
@@ -44,7 +44,6 @@ from plekstender.api.schemas import (
     TidalOut,
 )
 from plekstender.artwork.catalogue import catalogue, find
-from plekstender.artwork.covers import check_tidal
 from plekstender.artwork.sources import SourceError, fanart_logos
 from plekstender.artwork.text import FontError, check_font
 from plekstender.db.instance import (
@@ -322,7 +321,7 @@ async def put_tidal(
     body: TidalIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
 ) -> TidalOut:
     """Set (after Tidal accepts them) or remove the Tidal app's client ID and secret, used
-    for album covers."""
+    for album covers and importing Tidal playlists."""
     if bool(body.client_id) != bool(body.client_secret):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter both the client ID and the secret."
@@ -330,8 +329,8 @@ async def put_tidal(
     client = (body.client_id, body.client_secret) if body.client_id and body.client_secret else None
     if client:
         try:
-            await check_tidal(http, settings, client)
-        except SourceError as exc:
+            await tidal.check(http, settings, client)
+        except tidal.TidalError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     await set_tidal_client(db, settings, client)
     await db.commit()

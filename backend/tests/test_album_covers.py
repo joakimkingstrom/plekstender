@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from PIL import Image
 from sqlalchemy import select, update
 
+from plekstender import tidal as tidal_api
 from plekstender.artwork import covers, sources
 from plekstender.artwork import fetch as fetch_mod
 from plekstender.config import get_settings
@@ -47,7 +48,7 @@ def web(plex: FakePlex, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[httpx
 
     monkeypatch.setattr(fetch_mod, "resolver", resolve)
     monkeypatch.setattr(sources, "MB_INTERVAL", 0)
-    covers._tidal_tokens.clear()
+    tidal_api._tokens.clear()
     asked: dict[str, list[httpx.Request]] = {"deezer": [], "tidal": [], "musicbrainz": []}
     r = plex.router
 

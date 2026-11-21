@@ -13,7 +13,6 @@ import asyncio
 import datetime as dt
 import io
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -23,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plekstender import tidal as tidal_api
 from plekstender.artwork import images, sources
 from plekstender.artwork.fetch import USER_AGENT, FetchError, fetch
 from plekstender.artwork.images import ImageError
@@ -336,47 +336,15 @@ async def itunes(http: httpx.AsyncClient, base: str, album: AlbumRef) -> list[Ca
     return _rank(found, album)
 
 
-_tidal_tokens: dict[str, tuple[str, float]] = {}
-
-
-async def _tidal_token(http: httpx.AsyncClient, auth_url: str, client: tuple[str, str]) -> str:
-    cached = _tidal_tokens.get(client[0])
-    if cached and cached[1] > time.monotonic() + 60:
-        return cached[0]
-    try:
-        resp = await http.post(
-            auth_url,
-            data={"grant_type": "client_credentials"},
-            auth=client,
-            headers={"User-Agent": USER_AGENT},
-            timeout=TIMEOUT,
-        )
-    except httpx.HTTPError as exc:
-        raise SourceError("Tidal couldn't be reached.") from exc
-    if resp.status_code in (400, 401, 403):
-        raise SourceError("Tidal didn't accept the client ID and secret.")
-    if resp.status_code != 200:
-        raise SourceError(f"Tidal is unavailable (HTTP {resp.status_code}).")
-    data = resp.json()
-    token = str(data.get("access_token") or "")
-    if not token:
-        raise SourceError("Tidal didn't give a token.")
-    _tidal_tokens[client[0]] = (token, time.monotonic() + float(data.get("expires_in") or 3600))
-    return token
-
-
-async def check_tidal(http: httpx.AsyncClient, settings: Settings, client: tuple[str, str]) -> None:
-    """Raises SourceError if Tidal refuses the client ID and secret."""
-    _tidal_tokens.pop(client[0], None)
-    await _tidal_token(http, settings.tidal_auth_url, client)
-
-
 async def tidal(
     http: httpx.AsyncClient, settings: Settings, client: tuple[str, str], album: AlbumRef
 ) -> list[Candidate]:
     """Tidal's catalogue: a search, then the albums found with their cover art (each file's
     size given)."""
-    token = await _tidal_token(http, settings.tidal_auth_url, client)
+    try:
+        token = await tidal_api.access_token(http, settings.tidal_auth_url, client)
+    except tidal_api.TidalError as exc:
+        raise SourceError(str(exc)) from exc
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.api+json"}
     base = settings.tidal_api_url.rstrip("/")
     search = await _json(

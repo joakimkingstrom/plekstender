@@ -498,7 +498,8 @@ function SkipsCard() {
       <div className="space-y-3">
         <p className="text-sm text-muted">
           While something plays in Plex, Plekstender notes how far each song gets. A play counts as skipped when less
-          than this much of the song was heard. Used for "Most skipped" on History.
+          than this much of the song was heard and another song started straight after on the same player. Pausing, or
+          stopping with nothing after, isn’t a skip. Used for "Most skipped" on History.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Stepper label="Skip threshold" value={current} min={10} max={95} onChange={setValue} invalid={!valid} />

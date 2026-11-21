@@ -339,7 +339,8 @@ function MostSkipped({ serverId, range }: { serverId: number; range: string }) {
       )}
       {data && (
         <p className="mt-3 text-xs text-muted">
-          A play counts as skipped when less than {data.threshold}% of the song was heard.{' '}
+          A play counts as skipped when less than {data.threshold}% of the song was heard and another song started
+          straight after.{' '}
           <Link to="/settings/listening" className="underline">
             Change
           </Link>

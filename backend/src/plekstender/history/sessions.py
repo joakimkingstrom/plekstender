@@ -1,8 +1,9 @@
 """The session watcher: what's playing in Plex, polled every few seconds.
 
 Plex's play history only records finished plays. Watching `/status/sessions` shows how
-far each track got (so stopped plays count as skips), which player it was on, and from
-where — and that's attached to the matching listen once Plex records the play.
+far each track got (a short play followed straight away by another song is a skip), which
+player it was on, and from where — and that's attached to the matching listen once Plex
+records the play.
 """
 
 from __future__ import annotations
@@ -28,6 +29,10 @@ log = logging.getLogger(__name__)
 
 POLL_INTERVAL = 10.0  # seconds
 POLLS_PER_RUN = 5  # one run per minute (the scheduler's resolution)
+# A track picked up again where it stopped (paused long enough for Plex to drop the session)
+# carries on the same play, so a pause never looks like a skip.
+RESUME_WITHIN = dt.timedelta(minutes=30)
+RESUME_FROM_MS = 15_000  # nearer the start than this, it's played again from the top
 
 
 def _int(value: Any) -> int | None:
@@ -85,6 +90,23 @@ async def poll_once(
                 PlaySession.ended_at.is_(None),
             )
         )
+        if row is None and offset >= RESUME_FROM_MS:
+            row = await db.scalar(
+                select(PlaySession)
+                .where(
+                    PlaySession.server_id == us.server_id,
+                    PlaySession.user_id == user_id,
+                    PlaySession.rating_key == rating_key,
+                    PlaySession.client.is_not_distinct_from(describe_player(player)),
+                    PlaySession.ended_at >= now - RESUME_WITHIN,
+                    PlaySession.max_offset_ms <= offset + 5_000,
+                )
+                .order_by(PlaySession.ended_at.desc())
+                .limit(1)
+            )
+            if row is not None:
+                row.ended_at = None
+                row.session_key = session_key
         if row is None:
             address = player.get("remotePublicAddress") or player.get("address")
             network = session.get("location") or ("lan" if player.get("local") else "wan")

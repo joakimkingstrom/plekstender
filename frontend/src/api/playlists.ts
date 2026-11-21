@@ -161,11 +161,20 @@ export function useCreatePlaylistImport(serverId: number) {
   })
 }
 
-/** Read a public Spotify playlist (its link) and match its songs. */
-export function usePreviewSpotifyImport(serverId: number) {
+/** Which service a playlist link is from (Spotify unless it's a Tidal one). */
+export const linkService = (url: string): 'tidal' | 'spotify' => (/(^|[/.])tidal\.com\//i.test(url) ? 'tidal' : 'spotify')
+
+/** Read a public Spotify or Tidal playlist (its link) and match its songs. */
+export function usePreviewLinkImport(serverId: number) {
   return useMutation({
-    mutationFn: (url: string) =>
-      unwrap(api.POST('/api/servers/{server_id}/playlists/import/spotify', { params: { path: { server_id: serverId } }, body: { url } })),
+    mutationFn: (url: string) => {
+      const params = { path: { server_id: serverId } }
+      return unwrap(
+        linkService(url) === 'tidal'
+          ? api.POST('/api/servers/{server_id}/playlists/import/tidal', { params, body: { url } })
+          : api.POST('/api/servers/{server_id}/playlists/import/spotify', { params, body: { url } }),
+      )
+    },
   })
 }
 

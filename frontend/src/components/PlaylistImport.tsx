@@ -3,7 +3,7 @@ import { errorMessage } from '../api/client'
 import {
   useCreatePlaylistImport,
   usePreviewPlaylistImport,
-  usePreviewSpotifyImport,
+  usePreviewLinkImport,
   type PlaylistImportPreview,
 } from '../api/playlists'
 import { formatDuration } from '../format'
@@ -13,17 +13,17 @@ import { Button, Card, Notice } from './ui'
 /** Bring a playlist in from Spotify, Apple Music, Tidal… (their exports) as a Plex playlist. */
 export function PlaylistImport({ serverId }: { serverId: number }) {
   const preview = usePreviewPlaylistImport(serverId)
-  const fromSpotify = usePreviewSpotifyImport(serverId)
+  const fromLink = usePreviewLinkImport(serverId)
   const [link, setLink] = useState('')
   // The last one read (a file or a link), shown for review.
-  const latest = (preview.submittedAt ?? 0) >= (fromSpotify.submittedAt ?? 0) ? preview : fromSpotify
+  const latest = (preview.submittedAt ?? 0) >= (fromLink.submittedAt ?? 0) ? preview : fromLink
   return (
     <Card title="Import a playlist">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
           From a CSV (e.g. Exportify or TuneMyMusic, for Spotify, Apple Music, Tidal and more), an M3U or a JSPF file. Its
           songs are matched to your library; you choose which go in, and it’s made in Plex under your account. Or paste a
-          public Spotify playlist’s link.
+          public Spotify or Tidal playlist’s link.
         </p>
         <FilePicker
           accept=".csv,.m3u,.m3u8,.jspf,.json,text/csv,audio/x-mpegurl,application/json"
@@ -34,19 +34,19 @@ export function PlaylistImport({ serverId }: { serverId: number }) {
           className="flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            if (link.trim()) fromSpotify.mutate(link.trim())
+            if (link.trim()) fromLink.mutate(link.trim())
           }}
         >
           <label className="min-w-0 flex-1 space-y-1">
-            <span className="block font-medium">Spotify playlist link</span>
+            <span className="block font-medium">Spotify or Tidal playlist link</span>
             <input
               value={link}
               onChange={(e) => setLink(e.target.value)}
-              placeholder="https://open.spotify.com/playlist/…"
+              placeholder="https://open.spotify.com/playlist/… or https://tidal.com/playlist/…"
               className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2"
             />
           </label>
-          <Button type="submit" disabled={!link.trim()} busy={fromSpotify.isPending}>
+          <Button type="submit" disabled={!link.trim()} busy={fromLink.isPending}>
             Read it
           </Button>
         </form>

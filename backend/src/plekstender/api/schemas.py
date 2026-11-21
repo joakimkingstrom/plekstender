@@ -42,7 +42,10 @@ class Preferences(BaseModel):
         default=80,
         ge=10,
         le=95,
-        description="A play counts as skipped when less than this % of the track was heard.",
+        description=(
+            "A play counts as skipped when less than this % of the track was heard and "
+            "another track started straight after."
+        ),
     )
     phone_start: Literal["rate", "home"] = Field(
         default="rate", description="The page the app opens on, on a phone."
@@ -1863,6 +1866,8 @@ class SpotifyAppOut(BaseModel):
 
 
 class SpotifyImportIn(BaseModel):
+    """A playlist's link (Spotify or Tidal)."""
+
     url: str = Field(min_length=10, max_length=500)
 
 

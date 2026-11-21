@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 
+from plekstender import tidal
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.routes.library import visible
@@ -33,7 +34,7 @@ from plekstender.api.schemas import (
     SeedTrack,
     SpotifyImportIn,
 )
-from plekstender.db.instance import get_spotify_app
+from plekstender.db.instance import get_spotify_app, get_tidal_client
 from plekstender.db.models import Playlist, Track, UserServer
 from plekstender.playlists import builder, imports, spotify
 from plekstender.playlists.definition import Definition
@@ -419,6 +420,36 @@ async def preview_spotify(
     if not entries:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That playlist has no songs.")
     return await _preview(db, user.id, us, name, entries)
+
+
+@router.post(
+    "/import/tidal",
+    response_model=PlaylistImportPreviewOut,
+    dependencies=[rate_limit("playlist-import", 30, 60)],
+)
+async def preview_tidal(
+    server_id: int,
+    body: SpotifyImportIn,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+) -> PlaylistImportPreviewOut:
+    """Read a public Tidal playlist (its link) and match its songs, like a file."""
+    us = await get_user_server(db, user, server_id)
+    client = await get_tidal_client(db, settings)
+    if client is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Tidal isn't set up: an admin can add a Tidal app in Settings → Services.",
+        )
+    try:
+        name, songs = await tidal.read_playlist(http, settings, client, body.url, imports.MAX_SONGS)
+    except tidal.TidalError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    if not songs:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That playlist has no songs.")
+    return await _preview(db, user.id, us, name, [imports.Entry(*song) for song in songs])
 
 
 @router.post(

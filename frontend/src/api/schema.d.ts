@@ -1226,6 +1226,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/playlists/import/tidal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Tidal
+         * @description Read a public Tidal playlist (its link) and match its songs, like a file.
+         */
+        post: operations["preview_tidal_api_servers__server_id__playlists_import_tidal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/playlists/import": {
         parameters: {
             query?: never;
@@ -3494,7 +3514,7 @@ export interface paths {
         /**
          * Put Tidal
          * @description Set (after Tidal accepts them) or remove the Tidal app's client ID and secret, used
-         *     for album covers.
+         *     for album covers and importing Tidal playlists.
          */
         put: operations["put_tidal_api_admin_tidal_put"];
         post?: never;
@@ -6819,7 +6839,7 @@ export interface components {
             accent?: string | null;
             /**
              * Skip Threshold
-             * @description A play counts as skipped when less than this % of the track was heard.
+             * @description A play counts as skipped when less than this % of the track was heard and another track started straight after.
              * @default 80
              */
             skip_threshold: number;
@@ -7723,7 +7743,10 @@ export interface components {
              */
             client_id: string | null;
         };
-        /** SpotifyImportIn */
+        /**
+         * SpotifyImportIn
+         * @description A playlist's link (Spotify or Tidal).
+         */
         SpotifyImportIn: {
             /** Url */
             url: string;
@@ -10618,6 +10641,41 @@ export interface operations {
         };
     };
     preview_spotify_api_servers__server_id__playlists_import_spotify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpotifyImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistImportPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_tidal_api_servers__server_id__playlists_import_tidal_post: {
         parameters: {
             query?: never;
             header?: never;
