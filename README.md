@@ -16,8 +16,6 @@ Plekstender isn't affiliated with or endorsed by Plex.
 - **Music files** (server owners, with the music folder mounted on the worker): scan your files' tags and see them on album pages next to Plex's metadata, differences highlighted. Once turned on (Settings → Music files): edit tags, write Plex's metadata (and, if you like, your ratings) into the files for the whole library or an artist, or pick an album's release on MusicBrainz (as in Picard) and write its tags and IDs. Files with missing tags can be identified by how they sound (AcoustID), and files can be renamed and moved into folders from a template (with a dry run first). Every change is previewed first, recorded, and can be undone.
 - **Exports:** your library with ratings and plays (CSV / JSON), and your listening history in ListenBrainz's format.
 
-See [plan.md](plan.md) for the roadmap and [app-features.md](app-features.md) for the original feature list.
-
 ## Running with Docker
 
 ```bash
