@@ -673,6 +673,7 @@ Tell people when something they rely on stops working, before they notice it the
 - [x] Who sees what: each person their own (servers, scrobble services, calendar links); the instance's (service keys, quotas, SearXNG) only admins.
 - [x] Each person can dismiss theirs (it comes back only if fixed and then broken again); an admin can hide an instance one for every admin.
 - [ ] Later: email or push (the app is installable) for the serious ones, per person.
+- [x] New gigs in the bell (21 Nov): after a gig refresh finds gigs for the first time (not a source's first lookup), one notification per person, "n new gigs" with the first few artists (soonest first) and a link to Gigs → Upcoming → New (`/gigs?show=new`). It counts what the New filter lists (merged across sources), is updated after each refresh, unread again when more are found, and removed when none are new (after a week). Level `info`: an amber dot and "Show" instead of "Fix".
 
 ### Phase 18 — Profile (20 Nov 2026)
 - [x] A profile page (/profile, from the avatar in the header): name, picture and email from Plex, when you joined, admin badge; scrobbles, ratings and gigs been to (each linking to its page) and how far back your history goes; your servers (yours or shared with you).

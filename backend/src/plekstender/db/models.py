@@ -680,7 +680,7 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     key: Mapped[str] = mapped_column(Text, unique=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    level: Mapped[str] = mapped_column(String(8))  # warning | error
+    level: Mapped[str] = mapped_column(String(8))  # warning | error | info
     title: Mapped[str] = mapped_column(Text)
     detail: Mapped[str | None] = mapped_column(Text)
     link: Mapped[str | None] = mapped_column(Text)

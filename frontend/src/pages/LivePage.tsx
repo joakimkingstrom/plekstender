@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useId, useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useMe } from '../api/hooks'
 import { useActiveServer } from '../api/library'
@@ -348,8 +348,19 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
 function Shows({ settings }: { settings: LiveSettings }) {
   const [artist, setArtist] = useState('')
   const [venue, setVenue] = useState('')
-  const [range, setRange] = useState<Range>('all')
+  // ?show=new (the bell's "new gigs" link) opens on the new ones, also when already here.
+  const [params] = useSearchParams()
+  const asked = params.get('show') === 'new' ? 'new' : null
+  const [followed, setFollowed] = useState(asked)
+  const [range, setRange] = useState<Range>(asked ?? 'all')
   const [to, setTo] = useState<string | undefined>(undefined)
+  if (asked !== followed) {
+    setFollowed(asked)
+    if (asked) {
+      setRange(asked)
+      setTo(undefined)
+    }
+  }
   const chooseRange = (key: Range) => {
     setRange(key)
     if (key === 'all' || key === 'starred' || key === 'tickets' || key === 'new') return setTo(undefined)

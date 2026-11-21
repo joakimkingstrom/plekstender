@@ -2152,7 +2152,9 @@ class AppTimeIn(BaseModel):
 
 class NotificationOut(BaseModel):
     id: int
-    level: Literal["warning", "error"]
+    level: Literal["warning", "error", "info"] = Field(
+        description="warning / error: something needs a look; info: news (new gigs)."
+    )
     title: str
     detail: str | None
     link: str | None

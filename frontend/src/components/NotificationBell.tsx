@@ -85,7 +85,7 @@ export function NotificationBell({ isAdmin }: { isAdmin: boolean }) {
                 return (
                   <li key={n.id} className={`flex gap-2 px-2 py-2.5 text-sm ${fixed ? 'opacity-60' : ''}`}>
                     <span
-                      className={`mt-1.5 size-2 shrink-0 rounded-full ${fixed ? 'bg-ok' : n.level === 'error' ? 'bg-danger' : 'bg-warn'}`}
+                      className={`mt-1.5 size-2 shrink-0 rounded-full ${fixed ? 'bg-ok' : n.level === 'error' ? 'bg-danger' : n.level === 'info' ? 'bg-accent' : 'bg-warn'}`}
                       aria-hidden
                     />
                     <div className="min-w-0 flex-1">
@@ -99,7 +99,7 @@ export function NotificationBell({ isAdmin }: { isAdmin: boolean }) {
                         {n.instance && <span>For admins</span>}
                         {!fixed && n.link && (
                           <Link to={n.link} onClick={() => setOpen(false)} className="text-accent hover:underline">
-                            Fix
+                            {n.level === 'info' ? 'Show' : 'Fix'}
                           </Link>
                         )}
                         {isAdmin && n.instance && !fixed && (

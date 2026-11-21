@@ -21,14 +21,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from plekstender.config import Settings
 from plekstender.db.models import Notification, NotificationState, User
 
-LEVELS = {"warning": 1, "error": 2}
+LEVELS = {"info": 0, "warning": 1, "error": 2}
+NEW_GIGS = "gigs:new:"  # + user id
 
 
 @dataclass(frozen=True)
 class Problem:
     key: str
     user_id: int | None  # None: the instance's, for admins
-    level: str  # warning | error
+    level: str  # warning | error (problems) | info (news, such as new gigs)
     title: str
     detail: str | None
     link: str | None
@@ -134,3 +135,46 @@ async def check(db: AsyncSession, http: httpx.AsyncClient, settings: Settings) -
     await resolve_others(db, "instance:", {p.key for p in instance}, now)
     await db.commit()
     return open_problems + len(instance)
+
+
+async def notify_new_gigs(
+    db: AsyncSession, user_id: int, now: dt.datetime, found_more: bool
+) -> None:
+    """After a gig refresh: one notification for the gigs first found in the past week (what
+    Gigs → Upcoming → New lists). It's made when a refresh finds new gigs, kept up to date
+    after each refresh, unread again whenever more are found, and gone when none are new."""
+    from plekstender.api.routes.live import _upcoming  # the gigs Upcoming lists, merged
+
+    new = [g for g in await _upcoming(db, user_id) if g.is_new]
+    key = f"{NEW_GIGS}{user_id}"
+    found = await db.scalar(select(Notification).where(Notification.key == key))
+    if not new:
+        if found is not None:
+            await db.delete(found)
+        return
+    if found is None and not found_more:
+        return
+    names = list(
+        dict.fromkeys(
+            (g.name if g.festival and g.name else g.artists[0].name if g.artists else g.name) or "?"
+            for g in new
+        )
+    )
+    detail = ", ".join(names[:3]) + (f" and {len(names) - 3} more" if len(names) > 3 else "")
+    note = await raise_problem(
+        db,
+        Problem(
+            key=key,
+            user_id=user_id,
+            level="info",
+            title=f"{len(new)} new {'gig' if len(new) == 1 else 'gigs'}",
+            detail=detail,
+            link="/gigs?show=new",
+        ),
+        now,
+    )
+    if found_more and found is not None:  # more found: new again for them
+        note.updated_at = now
+        await db.execute(
+            delete(NotificationState).where(NotificationState.notification_id == note.id)
+        )

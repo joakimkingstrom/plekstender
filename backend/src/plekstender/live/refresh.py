@@ -55,6 +55,7 @@ from plekstender.db.models import (
 from plekstender.live import datathistle, feeds, jambase, ticketmaster
 from plekstender.live.events import Event, Performer
 from plekstender.live.geocode import distance_km
+from plekstender.notifications import notify_new_gigs
 from plekstender.security.crypto import DecryptionError, TokenCipher
 from plekstender.sync.parse import normalise_artist
 
@@ -334,12 +335,14 @@ async def refresh_user(
     complete = not errors
 
     async with sessions() as db:
+        fresh = 0  # shows found for the first time
         for source, run in runs.items():
             if run.found:
                 await _store(db, user_id, source, run.found, ctx, now())
                 # A source's first lookup only notes what's there, too.
                 quiet = baseline or source not in seen_sources
-                await remember(db, user_id, source, list(run.found), now(), quiet=quiet)
+                added = await remember(db, user_id, source, list(run.found), now(), quiet=quiet)
+                fresh += 0 if quiet else added
             if not run.error:
                 # Shows not seen in a complete run are gone (cancelled, moved, out of range).
                 await db.execute(
@@ -370,6 +373,7 @@ async def refresh_user(
                 live.artist_count = len(artists)
                 if main and (not main_errors or any(not r.error for r in main.values())):
                     live.refreshed_at = now()
+        await notify_new_gigs(db, user_id, now(), fresh > 0)
         await db.commit()
     for message in errors:
         log.warning("Live refresh for user %s: %s", user_id, message)
@@ -395,13 +399,14 @@ async def remember(
     now: dt.datetime,
     *,
     quiet: bool = False,
-) -> None:
+) -> int:
     """Note when shows were first seen (shows seen before keep their date). `quiet` notes
-    them as long known, so a first lookup doesn't make everything "new"."""
+    them as long known, so a first lookup doesn't make everything "new". Returns how many
+    weren't seen before."""
     if not source_ids:
-        return
+        return 0
     when = now - SEEN_LONG_AGO if quiet else now
-    await db.execute(
+    added = await db.scalars(
         insert(LiveSeen)
         .values(
             [
@@ -415,7 +420,9 @@ async def remember(
             ]
         )
         .on_conflict_do_nothing(index_elements=[LiveSeen.user_id, LiveSeen.key])
+        .returning(LiveSeen.key)
     )
+    return len(list(added))
 
 
 async def forget_old_sightings(db: AsyncSession, now: dt.datetime) -> None:

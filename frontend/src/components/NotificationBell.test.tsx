@@ -25,6 +25,7 @@ beforeEach(() => {
           { id: 1, level: 'error', title: 'Koito isn’t working', detail: 'Koito rejected the token.', link: '/settings/scrobbling', instance: false, first_at: now, updated_at: now, resolved_at: null, read: false },
           { id: 2, level: 'warning', title: 'JamBase needs a look', detail: '765 of 900 requests this month', link: '/settings/services/gigs', instance: true, first_at: now, updated_at: now, resolved_at: null, read: true },
           { id: 3, level: 'error', title: 'SearXNG (image search) isn’t working', detail: null, link: null, instance: true, first_at: now, updated_at: now, resolved_at: now, read: false },
+          { id: 4, level: 'info', title: '2 new gigs', detail: 'Portishead, Radiohead', link: '/gigs?show=new', instance: false, first_at: now, updated_at: now, resolved_at: null, read: true },
         ],
         unread: 1,
       })
@@ -54,6 +55,8 @@ describe('The bell', () => {
       '/settings/services/gigs',
     ])
     expect(screen.getByText('· fixed')).toBeInTheDocument()
+    // News (new gigs): shown, not fixed.
+    expect(screen.getByRole('link', { name: 'Show' })).toHaveAttribute('href', '/gigs?show=new')
     await vi.waitFor(() => expect(posted).toContain('/api/notifications/read {"ids":[1]}'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide for all admins' }))

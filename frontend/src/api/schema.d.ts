@@ -6539,9 +6539,10 @@ export interface components {
             id: number;
             /**
              * Level
+             * @description warning / error: something needs a look; info: news (new gigs).
              * @enum {string}
              */
-            level: "warning" | "error";
+            level: "warning" | "error" | "info";
             /** Title */
             title: string;
             /** Detail */

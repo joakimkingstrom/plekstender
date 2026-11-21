@@ -154,10 +154,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function renderPage() {
+function renderPage(path = '/gigs') {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <LivePage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -308,6 +308,13 @@ describe('LivePage', () => {
     await vi.waitFor(() => expect(requestsTo('/api/live/shows').at(-1)!.url).toContain('new=true'))
     await vi.waitFor(() => expect(screen.queryByText('Way Out West 2027')).not.toBeInTheDocument())
     expect(screen.getByRole('link', { name: 'Radiohead' })).toBeInTheDocument()
+  })
+
+  it('opens on the new shows from the bell’s link', async () => {
+    settings = placed
+    renderPage('/gigs?show=new')
+    expect(await screen.findByRole('button', { name: 'New' })).toHaveAttribute('aria-pressed', 'true')
+    await vi.waitFor(() => expect(requestsTo('/api/live/shows').at(-1)!.url).toContain('new=true'))
   })
 
   it('lists the gigs you have tickets for with the Got tickets filter', async () => {

@@ -1139,6 +1139,15 @@ async def test_new_shows(app: FastAPI, plex: FakePlex) -> None:
     assert first and not any(s["is_new"] for s in first)
     assert all(s["first_seen_at"] for s in first)
 
+    async def news() -> list[tuple[str, str | None, str | None, bool]]:
+        """The bell's news (new gigs), as (title, detail, link, read)."""
+        items = (await owner.get("/api/notifications")).json()["items"]
+        return [
+            (i["title"], i["detail"], i["link"], i["read"]) for i in items if i["level"] == "info"
+        ]
+
+    assert await news() == []  # a first lookup finds nothing "new"
+
     # Announced later: new (and the "new" filter lists just that).
     jb.extra = [
         {
@@ -1153,6 +1162,11 @@ async def test_new_shows(app: FastAPI, plex: FakePlex) -> None:
     assert [s["name"] for s in shows if s["is_new"]] == ["Radiohead, second night"]
     only_new = (await owner.get("/api/live/shows", params={"new": True})).json()["shows"]
     assert [s["name"] for s in only_new] == ["Radiohead, second night"]
+    # The bell tells about it; once read, a refresh finding nothing more leaves it read.
+    assert await news() == [("1 new gig", "Radiohead", "/gigs?show=new", False)]
+    await owner.post("/api/notifications/read", json={"ids": None}, headers=CSRF)
+    assert (await refresh(user_id, datathistle="no")).complete
+    assert await news() == [("1 new gig", "Radiohead", "/gigs?show=new", True)]
 
     # Data Thistle: its first lookup isn't new; a listing that expired and comes back
     # isn't either (only its fingerprint was kept); a listing never seen before is.
@@ -1193,3 +1207,13 @@ async def test_new_shows(app: FastAPI, plex: FakePlex) -> None:
         if s["source"] == "datathistle"
     }
     assert dt_shows == {"Avicii Arena": False, "Annexet": False, "Cirkus": True}
+    # More found: the notification counts them and is new again.
+    # (soonest first)
+    assert await news() == [("2 new gigs", "Portishead, Radiohead", "/gigs?show=new", False)]
+
+    # A week on, none are new any more: it goes.
+    async with get_sessionmaker()() as db:
+        await db.execute(text("UPDATE live_seen SET first_seen_at = now() - interval '8 days'"))
+        await db.commit()
+    assert (await refresh(user_id, datathistle="no")).complete
+    assert await news() == []
