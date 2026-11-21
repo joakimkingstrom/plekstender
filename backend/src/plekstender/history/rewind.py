@@ -208,10 +208,10 @@ async def _when(
     return weekdays, hours, by_artist
 
 
-async def _artist_genres(
-    db: AsyncSession, user_id: int, server_id: int | None, artist_keys: list[str]
+async def _artist_tags(
+    db: AsyncSession, user_id: int, server_id: int | None, artist_keys: list[str], kind: str
 ) -> dict[str, list[str]]:
-    """Library artists' genres (their own and their albums'), by normalised name."""
+    """Library artists' genres or styles (their own and their albums'), by normalised name."""
     if server_id is None or not artist_keys:
         return {}
     tops = [Top((k,), k, None, 0) for k in artist_keys]
@@ -228,7 +228,7 @@ async def _artist_genres(
         .join(Tag, Tag.id == ItemTag.tag_id)
         .where(
             ItemTag.server_id == server_id,
-            Tag.kind == "genre",
+            Tag.kind == kind,
             ItemTag.rating_key.in_([*by_key, *owners]),
         )
     )
@@ -341,7 +341,11 @@ async def build(
     new_releases = await _new_releases(db, user_id, server_id, start, end)
     weekdays, hours, by_artist = await _when(db, user_id, start, end, tz)
     played_artists = list({a for counter in by_artist.values() for a in counter})
-    genres = await _artist_genres(db, user_id, server_id, played_artists[:3000])
+    # Styles say more than genres (most of a library is "Pop/Rock"); genres only when no
+    # artist played has a style.
+    genres = await _artist_tags(
+        db, user_id, server_id, played_artists[:3000], "style"
+    ) or await _artist_tags(db, user_id, server_id, played_artists[:3000], "genre")
     overall, genre_days, genre_parts = _genre_times(by_artist, genres)
     repeats, longest = await _repeats(db, user_id, start, end)
 

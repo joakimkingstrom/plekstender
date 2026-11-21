@@ -104,7 +104,9 @@ function useRewind(range: Range, serverId: number | null) {
 }
 
 const WEEKDAYS = Array.from({ length: 7 }, (_, i) => new Date(2026, 10, 16 + i).toLocaleString(undefined, { weekday: 'long' }))
+const WEEKDAYS_SHORT = Array.from({ length: 7 }, (_, i) => new Date(2026, 10, 16 + i).toLocaleString(undefined, { weekday: 'short' }))
 const PARTS: Record<string, string> = { night: 'at night', morning: 'in the morning', afternoon: 'in the afternoon', evening: 'in the evening' }
+const clockTime = (h: number) => new Date(2026, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 const hourName = (h: number) => new Date(2026, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' })
 
 type Slide = { key: string; colour: string; body: ReactNode }
@@ -248,15 +250,27 @@ function Ranked({ items, serverId, round = false, unit = 'listens' }: { items: I
   )
 }
 
-function Bars({ values, labels, highlight }: { values: number[]; labels: string[]; highlight: number }) {
+/** A small column chart; `ticks` are the labels shown under the bars ('' for none). */
+function Bars({ values, labels, ticks, highlight }: { values: number[]; labels: string[]; ticks: string[]; highlight: number }) {
   const max = Math.max(1, ...values)
   return (
-    <div className="flex h-32 items-end gap-1" role="img" aria-label={labels.map((l, i) => `${l}: ${values[i]}`).join(', ')}>
-      {values.map((v, i) => (
-        <div key={i} className="flex flex-1 flex-col items-center gap-1">
-          <div className={`w-full rounded-t ${i === highlight ? 'bg-white' : 'bg-white/40'}`} style={{ height: `${Math.max(2, (v / max) * 100)}%` }} />
-        </div>
-      ))}
+    <div>
+      <div className="flex h-32 items-end gap-1" role="img" aria-label={labels.map((l, i) => `${l}: ${values[i]}`).join(', ')}>
+        {values.map((v, i) => (
+          <div
+            key={i}
+            className={`flex-1 rounded-t ${i === highlight ? 'bg-white' : 'bg-white/40'}`}
+            style={{ height: `${Math.max(2, (v / max) * 100)}%` }}
+          />
+        ))}
+      </div>
+      <div className="mt-1 flex gap-1 text-[10px] text-white/60" aria-hidden>
+        {ticks.map((t, i) => (
+          <span key={i} className="flex-1 overflow-visible whitespace-nowrap">
+            {t}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
@@ -365,11 +379,16 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
     body: (
       <>
         <Heading kicker="When you listen">
-          {WEEKDAYS[busiestDay]}s, around {hourName(busiestHour)}
+          {WEEKDAYS[busiestDay]}s, around {clockTime(busiestHour)}
         </Heading>
-        <Bars values={r.weekdays} labels={WEEKDAYS} highlight={busiestDay} />
+        <Bars values={r.weekdays} labels={WEEKDAYS} ticks={WEEKDAYS_SHORT} highlight={busiestDay} />
         <p className="mt-2 mb-6 text-sm text-white/75">Listens by day of the week, Monday first</p>
-        <Bars values={r.hours} labels={r.hours.map((_, h) => hourName(h))} highlight={busiestHour} />
+        <Bars
+          values={r.hours}
+          labels={r.hours.map((_, h) => hourName(h))}
+          ticks={r.hours.map((_, h) => (h % 6 === 0 ? hourName(h) : ''))}
+          highlight={busiestHour}
+        />
         <p className="mt-2 text-sm text-white/75">…and by hour of the day</p>
       </>
     ),
