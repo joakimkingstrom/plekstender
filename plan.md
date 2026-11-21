@@ -471,6 +471,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
 **Settings**
 - [x] Move the Last.fm, ListenBrainz and fanart.tv keys and accounts to a "Connections" tab.
 - [x] An "Export / import" tab: the library export (with ratings and plays: tracks.csv, library.json), the listening history download, and the logo pack export / import.
+  - Split into parts like Services (Settings → Export & import → History, Library, Gigs, Artist logos; logos for owners only), each with its imports first. The gigs import / export card moved here from Gigs → Been to, which links to it.
 - [x] Move Admin from the main menu to a Settings tab (`/admin` redirects there).
 
 **General (cont.)**

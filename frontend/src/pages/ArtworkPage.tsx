@@ -161,8 +161,8 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
             Settings → Artwork
           </Link>{' '}
           and{' '}
-          <Link to="/settings/export" className="underline hover:text-text">
-            Export / import
+          <Link to="/settings/export/logos" className="underline hover:text-text">
+            Export &amp; import
           </Link>
           .
         </p>

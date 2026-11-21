@@ -104,9 +104,13 @@ describe('ArtworkPage', () => {
   })
 
   it('exports the library and history, and previews a logo pack and applies the matched artists (Export / import)', async () => {
-    renderPage(<ExportPage />)
+    renderPage(<ExportPage part="library" />)
     expect(await screen.findByRole('link', { name: 'Songs (CSV)' })).toHaveAttribute('href', '/api/servers/1/export/tracks.csv')
-    expect(screen.getByRole('link', { name: 'Download all listens' })).toHaveAttribute('href', '/api/listens/export.jsonl')
+    cleanup()
+    renderPage(<ExportPage part="history" />)
+    expect(await screen.findByRole('link', { name: 'Download all listens' })).toHaveAttribute('href', '/api/listens/export.jsonl')
+    cleanup()
+    renderPage(<ExportPage part="logos" />)
     const input = await screen.findByLabelText('Import a pack (.zip)')
     fireEvent.change(input, { target: { files: [new File(['zip'], 'pack.zip', { type: 'application/zip' })] } })
     expect(await screen.findByText(/1 of 2 match your artists/)).toBeInTheDocument()

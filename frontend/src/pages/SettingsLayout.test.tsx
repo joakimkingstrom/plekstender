@@ -57,6 +57,23 @@ describe('Settings', () => {
     expect(screen.getByRole('button', { name: /^Settings section/ })).toBeInTheDocument() // the phone's picker
   })
 
+  it('splits Export & import into parts, with artist logos for owners only', async () => {
+    renderAt('/settings/export/gigs')
+    const nav = screen.getByRole('navigation', { name: 'Settings' })
+    expect(await within(nav).findByRole('link', { name: 'Export & import' })).toHaveAttribute('href', '/settings/export/history')
+    expect(within(nav).getByRole('link', { name: 'Gigs' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('link', { name: 'Library' })).toHaveAttribute('href', '/settings/export/library')
+    expect(await within(nav).findByRole('link', { name: 'Artist logos' })).toHaveAttribute('href', '/settings/export/logos')
+    expect(screen.getByRole('heading', { name: /^Export & import\s*·\s*Gigs$/ })).toBeInTheDocument()
+    cleanup()
+    owner = false
+    renderAt('/settings/export/history')
+    const again = screen.getByRole('navigation', { name: 'Settings' })
+    expect(await within(again).findByRole('link', { name: 'History' })).toHaveAttribute('aria-current', 'page')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(within(again).queryByRole('link', { name: 'Artist logos' })).not.toBeInTheDocument()
+  })
+
   it('shows only your own sections to someone who isn’t an admin or owner', async () => {
     admin = false
     owner = false

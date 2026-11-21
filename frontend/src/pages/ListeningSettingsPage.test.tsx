@@ -59,7 +59,7 @@ describe('ListeningSettingsPage', () => {
     renderPage({
       'GET /api/auth/me': user,
       'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
-    }, <ExportPage />)
+    }, <ExportPage part="history" />)
     expect(await screen.findByText(/Ask an admin to add a Last.fm API key/)).toBeInTheDocument()
     expect(screen.queryByText('Last.fm API key')).not.toBeInTheDocument() // admin-only card
   })
@@ -69,7 +69,7 @@ describe('ListeningSettingsPage', () => {
       'GET /api/auth/me': user,
       'GET /api/listens/lastfm': { available: true, username: 'Joakim', active: null, last: finished },
       'POST /api/listens/lastfm': { ...finished, id: 8, status: 'queued' },
-    }, <ExportPage />)
+    }, <ExportPage part="history" />)
     expect(await screen.findByText(/118 new listens/)).toBeInTheDocument()
     expect(screen.getByText(/2 were already here/)).toBeInTheDocument()
     const input = screen.getByLabelText('Last.fm username')
@@ -94,7 +94,7 @@ describe('ListeningSettingsPage', () => {
         active: { ...finished, status: 'running', finished_at: null, progress: { done: 400, total: 1000 } },
         last: null,
       },
-    }, <ExportPage />)
+    }, <ExportPage part="history" />)
     expect(await screen.findByText("Importing Joakim's scrobbles…")).toBeInTheDocument()
     expect(screen.getByText('400 / 1,000')).toBeInTheDocument()
     expect(screen.queryByLabelText('Last.fm username')).not.toBeInTheDocument()
@@ -191,7 +191,7 @@ describe('Import from ListenBrainz', () => {
       'GET /api/auth/me': user,
       'GET /api/listens/lastfm': { available: false, username: null, active: null, last: null },
       'POST /api/listens/imports/listenbrainz': { ...finished, id: 9, source: 'listenbrainz', status: 'queued' },
-    }, <ExportPage />)
+    }, <ExportPage part="history" />)
     const input = await screen.findByLabelText('ListenBrainz username')
     fireEvent.change(input, { target: { value: 'joakim_lb' } })
     const card = input.closest('section')!

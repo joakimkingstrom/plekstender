@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { GigExportCard, GigImportCard } from '../components/GigTransfer'
 import { GigsPage } from './GigsPage'
 
 const gigs = [
@@ -190,8 +191,21 @@ describe('GigsPage', () => {
     expect(await calls('/api/gigs/setlistfm/lookup')[0].clone().json()).toEqual({ url: 'https://www.setlist.fm/setlist/x-63de4613.html' })
   })
 
-  it('imports from setlist.fm and offers exports', async () => {
+  it('points to Settings for importing and exporting', async () => {
     renderPage()
+    expect(await screen.findByRole('link', { name: 'Settings → Export & import' })).toHaveAttribute('href', '/settings/export/gigs')
+    expect(screen.queryByLabelText('setlist.fm username')).not.toBeInTheDocument()
+  })
+})
+
+describe('Gig import and export (Settings → Export & import → Gigs)', () => {
+  it('imports from setlist.fm and offers exports', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <GigImportCard />
+        <GigExportCard />
+      </QueryClientProvider>,
+    )
     fireEvent.change(await screen.findByLabelText('setlist.fm username'), { target: { value: ' joakim ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Import the concerts I went to' }))
     expect(await screen.findByText(/Added 12, updated 3, 1 already there\./)).toBeInTheDocument()

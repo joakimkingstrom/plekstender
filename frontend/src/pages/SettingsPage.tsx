@@ -9,7 +9,7 @@ import { useActiveServer } from '../api/library'
 import { fontPreviewUrl, useEditFonts, useFanartKey, useFontCatalogue, useFonts, useSetFanartKey, type FontGroupName } from '../api/artwork'
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
-import { SERVICE_KINDS } from '../settingsSections'
+import { EXPORT_PARTS, SERVICE_KINDS } from '../settingsSections'
 import { FolderSettings } from '../components/FolderSettings'
 import { ScanCard } from '../components/MusicFiles'
 import { ArtworkSummaryCard } from '../components/FileArtwork'
@@ -33,7 +33,11 @@ function settingsGroups(owner: boolean, admin: boolean): Group[] {
         { to: '/settings/scrobbling', label: 'Scrobbling' },
         { to: '/settings/listening', label: 'Listening history' },
         { to: '/settings/game', label: 'Guess the intro' },
-        { to: '/settings/export', label: 'Export & import' },
+        {
+          to: '/settings/export',
+          label: 'Export & import',
+          children: EXPORT_PARTS.filter((p) => !p.owners || owner).map((p) => ({ to: `/settings/export/${p.slug}`, label: p.title })),
+        },
       ],
     },
   ]

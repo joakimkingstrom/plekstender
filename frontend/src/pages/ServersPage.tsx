@@ -96,8 +96,8 @@ function ConnectedServer({ server }: { server: Schemas['ServerOut'] }) {
           <SyncPanel serverId={server.id} />
           <p className="text-sm text-muted">
             Export this library with your ratings and plays from{' '}
-            <Link to="/settings/export" className="text-accent underline">
-              Export / import
+            <Link to="/settings/export/library" className="text-accent underline">
+              Export &amp; import
             </Link>
             .
           </p>

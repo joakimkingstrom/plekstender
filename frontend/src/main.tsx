@@ -114,6 +114,7 @@ const router = createBrowserRouter([
           { path: 'users', element: <UsersPage /> },
           { path: 'connections', element: <Navigate to="/settings/scrobbling" replace /> },
           { path: 'export', element: <ExportPage /> },
+          { path: 'export/:part', element: <ExportPage /> },
           { path: 'appearance', element: <Navigate to="/profile" replace /> },
           { path: 'artwork', element: <Navigate to="/settings/fonts/offered" replace /> },
           { path: 'fonts', element: <FontsSettingsPage /> },
