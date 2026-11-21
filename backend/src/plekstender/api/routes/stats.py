@@ -187,13 +187,19 @@ async def place_detail(
     tz: TzQuery = "UTC",
     continent: AreaCode = None,
     country: AreaCode = None,
+    server_id: Annotated[int | None, Query(description="Link top items to this server.")] = None,
 ) -> PlaceDetailOut:
     """Listens, top artists and songs (and, for a country, its cities) for an area: the
     whole world, a continent or a country."""
     period, _ = _period(range, tz)
+    library = await get_user_server(db, user, server_id) if server_id is not None else None
     found = await places.area_detail(
         db, user.id, period.start, period.end, continent=continent, country=country
     )
+    if library is not None:
+        # Linked to the library, for their pictures and links.
+        await stats.link_library(db, user.id, library.server_id, "artist", found.artists)
+        await stats.link_library(db, user.id, library.server_id, "track", found.tracks)
     return PlaceDetailOut(
         listens=found.listens,
         listening_ms=found.listening_ms,

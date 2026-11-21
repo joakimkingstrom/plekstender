@@ -14,7 +14,8 @@ beforeEach(() => {
     if (!url.pathname.startsWith('/api/'))
       // The map's shapes: an empty world is enough here.
       return json({ type: 'Topology', objects: { countries: { type: 'GeometryCollection', geometries: [] } }, arcs: [] })
-    if (url.pathname === '/api/servers') return json([])
+    if (url.pathname === '/api/servers')
+      return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
     if (url.pathname === '/api/listens/summary') return json({ total: 10, first_at: null, last_at: null, by_source: {} })
     if (url.pathname === '/api/stats/places')
       return json({
@@ -31,7 +32,8 @@ beforeEach(() => {
       return json({
         listens: country ? 7 : 9,
         listening_ms: 0,
-        top_artists: [{ name: country ? 'Portishead' : 'Radiohead', artist: null, listens: 5, listening_ms: 0, previous_rank: null, rating_key: null, thumb: null }],
+        // Linked to the library (for pictures and links) only when it's asked for.
+        top_artists: [{ name: country ? 'Portishead' : 'Radiohead', artist: null, listens: 5, listening_ms: 0, previous_rank: null, rating_key: url.searchParams.get('server_id') === '1' ? 100 : null, thumb: null }],
         top_tracks: [],
         cities: country ? [{ name: 'Local network', listens: 7 }] : [],
       })
@@ -58,6 +60,7 @@ describe('MapPage', () => {
       </QueryClientProvider>,
     )
     expect(await screen.findByText(/9 of 12 listens in this period have a place/)).toBeInTheDocument()
+    expect((await screen.findByRole('link', { name: /Radiohead/ })).getAttribute('href')).toBe('/library/artists/100')
     expect(await screen.findByText('Radiohead')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /United Kingdom/ }))
     expect(await screen.findByRole('heading', { name: 'United Kingdom' })).toBeInTheDocument()

@@ -133,7 +133,7 @@ function AreaLink({ current, onClick, children }: { current: boolean; onClick: (
 }
 
 function AreaDetail({ range, area, serverId }: { range: string; area: MapArea; serverId: number | null }) {
-  const detail = usePlaceDetail(range, area)
+  const detail = usePlaceDetail(range, area, serverId)
   if (detail.isPending) return <Spinner />
   if (detail.isError) return <Notice tone="error">{errorMessage(detail.error)}</Notice>
   const d = detail.data

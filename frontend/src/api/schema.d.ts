@@ -9081,6 +9081,8 @@ export interface operations {
                 tz?: string;
                 continent?: string | null;
                 country?: string | null;
+                /** @description Link top items to this server. */
+                server_id?: number | null;
             };
             header?: never;
             path?: never;

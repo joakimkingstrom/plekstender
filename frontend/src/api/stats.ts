@@ -63,14 +63,18 @@ export function usePlaces(range: string) {
   })
 }
 
-export function usePlaceDetail(range: string, area: MapArea) {
+export function usePlaceDetail(range: string, area: MapArea, serverId: number | null) {
   const tz = localTimeZone()
   const continent = area.level === 'continent' ? area.continent : undefined
   const country = area.level === 'country' ? area.country : undefined
   return useQuery({
-    queryKey: ['listens', 'stats', 'places', range, tz, continent ?? null, country ?? null],
+    queryKey: ['listens', 'stats', 'places', range, tz, continent ?? null, country ?? null, serverId],
     queryFn: () =>
-      unwrap(api.GET('/api/stats/places/detail', { params: { query: { range, tz, continent, country } } })),
+      unwrap(
+        api.GET('/api/stats/places/detail', {
+          params: { query: { range, tz, continent, country, ...(serverId !== null ? { server_id: serverId } : {}) } },
+        }),
+      ),
     placeholderData: keepPreviousData,
   })
 }

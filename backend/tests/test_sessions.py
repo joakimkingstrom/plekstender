@@ -135,7 +135,7 @@ async def test_database_download_falls_back_and_never_raises(
 @pytest.mark.db
 async def test_listens_map(app: FastAPI, plex: FakePlex) -> None:
     lib = plex.library
-    owner, _ = await owner_with_library(app, plex)
+    owner, sid = await owner_with_library(app, plex)
     friend, _ = await sign_in(app, plex, "friend-token")
     await connect(friend)
     await run_queued_syncs()
@@ -168,6 +168,16 @@ async def test_listens_map(app: FastAPI, plex: FakePlex) -> None:
     assert europe["listens"] == 1
     assert [a["name"] for a in europe["top_artists"]] == ["Radiohead"]
     assert [t["name"] for t in europe["top_tracks"]] == ["Paranoid Android"]
+    assert europe["top_artists"][0]["rating_key"] is None  # no library asked for
+    linked = (
+        await owner.get(
+            "/api/stats/places/detail", params={"range": "7d", "continent": "eu", "server_id": sid}
+        )
+    ).json()
+    # Linked to the library: pictures and links.
+    assert linked["top_artists"][0]["rating_key"] == 100
+    assert linked["top_artists"][0]["thumb"]
+    assert linked["top_tracks"][0]["rating_key"] is not None
     norway = (
         await owner.get("/api/stats/places/detail", params={"range": "7d", "country": "NO"})
     ).json()
