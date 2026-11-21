@@ -1447,6 +1447,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gigs/setlistfm/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Setlistfm Search
+         * @description Setlists on setlist.fm by artist, year and town (at least one), newest first.
+         */
+        get: operations["setlistfm_search_api_gigs_setlistfm_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gigs/artist/{server_id}/{rating_key}": {
         parameters: {
             query?: never;
@@ -7051,6 +7071,40 @@ export interface components {
             /** Setlists */
             setlists: components["schemas"]["GigSetlist"][];
         };
+        /** SetlistSearchItem */
+        SetlistSearchItem: {
+            /** Url */
+            url: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Artist */
+            artist: string;
+            /** Venue */
+            venue: string | null;
+            /** City */
+            city: string | null;
+            /** Country */
+            country: string | null;
+            /** Tour */
+            tour: string | null;
+            /**
+             * Songs
+             * @description Songs in the setlist (0 when nobody's added them).
+             */
+            songs: number;
+        };
+        /** SetlistSearchOut */
+        SetlistSearchOut: {
+            /** Items */
+            items: components["schemas"]["SetlistSearchItem"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+        };
         /** ShrinkCoversIn */
         ShrinkCoversIn: {
             /**
@@ -10429,6 +10483,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetlistLookupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    setlistfm_search_api_gigs_setlistfm_search_get: {
+        parameters: {
+            query?: {
+                artist?: string | null;
+                year?: number | null;
+                city?: string | null;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetlistSearchOut"];
                 };
             };
             /** @description Validation Error */

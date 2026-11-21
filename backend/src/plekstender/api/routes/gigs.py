@@ -25,6 +25,8 @@ from plekstender.api.schemas import (
     SetlistFmImportIn,
     SetlistLookupIn,
     SetlistLookupOut,
+    SetlistSearchItem,
+    SetlistSearchOut,
 )
 from plekstender.db.instance import get_setlistfm_api_key
 from plekstender.db.models import Artist, Gig, LiveShow
@@ -221,12 +223,7 @@ async def setlistfm_lookup(
 ) -> SetlistLookupOut:
     """A gig from a link to one of its setlists on setlist.fm: date, venue, tour, the
     whole bill (headliners first) and what each artist played."""
-    key, _ = await get_setlistfm_api_key(db, settings)
-    if not key:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "setlist.fm isn't set up: an admin can add an API key in Settings → Services.",
-        )
+    key = await _setlistfm_key(db, settings)
     if imports.setlist_id(body.url) is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "That isn't a link to a setlist on setlist.fm."
@@ -237,6 +234,64 @@ async def setlistfm_lookup(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     return SetlistLookupOut.model_validate(
         {**draft.__dict__, "url": draft.url or body.url}, from_attributes=False
+    )
+
+
+async def _setlistfm_key(db: DbDep, settings: SettingsDep) -> str:
+    key, _ = await get_setlistfm_api_key(db, settings)
+    if not key:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "setlist.fm isn't set up: an admin can add an API key in Settings → Services.",
+        )
+    return key
+
+
+@router.get(
+    "/setlistfm/search",
+    response_model=SetlistSearchOut,
+    dependencies=[rate_limit("gigs-setlist-search", 30, 60)],
+)
+async def setlistfm_search(
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+    artist: Annotated[str | None, Query(max_length=200)] = None,
+    year: Annotated[int | None, Query(ge=1900, le=2200)] = None,
+    city: Annotated[str | None, Query(max_length=200)] = None,
+    page: Annotated[int, Query(ge=1, le=100)] = 1,
+) -> SetlistSearchOut:
+    """Setlists on setlist.fm by artist, year and town (at least one), newest first."""
+    artist, city = _clean(artist), _clean(city)
+    if not (artist or year or city):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Search by an artist, a year or a town."
+        )
+    key = await _setlistfm_key(db, settings)
+    try:
+        found, total = await imports.setlistfm_search(
+            http, settings.setlistfm_api_url, key, artist=artist, year=year, city=city, page=page
+        )
+    except imports.ImportError_ as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return SetlistSearchOut(
+        items=[
+            SetlistSearchItem(
+                url=f.draft.url,
+                date=f.draft.date,
+                artist=f.artist,
+                venue=f.draft.venue,
+                city=f.draft.city,
+                country=f.draft.country,
+                tour=f.draft.name,
+                songs=f.songs,
+            )
+            for f in found
+            if f.draft.url
+        ],
+        total=total,
+        page=page,
     )
 
 

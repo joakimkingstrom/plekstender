@@ -13,12 +13,16 @@ import {
   SETLIST_LINK,
   type Gig,
   type GigIn,
+  useSetlistSearch,
   type GigSetlist,
+  type SetlistLookup,
+  type SetlistSearch,
 } from '../api/gigs'
 import { useActiveServer } from '../api/library'
 import { useStarShow } from '../api/live'
 import { FilePicker } from '../components/controls'
 import { DatePicker } from '../components/DatePicker'
+import { Dialog } from '../components/Dialog'
 import { GigStats } from '../components/GigStats'
 import { Select } from '../components/Select'
 import { Button, Card, Notice, Spinner } from '../components/ui'
@@ -70,7 +74,7 @@ export function GigsPage() {
           Add a gig
         </Button>
       </div>
-      {adding && <GigForm onDone={() => setAdding(false)} />}
+      {adding && <GigDialog onClose={() => setAdding(false)} />}
       {gigs.isPending ? (
         <Spinner />
       ) : gigs.isError ? (
@@ -257,14 +261,9 @@ function GigItem({ gig, serverId }: { gig: Gig; serverId: number | null }) {
   const remove = useDeleteGig()
   const day = localDate(gig.date)
   const where = [gig.venue, gig.city, gig.country ? countryName(gig.country) : null].filter(Boolean).join(' · ')
-  if (editing)
-    return (
-      <li className="p-3">
-        <GigForm gig={gig} onDone={() => setEditing(false)} />
-      </li>
-    )
   return (
     <li className="flex items-start gap-3 p-3">
+      {editing && <GigDialog gig={gig} onClose={() => setEditing(false)} />}
       <div className="w-12 shrink-0 text-center">
         <div className="text-xs uppercase text-muted">{day.toLocaleDateString(undefined, { month: 'short' })}</div>
         <div className="text-xl font-bold tabular-nums leading-tight">{day.getDate()}</div>
@@ -308,19 +307,178 @@ function GigItem({ gig, serverId }: { gig: Gig; serverId: number | null }) {
 
 const field = 'w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm'
 
-function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
+/** What a setlist.fm lookup filled in, in a sentence. */
+function filledIn(found: SetlistLookup): string {
+  const songs = found.setlists.reduce((n, s) => n + s.songs.length, 0)
+  const acts = found.artists.length
+  return (
+    `Filled in from setlist.fm: ${acts} ${acts === 1 ? 'artist' : 'artists'}` +
+    (songs ? ` and ${songs} ${songs === 1 ? 'song' : 'songs'} played` : '') +
+    '. Check it over, then save.'
+  )
+}
+
+/** Adding a gig (find it on setlist.fm, or add it by hand) or editing one, in a popup. */
+function GigDialog({ gig, onClose }: { gig?: Gig; onClose: () => void }) {
+  const [found, setFound] = useState<SetlistLookup | null>(null)
+  const [byHand, setByHand] = useState(false)
+  if (gig)
+    return (
+      <Dialog title="Edit the gig" onClose={onClose}>
+        <GigForm gig={gig} onDone={onClose} />
+      </Dialog>
+    )
+  if (found || byHand)
+    return (
+      <Dialog title="Add a gig" onClose={onClose}>
+        <button
+          type="button"
+          className="mb-3 text-sm text-muted hover:text-text"
+          onClick={() => {
+            setFound(null)
+            setByHand(false)
+          }}
+        >
+          ← Find another on setlist.fm
+        </button>
+        <GigForm key={found?.url ?? 'by-hand'} found={found ?? undefined} onDone={onClose} />
+      </Dialog>
+    )
+  return (
+    <Dialog title="Add a gig" subtitle="Find it on setlist.fm to fill in the night, the bill and what was played." onClose={onClose}>
+      <GigFinder onFound={setFound} onByHand={() => setByHand(true)} />
+    </Dialog>
+  )
+}
+
+const YEAR = /^\d{4}$/
+const shortDay = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+
+/** Step one of adding a gig: a setlist.fm link, or a search of setlist.fm. */
+function GigFinder({ onFound, onByHand }: { onFound: (found: SetlistLookup) => void; onByHand: () => void }) {
+  const lookup = useSetlistLookup()
+  const [link, setLink] = useState('')
+  const [picked, setPicked] = useState<string | null>(null)
+  const [artist, setArtist] = useState('')
+  const [year, setYear] = useState('')
+  const [city, setCity] = useState('')
+  const [search, setSearch] = useState<SetlistSearch | null>(null)
+  const results = useSetlistSearch(search)
+  const id = useId()
+  const open = (url: string) => {
+    setPicked(url)
+    lookup.mutate(url, { onSuccess: onFound })
+  }
+  const canSearch = Boolean(artist.trim() || city.trim() || YEAR.test(year))
+  const pages = results.data ? Math.max(1, Math.ceil(results.data.total / 20)) : 1
+  return (
+    <div className="space-y-5 text-sm">
+      <div className="space-y-1">
+        <label htmlFor={`${id}-link`} className="block font-medium">
+          A setlist.fm link
+        </label>
+        <input
+          id={`${id}-link`}
+          type="url"
+          value={link}
+          placeholder="https://www.setlist.fm/setlist/…"
+          onChange={(e) => {
+            setLink(e.target.value)
+            if (SETLIST_LINK.test(e.target.value)) open(e.target.value)
+          }}
+          className={field}
+        />
+        {lookup.isPending && picked === link && <p className="text-xs text-muted">Looking it up on setlist.fm…</p>}
+      </div>
+
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (canSearch) setSearch({ artist: artist.trim(), year: YEAR.test(year) ? year : '', city: city.trim(), page: 1 })
+        }}
+      >
+        <p className="font-medium">Or search setlist.fm</p>
+        <div className="grid gap-2 sm:grid-cols-[1fr_6rem_1fr_auto]">
+          <input aria-label="Artist" placeholder="Artist" value={artist} onChange={(e) => setArtist(e.target.value)} className={field} />
+          <input aria-label="Year" placeholder="Year" inputMode="numeric" maxLength={4} value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, ''))} className={field} />
+          <input aria-label="Town or city" placeholder="Town or city" value={city} onChange={(e) => setCity(e.target.value)} className={field} />
+          <Button type="submit" variant="primary" disabled={!canSearch} busy={results.isFetching}>
+            Search
+          </Button>
+        </div>
+      </form>
+
+      {results.isError && <Notice tone="error">{errorMessage(results.error)}</Notice>}
+      {lookup.isError && <Notice tone="error">{errorMessage(lookup.error)}</Notice>}
+      {results.data &&
+        (results.data.items.length === 0 ? (
+          <p className="text-muted">Nothing found on setlist.fm. Try fewer words, or add it by hand.</p>
+        ) : (
+          <div className={results.isPlaceholderData ? 'opacity-60' : ''}>
+            <ul className="-mx-2 divide-y divide-border" aria-label="Setlists found">
+              {results.data.items.map((r) => (
+                <li key={r.url}>
+                  <button
+                    type="button"
+                    disabled={lookup.isPending}
+                    onClick={() => open(r.url)}
+                    className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left hover:bg-surface-2 disabled:opacity-60"
+                  >
+                    <span className="w-24 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted">{shortDay.format(localDate(r.date))}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{r.artist}</span>
+                      <span className="block truncate text-xs text-muted">
+                        {[r.tour, r.venue, r.city, r.country ? countryName(r.country) : null].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs text-muted">
+                      {lookup.isPending && picked === r.url ? <Spinner small /> : r.songs ? `${r.songs} songs` : 'No setlist'}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {pages > 1 && search && (
+              <div className="mt-2 flex items-center justify-between text-xs text-muted">
+                <Button variant="ghost" disabled={search.page <= 1} onClick={() => setSearch({ ...search, page: search.page - 1 })}>
+                  ‹ Newer
+                </Button>
+                <span className="tabular-nums">
+                  Page {search.page} of {pages}
+                </span>
+                <Button variant="ghost" disabled={search.page >= pages} onClick={() => setSearch({ ...search, page: search.page + 1 })}>
+                  Older ›
+                </Button>
+              </div>
+            )}
+          </div>
+        ))}
+
+      <p className="border-t border-border pt-3 text-muted">
+        Not on setlist.fm?{' '}
+        <button type="button" className="text-accent hover:underline" onClick={onByHand}>
+          Add it by hand
+        </button>
+      </p>
+    </div>
+  )
+}
+
+function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onDone: () => void }) {
   const save = useSaveGig()
   const lookup = useSetlistLookup()
-  const [date, setDate] = useState(gig?.date ?? '')
-  const [artists, setArtists] = useState(gig?.artists.map((a) => a.name).join('\n') ?? '')
-  const [name, setName] = useState(gig?.name ?? '')
-  const [venue, setVenue] = useState(gig?.venue ?? '')
-  const [city, setCity] = useState(gig?.city ?? '')
-  const [country, setCountry] = useState(gig?.country ?? '')
+  const start = gig ?? found
+  const [date, setDate] = useState(start?.date ?? '')
+  const [artists, setArtists] = useState(gig ? gig.artists.map((a) => a.name).join('\n') : (found?.artists.join('\n') ?? ''))
+  const [name, setName] = useState(start?.name ?? '')
+  const [venue, setVenue] = useState(start?.venue ?? '')
+  const [city, setCity] = useState(start?.city ?? '')
+  const [country, setCountry] = useState(start?.country ?? '')
   const [notes, setNotes] = useState(gig?.notes ?? '')
-  const [url, setUrl] = useState(gig?.url ?? '')
-  const [setlists, setSetlists] = useState<GigSetlist[]>(gig?.setlists ?? [])
-  const [filled, setFilled] = useState<string | null>(null)
+  const [url, setUrl] = useState(start?.url ?? '')
+  const [setlists, setSetlists] = useState<GigSetlist[]>(start?.setlists ?? [])
+  const [filled, setFilled] = useState<string | null>(found ? filledIn(found) : null)
   const names = artists.split('\n').map((a) => a.trim()).filter(Boolean)
   const dateId = useId()
   const valid = Boolean(date) && names.length > 0 && (!country || /^[A-Za-z]{2}$/.test(country)) && (!url || /^https?:\/\//.test(url))
@@ -338,20 +496,15 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
   /** Fill the form in from a setlist.fm link: the night, the whole bill and the setlists. */
   const fillIn = (link: string) =>
     lookup.mutate(link, {
-      onSuccess: (found) => {
-        setDate(found.date)
-        setArtists(found.artists.join('\n'))
-        setName(found.name ?? '')
-        setVenue(found.venue ?? '')
-        setCity(found.city ?? '')
-        setCountry(found.country ?? '')
-        setSetlists(found.setlists)
-        const songs = found.setlists.reduce((n, s) => n + s.songs.length, 0)
-        setFilled(
-          `Filled in from setlist.fm: ${found.artists.length} ${found.artists.length === 1 ? 'artist' : 'artists'}` +
-            (songs ? ` and ${songs} ${songs === 1 ? 'song' : 'songs'} played` : '') +
-            '. Check it over, then save.',
-        )
+      onSuccess: (got) => {
+        setDate(got.date)
+        setArtists(got.artists.join('\n'))
+        setName(got.name ?? '')
+        setVenue(got.venue ?? '')
+        setCity(got.city ?? '')
+        setCountry(got.country ?? '')
+        setSetlists(got.setlists)
+        setFilled(filledIn(got))
       },
     })
   const onUrl = (next: string) => {
@@ -361,7 +514,6 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
     if (SETLIST_LINK.test(next) && !SETLIST_LINK.test(url)) fillIn(next)
   }
   return (
-    <Card title={gig ? 'Edit the gig' : 'Add a gig'}>
       <form
         className="grid gap-3 sm:grid-cols-2"
         onSubmit={(e) => {
@@ -446,6 +598,5 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
           </div>
         )}
       </form>
-    </Card>
   )
 }

@@ -470,6 +470,21 @@ async def test_gig_from_a_setlist_link(app: FastAPI, plex: FakePlex) -> None:
     search = asked[-1]
     assert search.url.params["date"] == "24-06-2017" and search.url.params["venueId"] == "v-wf"
 
+    # Searching setlist.fm: by artist, year and town; each setlist with its link.
+    assert (await owner.get("/api/gigs/setlistfm/search")).status_code == 422
+    results = (
+        await owner.get(
+            "/api/gigs/setlistfm/search",
+            params={"artist": " Radiohead ", "year": 2017, "city": "Pilton"},
+        )
+    ).json()
+    assert asked[-1].url.params["artistName"] == "Radiohead"
+    assert (asked[-1].url.params["year"], asked[-1].url.params["cityName"]) == ("2017", "Pilton")
+    assert results["items"] == [  # (the support act's setlist has no link: left out)
+        {"url": SETLIST_PAGE, "date": "2017-06-24", "artist": "Radiohead", "venue": "Worthy Farm",
+         "city": "Pilton", "country": "GB", "tour": "Glastonbury 2017", "songs": 5},
+    ]  # fmt: skip
+
     saved = await owner.post(
         "/api/gigs",
         json={

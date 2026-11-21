@@ -31,6 +31,32 @@ export function useSetlistLookup() {
   })
 }
 
+export type SetlistLookup = Schemas['SetlistLookupOut']
+export type SetlistSearch = { artist: string; year: string; city: string; page: number }
+
+/** Setlists on setlist.fm by artist, year and town (null: not searched yet). */
+export function useSetlistSearch(search: SetlistSearch | null) {
+  return useQuery({
+    queryKey: [...gigKeys.all, 'setlistfm', search],
+    enabled: search !== null,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/gigs/setlistfm/search', {
+          params: {
+            query: {
+              artist: search!.artist || undefined,
+              year: search!.year ? Number(search!.year) : undefined,
+              city: search!.city || undefined,
+              page: search!.page,
+            },
+          },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
+  })
+}
+
 /** The gigs you've been to where a library artist played (for their page). */
 export function useArtistPastGigs(serverId: number, ratingKey: number) {
   return useQuery({

@@ -1606,6 +1606,23 @@ class SetlistLookupOut(BaseModel):
     setlists: list[GigSetlist]
 
 
+class SetlistSearchItem(BaseModel):
+    url: str
+    date: dt.date
+    artist: str
+    venue: str | None
+    city: str | None
+    country: str | None
+    tour: str | None
+    songs: int = Field(description="Songs in the setlist (0 when nobody's added them).")
+
+
+class SetlistSearchOut(BaseModel):
+    items: list[SetlistSearchItem]
+    total: int
+    page: int
+
+
 class GigYear(BaseModel):
     year: int
     gigs: int

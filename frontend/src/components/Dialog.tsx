@@ -26,7 +26,8 @@ export function Dialog({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCloseRef.current()
+      // (Esc that something inside already handled, like closing a dropdown, stays there.)
+      if (e.key === 'Escape' && !e.defaultPrevented) onCloseRef.current()
       // Keep Tab inside the dialog.
       if (e.key === 'Tab' && panel.current) {
         const focusable = panel.current.querySelectorAll<HTMLElement>(

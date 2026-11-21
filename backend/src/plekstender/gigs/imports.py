@@ -187,6 +187,47 @@ async def setlistfm_gig(http: httpx.AsyncClient, base_url: str, api_key: str, ur
     return draft
 
 
+@dataclass
+class Found:
+    """A setlist in setlist.fm's search results."""
+
+    draft: Draft
+    artist: str
+    songs: int
+
+
+async def setlistfm_search(
+    http: httpx.AsyncClient,
+    base_url: str,
+    api_key: str,
+    *,
+    artist: str | None = None,
+    year: int | None = None,
+    city: str | None = None,
+    page: int = 1,
+) -> tuple[list[Found], int]:
+    """Setlists matching an artist, year and town (any of them), newest first, 20 a page;
+    and how many there are in all."""
+    params: dict[str, Any] = {"p": page}
+    if artist:
+        params["artistName"] = artist
+    if year:
+        params["year"] = year
+    if city:
+        params["cityName"] = city
+    body = await _setlistfm_get(http, f"{base_url}/search/setlists", api_key, params)
+    if not isinstance(body, dict):
+        return [], 0
+    found = []
+    for item in body.get("setlist") or []:
+        draft = _setlist(item)
+        if draft is not None:
+            songs = len(draft.setlists[0]["songs"]) if draft.setlists else 0
+            found.append(Found(draft, draft.artists[0], songs))
+    total = body.get("total")
+    return found, total if isinstance(total, int) else len(found)
+
+
 def _songs(item: dict[str, Any]) -> list[dict[str, Any]]:
     """The songs of a setlist, in order, across its sets and encores."""
     sets = (item.get("sets") or {}).get("set") if isinstance(item.get("sets"), dict) else None

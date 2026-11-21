@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GigsPage } from './GigsPage'
@@ -53,6 +53,11 @@ beforeEach(() => {
           years: [{ year: 2017, gigs: 1 }, { year: 2018, gigs: 0 }, { year: 2019, gigs: 1 }],
           months: [0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0],
           seasons: { winter: 0, spring: 0, summer: 1, autumn: 1 },
+        })
+      case '/api/gigs/setlistfm/search':
+        return json({
+          items: [{ url: 'https://www.setlist.fm/setlist/x-63de4613.html', date: '2017-06-24', artist: 'Radiohead', venue: 'Worthy Farm', city: 'Pilton', country: 'GB', tour: 'Glastonbury 2017', songs: 24 }],
+          total: 1, page: 1,
         })
       case '/api/gigs/setlistfm/lookup':
         return json({
@@ -119,15 +124,17 @@ describe('GigsPage', () => {
   it('adds a gig by hand', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Add a gig' }))
+    expect(screen.getByRole('dialog', { name: 'Add a gig' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Add it by hand' }))
     // The date picker: the title goes to months, then years; then 2024, May, the 1st.
     fireEvent.click(screen.getByLabelText('Date'))
-    const title = screen.getByRole('dialog').querySelector('[aria-live]')!
+    const title = screen.getByRole('dialog', { name: 'Choose a date' }).querySelector('[aria-live]')!
     fireEvent.click(title)
     fireEvent.click(title)
     fireEvent.click(screen.getByRole('button', { name: '2024' }))
     fireEvent.click(screen.getByRole('button', { name: 'May' }))
     fireEvent.click(screen.getByRole('button', { name: /May 1, 2024|1 May 2024/ }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Choose a date' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Date')).toHaveTextContent(/2024/)
     fireEvent.change(screen.getByLabelText(/^Artists/), { target: { value: 'Massive Attack\nYoung Fathers\n' } })
     fireEvent.change(screen.getByLabelText('Venue'), { target: { value: 'Brixton Academy' } })
@@ -152,7 +159,7 @@ describe('GigsPage', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Add a gig' }))
     const link = 'https://www.setlist.fm/setlist/radiohead/2017/worthy-farm-pilton-england-63de4613.html'
-    fireEvent.change(screen.getByLabelText('Link (setlist, tickets…)'), { target: { value: link } })
+    fireEvent.change(screen.getByLabelText('A setlist.fm link'), { target: { value: link } })
     expect(await screen.findByText(/Filled in from setlist\.fm: 2 artists and 3 songs played/)).toBeInTheDocument()
     expect(await calls('/api/gigs/setlistfm/lookup')[0].clone().json()).toEqual({ url: link })
     expect(screen.getByLabelText(/^Artists/)).toHaveValue('Radiohead\nSupport Act')
@@ -161,9 +168,26 @@ describe('GigsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await vi.waitFor(async () => {
       const saved = await calls('/api/gigs')[0]?.clone().json()
-      expect(saved).toMatchObject({ date: '2017-06-24', name: 'Glastonbury 2017', country: 'GB', url: link })
+      expect(saved).toMatchObject({ date: '2017-06-24', name: 'Glastonbury 2017', country: 'GB' })
       expect(saved.setlists.map((s: { artist: string }) => s.artist)).toEqual(['Radiohead', 'Support Act'])
     })
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('finds a gig by searching setlist.fm', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a gig' }))
+    const popup = within(screen.getByRole('dialog', { name: 'Add a gig' }))
+    fireEvent.change(popup.getByLabelText('Artist'), { target: { value: 'Radiohead' } })
+    fireEvent.change(popup.getByLabelText('Year'), { target: { value: '2017' } })
+    fireEvent.click(popup.getByRole('button', { name: 'Search' }))
+    const results = await screen.findByRole('list', { name: 'Setlists found' })
+    const asked = new URL(calls('/api/gigs/setlistfm/search', 'GET')[0].url)
+    expect([asked.searchParams.get('artist'), asked.searchParams.get('year'), asked.searchParams.get('city')]).toEqual(['Radiohead', '2017', null])
+    expect(results).toHaveTextContent('Glastonbury 2017 · Worthy Farm · Pilton · United Kingdom')
+    fireEvent.click(screen.getByRole('button', { name: /Radiohead.*24 songs/ }))
+    expect(await screen.findByText(/Filled in from setlist\.fm/)).toBeInTheDocument()
+    expect(await calls('/api/gigs/setlistfm/lookup')[0].clone().json()).toEqual({ url: 'https://www.setlist.fm/setlist/x-63de4613.html' })
   })
 
   it('imports from setlist.fm and offers exports', async () => {
