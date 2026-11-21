@@ -5230,6 +5230,12 @@ export interface components {
              */
             place_others: boolean;
             /**
+             * Rename Others
+             * @description Editing: when the venue, town or country changed, change them on the person's other gigs at the old venue too.
+             * @default false
+             */
+            rename_others: boolean;
+            /**
              * Find Place
              * @description Forget a place picked by hand and look it up again.
              * @default false

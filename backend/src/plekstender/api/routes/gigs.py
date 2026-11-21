@@ -247,14 +247,29 @@ async def _own(db: DbDep, user_id: int, gig_id: int) -> Gig:
 async def edit_gig(gig_id: int, body: GigIn, db: DbDep, user: UserDep) -> GigOut:
     gig = await _own(db, user.id, gig_id)
     _check_date(body.date)
+    before = (gig.venue, gig.city, gig.country)
     _apply(gig, body, link_artists(body.artists, await library_matcher(db, user.id)))
+    renamed = 0
+    if body.rename_others and place_key(*before) != place_key(gig.venue, gig.city, gig.country):
+        renamed = await _rename_venue(db, gig, before)
     if body.place and body.place_others:
         await _same_place(db, gig)
     await db.commit()
     await db.refresh(gig)
-    if gig.place_precision is None:
+    if gig.place_precision is None or renamed:
         await enqueue_gig_places(user.id)
     return gig_out(gig)
+
+
+async def _rename_venue(db: DbDep, gig: Gig, before: tuple[str | None, ...]) -> int:
+    """The person's other gigs at the gig's old venue get its new venue, town and country
+    (and are looked up on the map again, as the gig itself is). How many."""
+    venue, city, country = before
+    others = await _at_venue(db, gig.user_id, venue, city, country, gig.id)
+    for other in others:
+        other.venue, other.city, other.country = gig.venue, gig.city, gig.country
+        other.latitude = other.longitude = other.place_precision = None
+    return len(others)
 
 
 @router.get("/same-venue", response_model=GigSameVenueOut)

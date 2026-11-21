@@ -268,6 +268,41 @@ async def test_gig_places(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Monk
         await places.place_gigs(db, http, get_settings().nominatim_url)
     by_id = {g["id"]: g for g in (await owner.get("/api/gigs")).json()["gigs"]}
     assert by_id[pyramid_gig["id"]]["place_precision"] == "manual"
+    # Renaming the venue on the other gigs there too (asked first in the app): they move to
+    # the new name and are looked up again; without asking, only this one changes.
+    third = await owner.post(
+        "/api/gigs",
+        json={"date": "2022-06-25", "artists": ["Billie Eilish"], "venue": "pyramid stage",
+              "city": "Pilton", "country": "GB"},
+        headers=CSRF,
+    )  # fmt: skip
+    renamed = {**body, "artists": ["Radiohead"], "venue": "The Pyramid Stage"}
+    alone = await owner.put(f"/api/gigs/{pyramid_gig['id']}", json=renamed, headers=CSRF)
+    assert alone.json()["venue"] == "The Pyramid Stage"
+    by_id = {g["id"]: g for g in (await owner.get("/api/gigs")).json()["gigs"]}
+    assert by_id[third.json()["id"]]["venue"] == "pyramid stage"
+    old = await owner.get(
+        "/api/gigs/same-venue",
+        params={"venue": "Pyramid Stage", "city": "Pilton", "country": "GB", "but": pyramid_gig["id"]},
+    )  # fmt: skip
+    assert old.json() == {"gigs": 2}
+    back = {**renamed, "venue": "Pyramid Stage"}
+    await owner.put(f"/api/gigs/{pyramid_gig['id']}", json=back, headers=CSRF)
+    together = await owner.put(
+        f"/api/gigs/{pyramid_gig['id']}",
+        json={**renamed, "rename_others": True},
+        headers=CSRF,
+    )
+    assert together.status_code == 200
+    by_id = {g["id"]: g for g in (await owner.get("/api/gigs")).json()["gigs"]}
+    assert {by_id[i]["venue"] for i in (second.json()["id"], third.json()["id"])} == {
+        "The Pyramid Stage"
+    }
+    assert by_id[second.json()["id"]]["place_precision"] is None  # looked up again
+    await owner.put(
+        f"/api/gigs/{pyramid_gig['id']}", json={**back, "rename_others": True}, headers=CSRF
+    )
+
     # Asking for the lookup again forgets it.
     again = await owner.put(
         f"/api/gigs/{pyramid_gig['id']}",

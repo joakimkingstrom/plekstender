@@ -1676,6 +1676,11 @@ class GigIn(BaseModel):
         default=False,
         description="Put the person's other gigs at the same venue at the picked place too.",
     )
+    rename_others: bool = Field(
+        default=False,
+        description="Editing: when the venue, town or country changed, change them on the "
+        "person's other gigs at the old venue too.",
+    )
     find_place: bool = Field(
         default=False, description="Forget a place picked by hand and look it up again."
     )

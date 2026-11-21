@@ -345,6 +345,45 @@ function GigItem({ gig, serverId }: { gig: Gig; serverId: number | null }) {
 
 const field = 'w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm'
 
+/** The same venue to the server (case, accents and spacing aside), roughly. */
+const placeKey = (...parts: (string | null | undefined)[]) =>
+  parts.map((p) => (p ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().split(/\s+/).filter(Boolean).join(' ')).join('|')
+
+const venueName = (venue: string | null | undefined, city: string | null | undefined) =>
+  city?.trim() ? `${(venue ?? '').trim()} (${city.trim()})` : (venue ?? '').trim()
+
+/** Before saving: should this go for the other gigs at the venue too? */
+function OtherGigs({
+  text,
+  count,
+  busy,
+  onAnswer,
+  onBack,
+}: {
+  text: string
+  count: number
+  busy: 'yes' | 'no' | null
+  onAnswer: (yes: boolean) => void
+  onBack: () => void
+}) {
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-3 text-sm sm:col-span-2" role="group" aria-label="Other gigs here">
+      <p>{text}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" busy={busy === 'yes'} disabled={busy !== null} onClick={() => onAnswer(true)}>
+          Yes, all {count + 1} gigs
+        </Button>
+        <Button busy={busy === 'no'} disabled={busy !== null} onClick={() => onAnswer(false)}>
+          Just this one
+        </Button>
+        <Button variant="ghost" disabled={busy !== null} onClick={onBack}>
+          Back
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 /** What a setlist.fm lookup filled in, in a sentence. */
 function filledIn(found: SetlistLookup): string {
   const songs = found.setlists.reduce((n, s) => n + s.songs.length, 0)
@@ -518,10 +557,15 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
   const [setlists, setSetlists] = useState<GigSetlist[]>(start?.setlists ?? [])
   const [filled, setFilled] = useState<string | null>(found ? filledIn(found) : null)
   const [place, setPlace] = useState<PlaceChoice>({ picked: null, findAgain: false })
-  // A place picked by hand: ask whether the other gigs at this venue go there too.
-  const [asking, setAsking] = useState(false)
-  const sameVenue = useSameVenue(venue, city, country, gig?.id, Boolean(place.picked))
-  const others = place.picked ? (sameVenue.data?.gigs ?? 0) : 0
+  // Ask about the other gigs at the venue before saving: first whether a renamed venue is
+  // renamed on them too, then whether a place picked by hand goes for them too.
+  const [asking, setAsking] = useState<'rename' | 'place' | null>(null)
+  const [renameOthers, setRenameOthers] = useState(false)
+  const renamed = Boolean(gig?.venue) && placeKey(gig?.venue, gig?.city, gig?.country) !== placeKey(venue, city, country)
+  const atOldVenue = useSameVenue(gig?.venue ?? '', gig?.city ?? '', gig?.country ?? '', gig?.id, renamed)
+  const toRename = renamed ? (atOldVenue.data?.gigs ?? 0) : 0
+  const atVenue = useSameVenue(venue, city, country, gig?.id, Boolean(place.picked))
+  const toPlace = place.picked ? (atVenue.data?.gigs ?? 0) + (renameOthers ? toRename : 0) : 0
   const names = artists.split('\n').map((a) => a.trim()).filter(Boolean)
   const dateId = useId()
   const valid = Boolean(date) && names.length > 0 && (!country || /^[A-Za-z]{2}$/.test(country)) && (!url || /^https?:\/\//.test(url))
@@ -538,6 +582,15 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
     place: place.picked ? { latitude: place.picked.latitude, longitude: place.picked.longitude } : null,
     find_place: place.findAgain,
     place_others: false,
+    rename_others: false,
+  }
+  const submit = (rename: boolean, placeOthers: boolean) =>
+    save.mutate({ id: gig?.id, gig: { ...body, rename_others: rename, place_others: placeOthers } }, { onSuccess: onDone })
+  const afterRename = (rename: boolean) => {
+    setRenameOthers(rename)
+    const placeCount = place.picked ? (atVenue.data?.gigs ?? 0) + (rename ? toRename : 0) : 0
+    if (placeCount > 0) setAsking('place')
+    else submit(rename, false)
   }
   /** Fill the form in from a setlist.fm link: the night, the whole bill and the setlists. */
   const fillIn = (link: string) =>
@@ -565,8 +618,9 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
         onSubmit={(e) => {
           e.preventDefault()
           if (!valid) return
-          if (others > 0) setAsking(true)
-          else save.mutate({ id: gig?.id, gig: body }, { onSuccess: onDone })
+          if (toRename > 0) setAsking('rename')
+          else if (toPlace > 0) setAsking('place')
+          else submit(false, false)
         }}
       >
         <div className="space-y-1 text-sm sm:col-span-2">
@@ -633,33 +687,26 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
             </p>
           </div>
         )}
-        {asking ? (
-          <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-3 text-sm sm:col-span-2" role="group" aria-label="Other gigs here">
-            <p>
-              You’ve been to {others} other {others === 1 ? 'gig' : 'gigs'} at {venue.trim()}. Put {others === 1 ? 'it' : 'them'} at this place
-              on the map too?
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="primary"
-                busy={save.isPending && save.variables?.gig.place_others === true}
-                disabled={save.isPending}
-                onClick={() => save.mutate({ id: gig?.id, gig: { ...body, place_others: true } }, { onSuccess: onDone })}
-              >
-                Yes, all {others + 1} gigs
-              </Button>
-              <Button
-                busy={save.isPending && !save.variables?.gig.place_others}
-                disabled={save.isPending}
-                onClick={() => save.mutate({ id: gig?.id, gig: { ...body, place_others: false } }, { onSuccess: onDone })}
-              >
-                Just this one
-              </Button>
-              <Button variant="ghost" disabled={save.isPending} onClick={() => setAsking(false)}>
-                Back
-              </Button>
-            </div>
-          </div>
+        {asking === 'rename' ? (
+          <OtherGigs
+            text={`You’ve been to ${toRename} other ${toRename === 1 ? 'gig' : 'gigs'} at ${venueName(gig?.venue, gig?.city)}. Change ${
+              toRename === 1 ? 'it' : 'them'
+            } to ${venueName(venue, city)} too?`}
+            count={toRename}
+            busy={save.isPending ? (save.variables?.gig.rename_others ? 'yes' : 'no') : null}
+            onAnswer={afterRename}
+            onBack={() => setAsking(null)}
+          />
+        ) : asking === 'place' ? (
+          <OtherGigs
+            text={`You’ve been to ${toPlace} other ${toPlace === 1 ? 'gig' : 'gigs'} at ${venueName(venue, city)}. Put ${
+              toPlace === 1 ? 'it' : 'them'
+            } at this place on the map too?`}
+            count={toPlace}
+            busy={save.isPending ? (save.variables?.gig.place_others ? 'yes' : 'no') : null}
+            onAnswer={(yes) => submit(renameOthers, yes)}
+            onBack={() => (setRenameOthers(false), setAsking(null))}
+          />
         ) : (
           <div className="flex gap-2 sm:col-span-2">
             <Button type="submit" variant="primary" disabled={!valid} busy={save.isPending}>

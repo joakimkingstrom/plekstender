@@ -206,6 +206,7 @@ describe('GigsPage', () => {
         place: null,
         find_place: false,
         place_others: false,
+        rename_others: false,
       }),
     )
   })
@@ -232,6 +233,29 @@ describe('GigsPage', () => {
       const put = calls('/api/gigs/1', 'PUT')[0]
       expect(put).toBeTruthy()
       expect(await put.clone().json()).toMatchObject({ place: { latitude: 51.5009, longitude: -0.1774 }, find_place: false, place_others: true })
+    })
+  })
+
+  it('asks whether a renamed venue is renamed on the other gigs there too', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit the gig on 2019-10-02' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Venue'), { target: { value: 'The Royal Albert Hall' } })
+    await vi.waitFor(() => expect(calls('/api/gigs/same-venue', 'GET')).toHaveLength(1))
+    const asked = new URL(calls('/api/gigs/same-venue', 'GET')[0].url)
+    expect(Object.fromEntries(asked.searchParams)).toEqual({ venue: 'Royal Albert Hall', city: 'London', country: 'GB', but: '1' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(
+      within(dialog).getByText('You’ve been to 2 other gigs at Royal Albert Hall (London). Change them to The Royal Albert Hall (London) too?'),
+    ).toBeInTheDocument()
+    // Back to the form, then the other way: just this one.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Just this one' }))
+    await vi.waitFor(async () => {
+      const put = calls('/api/gigs/1', 'PUT')[0]
+      expect(put).toBeTruthy()
+      expect(await put.clone().json()).toMatchObject({ venue: 'The Royal Albert Hall', rename_others: false, place_others: false })
     })
   })
 
