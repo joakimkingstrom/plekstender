@@ -12,7 +12,6 @@ import {
 import { SyncPanel } from "../components/library";
 import { StatusCard } from "../components/StatusCard";
 import {
-  Badge,
   Card,
   Notice,
   PageTitle,
@@ -80,30 +79,9 @@ export function HomePage() {
               <SyncPanel serverId={s.id} />
             </Card>
           ))}
-        <Card
-          title="Servers"
-          action={
-            <Link to="/settings" className="text-sm text-accent">
-              Manage
-            </Link>
-          }
-        >
-          <ul className="space-y-2">
-            {servers.data.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-center justify-between gap-3 text-sm"
-              >
-                <span className="font-medium">{s.name}</span>
-                <Badge>
-                  {s.music_section_keys.length} music{" "}
-                  {s.music_section_keys.length === 1 ? "library" : "libraries"}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <StatusCard />
+        <div className="md:col-span-2">
+          <StatusCard />
+        </div>
       </div>
 
     </>

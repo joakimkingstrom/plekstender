@@ -71,7 +71,7 @@ function Group({ title, items }: { title: string; items: Item[] }) {
   return (
     <section aria-label={title}>
       <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">{title}</h3>
-      <ul className="grid gap-2 sm:grid-cols-2">
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {items.map((c, i) => (
           <Tile key={`${c.name}-${c.subtitle ?? ''}-${i}`} item={c} />
         ))}
