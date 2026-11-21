@@ -780,7 +780,8 @@ async def measure_cover_sizes_sweep(timestamp: int) -> None:
 @app.task(queue="maintenance", queueing_lock="check-notifications")
 async def check_notifications(timestamp: int) -> None:
     """Every 5 minutes: raise, update or resolve notifications from every connection's
-    status (Phase 17)."""
+    status (Phase 17), and tell people when their all-time top artists change."""
+    from plekstender.history import top_watch
     from plekstender.notifications import check
 
     async with (
@@ -788,6 +789,7 @@ async def check_notifications(timestamp: int) -> None:
         httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
     ):
         await check(db, http, get_settings())
+        await top_watch.check(db, dt.datetime.now(dt.UTC))
 
 
 @app.periodic(cron="* * * * *", periodic_id="heartbeat")

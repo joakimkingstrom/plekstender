@@ -702,6 +702,22 @@ class NotificationState(Base):
     dismissed_at: Mapped[dt.datetime | None]
 
 
+class TopSeen(Base):
+    """A person's all-time top 10 artists, albums or songs as last seen, to tell them when
+    one enters it or there's a new #1 (see plekstender.history.top_watch)."""
+
+    __tablename__ = "top_seen"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "kind"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(8))  # artist | album | track
+    # [{"key": "artist key/album key", "name", "artist", "listens"}], #1 first.
+    items: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # Worked out from the listens up to this one (nothing to do until there are newer).
+    last_listen_id: Mapped[int | None] = mapped_column(BigInteger)
+    updated_at: Mapped[dt.datetime]
+
+
 class HiddenSuggestion(Base):
     """An artist someone doesn't want suggested for their library (Library → Artists to add)."""
 
