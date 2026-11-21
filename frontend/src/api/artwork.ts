@@ -226,10 +226,11 @@ export function useSetFanartKey() {
 export type ArtworkJob = Schemas['ArtworkJobOut']
 
 /** Recent artwork jobs; polls while one is queued or running, and refreshes the list after. */
-export function useArtworkJobs(serverId: number) {
+export function useArtworkJobs(serverId: number, enabled = true) {
   const qc = useQueryClient()
   return useQuery({
     queryKey: [...artworkKeys.all(serverId), 'jobs'],
+    enabled,
     queryFn: async () => {
       const jobs = await unwrap(
         api.GET('/api/servers/{server_id}/artwork/jobs', { params: { path: { server_id: serverId } } }),

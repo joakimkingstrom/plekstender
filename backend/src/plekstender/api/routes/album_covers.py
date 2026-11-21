@@ -261,6 +261,8 @@ async def candidates(
         elif source == "itunes":
             found = await covers.itunes(http, settings.itunes_api_url, ref)
             note = None if found else "iTunes found nothing by that name."
+            # Asked for at 3000 px, Apple sends its original when that's smaller: how big.
+            await covers.measure_candidates(http, found, limit=15)
         elif source == "tidal":
             client = await get_tidal_client(db, settings)
             if client is None:

@@ -191,7 +191,11 @@ async def test_album_covers(
         'artist:"Radiohead" album:"OK Computer OKNOTOK"'
     ]
     itunes = (await owner.get(f"{album}/candidates", params={"source": "itunes"})).json()
-    assert itunes["candidates"][0]["up_to"] == 3000
+    # Measured: Apple sent its 1400 px original (asked for 3000).
+    assert [(c["width"], c["height"], c["up_to"]) for c in itunes["candidates"]] == [
+        (1400, 1400, None),
+        (1400, 1400, None),
+    ]
     caa = (await owner.get(f"{album}/candidates", params={"source": "coverartarchive"})).json()
     # The archive doesn't say how big its images are: read from the start of each.
     assert [(c["label"], c["width"], c["height"]) for c in caa["candidates"]] == [
