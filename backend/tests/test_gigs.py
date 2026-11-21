@@ -626,3 +626,60 @@ async def test_gig_from_a_setlist_link(
     share = (await owner.get(f"/api/servers/{sid}/library/stats/seen-live")).json()
     assert [(a["title"], a["seen"]) for a in share["artists"]] == [("Radiohead", 3)]
     assert share["artists"][0]["tracks"] >= 3
+
+
+@pytest.mark.db
+async def test_gig_filters_and_biggest_artists_first(app: FastAPI, plex: FakePlex) -> None:
+    from sqlalchemy import update
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import Artist, Gig
+
+    owner, _ = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        await db.execute(update(Artist).where(Artist.rating_key == 100).values(popularity=5000))
+        await db.execute(update(Artist).where(Artist.rating_key == 101).values(popularity=3000))
+        await db.commit()
+    gigs = [
+        ("2019-10-02", ["Support Act", "Portishead"], "Royal Albert Hall", "London", "GB"),
+        ("2019-10-02", ["Radiohead"], "O2 Academy", "Brixton", "GB"),  # same day, bigger
+        ("2018-05-01", ["Portishead"], "O2 Academy", "Glasgow", "GB"),
+        ("2017-06-24", ["Support Act", "Radiohead"], "Annexet", "Stockholm", "SE"),
+    ]
+    for date, artists, venue, city, country in gigs:
+        body = {"date": date, "artists": artists, "venue": venue, "city": city, "country": country}
+        assert (await owner.post("/api/gigs", json=body, headers=CSRF)).status_code == 201
+    async with get_sessionmaker()() as db:  # one found at its venue, one placed by hand
+        await db.execute(update(Gig).where(Gig.city == "London").values(place_precision="venue"))
+        await db.execute(update(Gig).where(Gig.city == "Glasgow").values(place_precision="manual"))
+        await db.execute(update(Gig).where(Gig.city == "Stockholm").values(place_precision="city"))
+        await db.commit()
+
+    listed = (await owner.get("/api/gigs")).json()
+    # On the same day the biggest artist's gig comes first, and each bill biggest first
+    # (artists not in the library last, in the order given).
+    assert [[a["name"] for a in g["artists"]] for g in listed["gigs"]] == [
+        ["Radiohead"],
+        ["Portishead", "Support Act"],
+        ["Portishead"],
+        ["Radiohead", "Support Act"],
+    ]
+    assert {(p["country"], p["city"], p["venue"], p["gigs"]) for p in listed["places"]} == {
+        ("GB", "London", "Royal Albert Hall", 1),
+        ("GB", "Brixton", "O2 Academy", 1),
+        ("GB", "Glasgow", "O2 Academy", 1),
+        ("SE", "Stockholm", "Annexet", 1),
+    }
+    assert listed["unplaced"] == 2  # Brixton (not looked up yet) and Stockholm (town only)
+
+    async def cities(**params: object) -> list[str]:
+        found = (await owner.get("/api/gigs", params=params)).json()["gigs"]
+        return [g["city"] for g in found]
+
+    assert await cities(country="gb") == ["Brixton", "London", "Glasgow"]
+    assert await cities(city="stockholm") == ["Stockholm"]
+    assert await cities(venue="O2 Academy") == ["Brixton", "Glasgow"]
+    assert await cities(venue="O2 Academy", city="Glasgow") == ["Glasgow"]
+    assert await cities(unplaced=True) == ["Brixton", "Stockholm"]
+    assert await cities(country="SE", year=2019) == []
+    assert (await owner.get("/api/gigs", params={"country": "Sweden"})).status_code == 422

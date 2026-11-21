@@ -5,16 +5,44 @@ import { liveKeys } from './live'
 export type Gig = Schemas['GigOut']
 export type GigIn = Schemas['GigIn']
 
-export const gigKeys = {
-  all: ['gigs'] as const,
-  list: (year: number | null, artist: string) => [...gigKeys.all, 'list', year, artist] as const,
+export type GigPlace = Schemas['GigPlace']
+
+/** What Gigs → Been to is narrowed to ('' / null / false: everything). */
+export type GigFilters = {
+  year: number | null
+  artist: string
+  country: string
+  city: string
+  venue: string
+  unplaced: boolean
 }
 
-export function useGigs(year: number | null, artist: string) {
+export const NO_GIG_FILTERS: GigFilters = { year: null, artist: '', country: '', city: '', venue: '', unplaced: false }
+
+export const gigKeys = {
+  all: ['gigs'] as const,
+  list: (filters: GigFilters) => [...gigKeys.all, 'list', filters] as const,
+}
+
+export function useGigs(filters: GigFilters = NO_GIG_FILTERS) {
+  const { year, artist, country, city, venue, unplaced } = filters
   return useQuery({
-    queryKey: gigKeys.list(year, artist),
+    queryKey: gigKeys.list(filters),
     queryFn: () =>
-      unwrap(api.GET('/api/gigs', { params: { query: { year: year ?? undefined, artist: artist || undefined } } })),
+      unwrap(
+        api.GET('/api/gigs', {
+          params: {
+            query: {
+              year: year ?? undefined,
+              artist: artist || undefined,
+              country: country || undefined,
+              city: city || undefined,
+              venue: venue || undefined,
+              unplaced: unplaced || undefined,
+            },
+          },
+        }),
+      ),
     placeholderData: keepPreviousData,
   })
 }

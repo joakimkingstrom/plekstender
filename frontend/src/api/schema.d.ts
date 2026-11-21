@@ -1420,7 +1420,8 @@ export interface paths {
         };
         /**
          * List Gigs
-         * @description The user's gigs, newest first; `year` and `artist` narrow them.
+         * @description The user's gigs, newest first (on the same day, the one with the biggest artist
+         *     first); `year`, `artist`, `country`, `city`, `venue` and `unplaced` narrow them.
          */
         get: operations["list_gigs_api_gigs_get"];
         put?: never;
@@ -5248,6 +5249,20 @@ export interface components {
             /** Url */
             url: string | null;
         };
+        /**
+         * GigPlace
+         * @description A place gigs were at (for the country, city and venue filters).
+         */
+        GigPlace: {
+            /** Country */
+            country: string | null;
+            /** City */
+            city: string | null;
+            /** Venue */
+            venue: string | null;
+            /** Gigs */
+            gigs: number;
+        };
         /** GigPlaceFound */
         GigPlaceFound: {
             /** Name */
@@ -5374,6 +5389,18 @@ export interface components {
             years: components["schemas"]["GigYear"][];
             /** Total */
             total: number;
+            /**
+             * Places
+             * @description Every country / city / venue combination (all gigs).
+             * @default []
+             */
+            places: components["schemas"]["GigPlace"][];
+            /**
+             * Unplaced
+             * @description Gigs not pinned at their venue on the map (all gigs).
+             * @default 0
+             */
+            unplaced: number;
         };
         /** GrowthPoint */
         GrowthPoint: {
@@ -10985,6 +11012,11 @@ export interface operations {
             query?: {
                 year?: number | null;
                 artist?: string | null;
+                country?: string | null;
+                city?: string | null;
+                venue?: string | null;
+                /** @description Only gigs not pinned at their venue on the map. */
+                unplaced?: boolean;
             };
             header?: never;
             path?: never;

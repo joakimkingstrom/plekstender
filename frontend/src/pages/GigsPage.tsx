@@ -9,8 +9,11 @@ import {
   useRecordLiveGig,
   useSaveGig,
   useSetlistLookup,
+  NO_GIG_FILTERS,
   SETLIST_LINK,
   type Gig,
+  type GigFilters,
+  type GigPlace,
   type GigIn,
   useSetlistSearch,
   type GigSetlist,
@@ -32,48 +35,29 @@ const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'n
 
 /** History → Gigs: the gigs you went to. */
 export function GigsPage() {
-  const [year, setYear] = useState<number | null>(null)
-  const [artist, setArtist] = useState('')
+  const [filters, setFilters] = useState<GigFilters>(NO_GIG_FILTERS)
   const [adding, setAdding] = useState(false)
-  const gigs = useGigs(year, artist)
-  const artists = useGigArtists()
-  const artistId = useId()
+  const gigs = useGigs(filters)
+  const filtered = JSON.stringify(filters) !== JSON.stringify(NO_GIG_FILTERS)
 
   return (
     <div className="space-y-6">
       <Suggestions />
       <GigStats />
       <WhereMap />
-      <div className="flex flex-wrap items-center gap-2">
-        <span id={artistId} className="sr-only">
-          Artist
-        </span>
-        <Select
-          labelledBy={artistId}
-          value={artist}
-          options={[{ value: '', label: 'All artists' }, ...(artists.data ?? []).map((a) => ({ value: a, label: a }))]}
-          onChange={setArtist}
-        />
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Year">
-          {[null, ...(gigs.data?.years ?? []).map((y) => y.year)].map((y) => (
-            <button
-              key={y ?? 'all'}
-              type="button"
-              aria-pressed={year === y}
-              onClick={() => setYear(y)}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                year === y ? 'bg-accent text-on-accent' : 'bg-surface-2 text-muted hover:text-text'
-              }`}
-            >
-              {y ?? 'All years'}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-wrap items-start gap-2">
+        <GigFilterBar filters={filters} onChange={setFilters} years={gigs.data?.years ?? []} places={gigs.data?.places ?? []} unplaced={gigs.data?.unplaced ?? 0} />
         <Button variant="primary" className="ml-auto" onClick={() => setAdding(true)}>
           Add a gig
         </Button>
       </div>
       {adding && <GigDialog onClose={() => setAdding(false)} />}
+      {filters.unplaced && (
+        <p className="text-sm text-muted">
+          These aren’t pinned at their venue on the map: only the town was found, or nothing was. Edit a gig to pick its
+          place by hand.
+        </p>
+      )}
       {gigs.isPending ? (
         <Spinner />
       ) : gigs.isError ? (
@@ -81,7 +65,7 @@ export function GigsPage() {
       ) : gigs.data.gigs.length === 0 ? (
         <Card>
           <p className="text-sm text-muted">
-            {year || artist
+            {filtered
               ? 'No gigs match.'
               : 'No gigs yet. Add the ones you’ve been to, or star gigs on Live: once they’ve happened, they’re offered here.'}
           </p>
@@ -100,11 +84,137 @@ export function GigsPage() {
   )
 }
 
+const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '').toLowerCase() === (b ?? '').toLowerCase()
+const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label)
+
+/**
+ * Artist, year, country, city and venue, and gigs not pinned at their venue. Picking a city
+ * or venue also picks where it is; changing one clears the ones below it.
+ */
+function GigFilterBar({
+  filters,
+  onChange,
+  years,
+  places,
+  unplaced,
+}: {
+  filters: GigFilters
+  onChange: (f: GigFilters) => void
+  years: { year: number; gigs: number }[]
+  places: GigPlace[]
+  unplaced: number
+}) {
+  const artists = useGigArtists()
+  const { country, city, venue } = filters
+  const set = (patch: Partial<GigFilters>) => onChange({ ...filters, ...patch })
+
+  const countries = useMemo(
+    () =>
+      [...new Set(places.map((p) => p.country).filter((c): c is string => Boolean(c)))]
+        .map((c) => ({ value: c, label: countryName(c) }))
+        .sort(byLabel),
+    [places],
+  )
+  const cities = useMemo(() => {
+    const found = new Map<string, { country: string; city: string }>()
+    for (const p of places) {
+      if (!p.city || (country && p.country !== country)) continue
+      const key = `${p.country ?? ''}|${p.city.toLowerCase()}`
+      if (!found.has(key)) found.set(key, { country: p.country ?? '', city: p.city })
+    }
+    const list = [...found.values()]
+    // The same name in two countries: say which is which.
+    const twice = (c: string) => list.filter((o) => same(o.city, c)).length > 1
+    return list
+      .map((o) => ({
+        value: JSON.stringify([o.country, o.city]),
+        label: twice(o.city) && o.country ? `${o.city} · ${countryName(o.country)}` : o.city,
+      }))
+      .sort(byLabel)
+  }, [places, country])
+  const venues = useMemo(() => {
+    const found = new Map<string, { country: string; city: string; venue: string }>()
+    for (const p of places) {
+      if (!p.venue || (country && p.country !== country) || (city && !same(p.city, city))) continue
+      const key = `${p.country ?? ''}|${(p.city ?? '').toLowerCase()}|${p.venue.toLowerCase()}`
+      if (!found.has(key)) found.set(key, { country: p.country ?? '', city: p.city ?? '', venue: p.venue })
+    }
+    return [...found.values()]
+      .map((o) => ({ value: JSON.stringify([o.country, o.city, o.venue]), label: !city && o.city ? `${o.venue} · ${o.city}` : o.venue }))
+      .sort(byLabel)
+  }, [places, country, city])
+
+  return (
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter gigs">
+      <Select
+        label="Filter by artist"
+        value={filters.artist}
+        options={[{ value: '', label: 'All artists' }, ...(artists.data ?? []).map((a) => ({ value: a, label: a }))]}
+        onChange={(artist) => set({ artist })}
+      />
+      <Select
+        label="Filter by year"
+        value={filters.year === null ? '' : String(filters.year)}
+        options={[{ value: '', label: 'All years' }, ...years.map((y) => ({ value: String(y.year), label: String(y.year) }))]}
+        onChange={(y) => set({ year: y ? Number(y) : null })}
+      />
+      {countries.length > 0 && (
+        <Select
+          label="Filter by country"
+          value={country}
+          options={[{ value: '', label: 'All countries' }, ...countries]}
+          onChange={(c) => set({ country: c, city: '', venue: '' })}
+        />
+      )}
+      {cities.length > 0 && (
+        <Select
+          label="Filter by city"
+          value={city ? JSON.stringify([country, city]) : ''}
+          options={[{ value: '', label: 'All cities' }, ...cities]}
+          onChange={(v) => {
+            const [c, town] = v ? (JSON.parse(v) as [string, string]) : [country, '']
+            set({ country: c, city: town, venue: '' })
+          }}
+        />
+      )}
+      {venues.length > 0 && (
+        <Select
+          label="Filter by venue"
+          value={venue ? JSON.stringify([country, city, venue]) : ''}
+          options={[{ value: '', label: 'All venues' }, ...venues]}
+          onChange={(v) => {
+            if (!v) return set({ venue: '' })
+            const [c, town, place] = JSON.parse(v) as [string, string, string]
+            set({ country: c, city: town, venue: place })
+          }}
+        />
+      )}
+      {(unplaced > 0 || filters.unplaced) && (
+        <button
+          type="button"
+          aria-pressed={filters.unplaced}
+          onClick={() => set({ unplaced: !filters.unplaced })}
+          className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+            filters.unplaced ? 'bg-accent text-on-accent' : 'bg-surface-2 text-muted hover:text-text'
+          }`}
+        >
+          📍 Venue not found ({unplaced})
+        </button>
+      )}
+      {JSON.stringify(filters) !== JSON.stringify(NO_GIG_FILTERS) && (
+        <Button variant="ghost" onClick={() => onChange(NO_GIG_FILTERS)}>
+          Clear filters
+        </Button>
+      )}
+    </div>
+  )
+}
+
 const GigMap = lazy(() => import('../components/GigMap'))
 
 /** Every gig with a place, on the map (whatever the filters below). */
 function WhereMap() {
-  const all = useGigs(null, '')
+  const all = useGigs()
   const placed = all.data?.gigs.filter((g) => g.latitude != null) ?? []
   if (placed.length === 0) return null
   const waiting = (all.data?.gigs.length ?? 0) - placed.length

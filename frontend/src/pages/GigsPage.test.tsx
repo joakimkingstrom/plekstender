@@ -29,6 +29,10 @@ const suggestion = {
 }  // prettier-ignore
 
 let fetchMock: ReturnType<typeof vi.fn<(input: Request | string) => Promise<Response>>>
+const gigLists = () =>
+  fetchMock.mock.calls
+    .map(([input]) => new URL(typeof input === 'string' ? input : input.url, 'http://localhost'))
+    .filter((url) => url.pathname === '/api/gigs')
 const calls = (path: string, method = 'POST') =>
   fetchMock.mock.calls
     .map(([input]) => input)
@@ -44,7 +48,14 @@ beforeEach(() => {
         return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
       case '/api/gigs':
         if (typeof input !== 'string' && input.method === 'POST') return json({ ...gigs[0], id: 3 }, 201)
-        return json({ gigs, years: [{ year: 2019, gigs: 1 }, { year: 2017, gigs: 1 }], total: 2 })
+        return json({
+          gigs, years: [{ year: 2019, gigs: 1 }, { year: 2017, gigs: 1 }], total: 2, unplaced: 2,
+          places: [
+            { country: 'GB', city: 'London', venue: 'Royal Albert Hall', gigs: 1 },
+            { country: 'GB', city: 'Pilton', venue: 'Pyramid Stage', gigs: 1 },
+            { country: 'SE', city: 'Stockholm', venue: 'Annexet', gigs: 1 },
+          ],
+        })  // prettier-ignore
       case '/api/gigs/artists':
         return json(['Portishead', 'Radiohead'])
       case '/api/gigs/suggestions':
@@ -111,7 +122,38 @@ describe('GigsPage', () => {
     expect(links.map((l) => l.getAttribute('href'))).toEqual(['/library/artists/100', '/library/artists/100'])
     expect(screen.getByText('Glastonbury 2017')).toBeInTheDocument()
     expect(screen.getByText('Paranoid Android!')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '2019' })).toBeInTheDocument()
+  })
+
+  it('narrows gigs by year, place and venues not found on the map', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: /2019/ })
+    const lastList = () => {
+      const url = gigLists().at(-1)!
+      return Object.fromEntries(url.searchParams)
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by year' }))
+    fireEvent.click(screen.getByRole('option', { name: '2019' }))
+    await vi.waitFor(() => expect(lastList()).toEqual({ year: '2019' }))
+
+    // A venue brings its city and country with it; a country clears what's below it.
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by venue' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent?.replace('✓', ''))).toEqual([
+      'All venues', 'Annexet · Stockholm', 'Pyramid Stage · Pilton', 'Royal Albert Hall · London',
+    ])  // prettier-ignore
+    fireEvent.click(screen.getByRole('option', { name: 'Annexet · Stockholm' }))
+    await vi.waitFor(() => expect(lastList()).toEqual({ year: '2019', country: 'SE', city: 'Stockholm', venue: 'Annexet' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by country' }))
+    fireEvent.click(screen.getByRole('option', { name: 'United Kingdom' }))
+    await vi.waitFor(() => expect(lastList()).toEqual({ year: '2019', country: 'GB' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by city' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent?.replace('✓', ''))).toEqual(['All cities', 'London', 'Pilton'])
+    fireEvent.click(screen.getByRole('option', { name: 'All cities' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '📍 Venue not found (2)' }))
+    await vi.waitFor(() => expect(lastList()).toEqual({ year: '2019', country: 'GB', unplaced: 'true' }))
+    expect(screen.getByText(/Edit a gig to pick its place by hand/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    await vi.waitFor(() => expect(lastList()).toEqual({}))
   })
 
   it('shows stats: busiest year, most seen artists and venues, time of year', async () => {

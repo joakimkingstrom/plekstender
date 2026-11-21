@@ -7,17 +7,19 @@ from collections import Counter
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
-from sqlalchemy import extract, func, or_, select
+from sqlalchemy import or_, select, tuple_
 
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.routes.live import _show
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
+    GigArtistOut,
     GigFromLiveIn,
     GigImportOut,
     GigIn,
     GigOut,
+    GigPlace,
     GigPlaceFound,
     GigsOut,
     GigStatsOut,
@@ -52,28 +54,109 @@ def gig_out(gig: Gig) -> GigOut:
     return GigOut.model_validate(gig, from_attributes=True)
 
 
+FOUND = ("venue", "manual")  # place_precision: pinned at the venue itself
+
+
+def _same(a: str | None, b: str | None) -> bool:
+    return (a or "").casefold() == (b or "").casefold()
+
+
+async def _popularity(db: DbDep, gigs: list[Gig]) -> dict[tuple[int, int], int]:
+    """How popular each library artist on these gigs is (Plekstender's score from Last.fm
+    listeners, see plekstender.sync.popularity)."""
+    refs = {
+        (a["server_id"], a["rating_key"])
+        for g in gigs
+        for a in g.artists
+        if a.get("server_id") is not None and a.get("rating_key") is not None
+    }
+    if not refs:
+        return {}
+    rows = await db.execute(
+        select(Artist.server_id, Artist.rating_key, Artist.popularity).where(
+            tuple_(Artist.server_id, Artist.rating_key).in_(list(refs)),
+            Artist.popularity.is_not(None),
+        )
+    )
+    return {(sid, key): int(pop or 0) for sid, key, pop in rows.all()}
+
+
+def _by_popularity(gig: Gig, popularity: dict[tuple[int, int], int]) -> GigOut:
+    """The gig with its bill biggest artist first (ones not in the library, or without a
+    score, after the rest in the order they were given)."""
+    out = gig_out(gig)
+
+    def score(artist: GigArtistOut) -> int:
+        if artist.server_id is None or artist.rating_key is None:
+            return -1
+        return popularity.get((artist.server_id, artist.rating_key), -1)
+
+    out.artists = sorted(out.artists, key=lambda a: -score(a))  # stable: ties keep order
+    return out
+
+
 @router.get("", response_model=GigsOut)
 async def list_gigs(
     db: DbDep,
     user: UserDep,
     year: Annotated[int | None, Query(ge=1900, le=2200)] = None,
     artist: Annotated[str | None, Query(max_length=300)] = None,
+    country: Annotated[str | None, Query(pattern=r"^[A-Za-z]{2}$")] = None,
+    city: Annotated[str | None, Query(max_length=300)] = None,
+    venue: Annotated[str | None, Query(max_length=300)] = None,
+    unplaced: Annotated[
+        bool, Query(description="Only gigs not pinned at their venue on the map.")
+    ] = False,
 ) -> GigsOut:
-    """The user's gigs, newest first; `year` and `artist` narrow them."""
-    query = select(Gig).where(Gig.user_id == user.id).order_by(Gig.date.desc(), Gig.id.desc())
-    if year:
-        query = query.where(extract("year", Gig.date) == year)
-    gigs = list(await db.scalars(query))
-    if artist:
-        gigs = [g for g in gigs if any(a["name"] == artist for a in g.artists)]
-    per_year = await db.execute(
-        select(extract("year", Gig.date).label("y"), func.count())
-        .where(Gig.user_id == user.id)
-        .group_by("y")
-        .order_by(extract("year", Gig.date).desc())
+    """The user's gigs, newest first (on the same day, the one with the biggest artist
+    first); `year`, `artist`, `country`, `city`, `venue` and `unplaced` narrow them."""
+    every = list(
+        await db.scalars(
+            select(Gig).where(Gig.user_id == user.id).order_by(Gig.date.desc(), Gig.id.desc())
+        )
     )
-    years = [GigYear(year=int(y), gigs=n) for y, n in per_year.all()]
-    return GigsOut(gigs=[gig_out(g) for g in gigs], years=years, total=sum(y.gigs for y in years))
+    gigs = [
+        g
+        for g in every
+        if (not year or g.date.year == year)
+        and (not artist or any(a["name"] == artist for a in g.artists))
+        and (not country or (g.country or "") == country.upper())
+        and (not city or _same(g.city, city))
+        and (not venue or _same(g.venue, venue))
+        and (not unplaced or g.place_precision not in FOUND)
+    ]
+    popularity = await _popularity(db, gigs)
+    out = [_by_popularity(g, popularity) for g in gigs]
+
+    def biggest(g: GigOut) -> int:
+        return max(
+            (popularity.get((a.server_id, a.rating_key), -1) for a in g.artists
+             if a.server_id is not None and a.rating_key is not None),
+            default=-1,
+        )  # fmt: skip
+
+    # Newest day first; on one day, the biggest artist's gig first (sorts are stable).
+    out.sort(key=lambda g: -biggest(g))
+    out.sort(key=lambda g: g.date, reverse=True)
+
+    per_year = Counter(g.date.year for g in every)
+    years = [GigYear(year=y, gigs=n) for y, n in sorted(per_year.items(), reverse=True)]
+    places: dict[tuple[str, str, str], GigPlace] = {}
+    for g in every:
+        if not (g.country or g.city or g.venue):
+            continue
+        key = (g.country or "", (g.city or "").casefold(), (g.venue or "").casefold())
+        if key in places:
+            places[key].gigs += 1
+        else:
+            places[key] = GigPlace(country=g.country, city=g.city, venue=g.venue, gigs=1)
+    return GigsOut(
+        gigs=out,
+        years=years,
+        total=len(every),
+        places=list(places.values()),
+        unplaced=sum(g.place_precision not in FOUND for g in every),
+    )
 
 
 def _check_date(day: dt.date) -> None:

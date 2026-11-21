@@ -1732,10 +1732,25 @@ class GigYear(BaseModel):
     gigs: int
 
 
+class GigPlace(BaseModel):
+    """A place gigs were at (for the country, city and venue filters)."""
+
+    country: str | None
+    city: str | None
+    venue: str | None
+    gigs: int
+
+
 class GigsOut(BaseModel):
     gigs: list[GigOut]
     years: list[GigYear] = Field(description="Gigs per year (all of them, for the filter).")
     total: int
+    places: list[GigPlace] = Field(
+        default=[], description="Every country / city / venue combination (all gigs)."
+    )
+    unplaced: int = Field(
+        default=0, description="Gigs not pinned at their venue on the map (all gigs)."
+    )
 
 
 class GigFromLiveIn(BaseModel):
