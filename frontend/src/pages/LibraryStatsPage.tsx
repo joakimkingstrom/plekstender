@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import {
@@ -18,6 +18,7 @@ import { CONTINENTS, countryName } from '../places'
 import { AreaChart, ColumnChart } from '../components/charts'
 import { Artwork } from '../components/library'
 import { Segmented } from '../components/Segmented'
+import { WordCloud } from '../components/WordCloud'
 import { Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { formatCount } from '../format'
@@ -343,18 +344,10 @@ const WORD_KINDS: [WordKind, string][] = [
   ['artist', 'Artists'],
 ]
 
-/** A stable shuffle (by the word), so the biggest words don't all sit at the start. */
-function scatter<T extends { word: string }>(items: T[]): T[] {
-  const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
-  return [...items].sort((a, b) => hash(a.word) - hash(b.word))
-}
-
 function Words({ serverId }: { serverId: number }) {
   const [kind, setKind] = useState<WordKind>('track')
   const words = useWords(serverId, kind)
-  const shown = useMemo(() => scatter(words.data ?? []), [words.data])
-  const max = Math.max(1, ...(words.data ?? []).map((w) => w.count))
-  const min = Math.min(max, ...(words.data ?? []).map((w) => w.count))
+  const shown = words.data ?? []
   const what = WORD_KINDS.find(([k]) => k === kind)![1].toLowerCase()
   return (
     <Card title="Words in names" action={<Segmented label="Names of" value={kind} options={WORD_KINDS} onChange={setKind} />}>
@@ -365,23 +358,7 @@ function Words({ serverId }: { serverId: number }) {
       ) : shown.length === 0 ? (
         <p className="text-sm text-muted">No words yet.</p>
       ) : (
-        <ul className="flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1 py-2" aria-label={`The most common words in ${what}' names`}>
-          {shown.map((w) => {
-            // Square-root scale between 0.8rem and 2.8rem.
-            const t = max === min ? 1 : Math.sqrt((w.count - min) / (max - min))
-            return (
-              <li
-                key={w.word}
-                title={`${w.word}: in ${plural(w.count, 'name', 'names')}`}
-                className={t > 0.45 ? 'font-display font-bold text-text' : t > 0.15 ? 'font-semibold text-text' : 'text-muted'}
-                style={{ fontSize: `${0.8 + t * 2}rem`, lineHeight: 1.15 }}
-              >
-                {w.word}
-                <span className="sr-only">: {formatCount(w.count)}</span>
-              </li>
-            )
-          })}
-        </ul>
+        <WordCloud words={shown} label={`The most common words in ${what}' names`} />
       )}
       <p className="mt-2 text-xs text-muted">
         The 100 most common words in {what}' names, sized by how many names they're in. Words like "the", "and" or

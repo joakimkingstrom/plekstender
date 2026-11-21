@@ -25,8 +25,13 @@ STOP_WORDS = frozenset(
     reprise instrumental original disc cd
     """.split()
 )
-APOSTROPHE = "\u2019"  # the typographic one, read as a plain apostrophe
-WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)?", re.UNICODE)
+# Apostrophes as they turn up in tags: typographic ones, accents and backticks standing in
+# for one ("I\u00b4ll"), all read as a plain apostrophe so "I'll" stays one word.
+APOSTROPHES = "'\u2019\u2018\u00b4`\u02bc\u2032"
+LETTERS = r"[^\W\d_\u02bc]+"  # (U+02BC is a letter to Unicode, an apostrophe to people)
+WORD = re.compile(LETTERS + "(?:[" + APOSTROPHES + "]" + LETTERS + ")?", re.UNICODE)
+# What's left of a contraction if it gets split anyway ("I ll", "we ve").
+FRAGMENTS = frozenset({"ll", "ve", "re"})
 # Brackets hold versions and guests ("(2011 Remaster)", "[feat. X]"), not the name.
 BRACKETS = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 
@@ -39,9 +44,9 @@ def words(names: Iterable[str], limit: int = 120) -> list[tuple[str, int]]:
     for name in names:
         seen = set()
         for match in WORD.finditer(BRACKETS.sub(" ", unicodedata.normalize("NFC", name))):
-            word = match.group().replace(APOSTROPHE, "'")
+            word = re.sub(f"[{APOSTROPHES}]", "'", match.group())
             key = word.casefold()
-            if len(key) < 2 or key in STOP_WORDS or key in seen:
+            if len(key) < 2 or key in STOP_WORDS or key in FRAGMENTS or key in seen:
                 continue
             seen.add(key)
             counts[key] += 1

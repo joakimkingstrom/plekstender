@@ -78,9 +78,14 @@ def test_word_counting() -> None:
         "don't stop believin'",
         "Mary, Mary [feat. Someone]",
         "Det är vi som är här",
+        "I\u00b4ll Be Mary",
+        "I`ll Be There, Mary",
+        "We ll Meet Again",
     ]
     counted = dict(words(names))
-    assert counted["Mary"] == 3  # once per name
+    assert counted["Mary"] == 5  # once per name
+    # Accents and backticks standing in for apostrophes: still one word, never "ll".
+    assert counted["I'll"] == 2 and "ll" not in {k.lower() for k in counted}
     assert counted["Stop"] == 2 and "Don't" not in counted  # a stop word, whichever apostrophe
     assert "Remaster" not in counted and "Someone" not in counted and "feat" not in counted
     assert "är" not in counted and "the" not in {k.lower() for k in counted}
