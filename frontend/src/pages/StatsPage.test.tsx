@@ -35,7 +35,7 @@ const activity = {
   heatmap: Array.from({ length: 7 }, (_, d) => Array.from({ length: 24 }, (_, h) => (d === 1 && h === 21 ? 34 : 0))),
 }
 
-function renderPage() {
+function renderPage(extra: Record<string, unknown> = {}) {
   const fetch = vi.fn(async (input: Request) => {
     const path = new URL(input.url).pathname
     const body: Record<string, unknown> = {
@@ -46,6 +46,7 @@ function renderPage() {
         total: 1,
         items: [{ id: 1, listened_at: '2026-11-17T21:10:00Z', source: 'plex', artist_name: 'Radiohead', album_name: 'OK Computer', track_name: 'Airbag', duplicate: false }],
       },
+      ...extra,
     }
     return new Response(JSON.stringify(body[path] ?? { detail: 'Not found' }), {
       status: path in body ? 200 : 404,
@@ -98,6 +99,26 @@ describe('StatsPage', () => {
     expect(await screen.findByRole('table', { name: 'Listens by weekday and hour' })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Listens per day' })).toBeInTheDocument()
     expect(screen.getByText('34')).toBeInTheDocument()
+  })
+})
+
+describe('Most skipped', () => {
+  it('lists songs and artists (not albums) with how many times each was skipped', async () => {
+    renderPage({
+      '/api/servers': [{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }],
+      '/api/stats/skips': {
+        threshold: 50,
+        watching: true,
+        items: [
+          { rating_key: 300, name: 'Paranoid Android', artist: 'Radiohead', thumb: null, skips: 3, plays: 10 },
+          { rating_key: 304, name: 'Glory Box', artist: 'Portishead', thumb: null, skips: 1, plays: 1 },
+        ],
+      },
+    })
+    const group = await screen.findByRole('group', { name: 'Skipped' })
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Songs', 'Artists'])
+    expect(await screen.findByText('3 skips')).toHaveAttribute('title', '3 of 10 plays skipped')
+    expect(screen.getByText('1 skip')).toHaveAttribute('title', '1 of 1 play skipped')
   })
 })
 

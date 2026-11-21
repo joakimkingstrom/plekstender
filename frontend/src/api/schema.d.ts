@@ -830,7 +830,7 @@ export interface paths {
         };
         /**
          * Skips
-         * @description Most skipped songs, albums or artists (needs the session watcher's live data).
+         * @description Most skipped songs or artists (needs the session watcher's live data).
          */
         get: operations["skips_api_stats_skips_get"];
         put?: never;
@@ -10042,7 +10042,7 @@ export interface operations {
                 range?: string;
                 /** @description IANA time zone, e.g. Europe/London */
                 tz?: string;
-                kind?: "artist" | "album" | "track";
+                kind?: "artist" | "track";
             };
             header?: never;
             path?: never;

@@ -99,6 +99,8 @@ async def test_watcher_records_skips_players_and_places(app: FastAPI, plex: Fake
         await owner.get("/api/stats/skips", params={"server_id": sid, "kind": "artist"})
     ).json()
     assert [i["name"] for i in by_artist["items"]] == ["Radiohead"]
+    albums = await owner.get("/api/stats/skips", params={"server_id": sid, "kind": "album"})
+    assert albums.status_code == 422  # skipping an album isn't something that can be told
     # Only plays where less than the threshold was heard count: at 20%, 1:00 of 4:00 isn't one.
     await owner.put("/api/auth/me/preferences", json={"skip_threshold": 20}, headers=CSRF)
     lenient = (await owner.get("/api/stats/skips", params={"server_id": sid})).json()

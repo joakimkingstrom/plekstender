@@ -35,7 +35,7 @@ export function useStatsActivity(range: string) {
   })
 }
 
-export type SkipKind = 'track' | 'album' | 'artist'
+export type SkipKind = 'track' | 'artist'
 
 export function useSkips(serverId: number | null, range: string, kind: SkipKind) {
   const tz = localTimeZone()

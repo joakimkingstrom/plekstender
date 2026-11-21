@@ -282,7 +282,6 @@ export function StatsPage() {
 
 const SKIP_KINDS: [SkipKind, string][] = [
   ['track', 'Songs'],
-  ['album', 'Albums'],
   ['artist', 'Artists'],
 ]
 
@@ -330,8 +329,11 @@ function MostSkipped({ serverId, range }: { serverId: number; range: string }) {
                 <p className="truncate text-sm font-medium">{item.name}</p>
                 {item.artist && <p className="truncate text-xs text-muted">{item.artist}</p>}
               </div>
-              <span className="shrink-0 text-right text-xs text-muted tabular-nums">
-                {formatCount(item.skips)} of {formatCount(item.plays)}
+              <span
+                className="shrink-0 text-right text-xs text-muted tabular-nums"
+                title={`${formatCount(item.skips)} of ${formatCount(item.plays)} ${item.plays === 1 ? 'play' : 'plays'} skipped`}
+              >
+                {formatCount(item.skips)} {item.skips === 1 ? 'skip' : 'skips'}
               </span>
             </li>
           ))}

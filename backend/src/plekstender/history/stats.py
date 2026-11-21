@@ -448,7 +448,6 @@ class Skipped:
 
 _SKIP_GROUPS = {
     "track": ("t.rating_key", "t.title", "coalesce(t.original_title, ar.title)", "al.thumb"),
-    "album": ("al.rating_key", "al.title", "ar.title", "al.thumb"),
     "artist": ("ar.rating_key", "ar.title", "NULL", "ar.thumb"),
 }
 
@@ -463,13 +462,13 @@ async def skipped(
     db: AsyncSession,
     user_id: int,
     server_id: int,
-    kind: Literal["artist", "album", "track"],
+    kind: Literal["artist", "track"],
     start: dt.datetime | None,
     end: dt.datetime,
     threshold: int,
     limit: int = 10,
 ) -> list[Skipped]:
-    """Most skipped songs / albums / artists, from the session watcher: plays where less than
+    """Most skipped songs / artists, from the session watcher: plays where less than
     `threshold` percent of the track was heard and another song started straight after
     (within SKIP_GAP, on the same player)."""
     key, name, artist, thumb = _SKIP_GROUPS[kind]

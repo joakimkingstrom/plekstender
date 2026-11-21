@@ -135,9 +135,9 @@ async def skips(
     server_id: int,
     range: RangeQuery = "30d",
     tz: TzQuery = "UTC",
-    kind: Literal["artist", "album", "track"] = "track",
+    kind: Literal["artist", "track"] = "track",
 ) -> SkipsOut:
-    """Most skipped songs, albums or artists (needs the session watcher's live data)."""
+    """Most skipped songs or artists (needs the session watcher's live data)."""
     period, _ = _period(range, tz)
     us = await get_user_server(db, user, server_id)
     threshold = load_preferences(user).skip_threshold
