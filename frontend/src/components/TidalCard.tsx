@@ -49,7 +49,7 @@ export function TidalCard() {
               )
           }}
         >
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block font-medium">Client ID</span>
               <input value={id} onChange={(e) => (setSaved(false), setId(e.target.value))} autoComplete="off" spellCheck={false} className={field} />

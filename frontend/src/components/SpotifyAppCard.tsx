@@ -52,14 +52,16 @@ export function SpotifyAppCard() {
               )
           }}
         >
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">Client ID</span>
-            <input value={id} autoComplete="off" spellCheck={false} onChange={(e) => setId(e.target.value)} className={field} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">Client secret</span>
-            <input type="password" value={secret} autoComplete="off" spellCheck={false} onChange={(e) => setSecret(e.target.value)} className={field} />
-          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium">Client ID</span>
+              <input value={id} autoComplete="off" spellCheck={false} onChange={(e) => setId(e.target.value)} className={field} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium">Client secret</span>
+              <input type="password" value={secret} autoComplete="off" spellCheck={false} onChange={(e) => setSecret(e.target.value)} className={field} />
+            </label>
+          </div>
           <div className="flex gap-2">
             <Button type="submit" variant="primary" disabled={!valid} busy={save.isPending && Boolean(save.variables?.client_id)}>
               Check and save

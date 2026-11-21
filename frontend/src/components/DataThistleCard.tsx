@@ -63,28 +63,30 @@ export function DataThistleCard() {
               )
           }}
         >
-          {(
-            [
-              ['Access token', access, setAccess],
-              ['Refresh token', refresh, setRefresh],
-            ] as const
-          ).map(([label, value, set]) => (
-            <label key={label} className="block">
-              <span className="mb-1 block text-sm font-medium">{label}</span>
-              <input
-                type="password"
-                value={value}
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(e) => {
-                  setSaved(false)
-                  set(e.target.value)
-                }}
-                placeholder="eyJ…"
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm"
-              />
-            </label>
-          ))}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                ['Access token', access, setAccess],
+                ['Refresh token', refresh, setRefresh],
+              ] as const
+            ).map(([label, value, set]) => (
+              <label key={label} className="block">
+                <span className="mb-1 block text-sm font-medium">{label}</span>
+                <input
+                  type="password"
+                  value={value}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(e) => {
+                    setSaved(false)
+                    set(e.target.value)
+                  }}
+                  placeholder="eyJ…"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm"
+                />
+              </label>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" variant="primary" disabled={!valid} busy={save.isPending && save.variables !== null}>
               Check and save
