@@ -1866,6 +1866,7 @@ class RewindRepeat(BaseModel):
     artist: str
     runs: int = Field(description="Times it was played two or more times in a row.")
     longest: int = Field(description="The most times in a row.")
+    shortest: int = Field(description="The fewest times in a row (of those runs).")
 
 
 class RewindGenreTime(BaseModel):

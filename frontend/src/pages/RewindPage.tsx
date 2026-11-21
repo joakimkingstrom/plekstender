@@ -275,6 +275,16 @@ function Bars({ values, labels, ticks, highlight }: { values: number[]; labels: 
   )
 }
 
+const NUMBER_WORDS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
+
+/** "3 times in a row"; when it happened more than once, "… on two different occasions"
+ * (with "2 to 5 times" when the runs weren't all as long). */
+function onRepeat(s: { runs: number; longest: number; shortest: number }): string {
+  const times = s.shortest && s.shortest !== s.longest ? `${s.shortest} to ${s.longest}` : `${s.longest}`
+  if (s.runs < 2) return `${times} times in a row`
+  return `${times} times in a row on ${NUMBER_WORDS[s.runs] ?? formatCount(s.runs)} different occasions`
+}
+
 function Big({ value, label }: { value: string; label: string }) {
   return (
     <div>
@@ -440,9 +450,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
                 <span className="min-w-0 truncate">
                   <span className="font-semibold">{s.name}</span> <span className="text-white/75">· {s.artist}</span>
                 </span>
-                <span className="shrink-0 text-sm text-white/80">
-                  {s.runs}× in a row{s.longest > 2 ? `, up to ${s.longest}` : ''}
-                </span>
+                <span className="shrink-0 text-sm text-white/80">{onRepeat(s)}</span>
               </li>
             ))}
           </ol>

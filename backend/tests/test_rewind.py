@@ -77,9 +77,9 @@ async def test_rewind(app: FastAPI, plex: FakePlex) -> None:
     # Portishead has no style, so isn't counted.
     assert [(g["genre"], g["listens"]) for g in r["genres"]] == [("Art Rock", 13)]
     assert r["genre_days"] and r["genre_parts"]
-    assert [(s["name"], s["runs"], s["longest"]) for s in r["repeats"]] == [
-        ("Paranoid Android", 1, 10),
-        ("Karma Police", 1, 2),
+    assert [(s["name"], s["runs"], s["longest"], s["shortest"]) for s in r["repeats"]] == [
+        ("Paranoid Android", 1, 10, 10),
+        ("Karma Police", 1, 2, 2),
     ]
     assert r["longest_repeat"]["longest"] == 10
     assert r["game"] is None

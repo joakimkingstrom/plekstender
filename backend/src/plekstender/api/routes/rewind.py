@@ -30,7 +30,13 @@ DAY_SECONDS = 86_400
 
 
 def _repeat(song: rewind.RepeatSong) -> RewindRepeat:
-    return RewindRepeat(name=song.name, artist=song.artist, runs=song.runs, longest=song.longest)
+    return RewindRepeat(
+        name=song.name,
+        artist=song.artist,
+        runs=song.runs,
+        longest=song.longest,
+        shortest=song.shortest,
+    )
 
 
 def _items(items: list[Top], colours: dict[int, str]) -> list[RewindItem]:

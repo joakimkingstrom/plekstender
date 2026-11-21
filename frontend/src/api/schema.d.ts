@@ -6775,6 +6775,11 @@ export interface components {
              * @description The most times in a row.
              */
             longest: number;
+            /**
+             * Shortest
+             * @description The fewest times in a row (of those runs).
+             */
+            shortest: number;
         };
         /**
          * Rules

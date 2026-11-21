@@ -39,6 +39,7 @@ class RepeatSong:
     artist: str
     runs: int  # times it was played two or more times in a row
     longest: int  # the most times in a row
+    shortest: int = 0  # the fewest (2 or more)
 
 
 @dataclass
@@ -171,8 +172,9 @@ async def _repeats(
         song = songs.setdefault(key, RepeatSong(names[0], names[1], 0, 0))
         song.runs += 1
         song.longest = max(song.longest, length)
+        song.shortest = length if song.runs == 1 else min(song.shortest, length)
         if longest is None or length > longest.longest:
-            longest = RepeatSong(names[0], names[1], 1, length)
+            longest = RepeatSong(names[0], names[1], 1, length, length)
 
     names: tuple[str, str] = ("", "")
     for artist_key, track_key, track, artist in rows.all():

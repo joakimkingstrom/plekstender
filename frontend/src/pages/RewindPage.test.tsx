@@ -29,8 +29,12 @@ beforeEach(() => {
           weekdays: [1, 2, 3, 9, 4, 5, 6], hours: Array.from({ length: 24 }, (_, h) => (h === 21 ? 50 : 3)),
           genres: [{ genre: 'Rock', listens: 900 }], genre_days: [{ when: '3', genre: 'Rock', share: 0.5 }],
           genre_parts: [{ when: 'evening', genre: 'Trip Hop', share: 0.4 }],
-          repeats: [{ name: 'Glory Box', artist: 'Portishead', runs: 3, longest: 5 }],
-          longest_repeat: { name: 'Glory Box', artist: 'Portishead', runs: 1, longest: 5 },
+          repeats: [
+            { name: 'Glory Box', artist: 'Portishead', runs: 3, longest: 5, shortest: 2 },
+            { name: 'Roads', artist: 'Portishead', runs: 2, longest: 3, shortest: 3 },
+            { name: 'Sour Times', artist: 'Portishead', runs: 1, longest: 4, shortest: 4 },
+          ],
+          longest_repeat: { name: 'Glory Box', artist: 'Portishead', runs: 1, longest: 5, shortest: 5 },
           game: null, app_seconds: 5400,
         })
       }
@@ -67,7 +71,12 @@ describe('Rewind', () => {
     fireEvent.keyDown(window, { key: 'ArrowLeft' })
     expect(screen.getByRole('heading', { name: 'Radiohead' })).toBeInTheDocument()
     // On to the end: new obsessions, when, genres, repeats, time in Plekstender, outro.
-    for (let i = 0; i < 8; i++) fireEvent.keyDown(window, { key: 'ArrowRight' })
+    for (let i = 0; i < 6; i++) fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(screen.getByText('On repeat')).toBeInTheDocument()
+    expect(screen.getByText('2 to 5 times in a row on three different occasions')).toBeInTheDocument()
+    expect(screen.getByText('3 times in a row on two different occasions')).toBeInTheDocument()
+    expect(screen.getByText('4 times in a row')).toBeInTheDocument() // once: no need to say so
+    for (let i = 0; i < 2; i++) fireEvent.keyDown(window, { key: 'ArrowRight' })
     expect(screen.getByRole('heading', { name: year + ' so far' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
