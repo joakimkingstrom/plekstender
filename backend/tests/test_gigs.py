@@ -219,7 +219,7 @@ async def test_gig_places(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Monk
     assert pyramid and pyramid[0]["city"] == "Pilton"
 
     # Picking the place by hand (searched on OpenStreetMap): kept, and used for the other
-    # gig at the same venue.
+    # gig at the same venue when asked to.
     found = await owner.get(
         "/api/gigs/places", params={"q": "Worthy Farm, Pilton", "country": "GB"}
     )
@@ -235,18 +235,28 @@ async def test_gig_places(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Monk
         headers=CSRF,
     )  # fmt: skip
     body = {k: pyramid_gig[k] for k in ("date", "venue", "city", "country", "setlists")}
+    same = await owner.get(
+        "/api/gigs/same-venue",
+        params={"venue": "pyramid stage", "city": "Pilton", "country": "gb", "but": pyramid_gig["id"]},
+    )  # fmt: skip
+    assert same.json() == {"gigs": 1}
+    pick = {"latitude": 51.1537, "longitude": -2.5872}
     picked = await owner.put(
         f"/api/gigs/{pyramid_gig['id']}",
-        json={
-            **body,
-            "artists": ["Radiohead"],
-            "place": {"latitude": 51.1537, "longitude": -2.5872},
-        },
+        json={**body, "artists": ["Radiohead"], "place": pick},
         headers=CSRF,
     )
     assert (picked.json()["place_precision"], picked.json()["latitude"]) == ("manual", 51.1537)
     by_id = {g["id"]: g for g in (await owner.get("/api/gigs")).json()["gigs"]}
+    assert by_id[second.json()["id"]]["place_precision"] != "manual"  # just this one
+    await owner.put(
+        f"/api/gigs/{pyramid_gig['id']}",
+        json={**body, "artists": ["Radiohead"], "place": pick, "place_others": True},
+        headers=CSRF,
+    )
+    by_id = {g["id"]: g for g in (await owner.get("/api/gigs")).json()["gigs"]}
     assert by_id[second.json()["id"]]["place_precision"] == "manual"
+    assert by_id[second.json()["id"]]["latitude"] == 51.1537
     # Editing other things keeps it; the lookups leave it alone.
     kept = await owner.put(
         f"/api/gigs/{pyramid_gig['id']}",

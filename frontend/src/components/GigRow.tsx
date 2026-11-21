@@ -11,6 +11,22 @@ const SOURCE_NAMES: Record<string, string> = {
   calendar: 'your calendar link',
 }
 
+const CALENDAR_SITES: [RegExp, string][] = [
+  [/(^|\.)songkick\.com$/, 'Songkick'],
+  [/(^|\.)bandsintown\.com$/, 'Bandsintown'],
+]
+
+/** A gig from someone's calendar link, named after the site its page is on ("Songkick"). */
+function calendarSite(url: string): string {
+  let host = ''
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return 'Your calendar'
+  }
+  return CALENDAR_SITES.find(([re]) => re.test(host))?.[1] ?? (host.replace(/^www\./, '') || 'Your calendar')
+}
+
 const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Cancelled',
   postponed: 'Postponed',
@@ -86,7 +102,7 @@ export function GigRow({ show, serverId }: { show: LiveShow; serverId: number | 
           {price && <span className="font-medium text-text">{price}</span>}
           {extra.map((t) => (
             <a key={t.url} href={t.url} target="_blank" rel="nofollow noopener noreferrer" className="underline hover:text-accent">
-              {t.source === 'calendar' ? 'In your calendar link' : `Also on ${SOURCE_NAMES[t.source] ?? t.source}`}
+              {t.source === 'calendar' ? calendarSite(t.url) : `Also on ${SOURCE_NAMES[t.source] ?? t.source}`}
             </a>
           ))}
           {starred && (

@@ -9,6 +9,7 @@ import {
   useRecordLiveGig,
   useSaveGig,
   useSetlistLookup,
+  useSameVenue,
   NO_GIG_FILTERS,
   SETLIST_LINK,
   type Gig,
@@ -517,6 +518,10 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
   const [setlists, setSetlists] = useState<GigSetlist[]>(start?.setlists ?? [])
   const [filled, setFilled] = useState<string | null>(found ? filledIn(found) : null)
   const [place, setPlace] = useState<PlaceChoice>({ picked: null, findAgain: false })
+  // A place picked by hand: ask whether the other gigs at this venue go there too.
+  const [asking, setAsking] = useState(false)
+  const sameVenue = useSameVenue(venue, city, country, gig?.id, Boolean(place.picked))
+  const others = place.picked ? (sameVenue.data?.gigs ?? 0) : 0
   const names = artists.split('\n').map((a) => a.trim()).filter(Boolean)
   const dateId = useId()
   const valid = Boolean(date) && names.length > 0 && (!country || /^[A-Za-z]{2}$/.test(country)) && (!url || /^https?:\/\//.test(url))
@@ -532,6 +537,7 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
     setlists,
     place: place.picked ? { latitude: place.picked.latitude, longitude: place.picked.longitude } : null,
     find_place: place.findAgain,
+    place_others: false,
   }
   /** Fill the form in from a setlist.fm link: the night, the whole bill and the setlists. */
   const fillIn = (link: string) =>
@@ -558,7 +564,9 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
         className="grid gap-3 sm:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (valid) save.mutate({ id: gig?.id, gig: body }, { onSuccess: onDone })
+          if (!valid) return
+          if (others > 0) setAsking(true)
+          else save.mutate({ id: gig?.id, gig: body }, { onSuccess: onDone })
         }}
       >
         <div className="space-y-1 text-sm sm:col-span-2">
@@ -625,14 +633,43 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
             </p>
           </div>
         )}
-        <div className="flex gap-2 sm:col-span-2">
-          <Button type="submit" variant="primary" disabled={!valid} busy={save.isPending}>
-            Save
-          </Button>
-          <Button variant="ghost" onClick={onDone}>
-            Cancel
-          </Button>
-        </div>
+        {asking ? (
+          <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-3 text-sm sm:col-span-2" role="group" aria-label="Other gigs here">
+            <p>
+              You’ve been to {others} other {others === 1 ? 'gig' : 'gigs'} at {venue.trim()}. Put {others === 1 ? 'it' : 'them'} at this place
+              on the map too?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                busy={save.isPending && save.variables?.gig.place_others === true}
+                disabled={save.isPending}
+                onClick={() => save.mutate({ id: gig?.id, gig: { ...body, place_others: true } }, { onSuccess: onDone })}
+              >
+                Yes, all {others + 1} gigs
+              </Button>
+              <Button
+                busy={save.isPending && !save.variables?.gig.place_others}
+                disabled={save.isPending}
+                onClick={() => save.mutate({ id: gig?.id, gig: { ...body, place_others: false } }, { onSuccess: onDone })}
+              >
+                Just this one
+              </Button>
+              <Button variant="ghost" disabled={save.isPending} onClick={() => setAsking(false)}>
+                Back
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2 sm:col-span-2">
+            <Button type="submit" variant="primary" disabled={!valid} busy={save.isPending}>
+              Save
+            </Button>
+            <Button variant="ghost" onClick={onDone}>
+              Cancel
+            </Button>
+          </div>
+        )}
         {save.isError && (
           <div className="sm:col-span-2">
             <Notice tone="error">{errorMessage(save.error)}</Notice>

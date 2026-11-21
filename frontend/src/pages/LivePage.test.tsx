@@ -41,6 +41,7 @@ const concert = {
   tickets: [
     { source: 'jambase', url: 'https://www.ticketmaster.se/event/radiohead', seller: 'Ticketmaster', is_ticket: true },
     { source: 'ticketmaster', url: 'https://www.ticketmaster.se/event/A1', seller: 'Ticketmaster', is_ticket: true },
+    { source: 'calendar', url: 'https://www.songkick.com/concerts/42-radiohead', seller: null, is_ticket: false },
   ],
   name: 'Radiohead at Avicii Arena',
   festival: false,
@@ -230,6 +231,8 @@ describe('LivePage', () => {
     expect(screen.getByRole('link', { name: 'Gigs also from Ticketmaster' })).toBeInTheDocument()
     // Found by both sources: Ticketmaster's own link too.
     expect(within(row).getByRole('link', { name: 'Also on Ticketmaster' })).toHaveAttribute('href', 'https://www.ticketmaster.se/event/A1')
+    // From a calendar link: named after the site (a Songkick calendar).
+    expect(within(row).getByRole('link', { name: 'Songkick' })).toHaveAttribute('href', 'https://www.songkick.com/concerts/42-radiohead')
     // A starred show can be added to a calendar by hand.
     expect(screen.getByRole('link', { name: 'Add to calendar' })).toHaveAttribute('href', '/api/live/shows/2.ics')
     // Only starred shows offer "I've got a ticket".

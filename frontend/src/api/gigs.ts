@@ -113,6 +113,20 @@ export function useSaveGig() {
   })
 }
 
+/** How many of the person's other gigs are at this venue (`but`: the gig being edited). */
+export function useSameVenue(venue: string, city: string, country: string, but: number | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: [...gigKeys.all, 'same-venue', venue, city, country, but],
+    enabled: enabled && Boolean(venue.trim()),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/gigs/same-venue', {
+          params: { query: { venue: venue.trim(), city: city.trim() || undefined, country: /^[A-Za-z]{2}$/.test(country) ? country : undefined, but } },
+        }),
+      ),
+  })
+}
+
 export function useDeleteGig() {
   const qc = useQueryClient()
   return useMutation({

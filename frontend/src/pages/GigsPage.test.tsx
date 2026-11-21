@@ -85,6 +85,8 @@ beforeEach(() => {
         })
       case '/api/gigs/import/setlistfm':
         return json({ added: 12, updated: 3, skipped: 1, problems: [] })
+      case '/api/gigs/same-venue':
+        return json({ gigs: url.searchParams.get('venue') === 'Royal Albert Hall' ? 2 : 0 })
       case '/api/gigs/places':
         return json([{ name: 'Royal Albert Hall', address: 'Kensington Gore, London, United Kingdom', kind: 'theatre', latitude: 51.5009, longitude: -0.1774 }])
       case '/api/gigs/1':
@@ -203,6 +205,7 @@ describe('GigsPage', () => {
         setlists: [],
         place: null,
         find_place: false,
+        place_others: false,
       }),
     )
   })
@@ -218,11 +221,17 @@ describe('GigsPage', () => {
     expect(within(dialog).getByText('Picked: Royal Albert Hall, Kensington Gore, London, United Kingdom.')).toBeInTheDocument()
     const asked = new URL(calls('/api/gigs/places', 'GET')[0].url)
     expect([asked.searchParams.get('q'), asked.searchParams.get('country')]).toEqual(['Royal Albert Hall, London', 'GB'])
+    // Two other gigs there: asked whether they go there too.
+    await vi.waitFor(() => expect(calls('/api/gigs/same-venue', 'GET')).toHaveLength(1))
+    expect(new URL(calls('/api/gigs/same-venue', 'GET')[0].url).searchParams.get('but')).toBe('1')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(within(dialog).getByText(/You’ve been to 2 other gigs at Royal Albert Hall/)).toBeInTheDocument()
+    expect(calls('/api/gigs/1', 'PUT')).toHaveLength(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Yes, all 3 gigs' }))
     await vi.waitFor(async () => {
       const put = calls('/api/gigs/1', 'PUT')[0]
       expect(put).toBeTruthy()
-      expect(await put.clone().json()).toMatchObject({ place: { latitude: 51.5009, longitude: -0.1774 }, find_place: false })
+      expect(await put.clone().json()).toMatchObject({ place: { latitude: 51.5009, longitude: -0.1774 }, find_place: false, place_others: true })
     })
   })
 

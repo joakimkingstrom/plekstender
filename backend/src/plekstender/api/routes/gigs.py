@@ -7,7 +7,7 @@ from collections import Counter
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
-from sqlalchemy import or_, select, tuple_
+from sqlalchemy import select, tuple_
 
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
@@ -21,6 +21,7 @@ from plekstender.api.schemas import (
     GigOut,
     GigPlace,
     GigPlaceFound,
+    GigSameVenueOut,
     GigsOut,
     GigStatsOut,
     GigYear,
@@ -179,7 +180,7 @@ async def add_gig(body: GigIn, db: DbDep, user: UserDep) -> GigOut:
     _apply(gig, body, link_artists(body.artists, match))
     db.add(gig)
     await db.flush()
-    if body.place:
+    if body.place and body.place_others:
         await _same_place(db, gig)
     await db.commit()
     await db.refresh(gig)
@@ -206,27 +207,33 @@ def _apply(gig: Gig, body: GigIn, artists: list[dict[str, object]]) -> None:
         gig.latitude = gig.longitude = gig.place_precision = None
 
 
-async def _same_place(db: DbDep, gig: Gig) -> int:
-    """A place picked by hand goes to the person's other gigs at the same venue (unless
-    they picked one for those too). How many."""
-    if not gig.venue:
-        return 0
-    key = place_key(gig.venue, gig.city, gig.country)
-    others = await db.scalars(
-        select(Gig).where(
-            Gig.user_id == gig.user_id,
-            Gig.id != gig.id,
-            Gig.venue.is_not(None),
-            or_(Gig.place_precision.is_(None), Gig.place_precision != "manual"),
-        )
+async def _at_venue(
+    db: DbDep,
+    user_id: int,
+    venue: str | None,
+    city: str | None,
+    country: str | None,
+    but: int | None,
+) -> list[Gig]:
+    """The person's other gigs at this venue (the same venue, town and country, ignoring
+    case and accents)."""
+    if not _clean(venue):
+        return []
+    key = place_key(_clean(venue), _clean(city), (country or "").upper() or None)
+    gigs = await db.scalars(
+        select(Gig).where(Gig.user_id == user_id, Gig.venue.is_not(None), Gig.id != (but or -1))
     )
-    moved = 0
+    return [g for g in gigs if place_key(g.venue, g.city, g.country) == key]
+
+
+async def _same_place(db: DbDep, gig: Gig) -> int:
+    """A place picked by hand, given to the person's other gigs at the same venue (when they
+    said so). How many."""
+    others = await _at_venue(db, gig.user_id, gig.venue, gig.city, gig.country, gig.id)
     for other in others:
-        if place_key(other.venue, other.city, other.country) == key:
-            other.latitude, other.longitude = gig.latitude, gig.longitude
-            other.place_precision = "manual"
-            moved += 1
-    return moved
+        other.latitude, other.longitude = gig.latitude, gig.longitude
+        other.place_precision = "manual"
+    return len(others)
 
 
 async def _own(db: DbDep, user_id: int, gig_id: int) -> Gig:
@@ -241,13 +248,27 @@ async def edit_gig(gig_id: int, body: GigIn, db: DbDep, user: UserDep) -> GigOut
     gig = await _own(db, user.id, gig_id)
     _check_date(body.date)
     _apply(gig, body, link_artists(body.artists, await library_matcher(db, user.id)))
-    if body.place:
+    if body.place and body.place_others:
         await _same_place(db, gig)
     await db.commit()
     await db.refresh(gig)
     if gig.place_precision is None:
         await enqueue_gig_places(user.id)
     return gig_out(gig)
+
+
+@router.get("/same-venue", response_model=GigSameVenueOut)
+async def same_venue(
+    db: DbDep,
+    user: UserDep,
+    venue: Annotated[str, Query(max_length=300)],
+    city: Annotated[str | None, Query(max_length=200)] = None,
+    country: Annotated[str | None, Query(pattern=r"^[A-Za-z]{2}$")] = None,
+    but: Annotated[int | None, Query(description="The gig being edited.")] = None,
+) -> GigSameVenueOut:
+    """How many of the person's other gigs are at this venue (to ask whether a place picked
+    by hand goes for those too)."""
+    return GigSameVenueOut(gigs=len(await _at_venue(db, user.id, venue, city, country, but)))
 
 
 @router.get(

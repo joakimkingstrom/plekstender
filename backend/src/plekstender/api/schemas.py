@@ -1654,6 +1654,10 @@ class GigPlaceFound(BaseModel):
     longitude: float
 
 
+class GigSameVenueOut(BaseModel):
+    gigs: int = Field(description="The person's other gigs at this venue.")
+
+
 class GigIn(BaseModel):
     date: dt.date
     artists: list[str] = Field(min_length=1, max_length=50)
@@ -1666,8 +1670,11 @@ class GigIn(BaseModel):
     setlists: list[GigSetlist] = Field(default_factory=list, max_length=50)
     place: GigPlacePick | None = Field(
         default=None,
-        description="A place picked by hand. Kept until the venue, town or country change; "
-        "also used for the person's other gigs at the same venue.",
+        description="A place picked by hand. Kept until the venue, town or country change.",
+    )
+    place_others: bool = Field(
+        default=False,
+        description="Put the person's other gigs at the same venue at the picked place too.",
     )
     find_place: bool = Field(
         default=False, description="Forget a place picked by hand and look it up again."

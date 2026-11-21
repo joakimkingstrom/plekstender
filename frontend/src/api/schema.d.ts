@@ -1451,6 +1451,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gigs/same-venue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Same Venue
+         * @description How many of the person's other gigs are at this venue (to ask whether a place picked
+         *     by hand goes for those too).
+         */
+        get: operations["same_venue_api_gigs_same_venue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gigs/places": {
         parameters: {
             query?: never;
@@ -5200,8 +5221,14 @@ export interface components {
             url?: string | null;
             /** Setlists */
             setlists?: components["schemas"]["GigSetlist"][];
-            /** @description A place picked by hand. Kept until the venue, town or country change; also used for the person's other gigs at the same venue. */
+            /** @description A place picked by hand. Kept until the venue, town or country change. */
             place?: components["schemas"]["GigPlacePick"] | null;
+            /**
+             * Place Others
+             * @description Put the person's other gigs at the same venue at the picked place too.
+             * @default false
+             */
+            place_others: boolean;
             /**
              * Find Place
              * @description Forget a place picked by hand and look it up again.
@@ -5285,6 +5312,14 @@ export interface components {
             latitude: number;
             /** Longitude */
             longitude: number;
+        };
+        /** GigSameVenueOut */
+        GigSameVenueOut: {
+            /**
+             * Gigs
+             * @description The person's other gigs at this venue.
+             */
+            gigs: number;
         };
         /** GigSetlist */
         GigSetlist: {
@@ -11129,6 +11164,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    same_venue_api_gigs_same_venue_get: {
+        parameters: {
+            query: {
+                venue: string;
+                city?: string | null;
+                country?: string | null;
+                /** @description The gig being edited. */
+                but?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigSameVenueOut"];
+                };
             };
             /** @description Validation Error */
             422: {
