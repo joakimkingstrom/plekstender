@@ -49,7 +49,7 @@ Container hardening (as in other stacks): non-root user, `read_only: true` + `tm
 ### Repo layout
 
 ```
-plex-helper-app/                     # repo (app name: Plekstender)
+plekstender/                         # repo
 ├── compose.yaml                     # db, db-init, frontend, worker (+ searxng, traefik profiles)
 ├── compose.override.example.yaml    # running behind an existing Traefik
 ├── .env.example
