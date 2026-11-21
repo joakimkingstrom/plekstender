@@ -54,6 +54,8 @@ h2 {
 }
 
 body {
+  /* Nothing may make the page wider than the screen: phones would zoom out to fit it. */
+  overflow-x: clip;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);

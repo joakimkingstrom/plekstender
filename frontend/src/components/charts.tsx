@@ -166,7 +166,9 @@ export function ColumnChart({
           {onSelect && hovered.value > 0 && <div className="text-muted">Click to see them</div>}
         </div>
       )}
-      <table className="sr-only">
+      {/* In a box: a table ignores .sr-only's 1px width and would widen the page. */}
+      <div className="sr-only">
+        <table>
         <caption>{caption}</caption>
         <tbody>
           {points.map((p, i) => (
@@ -177,6 +179,7 @@ export function ColumnChart({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -303,7 +306,8 @@ export function Heatmap({
           More
         </span>
       </div>
-      <table className="sr-only">
+      <div className="sr-only">
+      <table>
         <caption>{caption}</caption>
         <thead>
           <tr>
@@ -324,6 +328,7 @@ export function Heatmap({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -409,7 +414,8 @@ export function AreaChart({
           <div className="font-medium tabular-nums">{unit(hovered.value)}</div>
         </div>
       )}
-      <table className="sr-only">
+      <div className="sr-only">
+      <table>
         <caption>{caption}</caption>
         <tbody>
           {points.map((p, i) => (
@@ -420,6 +426,7 @@ export function AreaChart({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
