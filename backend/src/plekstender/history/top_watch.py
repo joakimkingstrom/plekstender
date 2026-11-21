@@ -1,10 +1,11 @@
 """Telling people when their all-time top 10s change: an artist, album or song entering its
 top 10, or a new #1 (notifications in the bell, linked to History's all-time overview).
 
-Each top 10 is kept as last seen (TopSeen) and worked out again when there are newer
-listens. The first time only notes it, so nobody gets thirty notifications at once; entries
-are told about once there are ten to enter among; and many entering together (an import)
-make one notification. These notifications go by themselves after a while.
+Each top 10 is kept as last seen (TopSeen) and worked out again once a day (the worker's
+top_10_news) when there are newer listens. The first time only notes it, so nobody gets
+thirty notifications at once; entries are told about once there are ten to enter among;
+and many entering together (an import) make one notification. These notifications go by
+themselves after a while.
 """
 
 from __future__ import annotations
