@@ -137,3 +137,18 @@ export function useSetSetlistFmKey() {
 export function useGigStats() {
   return useQuery({ queryKey: [...gigKeys.all, 'stats'], queryFn: () => unwrap(api.GET('/api/gigs/stats')) })
 }
+
+export type GigPlaceFound = Schemas['GigPlaceFound']
+export type PlaceSearch = { q: string; country: string | null }
+
+/** Places on OpenStreetMap for a name, to pick a gig's place by hand (searched when asked:
+ * the map search is shared, at most a request a second). */
+export function useGigPlaceSearch(search: PlaceSearch | null) {
+  return useQuery({
+    queryKey: [...gigKeys.all, 'places', search],
+    enabled: search !== null,
+    staleTime: Infinity,
+    queryFn: () =>
+      unwrap(api.GET('/api/gigs/places', { params: { query: { q: search!.q, country: search!.country || undefined } } })),
+  })
+}

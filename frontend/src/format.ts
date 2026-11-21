@@ -83,3 +83,13 @@ export function formatChange(current: number, previous: number | null | undefine
   if (pct === 0) return '±0%'
   return pct > 0 ? `+${pct}%` : `−${Math.abs(pct)}%`
 }
+
+/** A share as a percentage that never reads 0% or 100% when it isn't quite. */
+export function formatShare(part: number, whole: number): string {
+  if (whole <= 0 || part <= 0) return '0%'
+  const pct = (part / whole) * 100
+  if (pct < 0.1) return '<0.1%'
+  if (pct >= 100) return '100%'
+  const shown = pct < 10 ? pct.toFixed(1) : String(Math.round(pct))
+  return `${shown === '100' ? '99' : shown}%`
+}

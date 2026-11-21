@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LibraryStatsPage } from './LibraryStatsPage'
@@ -44,6 +44,8 @@ beforeEach(() => {
           return json({ families: [{ name: 'red', albums: 1, hex: '#c81e1e' }, { name: 'blue', albums: 2, hex: '#2850c8' }], strip: ['#c81e1e', '#2850c8', '#2850c8'], albums: 3, waiting: 1 })
         case '/api/servers/1/library/stats/colours/blue':
           return json([{ rating_key: 200, title: 'OK Computer', thumb: null, artist_title: 'Radiohead', hex: '#2850c8' }])
+        case '/api/servers/1/library/stats/seen-live':
+          return json({ tracks: 1234, seen: 9, setlists: 4, artists: [{ rating_key: 100, title: 'Radiohead', thumb: null, tracks: 40, seen: 8 }] })
         case '/api/servers/1/library/stats/words':
           return json([{ word: 'Love', count: 40 }, { word: 'Karma', count: 2 }])
         default:
@@ -84,6 +86,13 @@ describe('Library stats', () => {
     expect(screen.getByText(/4 without a country \(3 still to be looked up/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^Sweden/ }))
     expect(await screen.findByRole('link', { name: 'The Knife' })).toHaveAttribute('href', '/library/artists/105')
+
+    // Seen live: the share as a number, and the artists with the most of their songs seen live.
+    expect(screen.getByText('0.7%')).toBeInTheDocument()
+    expect(screen.getByText(/9 of 1,234, from the setlists of 4 gigs/)).toBeInTheDocument()
+    const seenLive = screen.getByRole('list', { name: 'Artists with the most of their songs seen live' })
+    expect(within(seenLive).getByRole('link', { name: /Radiohead/ })).toHaveAttribute('href', '/library/artists/100')
+    expect(within(seenLive).getByText('20%')).toBeInTheDocument()
 
     // Cover colours: a family's covers.
     expect(screen.getByText(/1 cover still to be looked at/)).toBeInTheDocument()

@@ -154,8 +154,14 @@ async def test_gig_places(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Monk
             return httpx.Response(
                 200, json=[{"lat": "51.5009", "lon": "-0.1774", "display_name": "RAH"}]
             )
-        if params.get("city") == "Pilton":
+        if params.get("city") == "Pilton" and "amenity" not in params:
             return httpx.Response(200, json=[{"lat": "51.16", "lon": "-2.59"}])
+        if params.get("q") == "Worthy Farm, Pilton":
+            return httpx.Response(200, json=[{
+                "lat": "51.1537", "lon": "-2.5872", "name": "Worthy Farm", "type": "farm",
+                "display_name": "Worthy Farm, Pilton, Somerset, England, United Kingdom",
+                "address": {"village": "Pilton", "country": "United Kingdom"},
+            }])  # fmt: skip
         return httpx.Response(200, json=[])
 
     plex.router.get("https://nominatim.openstreetmap.org/search").mock(side_effect=nominatim)
@@ -208,6 +214,98 @@ async def test_gig_places(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Monk
     # The Royal Albert Hall was looked up once for both gigs; the country narrows the search.
     assert [a.get("q") or a.get("city") for a in asked].count("Royal Albert Hall, London") == 1
     assert asked[0]["countrycodes"] == "gb"
+    # A venue the free text misses is searched as a named place in the town, before the town.
+    pyramid = [a for a in asked if a.get("amenity") == "Pyramid Stage"]
+    assert pyramid and pyramid[0]["city"] == "Pilton"
+
+    # Picking the place by hand (searched on OpenStreetMap): kept, and used for the other
+    # gig at the same venue.
+    found = await owner.get(
+        "/api/gigs/places", params={"q": "Worthy Farm, Pilton", "country": "GB"}
+    )
+    assert found.json() == [
+        {"name": "Worthy Farm", "address": "Pilton, United Kingdom", "kind": "farm",
+         "latitude": 51.1537, "longitude": -2.5872},
+    ]  # fmt: skip
+    pyramid_gig = gigs[("Pyramid Stage", "2017-06-24")]
+    second = await owner.post(
+        "/api/gigs",
+        json={"date": "2019-06-29", "artists": ["The Killers"], "venue": "Pyramid Stage",
+              "city": "Pilton", "country": "GB"},
+        headers=CSRF,
+    )  # fmt: skip
+    body = {k: pyramid_gig[k] for k in ("date", "venue", "city", "country", "setlists")}
+    picked = await owner.put(
+        f"/api/gigs/{pyramid_gig['id']}",
+        json={
+            **body,
+            "artists": ["Radiohead"],
+            "place": {"latitude": 51.1537, "longitude": -2.5872},
+        },
+        headers=CSRF,
+    )
+    assert (picked.json()["place_precision"], picked.json()["latitude"]) == ("manual", 51.1537)
+    by_id = {g["id"]: g for g in (await owner.get("/api/gigs")).json()["gigs"]}
+    assert by_id[second.json()["id"]]["place_precision"] == "manual"
+    # Editing other things keeps it; the lookups leave it alone.
+    kept = await owner.put(
+        f"/api/gigs/{pyramid_gig['id']}",
+        json={**body, "artists": ["Radiohead"], "notes": "Mud"},
+        headers=CSRF,
+    )
+    assert kept.json()["place_precision"] == "manual"
+    async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
+        await places.place_gigs(db, http, get_settings().nominatim_url)
+    by_id = {g["id"]: g for g in (await owner.get("/api/gigs")).json()["gigs"]}
+    assert by_id[pyramid_gig["id"]]["place_precision"] == "manual"
+    # Asking for the lookup again forgets it.
+    again = await owner.put(
+        f"/api/gigs/{pyramid_gig['id']}",
+        json={**body, "artists": ["Radiohead"], "find_place": True},
+        headers=CSRF,
+    )
+    assert again.json()["place_precision"] is None
+
+
+@pytest.mark.db
+async def test_town_only_places_are_looked_up_again(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Places found only as their town before venues were searched as named places get one
+    more lookup."""
+    import httpx
+
+    from plekstender.config import get_settings
+    from plekstender.db.models import GigPlace
+    from plekstender.gigs import places
+    from plekstender.gigs.service import place_key
+
+    monkeypatch.setattr(places, "INTERVAL", 0.0)
+
+    def nominatim(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("amenity") == "Debaser Slussen":
+            return httpx.Response(200, json=[{"lat": "59.3195", "lon": "18.0717"}])
+        return httpx.Response(200, json=[])
+
+    plex.router.get("https://nominatim.openstreetmap.org/search").mock(side_effect=nominatim)
+    owner, _ = await owner_with_library(app, plex)
+    gig = await owner.post(
+        "/api/gigs",
+        json={"date": "2003-04-20", "artists": ["Randy"], "venue": "Debaser Slussen",
+              "city": "Stockholm", "country": "SE"},
+        headers=CSRF,
+    )  # fmt: skip
+    key = place_key("Debaser Slussen", "Stockholm", "SE")
+    async with get_sessionmaker()() as db:
+        # As an earlier lookup left it: only the town.
+        db.add(GigPlace(key=key, latitude=59.3293, longitude=18.0686, precision="city",
+                        looked_up_at=dt.datetime(2026, 1, 1, tzinfo=dt.UTC)))  # fmt: skip
+        await db.commit()
+        async with httpx.AsyncClient() as http:
+            await places.place_gigs(db, http, get_settings().nominatim_url)
+    placed = (await owner.get("/api/gigs")).json()["gigs"][0]
+    assert placed["id"] == gig.json()["id"]
+    assert (placed["latitude"], placed["place_precision"]) == (59.3195, "venue")
 
 
 def test_csv_dates_and_columns() -> None:
@@ -433,7 +531,9 @@ SUPPORT_SET = {
 
 
 @pytest.mark.db
-async def test_gig_from_a_setlist_link(app: FastAPI, plex: FakePlex) -> None:
+async def test_gig_from_a_setlist_link(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import httpx
 
     asked: list[httpx.Request] = []
@@ -513,3 +613,14 @@ async def test_gig_from_a_setlist_link(app: FastAPI, plex: FakePlex) -> None:
     assert top["Paranoid Android"] == 1 and sum(top.values()) == len(
         [t for t in top if t.startswith(("Paranoid Android", "Karma Police"))]
     )
+
+    # Library → Stats: the share of the library's songs seen live, and by artist.
+    share = (await owner.get(f"/api/servers/{sid}/library/stats/seen-live")).json()
+    assert (share["tracks"], share["seen"], share["setlists"]) == (6, 3, 1)
+    assert share["artists"] == []  # Radiohead has too few songs here to rank
+    from plekstender.api.routes import library_stats
+
+    monkeypatch.setattr(library_stats, "SEEN_LIVE_MIN_TRACKS", 1)
+    share = (await owner.get(f"/api/servers/{sid}/library/stats/seen-live")).json()
+    assert [(a["title"], a["seen"]) for a in share["artists"]] == [("Radiohead", 3)]
+    assert share["artists"][0]["tracks"] >= 3

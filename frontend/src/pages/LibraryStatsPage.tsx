@@ -9,6 +9,7 @@ import {
   useCountryArtists,
   useLibraryStats,
   useReleased,
+  useSeenLive,
   useWords,
   type WordKind,
 } from '../api/libraryStats'
@@ -21,7 +22,7 @@ import { Segmented } from '../components/Segmented'
 import { WordCloud } from '../components/WordCloud'
 import { Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
-import { formatCount } from '../format'
+import { formatCount, formatShare } from '../format'
 
 type Measure = 'tracks' | 'albums' | 'artists'
 
@@ -66,12 +67,78 @@ function Stats({ serverId }: { serverId: number }) {
           </div>
         ))}
       </div>
+      <SeenLive serverId={serverId} />
       <Countries serverId={serverId} />
       <Growth growth={s.growth} />
       <Decades serverId={serverId} decades={s.decades} undated={s.undated_albums} />
       <Colours serverId={serverId} />
       <Words serverId={serverId} />
     </div>
+  )
+}
+
+/** How much of the library has been seen live (most people: very little, so it's a number,
+ * not a chart), and the artists with the highest share of their songs seen live. */
+function SeenLive({ serverId }: { serverId: number }) {
+  const seen = useSeenLive(serverId)
+  if (seen.isPending) return <Card title="Seen live"><Spinner /></Card>
+  if (seen.isError) return <Card title="Seen live"><Notice tone="error">{errorMessage(seen.error)}</Notice></Card>
+  const s = seen.data
+  if (s.setlists === 0)
+    return (
+      <Card title="Seen live">
+        <p className="text-sm text-muted">
+          Add setlists to the gigs you’ve been to (a setlist.fm link fills them in, on{' '}
+          <Link to="/gigs/been-to" className="text-accent underline">
+            Gigs → Been to
+          </Link>
+          ) to see how much of your library you’ve heard live.
+        </p>
+      </Card>
+    )
+  return (
+    <Card title="Seen live">
+      <div className="grid gap-6 md:grid-cols-[minmax(0,14rem)_1fr]">
+        <div>
+          <p className="font-display text-5xl font-bold tabular-nums">{formatShare(s.seen, s.tracks)}</p>
+          <p className="mt-1 text-sm text-muted">
+            of the songs in your library: {formatCount(s.seen)} of {formatCount(s.tracks)}, from the setlists of{' '}
+            {plural(s.setlists, 'gig', 'gigs')}.
+          </p>
+        </div>
+        {s.artists.length > 0 ? (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Most of their songs seen live</p>
+            <ol className="space-y-2" aria-label="Artists with the most of their songs seen live">
+              {s.artists.map((a) => (
+                <li key={a.rating_key}>
+                  <Link to={`/library/artists/${a.rating_key}`} className="group flex items-center gap-3">
+                    <Artwork serverId={serverId} path={a.thumb} title={a.title} size={64} round className="size-9 shrink-0 text-xs" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2 text-sm">
+                        <span className="truncate font-medium group-hover:underline">{a.title}</span>
+                        <span className="shrink-0 tabular-nums text-muted">
+                          {formatCount(a.seen)} of {formatCount(a.tracks)} · <span className="font-semibold text-text">{formatShare(a.seen, a.tracks)}</span>
+                        </span>
+                      </span>
+                      <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
+                        <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.max(2, (a.seen / a.tracks) * 100)}%` }} />
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : (
+          <p className="self-center text-sm text-muted">
+            {s.seen === 0
+              ? 'None of the songs in your gigs’ setlists are in this library yet.'
+              : 'Artists show here once you’ve seen songs live by someone with at least 5 songs in your library.'}
+          </p>
+        )}
+      </div>
+    </Card>
   )
 }
 

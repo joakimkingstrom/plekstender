@@ -5,7 +5,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { useEffect, useMemo, useRef } from 'react'
 import Supercluster from 'supercluster'
 import type { Gig } from '../api/gigs'
-import { gigPlaces, mapStyle, pinCount, pinOffsets, siteColours, type GigPlace } from '../gigMap'
+import { gigPlaces, mapStyle, pinCount, pinOffsets, placeName, siteColours, type GigPlace } from '../gigMap'
 import { localDate } from '../live'
 
 type Props = { placeId: string; gigs: number }
@@ -14,8 +14,9 @@ setWorkerUrl(workerUrl)
 
 let pinId = 0
 
-/** A red pushpin with a round, shiny head, a steel needle and a soft shadow. */
-function pushpin(tilt: number): SVGSVGElement {
+/** A pushpin with a round, shiny head (red; grey where only the town is known), a steel
+ * needle and a soft shadow. */
+function pushpin(tilt: number, grey = false): SVGSVGElement {
   const id = `pin${pinId++}`
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   svg.setAttribute('viewBox', '0 0 24 40')
@@ -27,9 +28,9 @@ function pushpin(tilt: number): SVGSVGElement {
   svg.innerHTML = `
     <defs>
       <radialGradient id="${id}h" cx="38%" cy="32%" r="70%">
-        <stop offset="0" stop-color="#ff8a80"/>
-        <stop offset="0.45" stop-color="#e3242b"/>
-        <stop offset="1" stop-color="#7f0d12"/>
+        <stop offset="0" stop-color="${grey ? '#e2e4e7' : '#ff8a80'}"/>
+        <stop offset="0.45" stop-color="${grey ? '#9a9ea5' : '#e3242b'}"/>
+        <stop offset="1" stop-color="${grey ? '#4d5056' : '#7f0d12'}"/>
       </radialGradient>
       <linearGradient id="${id}n" x1="0" x2="1">
         <stop offset="0" stop-color="#8d9196"/>
@@ -45,7 +46,7 @@ function pushpin(tilt: number): SVGSVGElement {
   return svg
 }
 
-function markerElement(gigs: number, title: string, onClick: () => void): HTMLElement {
+function markerElement(gigs: number, title: string, onClick: () => void, grey = false): HTMLElement {
   const el = document.createElement('button')
   el.type = 'button'
   el.title = title
@@ -53,7 +54,7 @@ function markerElement(gigs: number, title: string, onClick: () => void): HTMLEl
   // No `position` here: MapLibre places markers absolutely (and the pins inside sit on that).
   el.style.cssText = 'width:40px;height:44px;background:none;border:0;padding:0;cursor:pointer'
   pinOffsets(pinCount(gigs)).forEach(({ x, y, tilt }) => {
-    const pin = pushpin(tilt)
+    const pin = pushpin(tilt, grey)
     pin.style.position = 'absolute'
     pin.style.left = `${9 + x}px`
     pin.style.top = `${5 + y}px`
@@ -74,20 +75,29 @@ function markerElement(gigs: number, title: string, onClick: () => void): HTMLEl
   return el
 }
 
-/** The gigs at a place, as plain text (names come from imports, so no HTML). */
+/** The gigs at a place, as plain text (names come from imports, so no HTML). Where the
+ * gigs were at different venues (or only the town is known), each says its venue. */
 function placeList(place: GigPlace): HTMLElement {
   const box = document.createElement('div')
   box.style.cssText = 'max-height:220px;overflow:auto;font:13px/1.4 system-ui;color:#1c1d21'
   const head = document.createElement('div')
   head.style.fontWeight = '600'
-  head.textContent = [place.venue, place.city].filter(Boolean).join(', ') || 'Somewhere'
+  head.textContent = placeName(place)
   box.appendChild(head)
+  if (place.approximate) {
+    const note = document.createElement('div')
+    note.style.cssText = 'margin-bottom:4px;font-size:12px;color:#5f6168'
+    note.textContent = 'These venues weren’t found on the map, so they’re shown at the town. Edit a gig to pick its place.'
+    box.appendChild(note)
+  }
   for (const gig of [...place.gigs].sort((a, b) => b.date.localeCompare(a.date))) {
     const row = document.createElement('div')
-    row.textContent = `${localDate(gig.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} · ${gig.artists
+    const date = localDate(gig.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    const artists = gig.artists
       .slice(0, 3)
       .map((a) => a.name)
-      .join(', ')}`
+      .join(', ')
+    row.textContent = [date, artists, place.venue ? null : gig.venue].filter(Boolean).join(' · ')
     box.appendChild(row)
   }
   return box
@@ -149,11 +159,16 @@ export default function GigMap({ gigs }: { gigs: Gig[] }) {
           })
         } else {
           const place = byId.get(props.placeId!)!
-          const name = [place.venue, place.city].filter(Boolean).join(', ') || 'A gig'
-          el = markerElement(place.gigs.length, `${name}: ${place.gigs.length} ${place.gigs.length === 1 ? 'gig' : 'gigs'}`, () => {
-            popup?.remove()
-            popup = new Popup({ offset: 30, maxWidth: '280px' }).setLngLat([lng, lat]).setDOMContent(placeList(place)).addTo(map)
-          })
+          const name = `${placeName(place)}${place.approximate ? ' (venues not found)' : ''}`
+          el = markerElement(
+            place.gigs.length,
+            `${name}: ${place.gigs.length} ${place.gigs.length === 1 ? 'gig' : 'gigs'}`,
+            () => {
+              popup?.remove()
+              popup = new Popup({ offset: 30, maxWidth: '300px' }).setLngLat([lng, lat]).setDOMContent(placeList(place)).addTo(map)
+            },
+            place.approximate,
+          )
         }
         markers.push(new Marker({ element: el, anchor: 'bottom', offset: [0, 4] }).setLngLat([lng, lat]).addTo(map))
       }

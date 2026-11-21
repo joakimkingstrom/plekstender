@@ -1,27 +1,52 @@
 import type { StyleSpecification } from 'maplibre-gl'
 import type { Gig } from './api/gigs'
 
-/** A place on the gig map: a venue (or a town, when the venue wasn't found). */
+/**
+ * A spot on the gig map: a venue, or a town for gigs whose venue wasn't found there
+ * (`approximate`: shown at the town, each gig with its own venue).
+ */
 export type GigPlace = {
   id: string
+  /** The venue when all its gigs share one; else null (each gig says its own). */
   venue: string | null
   city: string | null
+  approximate: boolean
   latitude: number
   longitude: number
   gigs: Gig[]
 }
 
-/** Gigs with a place, one entry per spot (gigs at the same venue share it), most first. */
+const fold = (s: string | null) => (s ?? '').normalize('NFKD').replace(/\p{M}/gu, '').trim().toLowerCase()
+
+/** Gigs with a place, one entry per spot, most first. Gigs only placed at their town are
+ * kept apart from venues that happen to be found at the same point. */
 export function gigPlaces(gigs: Gig[]): GigPlace[] {
   const places = new Map<string, GigPlace>()
   for (const gig of gigs) {
     if (gig.latitude == null || gig.longitude == null) continue
-    const id = `${gig.latitude.toFixed(4)},${gig.longitude.toFixed(4)}`
+    const approximate = gig.place_precision === 'city'
+    const id = `${approximate ? 'town:' : ''}${gig.latitude.toFixed(4)},${gig.longitude.toFixed(4)}`
     const place = places.get(id)
-    if (place) place.gigs.push(gig)
-    else places.set(id, { id, venue: gig.venue, city: gig.city, latitude: gig.latitude, longitude: gig.longitude, gigs: [gig] })
+    if (place) {
+      place.gigs.push(gig)
+      if (place.venue !== null && fold(place.venue) !== fold(gig.venue)) place.venue = null
+    } else
+      places.set(id, {
+        id,
+        venue: approximate ? null : gig.venue,
+        city: gig.city,
+        approximate,
+        latitude: gig.latitude,
+        longitude: gig.longitude,
+        gigs: [gig],
+      })
   }
   return [...places.values()].sort((a, b) => b.gigs.length - a.gigs.length)
+}
+
+/** A spot's name: its venue and town, or just the town when its gigs were at several. */
+export function placeName(place: GigPlace): string {
+  return [place.venue, place.city].filter(Boolean).join(', ') || 'Somewhere'
 }
 
 /** How many pins a spot gets: one per gig, but never more than three. */

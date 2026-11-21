@@ -1,4 +1,5 @@
-"""Library → Stats: the library over time, music by decade, and words in names.
+"""Library → Stats: the library over time, music by decade, words in names, and the songs
+seen live.
 
 Like the rest of the library, everything counts only what the user's own Plex account can
 see in the libraries they picked.
@@ -7,10 +8,11 @@ see in the libraries they picked.
 from __future__ import annotations
 
 import datetime as dt
+from collections import Counter
 from typing import Literal
 
 from fastapi import APIRouter, Path, Query
-from sqlalchemy import extract, func, select
+from sqlalchemy import extract, func, select, text
 
 from plekstender.api.deps import DbDep, UserDep
 from plekstender.api.routes.library import _album_count, _artist_summary, plays_of, visible
@@ -27,12 +29,16 @@ from plekstender.api.schemas import (
     LibraryStatsOut,
     ReleasedAlbum,
     ReleasedOut,
+    SeenLiveArtist,
+    SeenLiveOut,
     WordCount,
 )
 from plekstender.artist_countries import ArtistKey, countries_for
 from plekstender.cover_colours import ORDER, family
-from plekstender.db.models import Album, AlbumColour, Artist, Track, UserServer
+from plekstender.db.models import Album, AlbumColour, Artist, Gig, Track, UserServer
+from plekstender.gigs.seen_live import seen_live
 from plekstender.library_stats import words
+from plekstender.sync.parse import normalise_artist
 
 router = APIRouter(prefix="/api/servers/{server_id}/library/stats", tags=["library"])
 
@@ -351,3 +357,85 @@ async def colour_family(
         for fam, _hue, _light, hex_, key, title, thumb, artist in coloured
         if fam == name
     ][:400]
+
+
+SEEN_LIVE_MIN_TRACKS = 5  # fewer, and one song seen live is already a big share
+SEEN_LIVE_ARTISTS = 10
+
+
+@router.get("/seen-live", response_model=SeenLiveOut)
+async def seen_live_share(server_id: int, db: DbDep, user: UserDep) -> SeenLiveOut:
+    """How many of the library's songs the person has seen live (from their gigs'
+    setlists), and the artists with the highest share. A song counts when its artist (the
+    song's or the album's) played a song of that title at one of their gigs."""
+    us = await get_user_server(db, user, server_id)
+    state, cond, where = visible(Track, user.id, us)
+    total = await db.scalar(select(func.count()).select_from(Track).join(state, cond).where(*where))
+    per_artist = Counter[int]()
+    rows = await db.execute(
+        select(Track.artist_rating_key, func.count())
+        .select_from(Track)
+        .join(state, cond)
+        .where(*where, Track.artist_rating_key.is_not(None))
+        .group_by(Track.artist_rating_key)
+    )
+    for key, count in rows.all():
+        if key is not None:
+            per_artist[key] = count
+    setlists = await db.scalar(
+        select(func.count())
+        .select_from(Gig)
+        .where(Gig.user_id == user.id, Gig.setlists != text("'[]'::jsonb"))
+    )
+    seen = await seen_live(db, user.id)
+    if not seen:
+        return SeenLiveOut(tracks=total or 0, seen=0, setlists=setlists or 0, artists=[])
+
+    # The library's artists who played at the person's gigs (by name).
+    a_state, a_cond, a_where = visible(Artist, user.id, us)
+    artists = {
+        a.rating_key: a
+        for a in await db.scalars(select(Artist).join(a_state, a_cond).where(*a_where))
+        if normalise_artist(a.title or "") in seen
+    }
+    tracks = await db.execute(
+        select(Track.artist_rating_key, Track.artist_key, Track.title_norm)
+        .join(state, cond)
+        .where(
+            *where,
+            (Track.artist_key.in_(list(seen))) | (Track.artist_rating_key.in_(list(artists))),
+        )
+    )
+    seen_by = Counter[int]()
+    seen_total = 0
+    for album_artist, track_artist, title in tracks.all():
+        names = [track_artist]
+        if album_artist in artists:
+            names.append(normalise_artist(artists[album_artist].title or ""))
+        if any(title in seen.get(n or "", ()) for n in names):
+            seen_total += 1
+            if album_artist is not None:
+                seen_by[album_artist] += 1
+    ranked = sorted(
+        (
+            (n / per_artist[key], n, key)
+            for key, n in seen_by.items()
+            if key in artists and per_artist[key] >= SEEN_LIVE_MIN_TRACKS
+        ),
+        key=lambda t: (-t[0], -t[1], artists[t[2]].title or ""),
+    )[:SEEN_LIVE_ARTISTS]
+    return SeenLiveOut(
+        tracks=total or 0,
+        seen=seen_total,
+        setlists=setlists or 0,
+        artists=[
+            SeenLiveArtist(
+                rating_key=key,
+                title=artists[key].title,
+                thumb=artists[key].thumb,
+                tracks=per_artist[key],
+                seen=n,
+            )
+            for _, n, key in ranked
+        ],
+    )

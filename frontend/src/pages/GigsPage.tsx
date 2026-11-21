@@ -21,6 +21,7 @@ import { useActiveServer } from '../api/library'
 import { useStarShow } from '../api/live'
 import { DatePicker } from '../components/DatePicker'
 import { Dialog } from '../components/Dialog'
+import { GigPlacePicker, type PlaceChoice } from '../components/GigPlacePicker'
 import { GigStats } from '../components/GigStats'
 import { Select } from '../components/Select'
 import { Button, Card, Notice, Spinner } from '../components/ui'
@@ -405,6 +406,7 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
   const [url, setUrl] = useState(start?.url ?? '')
   const [setlists, setSetlists] = useState<GigSetlist[]>(start?.setlists ?? [])
   const [filled, setFilled] = useState<string | null>(found ? filledIn(found) : null)
+  const [place, setPlace] = useState<PlaceChoice>({ picked: null, findAgain: false })
   const names = artists.split('\n').map((a) => a.trim()).filter(Boolean)
   const dateId = useId()
   const valid = Boolean(date) && names.length > 0 && (!country || /^[A-Za-z]{2}$/.test(country)) && (!url || /^https?:\/\//.test(url))
@@ -418,6 +420,8 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
     notes: notes || null,
     url: url || null,
     setlists,
+    place: place.picked ? { latitude: place.picked.latitude, longitude: place.picked.longitude } : null,
+    find_place: place.findAgain,
   }
   /** Fill the form in from a setlist.fm link: the night, the whole bill and the setlists. */
   const fillIn = (link: string) =>
@@ -494,6 +498,7 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
             <input value={country} maxLength={2} placeholder="GB" onChange={(e) => setCountry(e.target.value.toUpperCase())} className={field} />
           </label>
         </div>
+        <GigPlacePicker gig={gig} venue={venue} city={city} country={country} choice={place} onChange={setPlace} />
         <label className="space-y-1 text-sm sm:col-span-2">
           <span className="block font-medium">Notes</span>
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={field} />

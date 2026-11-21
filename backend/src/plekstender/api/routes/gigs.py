@@ -7,7 +7,7 @@ from collections import Counter
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
-from sqlalchemy import extract, func, select
+from sqlalchemy import extract, func, or_, select
 
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
@@ -18,6 +18,7 @@ from plekstender.api.schemas import (
     GigImportOut,
     GigIn,
     GigOut,
+    GigPlaceFound,
     GigsOut,
     GigStatsOut,
     GigYear,
@@ -31,7 +32,14 @@ from plekstender.api.schemas import (
 from plekstender.db.instance import get_setlistfm_api_key
 from plekstender.db.models import Artist, Gig, LiveShow
 from plekstender.gigs import imports
-from plekstender.gigs.service import gig_from_live, library_matcher, link_artists, live_refs
+from plekstender.gigs.places import PlaceError, search_places
+from plekstender.gigs.service import (
+    gig_from_live,
+    library_matcher,
+    link_artists,
+    live_refs,
+    place_key,
+)
 from plekstender.gigs.stats import gig_stats
 from plekstender.live.merge import merge
 from plekstender.sync.parse import normalise_artist
@@ -87,6 +95,9 @@ async def add_gig(body: GigIn, db: DbDep, user: UserDep) -> GigOut:
     gig = Gig(user_id=user.id, source="manual")
     _apply(gig, body, link_artists(body.artists, match))
     db.add(gig)
+    await db.flush()
+    if body.place:
+        await _same_place(db, gig)
     await db.commit()
     await db.refresh(gig)
     await enqueue_gig_places(user.id)
@@ -105,8 +116,34 @@ def _apply(gig: Gig, body: GigIn, artists: list[dict[str, object]]) -> None:
     gig.url = body.url
     gig.artists = artists
     gig.setlists = [s.model_dump() for s in body.setlists]
-    if place_changed:  # looked up again (see gigs.places)
+    if body.place:
+        gig.latitude, gig.longitude = body.place.latitude, body.place.longitude
+        gig.place_precision = "manual"
+    elif place_changed or body.find_place:  # looked up again (see gigs.places)
         gig.latitude = gig.longitude = gig.place_precision = None
+
+
+async def _same_place(db: DbDep, gig: Gig) -> int:
+    """A place picked by hand goes to the person's other gigs at the same venue (unless
+    they picked one for those too). How many."""
+    if not gig.venue:
+        return 0
+    key = place_key(gig.venue, gig.city, gig.country)
+    others = await db.scalars(
+        select(Gig).where(
+            Gig.user_id == gig.user_id,
+            Gig.id != gig.id,
+            Gig.venue.is_not(None),
+            or_(Gig.place_precision.is_(None), Gig.place_precision != "manual"),
+        )
+    )
+    moved = 0
+    for other in others:
+        if place_key(other.venue, other.city, other.country) == key:
+            other.latitude, other.longitude = gig.latitude, gig.longitude
+            other.place_precision = "manual"
+            moved += 1
+    return moved
 
 
 async def _own(db: DbDep, user_id: int, gig_id: int) -> Gig:
@@ -121,11 +158,34 @@ async def edit_gig(gig_id: int, body: GigIn, db: DbDep, user: UserDep) -> GigOut
     gig = await _own(db, user.id, gig_id)
     _check_date(body.date)
     _apply(gig, body, link_artists(body.artists, await library_matcher(db, user.id)))
+    if body.place:
+        await _same_place(db, gig)
     await db.commit()
     await db.refresh(gig)
     if gig.place_precision is None:
         await enqueue_gig_places(user.id)
     return gig_out(gig)
+
+
+@router.get(
+    "/places",
+    response_model=list[GigPlaceFound],
+    dependencies=[rate_limit("gig-places", 20, 60)],
+)
+async def find_places(
+    http: HttpDep,
+    settings: SettingsDep,
+    _: UserDep,
+    q: Annotated[str, Query(min_length=2, max_length=300)],
+    country: Annotated[str | None, Query(pattern=r"^[A-Za-z]{2}$")] = None,
+) -> list[GigPlaceFound]:
+    """Places on OpenStreetMap matching a name (and town), to pick a gig's place by hand.
+    Only the typed text and country are sent."""
+    try:
+        found = await search_places(http, settings.nominatim_url, q.strip(), country)
+    except PlaceError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return [GigPlaceFound(**f) for f in found]
 
 
 @router.delete("/{gig_id}", status_code=status.HTTP_204_NO_CONTENT)

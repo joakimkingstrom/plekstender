@@ -364,6 +364,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/stats/seen-live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Seen Live Share
+         * @description How many of the library's songs the person has seen live (from their gigs'
+         *     setlists), and the artists with the highest share. A song counts when its artist (the
+         *     song's or the album's) played a song of that title at one of their gigs.
+         */
+        get: operations["seen_live_share_api_servers__server_id__library_stats_seen_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/discover": {
         parameters: {
             query?: never;
@@ -1402,6 +1424,27 @@ export interface paths {
         post?: never;
         /** Delete Gig */
         delete: operations["delete_gig_api_gigs__gig_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find Places
+         * @description Places on OpenStreetMap matching a name (and town), to pick a gig's place by hand.
+         *     Only the typed text and country are sent.
+         */
+        get: operations["find_places_api_gigs_places_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4934,6 +4977,14 @@ export interface components {
             url?: string | null;
             /** Setlists */
             setlists?: components["schemas"]["GigSetlist"][];
+            /** @description A place picked by hand. Kept until the venue, town or country change; also used for the person's other gigs at the same venue. */
+            place?: components["schemas"]["GigPlacePick"] | null;
+            /**
+             * Find Place
+             * @description Forget a place picked by hand and look it up again.
+             * @default false
+             */
+            find_place: boolean;
         };
         /** GigOut */
         GigOut: {
@@ -4956,8 +5007,11 @@ export interface components {
             latitude: number | null;
             /** Longitude */
             longitude: number | null;
-            /** Place Precision */
-            place_precision: ("venue" | "city") | null;
+            /**
+             * Place Precision
+             * @description venue: found; city: only the town was found; manual: picked by hand.
+             */
+            place_precision: ("venue" | "city" | "manual") | null;
             /** Notes */
             notes: string | null;
             /** Artists */
@@ -4971,6 +5025,29 @@ export interface components {
             source: string;
             /** Url */
             url: string | null;
+        };
+        /** GigPlaceFound */
+        GigPlaceFound: {
+            /** Name */
+            name: string;
+            /** Address */
+            address: string;
+            /**
+             * Kind
+             * @description OpenStreetMap's type for it, e.g. theatre, nightclub.
+             */
+            kind: string;
+            /** Latitude */
+            latitude: number;
+            /** Longitude */
+            longitude: number;
+        };
+        /** GigPlacePick */
+        GigPlacePick: {
+            /** Latitude */
+            latitude: number;
+            /** Longitude */
+            longitude: number;
         };
         /** GigSetlist */
         GigSetlist: {
@@ -7189,6 +7266,48 @@ export interface components {
             /** Thumb */
             thumb: string | null;
         };
+        /** SeenLiveArtist */
+        SeenLiveArtist: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+            /**
+             * Tracks
+             * @description Songs by them in the library.
+             */
+            tracks: number;
+            /**
+             * Seen
+             * @description Of those, songs played at gigs the person went to.
+             */
+            seen: number;
+        };
+        /** SeenLiveOut */
+        SeenLiveOut: {
+            /**
+             * Tracks
+             * @description Songs in the library.
+             */
+            tracks: number;
+            /**
+             * Seen
+             * @description Songs in the library played at gigs the person went to.
+             */
+            seen: number;
+            /**
+             * Setlists
+             * @description Gigs with a setlist (what this is worked out from).
+             */
+            setlists: number;
+            /**
+             * Artists
+             * @description The highest share of their songs seen live (artists with at least a few songs in the library).
+             */
+            artists: components["schemas"]["SeenLiveArtist"][];
+        };
         /** SelectSectionsIn */
         SelectSectionsIn: {
             /** Keys */
@@ -8622,6 +8741,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumColourOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    seen_live_share_api_servers__server_id__library_stats_seen_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeenLiveOut"];
                 };
             };
             /** @description Validation Error */
@@ -10655,6 +10805,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_places_api_gigs_places_get: {
+        parameters: {
+            query: {
+                q: string;
+                country?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigPlaceFound"][];
+                };
             };
             /** @description Validation Error */
             422: {

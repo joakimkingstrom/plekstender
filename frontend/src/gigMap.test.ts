@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Gig } from './api/gigs'
-import { gigPlaces, mapStyle, pinCount, pinOffsets } from './gigMap'
+import { gigPlaces, mapStyle, pinCount, pinOffsets, placeName } from './gigMap'
 
 const gig = (id: number, venue: string, lat: number | null, lon: number | null): Gig => ({
   id, date: `2020-01-0${id}`, name: null, venue, city: 'London', country: 'GB', latitude: lat, longitude: lon,
@@ -20,6 +20,19 @@ describe('gig map', () => {
       ['Royal Albert Hall', 2],
       ['Brixton Academy', 1],
     ])
+  })
+
+  it('keeps gigs only placed at their town apart, and names venues that differ', () => {
+    const town = (id: number, venue: string): Gig => ({ ...gig(id, venue, 59.3293, 18.0686), city: 'Stockholm', place_precision: 'city' })
+    const found = { ...gig(5, 'Hornstull Strand', 59.3293, 18.0686), city: 'Stockholm' }
+    const places = gigPlaces([town(1, 'Debaser Slussen'), town(2, 'Nalen'), found, { ...found, id: 6, venue: 'hornstull strand' }])
+    expect(places.map((p) => [p.approximate, p.venue, p.gigs.length])).toEqual([
+      [true, null, 2],
+      [false, 'Hornstull Strand', 2],
+    ])
+    expect(places.map(placeName)).toEqual(['Stockholm', 'Hornstull Strand, Stockholm'])
+    const mixed = gigPlaces([gig(1, 'Brixton Academy', 51.5, -0.1), gig(2, 'O2 Academy Brixton', 51.5, -0.1)])
+    expect(mixed[0].venue).toBeNull() // two names for the spot: each gig says its own
   })
 
   it('gives a pin per gig, three at most, fanned out', () => {

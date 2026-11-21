@@ -5,10 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GigExportCard, GigImportCard } from '../components/GigTransfer'
 import { GigsPage } from './GigsPage'
 
+// The map needs WebGL, which jsdom hasn't got (gigMap.test covers how gigs are placed on it).
+vi.mock('../components/GigMap', () => ({ default: () => <div role="region" aria-label="Gig map" /> }))
+
 const gigs = [
   {
     id: 1, date: '2019-10-02', name: null, venue: 'Royal Albert Hall', city: 'London', country: 'GB',
-    latitude: null, longitude: null, place_precision: null, notes: null, source: 'manual', url: null,
+    latitude: 51.5072, longitude: -0.1276, place_precision: 'city', notes: null, source: 'manual', url: null,
     artists: [{ name: 'Portishead', server_id: 1, rating_key: 101 }],
   },
   {
@@ -71,6 +74,10 @@ beforeEach(() => {
         })
       case '/api/gigs/import/setlistfm':
         return json({ added: 12, updated: 3, skipped: 1, problems: [] })
+      case '/api/gigs/places':
+        return json([{ name: 'Royal Albert Hall', address: 'Kensington Gore, London, United Kingdom', kind: 'theatre', latitude: 51.5009, longitude: -0.1774 }])
+      case '/api/gigs/1':
+        return json(gigs[0])
       case '/api/gigs/from-live':
         return json({ ...gigs[1], id: 4, source: 'live' }, 201)
       default:
@@ -152,8 +159,29 @@ describe('GigsPage', () => {
         notes: null,
         url: null,
         setlists: [],
+        place: null,
+        find_place: false,
       }),
     )
+  })
+
+  it('picks a gig’s place by hand when only the town was found', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit the gig on 2019-10-02' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('The venue wasn’t found, so it’s shown at London.')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pick it yourself' }))
+    expect(within(dialog).getByLabelText('Search for the place')).toHaveValue('Royal Albert Hall, London')
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Royal Albert Hall.*Kensington Gore/ }))
+    expect(within(dialog).getByText('Picked: Royal Albert Hall, Kensington Gore, London, United Kingdom.')).toBeInTheDocument()
+    const asked = new URL(calls('/api/gigs/places', 'GET')[0].url)
+    expect([asked.searchParams.get('q'), asked.searchParams.get('country')]).toEqual(['Royal Albert Hall, London', 'GB'])
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await vi.waitFor(async () => {
+      const put = calls('/api/gigs/1', 'PUT')[0]
+      expect(put).toBeTruthy()
+      expect(await put.clone().json()).toMatchObject({ place: { latitude: 51.5009, longitude: -0.1774 }, find_place: false })
+    })
   })
 
   it('fills a gig in from a setlist.fm link', async () => {

@@ -92,3 +92,13 @@ export function useColourFamily(serverId: number, name: ColourName | null) {
       ),
   })
 }
+
+/** The library's songs seen live (from the gigs' setlists), and the artists with the highest share. */
+export function useSeenLive(serverId: number) {
+  return useQuery({
+    queryKey: [...keys.all(serverId), 'seen-live'],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/library/stats/seen-live', { params: { path: { server_id: serverId } } })),
+  })
+}

@@ -236,6 +236,24 @@ class ArtistSummary(BaseModel):
     album_count: int
 
 
+class SeenLiveArtist(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+    tracks: int = Field(description="Songs by them in the library.")
+    seen: int = Field(description="Of those, songs played at gigs the person went to.")
+
+
+class SeenLiveOut(BaseModel):
+    tracks: int = Field(description="Songs in the library.")
+    seen: int = Field(description="Songs in the library played at gigs the person went to.")
+    setlists: int = Field(description="Gigs with a setlist (what this is worked out from).")
+    artists: list[SeenLiveArtist] = Field(
+        description="The highest share of their songs seen live (artists with at least "
+        "a few songs in the library)."
+    )
+
+
 class ArtistPage(BaseModel):
     items: list[ArtistSummary]
     total: int
@@ -1569,6 +1587,19 @@ class GigSetlist(BaseModel):
     songs: list[GigSong] = Field(max_length=150)
 
 
+class GigPlacePick(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class GigPlaceFound(BaseModel):
+    name: str
+    address: str
+    kind: str = Field(description="OpenStreetMap's type for it, e.g. theatre, nightclub.")
+    latitude: float
+    longitude: float
+
+
 class GigIn(BaseModel):
     date: dt.date
     artists: list[str] = Field(min_length=1, max_length=50)
@@ -1579,6 +1610,14 @@ class GigIn(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
     url: str | None = Field(default=None, max_length=2000, pattern=r"^https?://")
     setlists: list[GigSetlist] = Field(default_factory=list, max_length=50)
+    place: GigPlacePick | None = Field(
+        default=None,
+        description="A place picked by hand. Kept until the venue, town or country change; "
+        "also used for the person's other gigs at the same venue.",
+    )
+    find_place: bool = Field(
+        default=False, description="Forget a place picked by hand and look it up again."
+    )
 
 
 class GigOut(BaseModel):
@@ -1590,7 +1629,9 @@ class GigOut(BaseModel):
     country: str | None
     latitude: float | None
     longitude: float | None
-    place_precision: Literal["venue", "city"] | None
+    place_precision: Literal["venue", "city", "manual"] | None = Field(
+        description="venue: found; city: only the town was found; manual: picked by hand."
+    )
     notes: str | None
     artists: list[GigArtistOut]
     setlists: list[GigSetlist] = []
