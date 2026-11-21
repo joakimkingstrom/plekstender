@@ -374,8 +374,9 @@ export interface paths {
         /**
          * Seen Live Share
          * @description How many of the library's songs the person has seen live (from their gigs'
-         *     setlists), and the artists with the highest share. A song counts when its artist (the
-         *     song's or the album's) played a song of that title at one of their gigs.
+         *     setlists), how many of its artists (anyone on a gig's bill), and the artists with the
+         *     highest share of their songs seen live. A song counts when its artist (the song's or
+         *     the album's) played a song of that title at one of their gigs.
          */
         get: operations["seen_live_share_api_servers__server_id__library_stats_seen_live_get"];
         put?: never;
@@ -2862,7 +2863,7 @@ export interface paths {
          * Shows
          * @description Upcoming shows, soonest first, each once however many sources found it; `artist`
          *     narrows to one of the user's artists, `venue` to one venue, `starred` to starred shows,
-         *     `new` to shows first found in the past week.
+         *     `tickets` to the ones they have a ticket for, `new` to shows first found in the past week.
          *     The artist and venue lists (for the filters) count the shows the other filters allow.
          */
         get: operations["shows_api_live_shows_get"];
@@ -4417,8 +4418,18 @@ export interface components {
              * @enum {string}
              */
             state: "ok" | "warning" | "error" | "off";
+            /**
+             * Subtitle
+             * @description Which one: the server's, account's or calendar's name.
+             */
+            subtitle?: string | null;
             /** Detail */
             detail?: string | null;
+            /**
+             * Usage
+             * @description Share of a request limit used (0-1), for admins.
+             */
+            usage?: number | null;
             /**
              * Link
              * @description Where it's set up or fixed.
@@ -7302,6 +7313,21 @@ export interface components {
              * @description Gigs with a setlist (what this is worked out from).
              */
             setlists: number;
+            /**
+             * Gigs
+             * @description Gigs the person went to.
+             */
+            gigs: number;
+            /**
+             * Artists Total
+             * @description Artists in the library.
+             */
+            artists_total: number;
+            /**
+             * Artists Seen
+             * @description Of those, artists on the bill of a gig they went to.
+             */
+            artists_seen: number;
             /**
              * Artists
              * @description The highest share of their songs seen live (artists with at least a few songs in the library).
@@ -13213,6 +13239,7 @@ export interface operations {
                 to?: string | null;
                 starred?: boolean;
                 new?: boolean;
+                tickets?: boolean;
             };
             header?: never;
             path?: never;

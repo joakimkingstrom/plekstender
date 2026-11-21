@@ -366,8 +366,9 @@ SEEN_LIVE_ARTISTS = 10
 @router.get("/seen-live", response_model=SeenLiveOut)
 async def seen_live_share(server_id: int, db: DbDep, user: UserDep) -> SeenLiveOut:
     """How many of the library's songs the person has seen live (from their gigs'
-    setlists), and the artists with the highest share. A song counts when its artist (the
-    song's or the album's) played a song of that title at one of their gigs."""
+    setlists), how many of its artists (anyone on a gig's bill), and the artists with the
+    highest share of their songs seen live. A song counts when its artist (the song's or
+    the album's) played a song of that title at one of their gigs."""
     us = await get_user_server(db, user, server_id)
     state, cond, where = visible(Track, user.id, us)
     total = await db.scalar(select(func.count()).select_from(Track).join(state, cond).where(*where))
@@ -387,17 +388,33 @@ async def seen_live_share(server_id: int, db: DbDep, user: UserDep) -> SeenLiveO
         .select_from(Gig)
         .where(Gig.user_id == user.id, Gig.setlists != text("'[]'::jsonb"))
     )
+    # Artists seen live: anyone on the bill of a gig the person went to (setlist or not).
+    billed: set[str] = set()
+    gigs = 0
+    for bill, sets in (
+        await db.execute(select(Gig.artists, Gig.setlists).where(Gig.user_id == user.id))
+    ).all():
+        gigs += 1
+        billed.update(normalise_artist(str(a.get("name") or "")) for a in bill or [])
+        billed.update(normalise_artist(str(s.get("artist") or "")) for s in sets or [])
+    billed.discard("")
+    a_state, a_cond, a_where = visible(Artist, user.id, us)
+    library_artists = list(await db.scalars(select(Artist).join(a_state, a_cond).where(*a_where)))
+    artists_seen = sum(1 for a in library_artists if normalise_artist(a.title or "") in billed)
+    counts = {
+        "tracks": total or 0,
+        "setlists": setlists or 0,
+        "gigs": gigs,
+        "artists_total": len(library_artists),
+        "artists_seen": artists_seen,
+    }
+
     seen = await seen_live(db, user.id)
     if not seen:
-        return SeenLiveOut(tracks=total or 0, seen=0, setlists=setlists or 0, artists=[])
+        return SeenLiveOut(**counts, seen=0, artists=[])
 
-    # The library's artists who played at the person's gigs (by name).
-    a_state, a_cond, a_where = visible(Artist, user.id, us)
-    artists = {
-        a.rating_key: a
-        for a in await db.scalars(select(Artist).join(a_state, a_cond).where(*a_where))
-        if normalise_artist(a.title or "") in seen
-    }
+    # The library's artists who played songs at the person's gigs (by name).
+    artists = {a.rating_key: a for a in library_artists if normalise_artist(a.title or "") in seen}
     tracks = await db.execute(
         select(Track.artist_rating_key, Track.artist_key, Track.title_norm)
         .join(state, cond)
@@ -425,9 +442,8 @@ async def seen_live_share(server_id: int, db: DbDep, user: UserDep) -> SeenLiveO
         key=lambda t: (-t[0], -t[1], artists[t[2]].title or ""),
     )[:SEEN_LIVE_ARTISTS]
     return SeenLiveOut(
-        tracks=total or 0,
+        **counts,
         seen=seen_total,
-        setlists=setlists or 0,
         artists=[
             SeenLiveArtist(
                 rating_key=key,

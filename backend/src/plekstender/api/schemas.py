@@ -248,6 +248,9 @@ class SeenLiveOut(BaseModel):
     tracks: int = Field(description="Songs in the library.")
     seen: int = Field(description="Songs in the library played at gigs the person went to.")
     setlists: int = Field(description="Gigs with a setlist (what this is worked out from).")
+    gigs: int = Field(description="Gigs the person went to.")
+    artists_total: int = Field(description="Artists in the library.")
+    artists_seen: int = Field(description="Of those, artists on the bill of a gig they went to.")
     artists: list[SeenLiveArtist] = Field(
         description="The highest share of their songs seen live (artists with at least "
         "a few songs in the library)."
@@ -1821,7 +1824,13 @@ class ConnectionStatus(BaseModel):
     state: Literal["ok", "warning", "error", "off"] = Field(
         description="off: not set up; warning: working, but look (nearly at a limit)."
     )
+    subtitle: str | None = Field(
+        default=None, description="Which one: the server's, account's or calendar's name."
+    )
     detail: str | None = None
+    usage: float | None = Field(
+        default=None, description="Share of a request limit used (0-1), for admins."
+    )
     link: str | None = Field(default=None, description="Where it's set up or fixed.")
 
 

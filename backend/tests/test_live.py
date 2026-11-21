@@ -649,7 +649,9 @@ async def test_ticketmaster_merging_stars_and_calendar(app: FastAPI, plex: FakeP
     assert "LOCATION:Avicii Arena\\, Stockholm" in body
     assert "STATUS:TENTATIVE" in body and "You have a ticket" not in body
 
-    # A ticket: confirmed in the calendar; unstarring forgets it.
+    # A ticket: confirmed in the calendar (and in the "Got tickets" filter); unstarring
+    # forgets it.
+    assert (await owner.get("/api/live/shows", params={"tickets": True})).json()["shows"] == []
     got = await owner.put(
         "/api/live/tickets", json={"ids": merged["ids"], "got_ticket": True}, headers=CSRF
     )
@@ -658,6 +660,8 @@ async def test_ticketmaster_merging_stars_and_calendar(app: FastAPI, plex: FakeP
     assert [(s["name"], s["got_ticket"]) for s in shows_now] == [
         ("Radiohead at Avicii Arena", True)
     ]
+    ticketed = (await owner.get("/api/live/shows", params={"tickets": True})).json()["shows"]
+    assert [s["name"] for s in ticketed] == ["Radiohead at Avicii Arena"]
     body = (
         await httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test").get(
             path

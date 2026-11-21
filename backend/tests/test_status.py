@@ -47,17 +47,20 @@ async def test_connections_status(
         await db.commit()
 
     found = {c["name"]: c for c in (await owner.get("/api/status/connections")).json()}
-    assert found["Plex: Home"] == {
-        "name": "Plex: Home",
+    assert found["Plex"] == {
+        "name": "Plex",
         "group": "yours",
         "state": "ok",
+        "subtitle": "Home",
         "detail": None,
+        "usage": None,
         "link": "/settings",
     }
     assert (found["Koito"]["state"], found["Koito"]["group"]) == ("error", "yours")
     assert (
         found["JamBase"]["state"] == "warning"
         and found["JamBase"]["detail"] == "765 of 900 requests this month"
+        and found["JamBase"]["usage"] == 0.85
     )
     assert (found["Ticketmaster"]["state"], found["Ticketmaster"]["detail"]) == (
         "off",
@@ -74,8 +77,10 @@ async def test_connections_status(
     await run_queued_syncs()
     theirs = {c["name"]: c for c in (await friend.get("/api/status/connections")).json()}
     assert "Koito" not in theirs
-    assert (theirs["JamBase"]["state"], theirs["JamBase"]["detail"], theirs["JamBase"]["link"]) == (
+    jambase = theirs["JamBase"]
+    assert (jambase["state"], jambase["detail"], jambase["link"], jambase["usage"]) == (
         "warning",
+        None,
         None,
         None,
     )

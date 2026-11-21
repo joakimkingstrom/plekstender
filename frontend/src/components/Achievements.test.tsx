@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, createEvent, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AchievementCelebration, AchievementList } from './Achievements'
 
@@ -81,6 +81,9 @@ describe('Achievements', () => {
     expect(await screen.findByText('Achievement unlocked')).toBeInTheDocument()
     expect(screen.getByText('Roadie')).toBeInTheDocument()
     expect(screen.getByText('✓ 100 artists in your library')).toBeInTheDocument() // what it's for
+    // It's the trading card itself, numbered as in the collection.
+    expect(within(await screen.findByRole('article', { name: 'Roadie' })).getByText('01/3')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Achievement unlocked' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Nice!' }))
     await vi.waitFor(() => expect(seen).toEqual({ ids: ['roadie'] }))
     await vi.waitFor(() => expect(screen.queryByText('Achievement unlocked')).not.toBeInTheDocument())

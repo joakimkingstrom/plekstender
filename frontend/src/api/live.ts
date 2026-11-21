@@ -5,7 +5,7 @@ export type LiveSettings = Schemas['LiveSettingsOut']
 export type LiveSettingsIn = Schemas['LiveSettingsIn']
 export type LiveShow = Schemas['LiveShowOut']
 export type Place = Schemas['PlaceOut']
-export type ShowFilters = { artist?: string; venue?: string; from?: string; to?: string; starred?: boolean; new?: boolean }
+export type ShowFilters = { artist?: string; venue?: string; from?: string; to?: string; starred?: boolean; tickets?: boolean; new?: boolean }
 
 export const liveKeys = {
   all: ['live'] as const,
@@ -37,6 +37,7 @@ export function useLiveShows(filters: ShowFilters, refreshing: boolean) {
               from: filters.from,
               to: filters.to,
               starred: filters.starred || undefined,
+              tickets: filters.tickets || undefined,
               new: filters.new || undefined,
             },
           },

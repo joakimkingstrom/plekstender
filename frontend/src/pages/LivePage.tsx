@@ -29,13 +29,14 @@ import { describePeriod, followCount, localDate } from '../live'
 import { GigRow } from '../components/GigRow'
 
 const DISTANCES = [25, 50, 100, 200, 500, 1000]
-type Range = 'all' | '30' | '90' | 'new' | 'starred'
+type Range = 'all' | '30' | '90' | 'new' | 'starred' | 'tickets'
 const RANGES: [Range, string][] = [
   ['all', 'Any time'],
   ['30', 'Next 30 days'],
   ['90', 'Next 3 months'],
   ['new', 'New'],
   ['starred', '★ Starred'],
+  ['tickets', '🎟 Got tickets'],
 ]
 
 function isoDate(d: Date): string {
@@ -351,7 +352,7 @@ function Shows({ settings }: { settings: LiveSettings }) {
   const [to, setTo] = useState<string | undefined>(undefined)
   const chooseRange = (key: Range) => {
     setRange(key)
-    if (key === 'all' || key === 'starred' || key === 'new') return setTo(undefined)
+    if (key === 'all' || key === 'starred' || key === 'tickets' || key === 'new') return setTo(undefined)
     const d = new Date()
     d.setDate(d.getDate() + Number(key))
     setTo(isoDate(d))
@@ -369,7 +370,7 @@ function Shows({ settings }: { settings: LiveSettings }) {
     return () => clearTimeout(stop)
   }, [])
   const shows = useLiveShows(
-    { artist, venue, to, starred: range === 'starred', new: range === 'new' },
+    { artist, venue, to, starred: range === 'starred', tickets: range === 'tickets', new: range === 'new' },
     busy || (dtPending && watching),
   )
   const { active } = useActiveServer()
@@ -457,6 +458,8 @@ function Shows({ settings }: { settings: LiveSettings }) {
             <p className="text-sm text-muted">
               {range === 'starred'
                 ? 'No starred gigs yet: star a gig to keep it and put it in your calendar.'
+                : range === 'tickets'
+                ? 'No gigs with tickets yet: choose “I’ve got a ticket” on a gig once you have one.'
                 : range === 'new'
                 ? 'Nothing new this past week: gigs appear here for a week after they’re first found.'
                 : artist || venue || range !== 'all'

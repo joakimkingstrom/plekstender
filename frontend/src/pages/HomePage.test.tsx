@@ -57,13 +57,14 @@ beforeEach(() => {
           return json({
             status: "ok",
             database: true,
-            worker: true,
+            worker: { healthy: true },
             version: "1.2.3",
           });
         case "/api/status/connections":
           return json([
             {
-              name: "Plex: Home",
+              name: "Plex",
+              subtitle: "Home",
               group: "yours",
               state: "ok",
               detail: null,
@@ -81,6 +82,7 @@ beforeEach(() => {
               group: "instance",
               state: "warning",
               detail: "765 of 900 requests this month",
+              usage: 0.85,
               link: "/settings/services/gigs",
             },
             {
@@ -163,6 +165,11 @@ it("lists every connection on the Status card", async () => {
   expect(screen.getByText("765 of 900 requests this month")).toBeTruthy();
   expect(screen.getByText("SearXNG (image search)")).toBeTruthy();
   expect(screen.getByText("Not set up: Ticketmaster, Spotify")).toBeTruthy();
+  // A summary up top; tiles grouped: Plekstender itself, yours, the services here.
+  expect(screen.getByText("1 not working")).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Yours" }).textContent).toMatch(/Plex.*Home/);
+  expect(screen.getByRole("region", { name: "Plekstender" }).textContent).toMatch(/Database.*Background worker/);
+  expect(screen.getByRole("region", { name: "Services on this Plekstender" }).textContent).toMatch(/JamBase/);
   const fixes = screen
     .getAllByRole("link", { name: "Fix" })
     .map((a) => a.getAttribute("href"));
@@ -189,6 +196,7 @@ it("shows your listening, top artists and albums, recent albums, gigs and rating
   expect((await screen.findByRole("link", { name: "Dummy" })).getAttribute("href")).toBe("/library/albums/202");
   expect(await screen.findByText(/Set your place on/)).toBeTruthy();
   expect(await screen.findByRole("link", { name: "Paranoid Android" })).toBeTruthy();
-  expect(screen.getByLabelText("4.5 stars").textContent).toBe("★★★★½");
+  // The site's star icons, with a half star (not "★★★★½").
+  expect(screen.getByRole("img", { name: "4.5 out of 5 stars" })).toBeInTheDocument();
   expect(screen.queryByText("Coming up")).toBeNull();
 });

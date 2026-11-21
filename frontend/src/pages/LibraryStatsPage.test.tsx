@@ -45,7 +45,7 @@ beforeEach(() => {
         case '/api/servers/1/library/stats/colours/blue':
           return json([{ rating_key: 200, title: 'OK Computer', thumb: null, artist_title: 'Radiohead', hex: '#2850c8' }])
         case '/api/servers/1/library/stats/seen-live':
-          return json({ tracks: 1234, seen: 9, setlists: 4, artists: [{ rating_key: 100, title: 'Radiohead', thumb: null, tracks: 40, seen: 8 }] })
+          return json({ tracks: 1234, seen: 9, setlists: 4, gigs: 6, artists_total: 300, artists_seen: 12, artists: [{ rating_key: 100, title: 'Radiohead', thumb: null, tracks: 40, seen: 8 }] })
         case '/api/servers/1/library/stats/words':
           return json([{ word: 'Love', count: 40 }, { word: 'Karma', count: 2 }])
         default:
@@ -90,6 +90,8 @@ describe('Library stats', () => {
     // Seen live: the share as a number, and the artists with the most of their songs seen live.
     expect(screen.getByText('0.7%')).toBeInTheDocument()
     expect(screen.getByText(/9 of 1,234, from the setlists of 4 gigs/)).toBeInTheDocument()
+    expect(screen.getByText('4.0%')).toBeInTheDocument() // artists: anyone on a gig's bill
+    expect(screen.getByText(/of the artists in your library: 12 of 300, from 6 gigs/)).toBeInTheDocument()
     const seenLive = screen.getByRole('list', { name: 'Artists with the most of their songs seen live' })
     expect(within(seenLive).getByRole('link', { name: /Radiohead/ })).toHaveAttribute('href', '/library/artists/100')
     expect(within(seenLive).getByText('20%')).toBeInTheDocument()

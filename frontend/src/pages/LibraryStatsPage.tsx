@@ -84,27 +84,44 @@ function SeenLive({ serverId }: { serverId: number }) {
   if (seen.isPending) return <Card title="Seen live"><Spinner /></Card>
   if (seen.isError) return <Card title="Seen live"><Notice tone="error">{errorMessage(seen.error)}</Notice></Card>
   const s = seen.data
-  if (s.setlists === 0)
+  if (s.gigs === 0)
     return (
       <Card title="Seen live">
         <p className="text-sm text-muted">
-          Add setlists to the gigs you’ve been to (a setlist.fm link fills them in, on{' '}
+          Add the gigs you’ve been to (on{' '}
           <Link to="/gigs/been-to" className="text-accent underline">
             Gigs → Been to
           </Link>
-          ) to see how much of your library you’ve heard live.
+          ) to see how much of your library you’ve heard live. A setlist.fm link fills in what they played.
         </p>
       </Card>
     )
   return (
     <Card title="Seen live">
-      <div className="grid gap-6 md:grid-cols-[minmax(0,14rem)_1fr]">
-        <div>
-          <p className="font-display text-5xl font-bold tabular-nums">{formatShare(s.seen, s.tracks)}</p>
-          <p className="mt-1 text-sm text-muted">
-            of the songs in your library: {formatCount(s.seen)} of {formatCount(s.tracks)}, from the setlists of{' '}
-            {plural(s.setlists, 'gig', 'gigs')}.
-          </p>
+      <div className="grid gap-6 md:grid-cols-[minmax(0,15rem)_1fr]">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-1">
+          <div>
+            <p className="font-display text-4xl font-bold tabular-nums sm:text-5xl">{formatShare(s.artists_seen, s.artists_total)}</p>
+            <p className="mt-1 text-sm text-muted">
+              of the artists in your library: {formatCount(s.artists_seen)} of {formatCount(s.artists_total)}, from{' '}
+              {plural(s.gigs, 'gig', 'gigs')}.
+            </p>
+          </div>
+          <div>
+            {s.setlists > 0 ? (
+              <>
+                <p className="font-display text-4xl font-bold tabular-nums sm:text-5xl">{formatShare(s.seen, s.tracks)}</p>
+                <p className="mt-1 text-sm text-muted">
+                  of the songs: {formatCount(s.seen)} of {formatCount(s.tracks)}, from the setlists of{' '}
+                  {plural(s.setlists, 'gig', 'gigs')}.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">
+                Songs seen live come from the gigs’ setlists: add a setlist.fm link to a gig to fill one in.
+              </p>
+            )}
+          </div>
         </div>
         {s.artists.length > 0 ? (
           <div>

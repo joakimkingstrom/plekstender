@@ -617,6 +617,8 @@ async def test_gig_from_a_setlist_link(
     # Library → Stats: the share of the library's songs seen live, and by artist.
     share = (await owner.get(f"/api/servers/{sid}/library/stats/seen-live")).json()
     assert (share["tracks"], share["seen"], share["setlists"]) == (6, 3, 1)
+    # Artists: anyone on a gig's bill (Radiohead here; the support act isn't in the library).
+    assert (share["gigs"], share["artists_seen"], share["artists_total"]) == (1, 1, 3)
     assert share["artists"] == []  # Radiohead has too few songs here to rank
     from plekstender.api.routes import library_stats
 

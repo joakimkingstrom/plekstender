@@ -242,14 +242,17 @@ async def shows(
     date_to: Annotated[dt.date | None, Query(alias="to")] = None,
     starred: bool = False,
     new: bool = False,
+    tickets: bool = False,
 ) -> LiveShowsOut:
     """Upcoming shows, soonest first, each once however many sources found it; `artist`
     narrows to one of the user's artists, `venue` to one venue, `starred` to starred shows,
-    `new` to shows first found in the past week.
+    `tickets` to the ones they have a ticket for, `new` to shows first found in the past week.
     The artist and venue lists (for the filters) count the shows the other filters allow."""
     groups = await _upcoming(db, user.id, date_from, date_to)
     if starred:
         groups = [g for g in groups if g.starred]
+    if tickets:
+        groups = [g for g in groups if g.got_ticket]
     if new:
         groups = [g for g in groups if g.is_new]
     by_artist = (

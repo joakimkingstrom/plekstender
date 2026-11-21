@@ -60,9 +60,15 @@ async def searxng_healthy(http: httpx.AsyncClient, url: str) -> bool:
 
 
 def instance(
-    name: str, state: State, detail: str | None = None, link: str | None = None
+    name: str,
+    state: State,
+    detail: str | None = None,
+    link: str | None = None,
+    usage: float | None = None,
 ) -> ConnectionStatus:
-    return ConnectionStatus(name=name, group="instance", state=state, detail=detail, link=link)
+    return ConnectionStatus(
+        name=name, group="instance", state=state, detail=detail, link=link, usage=usage
+    )
 
 
 def with_limit(
@@ -70,11 +76,12 @@ def with_limit(
 ) -> ConnectionStatus:
     """A service with a request limit: amber from 80 %, red at the limit."""
     numbers = f"{calls:,} of {cap:,} requests {period}"
+    used = min(1.0, calls / cap) if cap and admin else None
     if calls >= cap:
         detail = f"Plekstender's limit reached: {numbers}" if admin else "At its limit"
-        return instance(name, "error", detail, link)
+        return instance(name, "error", detail, link, used)
     state: State = "warning" if calls >= cap * NEAR_LIMIT else "ok"
-    return instance(name, state, numbers if admin else None, link)
+    return instance(name, state, numbers if admin else None, link, used)
 
 
 def data_thistle(
@@ -98,9 +105,14 @@ def data_thistle(
         state, detail = "warning", f"Renewing failed: {tokens.error}"
     else:
         state, detail = ("warning" if low else "ok"), left
+    used = (
+        min(1.0, max(0.0, 1 - usage.remaining / usage.limit))
+        if admin and usage.remaining is not None and usage.limit
+        else None
+    )
     if not admin:
         detail = None if state == "ok" else "Needs an admin's attention"
-    return instance("Data Thistle", state, detail, link)
+    return instance("Data Thistle", state, detail, link, used)
 
 
 async def instance_connections(
@@ -138,7 +150,7 @@ async def instance_connections(
         out.append(data_thistle(tokens, usage, admin, dt.datetime.now(dt.UTC)))
     simple("setlist.fm", (await get_setlistfm_api_key(db, settings))[0] is not None, gigs)
     simple(
-        "Last.fm", (await get_lastfm_api_key(db, settings))[0] is not None, f"{SERVICES}/history"
+        "Last.fm", (await get_lastfm_api_key(db, settings))[0] is not None, "/settings/scrobbling"
     )
     simple("Spotify", await get_spotify_app(db, settings) is not None, f"{SERVICES}/playlists")
     simple(
@@ -163,9 +175,18 @@ async def instance_connections(
 async def your_connections(db: DbDep, user_id: int) -> list[ConnectionStatus]:
     out: list[ConnectionStatus] = []
 
-    def add(name: str, state: State, detail: str | None, link: str) -> None:
+    def add(
+        name: str, state: State, detail: str | None, link: str, subtitle: str | None = None
+    ) -> None:
         out.append(
-            ConnectionStatus(name=name, group="yours", state=state, detail=detail, link=link)
+            ConnectionStatus(
+                name=name,
+                group="yours",
+                state=state,
+                subtitle=subtitle,
+                detail=detail,
+                link=link,
+            )
         )
 
     servers = await db.scalars(
@@ -179,30 +200,32 @@ async def your_connections(db: DbDep, user_id: int) -> list[ConnectionStatus]:
             .limit(1)
         )
         if last is not None and last.status == "failed":
-            add(
-                f"Plex: {us.server.name}",
-                "error",
-                last.error or "The last sync failed",
-                "/settings",
-            )
+            add("Plex", "error", last.error or "The last sync failed", "/settings", us.server.name)
         else:
-            add(f"Plex: {us.server.name}", "ok", None, "/settings")
+            add("Plex", "ok", None, "/settings", us.server.name)
     link = await db.get(ListenBrainzLink, user_id)
     if link is not None:
         state: State = "error" if link.paused else "warning" if link.last_error else "ok"
-        add("ListenBrainz", state, link.last_error, "/settings/scrobbling")
+        add("ListenBrainz", state, link.last_error, "/settings/scrobbling", link.username)
     targets = await db.scalars(
         select(ScrobbleTarget).where(ScrobbleTarget.user_id == user_id).order_by(ScrobbleTarget.id)
     )
     for target in targets:
         state = "error" if target.paused else "warning" if target.last_error else "ok"
-        add(service_label(target.service), state, target.last_error, "/settings/scrobbling")
+        add(
+            service_label(target.service),
+            state,
+            target.last_error,
+            "/settings/scrobbling",
+            target.username,
+        )
     for feed in await db.scalars(select(LiveFeed).where(LiveFeed.user_id == user_id)):
         add(
-            f"Calendar link: {feed.name or feed.host}",
+            "Calendar link",
             "warning" if feed.error else "ok",
             feed.error,
             "/gigs",
+            feed.name or feed.host,
         )
     return out
 

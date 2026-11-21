@@ -1,12 +1,6 @@
 import { Link } from "react-router";
 import { errorMessage } from "../api/client";
-import {
-  useConnections,
-  useHealth,
-  useMe,
-  useServers,
-  type ConnectionStatus,
-} from "../api/hooks";
+import { useMe, useServers } from "../api/hooks";
 import { useActiveServer } from "../api/library";
 import {
   LatestRatings,
@@ -16,20 +10,19 @@ import {
   YourListening,
 } from "../components/HomeSections";
 import { SyncPanel } from "../components/library";
+import { StatusCard } from "../components/StatusCard";
 import {
   Badge,
   Card,
   Notice,
   PageTitle,
   Spinner,
-  StatusDot,
 } from "../components/ui";
 import { ServersPage } from "./ServersPage";
 
 export function HomePage() {
   const { data: me } = useMe();
   const servers = useServers();
-  const health = useHealth();
   const { active } = useActiveServer();
   const libraryServer =
     active && active.music_section_keys.length > 0 ? active : null;
@@ -110,27 +103,7 @@ export function HomePage() {
             ))}
           </ul>
         </Card>
-        <Card title="Status">
-          {health.data ? (
-            <div className="flex flex-col gap-2">
-              <StatusDot ok={health.data.database} label="Database" />
-              <StatusDot
-                ok={health.data.worker.healthy}
-                label={
-                  health.data.worker.healthy
-                    ? "Background worker"
-                    : "Background worker not running"
-                }
-              />
-              <Connections />
-              <span className="text-xs text-muted">
-                Plekstender {health.data.version}
-              </span>
-            </div>
-          ) : (
-            <Spinner small />
-          )}
-        </Card>
+        <StatusCard />
       </div>
 
     </>
@@ -162,71 +135,5 @@ export function NotFoundPage() {
         Back home
       </Link>
     </>
-  );
-}
-
-const STATE_WORD = {
-  ok: "working",
-  warning: "needs a look",
-  error: "not working",
-  off: "not set up",
-} as const;
-
-/** Every connection: the user's own, then this Plekstender's (services not set up on one line). */
-function Connections() {
-  const connections = useConnections();
-  if (!connections.data) return null;
-  const groups: [string, ConnectionStatus[]][] = [
-    ["Yours", connections.data.filter((c) => c.group === "yours")],
-    [
-      "This Plekstender",
-      connections.data.filter(
-        (c) => c.group === "instance" && c.state !== "off",
-      ),
-    ],
-  ];
-  const off = connections.data.filter(
-    (c) => c.group === "instance" && c.state === "off",
-  );
-  return (
-    <div className="mt-1 space-y-3">
-      {groups.map(
-        ([title, items]) =>
-          items.length > 0 && (
-            <div key={title}>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
-                {title}
-              </p>
-              <ul className="space-y-1">
-                {items.map((c) => (
-                  <li key={c.name} className="text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <span title={`${c.name}: ${STATE_WORD[c.state]}`}>
-                        <StatusDot tone={c.state} label={c.name} />
-                      </span>
-                      {c.link && c.state !== "ok" && (
-                        <Link
-                          to={c.link}
-                          className="text-xs text-accent hover:underline"
-                        >
-                          Fix
-                        </Link>
-                      )}
-                    </div>
-                    {c.detail && (
-                      <p className="ml-4 text-xs text-muted">{c.detail}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ),
-      )}
-      {off.length > 0 && (
-        <p className="text-xs text-muted">
-          Not set up: {off.map((c) => c.name).join(", ")}
-        </p>
-      )}
-    </div>
   );
 }

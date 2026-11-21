@@ -598,6 +598,7 @@ History → Gigs: the gigs each person went to ("gigs" is the site's word for ev
 - [x] 11½f. Adding a gig is a popup (21 Nov): first a setlist.fm link, or a search of setlist.fm by artist, year and town (`/search/setlists`, 20 a page, newest first; each result with its tour, venue, town and how many songs); picking one fills in the whole night as a link does. "Add it by hand" goes straight to the form. Editing a gig opens the same form in a popup.
 - [x] 11½d. Setlists and "seen live" (21 Nov): pasting a setlist.fm setlist link into the gig form fills it in (`GET /setlist/{id}`, then `/search/setlists?date&venueId` for the rest of that night's bill; headliners taken to be the longest sets; needs the admin's setlist.fm key). Each artist's songs are kept with the gig (`gigs.setlists`: name, cover, tape), from the link and from setlist.fm imports. Songs in the library played at a gig you went to are marked "Seen live" ("Seen live 2×") on album and artist pages: matched by the album's or song's artist and the normalised title, so remasters count; songs played from tape don't.
   - Library → Stats → "Seen live": the share of the library's songs seen live as a number (most people's is small), from how many gigs' setlists, and up to 10 artists with the highest share of their songs seen live (at least 5 songs in the library; ties by the number seen).
+  - Also the share of the library's artists seen live: anyone on the bill of a gig the person went to (setlist or not).
 - [x] 11½e. Artist pages list the gigs you've been to where they played (by library link, or by name for gigs from before they were in the library), each with that artist's setlist. *Fixed with it: the upcoming-gigs lookups on artist pages compared the user's server link ID with the Plex server's ID, which only matched when the two happened to be equal.*
 
 ### Phase 12 — More services (from `.todo.md`)
@@ -702,3 +703,9 @@ Plekstender's own history makes this optional: the ratings queues and stats alre
 - Plex history timestamps: is `viewedAt` really the end of the track, and does the account mapping hold for shared users? (`plex_probe.py --history`)
 - Should playlists be shareable between users of the same server (e.g. "copy definition")?
 - Licence of shared logo packs: fanart.tv images come with their own terms; the export should keep `source` per image so people can decide what they share.
+
+### Polish (21 Nov)
+- [x] Home → Latest ratings uses the site's star icons (half stars too), not "★★½".
+- [x] Home → Status: a summary ("All working" / "1 needs a look" / "1 not working"), then tiles grouped as Plekstender, Yours and Services on this Plekstender; each with its account or server underneath, a meter for services with a request limit (admins), and "Fix" where it needs one. The API gives `subtitle` and `usage` instead of names like "Plex: Home".
+- [x] A new achievement pops up as its trading card, flipping over from its back in front of the page (with confetti and a shine; just appears with reduced motion).
+- [x] Gigs → Upcoming: a "🎟 Got tickets" filter (`/api/live/shows?tickets=true`).

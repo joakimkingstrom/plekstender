@@ -3,22 +3,6 @@ import { GROUP_SYMBOL, useAchievements, useNewAchievements, useSeenAchievements,
 import { formatCount, formatDate } from '../format'
 import { Button, Spinner } from './ui'
 
-/** A round badge, like a record label: the accent colour once unlocked, a silhouette before. */
-function Medal({ a, size = 'size-14' }: { a: Achievement; size?: string }) {
-  const on = Boolean(a.unlocked_at)
-  return (
-    <span
-      className={`${size} relative flex shrink-0 items-center justify-center rounded-full font-display text-2xl ${
-        on ? 'bg-accent text-on-accent shadow-md' : 'bg-surface-2 text-muted/50'
-      }`}
-      aria-hidden
-    >
-      <span className={`absolute inset-[18%] rounded-full border ${on ? 'border-on-accent/30' : 'border-border'}`} />
-      {GROUP_SYMBOL[a.group]}
-    </span>
-  )
-}
-
 /** Each kind of card has its own colour, like the sets in a trading card game. */
 const GROUP: Record<Achievement['group'], { label: string; colour: string }> = {
   library: { label: 'Library', colour: '#4f7cff' },
@@ -241,17 +225,38 @@ export function AchievementList() {
   )
 }
 
-const CONFETTI = Array.from({ length: 18 }, (_, i) => i)
+const CONFETTI = Array.from({ length: 24 }, (_, i) => i)
 
-/** A short celebration when one unlocks (calmer with reduced motion): a spinning record,
- * a little confetti, the name, what it's for and its message. */
+/** The back of a card: what it shows while it flips over. */
+function CardBack() {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center rounded-2xl p-2 shadow-xl [backface-visibility:hidden] [transform:rotateY(180deg)]"
+      style={{ background: 'linear-gradient(145deg, var(--color-accent), color-mix(in oklab, var(--color-accent) 45%, black))' }}
+      aria-hidden
+    >
+      <div className="flex size-full items-center justify-center rounded-xl border-2 border-white/25 bg-[repeating-linear-gradient(45deg,transparent_0_10px,rgb(255_255_255/0.06)_10px_20px)]">
+        <span className="flex size-28 items-center justify-center rounded-full bg-[#141417] shadow-lg">
+          <span className="flex size-10 items-center justify-center rounded-full bg-accent font-display text-xl text-on-accent">♪</span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/** When one unlocks: the new trading card flips over in front of the page (just fades in
+ * with reduced motion), with a little confetti and a shine, then goes into the collection. */
 export function AchievementCelebration({ enabled }: { enabled: boolean }) {
   const fresh = useNewAchievements(enabled)
+  const all = useAchievements()
   const seen = useSeenAchievements()
   const [index, setIndex] = useState(0)
   const items = fresh.data?.enabled ? fresh.data.items : []
-  if (!items.length) return null
-  const a = items[Math.min(index, items.length - 1)]
+  const a = items.length ? items[Math.min(index, items.length - 1)] : null
+  if (!a) return null
+  const list = all.data?.items ?? []
+  const number = list.findIndex((x) => x.id === a.id) + 1 || index + 1
+  const total = Math.max(list.length, number)
   const close = () => {
     if (index + 1 < items.length) setIndex(index + 1)
     else {
@@ -260,42 +265,54 @@ export function AchievementCelebration({ enabled }: { enabled: boolean }) {
     }
   }
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center px-4 md:bottom-8">
-      <div
-        role="status"
-        aria-live="polite"
-        className="pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-surface p-4 shadow-2xl motion-safe:animate-[rewind-in_400ms_ease-out]"
-      >
-        <div className="pointer-events-none absolute inset-0 hidden motion-safe:block" aria-hidden>
-          {CONFETTI.map((i) => (
-            <span
-              key={i}
-              className="absolute top-0 size-1.5 rounded-sm motion-safe:animate-[confetti_1.6s_ease-in_forwards]"
-              style={{
-                left: `${(i * 37) % 100}%`,
-                background: ['var(--color-accent)', 'var(--color-chart)', 'var(--color-ok)', 'var(--color-warn)'][i % 4],
-                animationDelay: `${(i % 6) * 80}ms`,
-              }}
-            />
-          ))}
-        </div>
-        <div className="relative flex items-center gap-4">
-          <span className="motion-safe:animate-[spin_3s_linear_infinite]">
-            <Medal a={a} size="size-16" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-accent">Achievement unlocked</p>
-            <p className="font-display text-lg font-bold">{a.name}</p>
-            <p className="text-sm font-semibold">✓ {a.hint}</p>
-            <p className="mt-1 text-sm text-muted">{a.message}</p>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Achievement unlocked"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/60 px-4 backdrop-blur-sm motion-safe:animate-[fade-in_250ms_ease-out]"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') close()
+      }}
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-[18%] mx-auto hidden h-0 max-w-sm motion-safe:block" aria-hidden>
+        {CONFETTI.map((i) => (
+          <span
+            key={`${a.id}-${i}`}
+            className="absolute top-0 size-2 rounded-sm motion-safe:animate-[confetti_1.8s_ease-in_forwards]"
+            style={{
+              left: `${(i * 37) % 100}%`,
+              background: ['var(--color-accent)', 'var(--color-chart)', 'var(--color-ok)', 'var(--color-warn)'][i % 4],
+              animationDelay: `${600 + (i % 8) * 70}ms`,
+            }}
+          />
+        ))}
+      </div>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/90">Achievement unlocked</p>
+      <div className="[perspective:1200px]">
+        <div
+          key={a.id}
+          className="relative [transform-style:preserve-3d] motion-safe:animate-[card-flip_900ms_cubic-bezier(0.2,0.8,0.2,1)_both]"
+        >
+          <div className="[backface-visibility:hidden]">
+            <AchievementCard a={a} number={number} total={total} />
           </div>
+          <CardBack />
+          <span
+            className="pointer-events-none absolute inset-0 hidden rounded-2xl bg-[linear-gradient(105deg,transparent_35%,rgb(255_255_255/0.45)_50%,transparent_65%)] bg-[length:250%_100%] bg-no-repeat motion-safe:block motion-safe:animate-[card-shine_1.1s_ease-out_900ms_both]"
+            aria-hidden
+          />
         </div>
-        <div className="relative mt-3 flex items-center justify-between">
-          <span className="text-xs text-muted">{items.length > 1 ? `${index + 1} of ${items.length}` : ''}</span>
-          <Button variant="primary" onClick={close} className="px-3 py-1.5 text-sm">
-            {index + 1 < items.length ? 'Next' : 'Nice!'}
-          </Button>
-        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        {items.length > 1 && (
+          <span className="text-xs tabular-nums text-white/80">
+            {index + 1} of {items.length}
+          </span>
+        )}
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- the dialog's one action */}
+        <Button key={a.id} autoFocus variant="primary" onClick={close}>
+          {index + 1 < items.length ? 'Next' : 'Nice!'}
+        </Button>
       </div>
     </div>
   )

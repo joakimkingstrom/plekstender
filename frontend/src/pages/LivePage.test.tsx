@@ -307,6 +307,15 @@ describe('LivePage', () => {
     expect(screen.getByRole('link', { name: 'Radiohead' })).toBeInTheDocument()
   })
 
+  it('lists the gigs you have tickets for with the Got tickets filter', async () => {
+    settings = placed
+    renderPage()
+    await screen.findByRole('link', { name: 'Radiohead' })
+    fireEvent.click(screen.getByRole('button', { name: '🎟 Got tickets' }))
+    await vi.waitFor(() => expect(requestsTo('/api/live/shows').at(-1)!.url).toContain('tickets=true'))
+    expect(screen.getByRole('button', { name: '🎟 Got tickets' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('says when JamBase has no key yet', async () => {
     settings = { ...placed, source_ready: false, sources: [] }
     renderPage()

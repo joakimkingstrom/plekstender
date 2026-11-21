@@ -8,7 +8,7 @@ import { useStatsActivity, useStatsOverview } from '../api/stats'
 import { formatChange, formatCount, formatListeningTime } from '../format'
 import { ColumnChart } from './charts'
 import { GigRow } from './GigRow'
-import { Artwork } from './library'
+import { Artwork, Stars } from './library'
 import { Segmented } from './Segmented'
 import { Card, Spinner } from './ui'
 
@@ -255,11 +255,6 @@ export function UpcomingGigs({ serverId }: { serverId: number | null }) {
   )
 }
 
-function stars(rating: number): string {
-  const halves = Math.round(rating)
-  return `${'★'.repeat(Math.floor(halves / 2))}${halves % 2 ? '½' : ''}`
-}
-
 /** What you rated last. */
 export function LatestRatings({ serverId }: { serverId: number }) {
   const rated = useRated(serverId, null)
@@ -290,9 +285,7 @@ export function LatestRatings({ serverId }: { serverId: number }) {
                 )}
                 {item.subtitle && <span className="block truncate text-xs text-muted">{item.subtitle}</span>}
               </span>
-              <span className="shrink-0 text-sm text-accent" aria-label={`${item.user_rating / 2} stars`}>
-                {stars(item.user_rating)}
-              </span>
+              <Stars rating={item.user_rating} className="shrink-0" />
             </li>
           )
         })}
