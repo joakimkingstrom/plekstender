@@ -62,8 +62,8 @@ export function Card({
 }
 
 /** Loading: the brand's spinning pick (the same turn as clicking the logo). */
-export function Spinner({ small = false }: { small?: boolean }) {
-  const size = small ? "size-4" : "size-7";
+export function Spinner({ small = false, large = false }: { small?: boolean; large?: boolean }) {
+  const size = large ? "size-14" : small ? "size-4" : "size-7";
   return (
     <span
       role="status"

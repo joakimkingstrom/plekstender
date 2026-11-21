@@ -117,7 +117,9 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
           </p>
         )}
         {albums.isPending ? (
-          <Spinner small />
+          <div className="flex justify-center py-8">
+            <Spinner />
+          </div>
         ) : albums.isError ? (
           <Notice tone="error">{errorMessage(albums.error)}</Notice>
         ) : (
@@ -289,7 +291,7 @@ function CoverEditor({
                 )}
                 {preview.loading && (
                   <span className="absolute inset-0 flex items-center justify-center bg-bg/40">
-                    <Spinner small />
+                    <Spinner />
                   </span>
                 )}
               </div>
@@ -434,7 +436,13 @@ function CoverGrid({
   onChoose: (token: string) => void
 }) {
   const found = useCoverCandidates(serverId, album.rating_key, source, query)
-  if (found.isPending) return <Spinner small />
+  if (found.isPending)
+    return (
+      <div className="flex min-h-56 flex-col items-center justify-center gap-3 text-sm text-muted">
+        <Spinner large />
+        <p>{source === 'search' ? 'Searching the web…' : `Looking on ${source === 'coverartarchive' ? 'the Cover Art Archive' : SOURCE_NAME[source]}…`}</p>
+      </div>
+    )
   if (found.isError) return <Notice tone="error">{errorMessage(found.error)}</Notice>
   const { candidates, note } = found.data
   return (
