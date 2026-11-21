@@ -133,7 +133,7 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
                 {unidentified > 0 || files.data.total > list.length ? (
                   <Button
                     variant="secondary"
-                    className="px-3 py-1.5 text-xs"
+                    size="sm"
                     busy={start.isPending}
                     onClick={() => start.mutate({ kind, again: false })}
                   >

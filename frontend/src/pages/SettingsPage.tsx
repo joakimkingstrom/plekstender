@@ -422,7 +422,7 @@ function FontBrowser({
                 ) : (
                   <Button
                     variant="secondary"
-                    className="shrink-0 px-3 py-1.5 text-xs"
+                    size="sm" className="shrink-0"
                     busy={adding === f.name}
                     disabled={Boolean(adding)}
                     onClick={() => onAdd(f.name)}

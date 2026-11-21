@@ -196,7 +196,7 @@ function Rater({ serverId }: { serverId: number }) {
         />
         <Button
           variant="secondary"
-          className="border border-border px-3 py-[7px] md:hidden"
+          size="none" className="border border-border px-3 py-[7px] text-sm md:hidden"
           aria-expanded={optionsOpen}
           aria-controls="rate-options"
           onClick={() => setOptionsOpen((o) => !o)}
@@ -535,7 +535,7 @@ function SwipeView({
       {round.error && game && <Notice tone="error">{round.error}</Notice>}
       {guessing && <RoundClock elapsed={round.elapsed} length={round.length} loading={round.phase === 'loading'} />}
       {game && round.phase === 'blocked' && (
-        <Button variant="primary" className="w-full py-3" onClick={round.resume}>
+        <Button variant="primary" size="lg" className="w-full" onClick={round.resume}>
           ▶ Tap to play the song
         </Button>
       )}
@@ -640,7 +640,7 @@ function SwipeView({
                 ) : (
                   <Button
                     variant="secondary"
-                    className="w-full px-3 py-1.5 text-xs"
+                    size="sm" className="w-full"
                     busy={playlistAdd.isPending}
                     onClick={() => playlistAdd.mutate({ mode: settings.kind, target: item.rating_key })}
                   >

@@ -157,16 +157,16 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
             </span>
             {withFiles.length > 0 && !editing && (
               <>
-                <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setLookup({})}>
+                <Button variant="secondary" size="sm" onClick={() => setLookup({})}>
                   MusicBrainz…
                 </Button>
-                <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setRenaming(true)}>
+                <Button variant="secondary" size="sm" onClick={() => setRenaming(true)}>
                   Rename…
                 </Button>
               </>
             )}
             {canEdit && !editing && (
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setEditing(true)}>
+              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
                 Edit tags
               </Button>
             )}
@@ -271,11 +271,11 @@ export function ArtistFiles({ serverId, artistKey }: { serverId: number; artistK
       title="Tags in the files"
       action={
         <span className="flex gap-2">
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setRenaming(true)}>
+          <Button variant="secondary" size="sm" onClick={() => setRenaming(true)}>
             Rename files…
           </Button>
           {!open && (
-            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setOpen(true)}>
+            <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
               Take tags from Plex…
             </Button>
           )}

@@ -137,7 +137,7 @@ function Suggestion({
         >
           Last.fm
         </a>
-        <Button variant="ghost" busy={busy} onClick={onToggle} className="px-2 py-1 text-xs" aria-label={`${hidden ? 'Bring back' : 'Hide'} ${artist.name}`}>
+        <Button variant="ghost" busy={busy} onClick={onToggle} size="xs" aria-label={`${hidden ? 'Bring back' : 'Hide'} ${artist.name}`}>
           {hidden ? 'Bring back' : 'Hide'}
         </Button>
       </div>

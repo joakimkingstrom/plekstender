@@ -402,10 +402,10 @@ function BulkMusicBrainz({
                       )}
                       {best.changes > 0 && !writes[a.rating_key] && !skipped.has(a.rating_key) && (
                         <>
-                          <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={!canWrite} onClick={() => void accept(a, best)}>
+                          <Button variant="secondary" size="sm" disabled={!canWrite} onClick={() => void accept(a, best)}>
                             Accept
                           </Button>
-                          <Button variant="ghost" className="px-3 py-1.5 text-xs" onClick={() => setSkipped((s) => new Set(s).add(a.rating_key))}>
+                          <Button variant="ghost" size="sm" onClick={() => setSkipped((s) => new Set(s).add(a.rating_key))}>
                             Skip
                           </Button>
                         </>

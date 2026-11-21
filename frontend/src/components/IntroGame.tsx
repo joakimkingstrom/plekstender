@@ -63,7 +63,7 @@ export function GameIntro({
         </li>
       </ul>
       <div className="flex items-center gap-2 pt-1">
-        <Button variant="primary" className="flex-1 py-3 text-base" onClick={onStart}>
+        <Button variant="primary" size="none" className="flex-1 px-4 py-3 text-base" onClick={onStart}>
           ▶ Start
         </Button>
         <Button variant="ghost" onClick={onCancel}>

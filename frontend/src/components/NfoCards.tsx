@@ -117,7 +117,7 @@ export function AlbumNfo({
                   : `Your files say ${files.length === 1 ? 'another release' : 'several releases'} (${files.map(short).join(', ')}).`}
             </span>
             {!same && (
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onApplyRelease(release)}>
+              <Button variant="secondary" size="sm" onClick={() => onApplyRelease(release)}>
                 Use this release…
               </Button>
             )}

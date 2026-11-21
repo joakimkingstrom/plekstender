@@ -179,7 +179,7 @@ function SoundsLike({
     <div className="space-y-2">
       <Button
         variant="ghost"
-        className="px-3 py-1.5 text-xs"
+        size="sm"
         busy={start.isPending}
         onClick={() => start.mutate({ album_key: albumKey, again: false })}
       >
@@ -312,7 +312,7 @@ function ReleaseMatch({
           <p className="truncate text-xs text-muted">{release.artist}</p>
           <p className="text-xs text-muted">{releaseFacts(release)}</p>
         </div>
-        <Button variant="ghost" className="px-3 py-1.5 text-xs" onClick={onBack}>
+        <Button variant="ghost" size="sm" onClick={onBack}>
           ← Other releases
         </Button>
       </div>

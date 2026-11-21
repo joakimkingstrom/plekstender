@@ -374,7 +374,7 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
         picked.size > 0 ? (
           <Button
             variant="secondary"
-            className="px-3 py-1.5 text-xs"
+            size="sm"
             busy={undo.isPending}
             onClick={() => undo.mutate([...picked], { onSuccess: () => setPicked(new Set()) })}
           >
@@ -447,7 +447,7 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                     {set.undoable > 0 && (
                       <Button
                         variant="ghost"
-                        className="px-2 py-1 text-xs"
+                        size="xs"
                         busy={undo.isPending}
                         onClick={() => undo.mutate({ setId: set.id })}
                       >

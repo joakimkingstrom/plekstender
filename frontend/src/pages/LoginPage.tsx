@@ -53,7 +53,7 @@ export function LoginPage() {
         <div className="space-y-4">
           {state.phase === 'denied' && <Notice tone="warn">{state.message}</Notice>}
           {state.phase === 'error' && <Notice tone="error">{state.message}</Notice>}
-          <Button variant="primary" className="w-full py-3" onClick={() => void start()}>
+          <Button variant="primary" size="lg" className="w-full" onClick={() => void start()}>
             Sign in with Plex
           </Button>
         </div>

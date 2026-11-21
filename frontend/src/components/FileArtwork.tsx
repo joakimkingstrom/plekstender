@@ -140,7 +140,7 @@ function ArtworkBody({ serverId, albumKey, art, canWrite }: { serverId: number; 
               />
               <Button
                 variant="secondary"
-                className="px-3 py-1.5 text-xs"
+                size="sm"
                 busy={embed.isPending}
                 onClick={() =>
                   embed.mutate(
@@ -160,7 +160,7 @@ function ArtworkBody({ serverId, albumKey, art, canWrite }: { serverId: number; 
               {mostUsed && (
                 <Button
                   variant="secondary"
-                  className="px-3 py-1.5 text-xs"
+                  size="sm"
                   busy={save.isPending && save.variables?.source === 'embedded'}
                   onClick={() => save.mutate({ source: 'embedded', sha1: mostUsed.sha1, name: 'cover.jpg' })}
                 >
@@ -170,7 +170,7 @@ function ArtworkBody({ serverId, albumKey, art, canWrite }: { serverId: number; 
               {art.plex_poster && (
                 <Button
                   variant="secondary"
-                  className="px-3 py-1.5 text-xs"
+                  size="sm"
                   busy={save.isPending && save.variables?.source === 'plex'}
                   onClick={() => save.mutate({ source: 'plex', name: 'cover.jpg' })}
                 >

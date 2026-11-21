@@ -708,7 +708,7 @@ function Suggestions({
       title="Add more like these"
       action={
         similar.length > 1 ? (
-          <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => similar.forEach(onArtist)}>
+          <Button variant="ghost" size="xs" onClick={() => similar.forEach(onArtist)}>
             Add all similar
           </Button>
         ) : undefined

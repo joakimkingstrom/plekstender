@@ -145,15 +145,15 @@ function RatedRow({
       <span className="hidden sm:inline">
         <Badge>{KIND_LABEL[item.kind]}</Badge>
       </span>
-      {item.rated_at && <span className="hidden w-12 text-right text-xs text-muted tabular-nums sm:block">{formatTime(item.rated_at)}</span>}
+      {item.rated_at && <span className="hidden min-w-12 whitespace-nowrap text-right text-xs text-muted tabular-nums sm:block">{formatTime(item.rated_at)}</span>}
       <StarRating label={`Rate ${item.title}`} value={item.user_rating} onChange={onRate} />
       {/* Ratings set in Plex (or changed there since) have no undo: what was before isn't known. */}
-      <span className="w-14 shrink-0 text-right">
+      <span className="flex w-20 shrink-0 justify-end">
         {item.undoable && (
           <Tooltip content={item.undo_to === null || item.undo_to === undefined ? 'Back to unrated' : `Back to ${starsText(item.undo_to)} ★`}>
             <Button
               variant="ghost"
-              className="px-2 py-1 text-xs"
+              size="xs"
               busy={undoing}
               onClick={onUndo}
               aria-label={`Undo the rating of ${item.title}`}
