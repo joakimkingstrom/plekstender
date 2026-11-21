@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AchievementCelebration, AchievementList } from './Achievements'
 
@@ -29,6 +29,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 const wrap = (ui: React.ReactNode) =>
@@ -45,14 +46,34 @@ describe('Achievements', () => {
     expect(top()).toHaveAccessibleName('Roadie')
     expect(top()).toHaveTextContent('✓ 100 artists in your library')
     expect(top()).toHaveTextContent('01/3')
-    // The scroll wheel sends it to the bottom.
-    fireEvent.wheel(stack, { deltaY: 120 })
-    expect(top()).toHaveAccessibleName('Front Row')
-    fireEvent.click(screen.getByRole('button', { name: 'Next card' }))
-    expect(top()).toHaveAccessibleName('Roadie')
-    fireEvent.keyDown(stack, { key: 'ArrowLeft' })
+    // The scroll wheel flips to the next card...
+    expect(fireEvent.wheel(stack, { deltaY: 120 })).toBe(false) // the page doesn't scroll along
     expect(top()).toHaveAccessibleName('Front Row')
     expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    // ...and stops at the last one: once that flick is over, the page scrolls on.
+    expect(fireEvent.wheel(stack, { deltaY: 120 })).toBe(false)
+    expect(top()).toHaveAccessibleName('Front Row')
+    const later = createEvent.wheel(stack, { deltaY: 120 })
+    Object.defineProperty(later, 'timeStamp', { value: later.timeStamp + 5000 })
+    expect(fireEvent(stack, later)).toBe(true)
+    expect(screen.getByRole('button', { name: 'Next card' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Previous card' }))
+    expect(top()).toHaveAccessibleName('Roadie')
+    fireEvent.keyDown(stack, { key: 'ArrowRight' })
+    expect(top()).toHaveAccessibleName('Front Row')
+  })
+
+  it('scrolls the page until the whole pile is in view before flipping', async () => {
+    wrap(<AchievementList />)
+    const stack = await screen.findByRole('group', { name: 'Your achievement cards' })
+    const scrollBy = vi.fn()
+    vi.stubGlobal('scrollBy', scrollBy)
+    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(3000)
+    // The pile's bottom is 100px below the window: scroll 100 + the margin, not the whole flick.
+    vi.spyOn(stack, 'getBoundingClientRect').mockReturnValue({ top: 500, bottom: 868, height: 368 } as DOMRect)
+    expect(fireEvent.wheel(stack, { deltaY: 300 })).toBe(false)
+    expect(scrollBy).toHaveBeenCalledWith({ top: 116 })
+    expect(screen.getByText('1 / 2')).toBeInTheDocument() // no card flipped yet
   })
 
   it('celebrates a new one once', async () => {

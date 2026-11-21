@@ -86,26 +86,61 @@ function jitter(id: string) {
 const SHOWN = 6 // cards visible in the pile; the rest sit hidden under the bottom one
 const WHEEL_STEP = 60 // pixels of scrolling per card
 const WHEEL_PAUSE = 140 // ms between cards, so a trackpad flick doesn't fly through the lot
+const WHEEL_SETTLE = 450 // ms after the last card during which the flick's tail is swallowed
+const MARGIN = 16 // room kept around the pile when scrolling it into view
 
-/** The collected cards in a messy pile, newest on top. Scroll (or swipe, the arrow keys or
- * the buttons) to send the top card to the bottom. */
+/** The collected cards in a messy pile, newest on top. The scroll wheel first brings the
+ * whole pile into view, then flips through it, then lets the page scroll on past the last
+ * card (or the first, going up). A swipe, a click, the arrow keys and the buttons flip too. */
 function CardStack({ cards, numbers, total }: { cards: Achievement[]; numbers: Map<string, number>; total: number }) {
   const [top, setTop] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
+  const topRef = useRef(0)
   const n = cards.length
-  const step = (by: number) => setTop((t) => (((t + by) % n) + n) % n)
+  const go = (to: number) => {
+    const next = Math.max(0, Math.min(n - 1, to))
+    topRef.current = next
+    setTop(next)
+  }
 
   useEffect(() => {
     const el = ref.current
     if (!el || n < 2) return
     let pending = 0
-    let last = 0
+    let last = -Infinity
     // Not React's onWheel: that one can't stop the page scrolling along.
     const onWheel = (e: WheelEvent) => {
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1
+      const vertical = Math.abs(e.deltaY) >= Math.abs(e.deltaX)
+      const delta = (vertical ? e.deltaY : e.deltaX) * unit
+      if (!delta) return
+      const down = delta > 0
+
+      // First the page scrolls until the whole pile is in view (if it fits), and stops there.
+      const box = el.getBoundingClientRect()
+      const page = document.scrollingElement ?? document.documentElement
+      const fits = box.height + 2 * MARGIN <= window.innerHeight
+      const short = down
+        ? Math.min(box.bottom + MARGIN - window.innerHeight, page.scrollHeight - page.clientHeight - page.scrollTop)
+        : Math.min(MARGIN - box.top, page.scrollTop)
+      if (vertical && fits && short > 0) {
+        e.preventDefault()
+        window.scrollBy({ top: down ? Math.min(delta, short) : Math.max(delta, -short) })
+        pending = 0
+        return
+      }
+
+      // Past the last card (or before the first): the page scrolls on, once this flick is over.
+      if (down ? topRef.current >= n - 1 : topRef.current <= 0) {
+        if (e.timeStamp - last < WHEEL_SETTLE) e.preventDefault()
+        pending = 0
+        return
+      }
       e.preventDefault()
-      pending += Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+      pending += delta
       if (Math.abs(pending) < WHEEL_STEP || e.timeStamp - last < WHEEL_PAUSE) return
-      setTop((t) => (((t + Math.sign(pending)) % n) + n) % n)
+      topRef.current = Math.max(0, Math.min(n - 1, topRef.current + Math.sign(pending)))
+      setTop(topRef.current)
       pending = 0
       last = e.timeStamp
     }
@@ -124,8 +159,8 @@ function CardStack({ cards, numbers, total }: { cards: Achievement[]; numbers: M
         tabIndex={0}
         className="relative h-[25.5rem] w-full max-w-md touch-pan-y rounded-2xl outline-offset-4"
         onKeyDown={(e) => {
-          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') step(1)
-          else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') step(-1)
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(top + 1)
+          else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') go(top - 1)
           else return
           e.preventDefault()
         }}
@@ -134,8 +169,9 @@ function CardStack({ cards, numbers, total }: { cards: Achievement[]; numbers: M
           if (swipe.current === null) return
           const dx = e.clientX - swipe.current
           swipe.current = null
-          if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1)
-          else if (n > 1) step(1)
+          if (Math.abs(dx) > 40) go(top + (dx < 0 ? 1 : -1))
+          // A click on the last card gathers the pile up again.
+          else if (n > 1) go(top + 1 < n ? top + 1 : 0)
         }}
       >
         {cards.map((a, i) => {
@@ -162,13 +198,13 @@ function CardStack({ cards, numbers, total }: { cards: Achievement[]; numbers: M
       </div>
       {n > 1 && (
         <div className="flex items-center gap-3 text-sm">
-          <Button onClick={() => step(-1)} className="px-3 py-1" aria-label="Previous card">
+          <Button onClick={() => go(top - 1)} disabled={top === 0} className="px-3 py-1" aria-label="Previous card">
             ‹
           </Button>
           <span className="tabular-nums text-muted" aria-live="polite">
             {top + 1} / {n}
           </span>
-          <Button onClick={() => step(1)} className="px-3 py-1" aria-label="Next card">
+          <Button onClick={() => go(top + 1)} disabled={top === n - 1} className="px-3 py-1" aria-label="Next card">
             ›
           </Button>
         </div>
