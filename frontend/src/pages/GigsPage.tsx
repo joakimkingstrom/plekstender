@@ -25,6 +25,7 @@ import { useActiveServer } from '../api/library'
 import { useStarShow } from '../api/live'
 import { DatePicker } from '../components/DatePicker'
 import { Dialog } from '../components/Dialog'
+import type { MapPoint } from '../components/GigMap'
 import { GigPlacePicker, type PlaceChoice } from '../components/GigPlacePicker'
 import { GigStats } from '../components/GigStats'
 import { Select } from '../components/Select'
@@ -45,7 +46,9 @@ export function GigsPage() {
     <div className="space-y-6">
       <Suggestions />
       <GigStats />
-      <WhereMap />
+      <WhereMap
+        focus={!filtered ? null : gigs.isPlaceholderData || !gigs.data ? undefined : gigs.data.gigs.flatMap((g) => (g.latitude != null && g.longitude != null ? [{ latitude: g.latitude, longitude: g.longitude }] : []))}
+      />
       <div className="flex flex-wrap items-start gap-2">
         <GigFilterBar filters={filters} onChange={setFilters} years={gigs.data?.years ?? []} places={gigs.data?.places ?? []} unplaced={gigs.data?.unplaced ?? 0} />
         <Button variant="primary" className="ml-auto" onClick={() => setAdding(true)}>
@@ -213,16 +216,17 @@ function GigFilterBar({
 
 const GigMap = lazy(() => import('../components/GigMap'))
 
-/** Every gig with a place, on the map (whatever the filters below). */
-function WhereMap() {
+/** Every gig with a place, on the map; it frames the gigs the filters below pick out. */
+function WhereMap({ focus }: { focus?: MapPoint[] | null }) {
   const all = useGigs()
-  const placed = all.data?.gigs.filter((g) => g.latitude != null) ?? []
+  // The same list between renders, or the map is built again (and loses its place).
+  const placed = useMemo(() => all.data?.gigs.filter((g) => g.latitude != null) ?? [], [all.data])
   if (placed.length === 0) return null
   const waiting = (all.data?.gigs.length ?? 0) - placed.length
   return (
     <Card title="Where">
       <Suspense fallback={<div className="h-[26rem]"><Spinner /></div>}>
-        <GigMap gigs={placed} />
+        <GigMap gigs={placed} focus={focus} />
       </Suspense>
       {waiting > 0 && (
         <p className="mt-2 text-xs text-muted">

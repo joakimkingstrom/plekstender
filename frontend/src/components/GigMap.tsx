@@ -103,10 +103,33 @@ function placeList(place: GigPlace): HTMLElement {
   return box
 }
 
-/** The gigs someone went to, as pushpins on a plain street map (zooms down to the venue). */
-export default function GigMap({ gigs }: { gigs: Gig[] }) {
+export type MapPoint = { latitude: number; longitude: number }
+
+/** Show these points: one up close, several so they all fit. */
+function frame(map: MapLibre, points: MapPoint[], animate: boolean) {
+  if (points.length === 0) return
+  const duration = animate ? 800 : 0
+  if (points.length === 1) {
+    map.easeTo({ center: [points[0].longitude, points[0].latitude], zoom: 12, duration })
+    return
+  }
+  const bounds = new LngLatBounds()
+  for (const p of points) bounds.extend([p.longitude, p.latitude])
+  map.fitBounds(bounds, { padding: 48, maxZoom: 12, duration })
+}
+
+/**
+ * The gigs someone went to, as pushpins on a plain street map (zooms down to the venue).
+ * `focus`: the places to frame (the gigs a filter picked out); null frames every gig, and
+ * undefined leaves the map where it is.
+ */
+export default function GigMap({ gigs, focus }: { gigs: Gig[]; focus?: MapPoint[] | null }) {
   const container = useRef<HTMLDivElement>(null)
   const places = useMemo(() => gigPlaces(gigs), [gigs])
+  const mapRef = useRef<MapLibre | null>(null)
+  const focusRef = useRef<MapPoint[] | null>(null)
+  // Only move when the places to frame change (not on every refetch).
+  const focusKey = focus === undefined ? undefined : focus === null ? 'all' : focus.map((p) => `${p.latitude},${p.longitude}`).sort().join(';')
 
   useEffect(() => {
     const element = container.current
@@ -174,13 +197,9 @@ export default function GigMap({ gigs }: { gigs: Gig[] }) {
       }
     }
     map.on('load', () => {
-      if (places.length > 1) {
-        const bounds = new LngLatBounds()
-        for (const p of places) bounds.extend([p.longitude, p.latitude])
-        map.fitBounds(bounds, { padding: 48, maxZoom: 12, duration: 0 })
-      } else {
-        map.jumpTo({ zoom: 12 })
-      }
+      const chosen = focusRef.current
+      frame(map, chosen?.length ? chosen : places, false)
+      mapRef.current = map
       draw()
     })
     map.on('moveend', draw)
@@ -196,9 +215,21 @@ export default function GigMap({ gigs }: { gigs: Gig[] }) {
       resized.disconnect()
       observer.disconnect()
       for (const m of markers) m.remove()
+      mapRef.current = null
       map.remove()
     }
   }, [places])
+
+  // A filter picked: frame its gigs (back to every gig when the filters are cleared).
+  useEffect(() => {
+    if (focus === undefined) return
+    focusRef.current = focus
+    const map = mapRef.current
+    if (!map) return
+    const chosen = focus
+    frame(map, chosen?.length ? chosen : places, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `focus` is new each render; its key isn't
+  }, [focusKey, places])
 
   return (
     <div

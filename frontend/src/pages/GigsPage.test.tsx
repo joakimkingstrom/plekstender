@@ -6,7 +6,12 @@ import { GigExportCard, GigImportCard } from '../components/GigTransfer'
 import { GigsPage } from './GigsPage'
 
 // The map needs WebGL, which jsdom hasn't got (gigMap.test covers how gigs are placed on it).
-vi.mock('../components/GigMap', () => ({ default: () => <div role="region" aria-label="Gig map" /> }))
+// The stand-in shows what it was asked to frame.
+vi.mock('../components/GigMap', () => ({
+  default: ({ focus }: { focus?: unknown }) => (
+    <div role="region" aria-label="Gig map" data-focus={focus === undefined ? 'unchanged' : JSON.stringify(focus)} />
+  ),
+}))
 
 const gigs = [
   {
@@ -136,6 +141,9 @@ describe('GigsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filter by year' }))
     fireEvent.click(screen.getByRole('option', { name: '2019' }))
     await vi.waitFor(() => expect(lastList()).toEqual({ year: '2019' }))
+    // The map frames the gigs picked out (the ones with a place).
+    const map = await screen.findByRole('region', { name: 'Gig map' })
+    await vi.waitFor(() => expect(map).toHaveAttribute('data-focus', JSON.stringify([{ latitude: 51.5072, longitude: -0.1276 }])))
 
     // A venue brings its city and country with it; a country clears what's below it.
     fireEvent.click(screen.getByRole('button', { name: 'Filter by venue' }))
@@ -156,6 +164,7 @@ describe('GigsPage', () => {
     expect(screen.getByText(/Edit a gig to pick its place by hand/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
     await vi.waitFor(() => expect(lastList()).toEqual({}))
+    expect(screen.getByRole('region', { name: 'Gig map' })).toHaveAttribute('data-focus', 'null')  // every gig
   })
 
   it('shows stats: busiest year, most seen artists and venues, time of year', async () => {
