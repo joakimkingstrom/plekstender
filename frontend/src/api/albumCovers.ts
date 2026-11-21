@@ -105,6 +105,34 @@ export function useApplyCover(serverId: number) {
   })
 }
 
+export type BestOutcome = Schemas['AlbumBestOut']
+
+/** The best match (this very album, at least 1000 × 1000) found and saved to Plex. */
+export function useApplyBest(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (key: number) =>
+      unwrap(
+        api.POST('/api/servers/{server_id}/artwork/albums/{rating_key}/best', {
+          params: { path: { server_id: serverId, rating_key: key } },
+        }),
+      ),
+    onSuccess: (out) => {
+      if (out.outcome === 'applied') void qc.invalidateQueries({ queryKey: keys.all(serverId) })
+    },
+  })
+}
+
+/** The best match for every album the list shows (a background artwork job). */
+export function useStartBestCovers(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { show: Exclude<CoverFilter, 'all'>; q?: string }) =>
+      unwrap(api.POST('/api/servers/{server_id}/artwork/albums/best', { params: { path: { server_id: serverId } }, body })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['servers', serverId, 'artwork', 'jobs'] }),
+  })
+}
+
 export function useKeepCover(serverId: number) {
   const qc = useQueryClient()
   return useMutation({

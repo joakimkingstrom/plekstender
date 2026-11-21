@@ -2,15 +2,18 @@ import { useDeferredValue, useState } from 'react'
 import { Link } from 'react-router'
 import {
   useAlbumCovers,
+  useApplyBest,
   useApplyCover,
   useCoverCandidates,
   useCoverPreview,
   useKeepCover,
+  useStartBestCovers,
   type AlbumCover,
+  type BestOutcome,
   type CoverFilter,
   type CoverSource,
 } from '../api/albumCovers'
-import { useUploadImage, type SourceSpec } from '../api/artwork'
+import { useArtworkJobs, useUploadImage, type SourceSpec } from '../api/artwork'
 import { errorMessage } from '../api/client'
 import { imageUrl } from '../api/library'
 import { FilePicker } from '../components/controls'
@@ -107,6 +110,7 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
             </button>
           ))}
         </div>
+        {show !== 'all' && (albums.data?.pages[0]?.total ?? 0) > 0 && <BestMatches serverId={serverId} show={show} q={q} count={albums.data?.pages[0]?.total ?? 0} />}
         {n('unchecked') > 0 && (
           <p className="flex items-center gap-2 text-xs text-muted">
             <Spinner small /> Measuring {formatCount(n('unchecked'))} covers…
@@ -174,6 +178,8 @@ function CoverEditor({
   const [notice, setNotice] = useState<string | null>(null)
   const preview = useCoverPreview(serverId, album.rating_key, source, square)
   const apply = useApplyCover(serverId)
+  const best = useApplyBest(serverId)
+  const [found, setFound] = useState<BestOutcome | null>(null)
   const keep = useKeepCover(serverId)
   const choose = (spec: SourceSpec) => {
     setNotice(null)
@@ -196,6 +202,24 @@ function CoverEditor({
           </h2>
           <p className="truncate text-sm text-muted">{[album.artist, album.year].filter(Boolean).join(' · ')}</p>
         </div>
+        <Button
+          variant="secondary"
+          busy={best.isPending}
+          title="The biggest cover of this very album on Deezer, iTunes, Tidal or the Cover Art Archive, if it’s at least 1000 × 1000"
+          onClick={() =>
+            best.mutate(album.rating_key, {
+              onSuccess: (out) => {
+                setFound(out)
+                if (out.outcome === 'applied' && out.cover) {
+                  setSource(null)
+                  onSaved(out.cover)
+                }
+              },
+            })
+          }
+        >
+          Apply best match
+        </Button>
         {album.state !== 'ok' && album.state !== 'unchecked' && (
           <Button
             variant="ghost"
@@ -206,6 +230,8 @@ function CoverEditor({
           </Button>
         )}
       </div>
+      {best.isError && <Notice tone="error">{errorMessage(best.error)}</Notice>}
+      {found && <Notice>{bestText(found)}</Notice>}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_20rem]">
         <Card>
@@ -318,6 +344,76 @@ function CoverEditor({
           <p className="mt-3 text-xs text-muted">Saved to Plex for everyone using the server. Covers over 3000 pixels are scaled down.</p>
         </Card>
       </div>
+    </div>
+  )
+}
+
+const BEST_RULE = 'the same album by the same artist, at least 1000 × 1000'
+
+function bestText(out: BestOutcome): string {
+  const found = out.source ? `${SOURCE_NAME[out.source] ?? out.source}, ${size(out.width, out.height)}` : ''
+  if (out.outcome === 'applied') return `Saved the best match to Plex (${found}).`
+  if (out.outcome === 'already') return `The cover in Plex is already as big as the best match (${found}).`
+  return `No match found: nothing on Deezer, iTunes, Tidal or the Cover Art Archive is ${BEST_RULE}.`
+}
+
+/** The best match for every album listed, in the background (a few seconds an album). */
+function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exclude<CoverFilter, 'all'>; q: string; count: number }) {
+  const jobs = useArtworkJobs(serverId)
+  const start = useStartBestCovers(serverId)
+  const [confirming, setConfirming] = useState(false)
+  const latest = jobs.data?.find((j) => j.kind === 'covers')
+  const running = latest && (latest.status === 'queued' || latest.status === 'running')
+  const { done = 0, total = 0 } = (latest?.progress ?? {}) as { done?: number; total?: number }
+  const stats = (latest?.stats ?? {}) as Record<string, number>
+  return (
+    <div className="space-y-2 rounded-2xl border border-border bg-surface p-3 text-sm">
+      {running ? (
+        <div className="space-y-2" aria-live="polite">
+          <p>
+            Applying best matches… <span className="tabular-nums text-muted">{done} / {total || '?'}</span>
+          </p>
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 5}%` }} />
+          </div>
+        </div>
+      ) : confirming ? (
+        <div className="space-y-2">
+          <p>
+            Look for a cover for {count === 1 ? 'the album' : `all ${formatCount(count)} albums`} listed that is {BEST_RULE}, on
+            Deezer, iTunes, Tidal and the Cover Art Archive, and save the biggest to Plex? Albums without one are left alone.
+            It takes a few seconds an album.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              busy={start.isPending}
+              onClick={() => start.mutate({ show, q: q || undefined }, { onSettled: () => setConfirming(false) })}
+            >
+              Apply to {formatCount(count)}
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <Button variant="secondary" onClick={() => setConfirming(true)} className="w-full">
+            Apply best matches
+          </Button>
+          {latest?.status === 'succeeded' && (
+            <p className="text-xs text-muted">
+              Last run: {stats.applied ?? 0} applied
+              {stats.not_found ? `, ${stats.not_found} without a match` : ''}
+              {stats.already ? `, ${stats.already} already as big` : ''}
+              {stats.failed ? `, ${stats.failed} failed` : ''}.
+            </p>
+          )}
+          {latest?.status === 'failed' && <p className="text-xs text-danger">Last run failed: {latest.error}</p>}
+        </>
+      )}
+      {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}
     </div>
   )
 }

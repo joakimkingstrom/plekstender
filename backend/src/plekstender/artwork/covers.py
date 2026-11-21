@@ -13,7 +13,8 @@ import asyncio
 import datetime as dt
 import io
 import logging
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import httpx
@@ -24,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender import tidal as tidal_api
 from plekstender.artwork import images, sources
-from plekstender.artwork.fetch import USER_AGENT, FetchError, fetch
+from plekstender.artwork.fetch import USER_AGENT, FetchError, fetch, image_size
 from plekstender.artwork.images import ImageError
 from plekstender.artwork.jobs import client_for
 from plekstender.artwork.sources import Candidate, SourceError
@@ -184,10 +185,21 @@ def _close(found: str, wanted: str) -> bool:
     return bool(a and b) and (a == b or a in b or b in a)
 
 
+def _is_album(title: str, artist: str, album: AlbumRef) -> bool:
+    """This very album: the same title (remaster and edition notes aside) by the same
+    artist. Strict, for picking a cover without anyone looking."""
+    same_title = normalise_title(title or "-") == normalise_title(album.title)
+    return same_title and (not album.artist or _same(artist, album.artist, artist=True))
+
+
 def _rank(found: list[tuple[Candidate, str, str]], album: AlbumRef) -> list[Candidate]:
-    """The same album by the same artist first, then the same artist, then the rest."""
+    """The same album by the same artist first, then the same artist, then the rest. The
+    ones that are this very album are marked (extra["match"])."""
 
     wanted = normalise_title(album.title)
+    for candidate, title, artist in found:
+        if _is_album(title, artist, album):
+            candidate.extra["match"] = True
 
     def score(entry: tuple[Candidate, str, str]) -> int:
         _, title, artist = entry
@@ -259,6 +271,7 @@ async def cover_art_archive(
                         url=url.replace("http://", "https://", 1),
                         thumb_url=thumbs.get("500") or thumbs.get("large") or None,
                         label=" · ".join(x for x in (kinds, image.get("comment")) if x) or None,
+                        extra={"front": bool(image.get("front"))},
                     )
                 )
             return out
@@ -455,6 +468,93 @@ async def fanart_covers(
     return []
 
 
+# --- sizes, and the best match ---------------------------------------------------------------
+
+MEASURE_CANDIDATES = 6  # at once
+BEST_MIN = 1000  # px on the shorter side, for a best match
+BEST_SQUARE = 1.05  # longer side / shorter side, at most (a little is cropped away)
+BEST_ORDER = ("itunes", "tidal", "coverartarchive", "deezer")  # when sizes are equal
+
+
+async def measure_candidates(
+    http: httpx.AsyncClient, candidates: list[Candidate], limit: int = 12
+) -> None:
+    """Fill in the size of candidates that don't say (the Cover Art Archive, fanart.tv,
+    iTunes), read from the start of each image. Ones that can't be read stay unknown."""
+    gate = asyncio.Semaphore(MEASURE_CANDIDATES)
+
+    async def one(candidate: Candidate) -> None:
+        async with gate:
+            try:
+                w, h = await image_size(http, candidate.url)
+            except FetchError as exc:
+                log.debug("couldn't measure %s: %s", candidate.url, exc)
+                return
+            candidate.width, candidate.height = w, h
+            candidate.extra.pop("up_to", None)
+
+    unknown = [c for c in candidates if c.width is None and c.url.startswith("https://")]
+    await asyncio.gather(*(one(c) for c in unknown[:limit]))
+
+
+@dataclass
+class BestMatch:
+    candidate: Candidate
+    source: str
+
+    @property
+    def size(self) -> tuple[int, int]:
+        return self.candidate.width or 0, self.candidate.height or 0
+
+
+async def best_match(
+    db: AsyncSession,
+    http: httpx.AsyncClient,
+    settings: Settings,
+    tidal_client: tuple[str, str] | None,
+    cover: AlbumCover,
+    album: AlbumRef,
+) -> tuple[BestMatch | None, list[str]]:
+    """The biggest cover of this very album on Deezer, iTunes, Tidal and the Cover Art
+    Archive that is at least BEST_MIN square. Also says which sources couldn't be asked."""
+    problems: list[str] = []
+
+    async def caa() -> list[Candidate]:
+        mbids = [m for m in (album.mbid,) if m]
+        if not mbids and (group := await release_group(db, http, settings, cover, album)):
+            mbids.append(group)
+        found = await cover_art_archive(http, settings.coverartarchive_url, mbids)
+        return [c for c in found if c.extra.get("front")][:1]
+
+    asks: dict[str, Any] = {
+        "deezer": deezer(http, settings.deezer_api_url, album),
+        "itunes": itunes(http, settings.itunes_api_url, album),
+        "coverartarchive": caa(),
+    }
+    if tidal_client:
+        asks["tidal"] = tidal(http, settings, tidal_client, album)
+    results = await asyncio.gather(*asks.values(), return_exceptions=True)
+    picked: list[BestMatch] = []
+    for name, result in zip(asks, results, strict=True):
+        if isinstance(result, BaseException):
+            if not isinstance(result, (SourceError, FetchError)):
+                raise result
+            problems.append(f"{name}: {result}")
+            continue
+        first = next((c for c in result if name == "coverartarchive" or c.extra.get("match")), None)
+        if first is not None:
+            picked.append(BestMatch(first, name))
+    await measure_candidates(http, [p.candidate for p in picked])
+
+    def good(p: BestMatch) -> bool:
+        w, h = p.size
+        return min(w, h) >= BEST_MIN and max(w, h) <= min(w, h) * BEST_SQUARE
+
+    fits = [p for p in picked if good(p)]
+    fits.sort(key=lambda p: (-min(min(p.size), MAX_SIDE), BEST_ORDER.index(p.source)))
+    return (fits[0] if fits else None), problems
+
+
 def source_of(ref: str) -> str:
     """Which source an image came from, by its address."""
     if ref.startswith("plex:"):
@@ -551,3 +651,94 @@ async def apply(
     row = await db.get(AlbumCover, (album.server_id, album.rating_key), populate_existing=True)
     assert row is not None
     return row
+
+
+async def cover_row(db: AsyncSession, album: Album) -> AlbumCover:
+    """The album's row of cover facts (made when missing)."""
+    row = await db.get(AlbumCover, (album.server_id, album.rating_key))
+    if row is None:
+        row = AlbumCover(server_id=album.server_id, rating_key=album.rating_key, kept=False)
+        db.add(row)
+        await db.flush()
+    return row
+
+
+@dataclass
+class BestOutcome:
+    # applied | not_found (nothing this album and big enough) | already (Plex's is as big)
+    outcome: Literal["applied", "not_found", "already"]
+    match: BestMatch | None = None
+    cover: AlbumCover | None = None
+    problems: list[str] = field(default_factory=list)
+
+
+async def apply_best(
+    db: AsyncSession,
+    http: httpx.AsyncClient,
+    settings: Settings,
+    client: PlexServerClient,
+    tidal_client: tuple[str, str] | None,
+    album: Album,
+    artist: str | None,
+    user_id: int,
+) -> BestOutcome:
+    """Find the best match (see best_match) and save it to Plex, unless the cover there is
+    already at least as big."""
+    row = await cover_row(db, album)
+    match, problems = await best_match(
+        db, http, settings, tidal_client, row, AlbumRef(album.title, artist, album.mbid)
+    )
+    if match is None:
+        return BestOutcome("not_found", problems=problems)
+    measured = row.thumb == album.thumb and row.width and row.height
+    if measured and min(row.width or 0, row.height or 0) >= min(match.size):
+        return BestOutcome("already", match, row, problems)
+    data = await image_bytes(http, client, match.candidate.url)
+    jpeg, size = cover_jpeg(data, square=match.size[0] != match.size[1])
+    saved = await apply(db, client, album, jpeg, size, match.source, match.candidate.url, user_id)
+    return BestOutcome("applied", match, saved, problems)
+
+
+BEST_PACE = 3.5  # seconds an album at least, in a job: iTunes allows ~20 searches a minute
+
+
+async def run_best_covers(
+    db: AsyncSession, http: httpx.AsyncClient, settings: Settings, job: Any, us: UserServer
+) -> None:
+    """An artwork job: the best match for each of the albums listed, saved to Plex."""
+    from plekstender.db.instance import get_tidal_client
+    from plekstender.db.models import Artist
+
+    keys = [int(k) for k in job.params.get("rating_keys") or []]
+    client = client_for(settings, http, us)
+    tidal_client = await get_tidal_client(db, settings)
+    stats = {"applied": 0, "not_found": 0, "already": 0, "failed": 0, **job.stats}
+    done = int(job.progress.get("done", 0))  # resume after a restart
+    job.progress = {"done": done, "total": len(keys)}
+    await db.commit()
+    for key in keys[done:]:
+        started = time.monotonic()
+        album = await db.get(Album, (us.server_id, key))
+        if album is not None:
+            artist = (
+                await db.get(Artist, (us.server_id, album.artist_rating_key))
+                if album.artist_rating_key
+                else None
+            )
+            try:
+                result = await apply_best(
+                    db, http, settings, client, tidal_client, album,
+                    artist.title if artist else None, us.user_id,
+                )  # fmt: skip
+                stats[result.outcome] += 1
+            except (CoverError, SourceError, FetchError) as exc:
+                log.info("best cover for %s failed: %s", album.title, exc)
+                await db.rollback()
+                stats["failed"] += 1
+        done += 1
+        job = await db.merge(job)
+        job.progress = {"done": done, "total": len(keys)}
+        job.stats = dict(stats)
+        job.updated_at = dt.datetime.now(dt.UTC)
+        await db.commit()
+        await asyncio.sleep(max(0.0, BEST_PACE - (time.monotonic() - started)))

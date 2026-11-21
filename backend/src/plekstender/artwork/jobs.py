@@ -115,9 +115,14 @@ async def run_fanart(
 
 
 def _runners() -> dict[str, Runner]:
-    from plekstender.artwork import packs
+    from plekstender.artwork import covers, packs
 
-    return {"fanart": run_fanart, "export": packs.run_export, "import": packs.run_import}
+    return {
+        "fanart": run_fanart,
+        "export": packs.run_export,
+        "import": packs.run_import,
+        "covers": covers.run_best_covers,
+    }
 
 
 async def run_job(

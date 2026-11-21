@@ -13,19 +13,23 @@ from sqlalchemy import and_, case, false, func, or_, select
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
-from plekstender.api.routes.artwork import candidates_out, owner_server
+from plekstender.api.routes.artwork import candidates_out, job_out, owner_server, start_job
 from plekstender.api.routes.library import _like, visible
 from plekstender.api.routes.servers import server_client
 from plekstender.api.schemas import (
+    AlbumBestOut,
     AlbumCoverFilter,
     AlbumCoverKeepIn,
     AlbumCoverOut,
     AlbumCoverPage,
+    ArtworkJobOut,
+    BestCoversJobIn,
     CandidatesOut,
 )
 from plekstender.artwork import covers
 from plekstender.artwork import service as art
 from plekstender.artwork.covers import LOW, AlbumRef, CoverError, CoverSource
+from plekstender.artwork.fetch import FetchError
 from plekstender.artwork.sources import Candidate, SourceError
 from plekstender.db.instance import get_fanart_api_key, get_tidal_client
 from plekstender.db.models import Album, AlbumCover, Artist, User, UserServer
@@ -55,6 +59,21 @@ def _columns() -> tuple[Any, Any, Any]:
     )
     kept = func.coalesce(cover.kept, false())
     return state, kept, shorter
+
+
+def _shown(show: str, q: str | None, state: Any, kept: Any) -> list[Any]:
+    """The conditions for a filter and a search (as the list shows them)."""
+    where: list[Any] = []
+    if show == "needs":
+        where += [state.in_(("missing", "low")), ~kept]
+    elif show in ("missing", "low"):
+        where += [state == show, ~kept]
+    if q:
+        like = _like(q)
+        where.append(
+            or_(Album.title.ilike(like, escape="\\"), Artist.title.ilike(like, escape="\\"))
+        )
+    return where
 
 
 async def _album(
@@ -132,16 +151,7 @@ async def list_covers(
     if counts["unchecked"]:
         await enqueue_cover_sizes()  # measure them now rather than at the next sweep
 
-    query = base
-    if show == "needs":
-        query = query.where(cover_state.in_(("missing", "low")), ~kept)
-    elif show in ("missing", "low"):
-        query = query.where(cover_state == show, ~kept)
-    if q:
-        like = _like(q)
-        query = query.where(
-            or_(Album.title.ilike(like, escape="\\"), Artist.title.ilike(like, escape="\\"))
-        )
+    query = base.where(*_shown(show, q, cover_state, kept))
     total = await db.scalar(select(func.count()).select_from(query.subquery())) or 0
     by_name = (
         func.lower(func.coalesce(Artist.title_sort, Artist.title, "")),
@@ -177,12 +187,24 @@ async def list_covers(
 
 
 async def _cover_row(db: DbDep, album: Album) -> AlbumCover:
-    row = await db.get(AlbumCover, (album.server_id, album.rating_key))
-    if row is None:
-        row = AlbumCover(server_id=album.server_id, rating_key=album.rating_key, kept=False)
-        db.add(row)
-        await db.flush()
-    return row
+    return await covers.cover_row(db, album)
+
+
+def _cover_out(album: Album, artist: str | None, row: AlbumCover) -> AlbumCoverOut:
+    size = (row.width or 0, row.height or 0)
+    return AlbumCoverOut(
+        rating_key=album.rating_key,
+        title=album.title,
+        artist=artist,
+        year=album.year,
+        thumb=album.thumb,
+        width=row.width,
+        height=row.height,
+        state="missing" if not row.width else "low" if min(size) < LOW else "ok",
+        kept=bool(row.kept),
+        source=row.source,
+        applied_at=row.applied_at,
+    )
 
 
 NO_MBID = "MusicBrainz doesn't know this album by its name and artist, so {} can't be searched."
@@ -232,6 +254,7 @@ async def candidates(
                 assert api_key
                 found = await covers.fanart_covers(http, settings.fanart_api_url, api_key, mbids)
                 note = None if found else "fanart.tv has no covers for this album yet."
+            await covers.measure_candidates(http, found)  # neither says how big they are
         elif source == "deezer":
             found = await covers.deezer(http, settings.deezer_api_url, ref)
             note = None if found else "Deezer found nothing by that name."
@@ -369,19 +392,85 @@ async def apply(
         row = await covers.apply(db, client, album, jpeg, size, source, url, user.id)
     except CoverError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-    return AlbumCoverOut(
-        rating_key=album.rating_key,
-        title=album.title,
-        artist=artist,
-        year=album.year,
-        thumb=album.thumb,
-        width=row.width,
-        height=row.height,
-        state="low" if min(size) < LOW else "ok",
-        kept=False,
-        source=row.source,
-        applied_at=row.applied_at,
+    return _cover_out(album, artist, row)
+
+
+@router.post(
+    "/{rating_key}/best",
+    response_model=AlbumBestOut,
+    dependencies=[rate_limit("cover-best", limit=20, window=60)],
+)
+async def apply_best(
+    server_id: int,
+    rating_key: int,
+    db: DbDep,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+    cipher: CipherDep,
+) -> AlbumBestOut:
+    """The best match saved to Plex: the biggest cover of this very album (same title and
+    artist) on Deezer, iTunes, Tidal and the Cover Art Archive, at least 1000 x 1000."""
+    us = await owner_server(db, user, server_id)
+    album, artist = await _album(db, user, us, rating_key)
+    try:
+        result = await covers.apply_best(
+            db, http, settings, server_client(us, cipher, settings, http),
+            await get_tidal_client(db, settings), album, artist, user.id,
+        )  # fmt: skip
+    except (CoverError, FetchError) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    await db.commit()
+    match = result.match
+    return AlbumBestOut(
+        outcome=result.outcome,
+        cover=_cover_out(album, artist, result.cover) if result.cover else None,
+        source=match.source if match else None,
+        width=match.size[0] if match else None,
+        height=match.size[1] if match else None,
+        problems=result.problems,
     )
+
+
+@router.post("/best", response_model=ArtworkJobOut, status_code=status.HTTP_201_CREATED)
+async def start_best(
+    server_id: int, body: BestCoversJobIn, db: DbDep, user: UserDep
+) -> ArtworkJobOut:
+    """Apply the best match to every album the list shows with this filter and search (in
+    the background, a few seconds an album)."""
+    us = await owner_server(db, user, server_id)
+    vis, cond, where = visible(Album, user.id, us)
+    cover_state, kept, shorter = _columns()
+    keys = list(
+        await db.scalars(
+            select(Album.rating_key)
+            .join(vis, cond)
+            .outerjoin(
+                Artist,
+                and_(
+                    Artist.server_id == Album.server_id,
+                    Artist.rating_key == Album.artist_rating_key,
+                ),
+            )
+            .outerjoin(
+                AlbumCover,
+                and_(
+                    AlbumCover.server_id == Album.server_id,
+                    AlbumCover.rating_key == Album.rating_key,
+                ),
+            )
+            .where(*where, *_shown(body.show, body.q, cover_state, kept))
+            .order_by(
+                case((cover_state == "missing", 0), else_=1),
+                shorter.asc().nulls_first(),
+                Album.rating_key,
+            )
+        )
+    )
+    if not keys:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No albums to look for.")
+    job = await start_job(db, us, "covers", {"rating_keys": keys, "show": body.show})
+    return job_out(server_id, job)
 
 
 @router.put("/{rating_key}/keep", status_code=status.HTTP_204_NO_CONTENT)

@@ -77,7 +77,25 @@ def web(plex: FakePlex, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[httpx
     r.get("https://itunes.apple.com/search").mock(return_value=httpx.Response(200, json={"results": [
         {"collectionName": "OK Computer OKNOTOK 1997 2017", "artistName": "Radiohead", "releaseDate": "2017-06-23T07:00:00Z",
          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/x/cover.jpg/100x100bb.jpg"},
+        {"collectionName": "OK Computer OKNOTOK (Remastered)", "artistName": "Radiohead", "releaseDate": "2017-06-23T07:00:00Z",
+         "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/exact/cover.jpg/100x100bb.jpg"},
     ]}))  # fmt: skip
+    # Images: Apple sends its 1400 px original when asked for 3000; the archive's are big.
+    r.get(url__regex=r"https://is1-ssl\.mzstatic\.com/.*").mock(
+        return_value=httpx.Response(
+            200, content=jpeg(1400, 1400), headers={"content-type": "image/jpeg"}
+        )
+    )
+    r.get("https://coverartarchive.org/release/r1/1.jpg").mock(
+        return_value=httpx.Response(
+            200, content=jpeg(1200, 1200), headers={"content-type": "image/jpeg"}
+        )
+    )
+    r.get("https://coverartarchive.org/release/r1/2.jpg").mock(
+        return_value=httpx.Response(
+            200, content=jpeg(800, 600), headers={"content-type": "image/jpeg"}
+        )
+    )
 
     def musicbrainz(request: httpx.Request) -> httpx.Response:
         asked["musicbrainz"].append(request)
@@ -175,7 +193,11 @@ async def test_album_covers(
     itunes = (await owner.get(f"{album}/candidates", params={"source": "itunes"})).json()
     assert itunes["candidates"][0]["up_to"] == 3000
     caa = (await owner.get(f"{album}/candidates", params={"source": "coverartarchive"})).json()
-    assert [c["label"] for c in caa["candidates"]] == ["Front", "Back"]
+    # The archive doesn't say how big its images are: read from the start of each.
+    assert [(c["label"], c["width"], c["height"]) for c in caa["candidates"]] == [
+        ("Front", 1200, 1200),
+        ("Back", 800, 600),
+    ]
     await owner.get(f"{album}/candidates", params={"source": "coverartarchive"})
     assert len(web["musicbrainz"]) == 1  # the release group found is remembered
 
@@ -257,3 +279,53 @@ async def test_album_covers(
             await db.scalar(select(Album.thumb).where(Album.rating_key == 201))
             != "/library/metadata/201/thumb/1700000000"
         )
+
+
+async def test_best_match(
+    app: FastAPI,
+    plex: FakePlex,
+    web: dict[str, list[httpx.Request]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The best match: the biggest cover of this very album (same title, remaster notes
+    aside, and artist) at least 1000 x 1000, from Deezer, iTunes, Tidal and the archive."""
+    from plekstender.worker import artwork_job
+
+    monkeypatch.setattr(covers, "BEST_PACE", 0)
+    owner, sid = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:  # Dummy has no cover in Plex
+        await db.execute(update(Album).where(Album.rating_key == 202).values(thumb=None))
+        await db.commit()
+    await measure()
+    base = f"/api/servers/{sid}/artwork/albums"
+
+    # OKNOTOK: Deezer has only the 1997-2017 edition (not this album); iTunes has it at
+    # 1400 px, the archive at 1200: iTunes wins.
+    best = (await owner.post(f"{base}/201/best", headers=CSRF)).json()
+    assert (best["outcome"], best["source"], best["width"], best["height"]) == (
+        "applied", "itunes", 1400, 1400,
+    )  # fmt: skip
+    assert (best["cover"]["width"], best["cover"]["state"], best["cover"]["source"]) == (
+        1400, "ok", "itunes",
+    )  # fmt: skip
+    assert plex.library.uploaded[-1][0] == 201
+    uploads = len(plex.library.uploaded)
+    # Asked again: Plex's is as big already, so nothing is saved.
+    again = (await owner.post(f"{base}/201/best", headers=CSRF)).json()
+    assert again["outcome"] == "already" and len(plex.library.uploaded) == uploads
+
+    # Dummy: nothing anywhere is this album.
+    none = (await owner.post(f"{base}/202/best", headers=CSRF)).json()
+    assert (none["outcome"], none["cover"], none["source"]) == ("not_found", None, None)
+
+    # Every album the list shows, in the background.
+    started = await owner.post(f"{base}/best", json={"show": "needs"}, headers=CSRF)
+    assert started.status_code == 201, started.text
+    job = started.json()
+    assert job["kind"] == "covers"
+    await artwork_job.func(job_id=job["id"])  # what the worker runs
+    [done] = (await owner.get(f"/api/servers/{sid}/artwork/jobs")).json()[:1]
+    assert (done["status"], done["progress"]) == ("succeeded", {"done": 1, "total": 1})
+    assert done["stats"] == {"applied": 0, "not_found": 1, "already": 0, "failed": 0}
+    nothing = await owner.post(f"{base}/best", json={"show": "low"}, headers=CSRF)
+    assert nothing.status_code == 422  # OKNOTOK isn't low any more

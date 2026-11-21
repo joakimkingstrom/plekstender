@@ -715,6 +715,18 @@ class AlbumCoverPage(BaseModel):
     )
 
 
+class AlbumBestOut(BaseModel):
+    outcome: Literal["applied", "not_found", "already"] = Field(
+        description="applied: saved to Plex; not_found: no cover of this album at least "
+        "1000 x 1000 (and square); already: Plex's cover is at least as big."
+    )
+    cover: AlbumCoverOut | None = Field(description="The album now (applied, already).")
+    source: str | None = Field(description="Where the best match is from.")
+    width: int | None
+    height: int | None
+    problems: list[str] = Field(description="Sources that couldn't be asked, and why.")
+
+
 class AlbumCoverKeepIn(BaseModel):
     kept: bool
 
@@ -737,7 +749,7 @@ class AcoustIdKeyIn(BaseModel):
 
 class ArtworkJobOut(BaseModel):
     id: int
-    kind: Literal["fanart", "export", "import"]
+    kind: Literal["fanart", "export", "import", "covers"]
     status: Literal["queued", "running", "succeeded", "failed"]
     progress: dict[str, Any]
     stats: dict[str, Any]
@@ -745,6 +757,13 @@ class ArtworkJobOut(BaseModel):
     created_at: dt.datetime
     finished_at: dt.datetime | None
     download: str | None = Field(default=None, description="Export: where to download it.")
+
+
+class BestCoversJobIn(BaseModel):
+    show: Literal["needs", "missing", "low"] = Field(
+        default="needs", description="The albums listed with this filter (and search)."
+    )
+    q: str | None = Field(default=None, max_length=200)
 
 
 class FanartJobIn(BaseModel):

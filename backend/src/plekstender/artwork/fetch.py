@@ -9,10 +9,12 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+from PIL import ImageFile
 
 from plekstender import __version__
 
@@ -68,10 +70,9 @@ async def check_url(url: str) -> None:
         raise FetchError("That address isn't on the public internet.")
 
 
-async def fetch(
-    http: httpx.AsyncClient, url: str, *, max_bytes: int = MAX_BYTES
-) -> tuple[bytes, str]:
-    """GET a public URL. Returns (body, content type)."""
+@asynccontextmanager
+async def _open(http: httpx.AsyncClient, url: str) -> AsyncIterator[httpx.Response]:
+    """A streamed GET of a public URL, redirects followed by hand (each hop checked)."""
     for _ in range(MAX_REDIRECTS + 1):
         await check_url(url)
         try:
@@ -94,14 +95,50 @@ async def fetch(
                     continue
                 if resp.status_code != 200:
                     raise FetchError(f"The image couldn't be downloaded (HTTP {resp.status_code}).")
-                if int(resp.headers.get("content-length") or 0) > max_bytes:
-                    raise FetchError("The image is too large.")
-                body = bytearray()
-                async for chunk in resp.aiter_bytes():
-                    body.extend(chunk)
-                    if len(body) > max_bytes:
-                        raise FetchError("The image is too large.")
-                return bytes(body), resp.headers.get("content-type", "")
+                yield resp
+                return
         except httpx.HTTPError as exc:
             raise FetchError("The image couldn't be downloaded.") from exc
     raise FetchError("Too many redirects.")
+
+
+async def fetch(
+    http: httpx.AsyncClient, url: str, *, max_bytes: int = MAX_BYTES
+) -> tuple[bytes, str]:
+    """GET a public URL. Returns (body, content type)."""
+    async with _open(http, url) as resp:
+        if int(resp.headers.get("content-length") or 0) > max_bytes:
+            raise FetchError("The image is too large.")
+        body = bytearray()
+        try:
+            async for chunk in resp.aiter_bytes():
+                body.extend(chunk)
+                if len(body) > max_bytes:
+                    raise FetchError("The image is too large.")
+        except httpx.HTTPError as exc:
+            raise FetchError("The image couldn't be downloaded.") from exc
+        return bytes(body), resp.headers.get("content-type", "")
+
+
+async def image_size(
+    http: httpx.AsyncClient, url: str, *, max_bytes: int = 2 * 1024 * 1024
+) -> tuple[int, int]:
+    """A public image's width and height, read from the start of the file (the header is in
+    its first few kilobytes), without downloading the rest."""
+    parser = ImageFile.Parser()
+    read = 0
+    async with _open(http, url) as resp:
+        try:
+            async for chunk in resp.aiter_bytes():
+                try:
+                    parser.feed(chunk)
+                except Exception as exc:  # Pillow raises many kinds for broken images
+                    raise FetchError("That isn't an image Plekstender can read.") from exc
+                if parser.image is not None:
+                    return parser.image.size
+                read += len(chunk)
+                if read > max_bytes:
+                    break
+        except httpx.HTTPError as exc:
+            raise FetchError("The image couldn't be downloaded.") from exc
+    raise FetchError("That isn't an image Plekstender can read.")

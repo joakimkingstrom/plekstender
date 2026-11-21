@@ -2547,6 +2547,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/albums/{rating_key}/best": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Best
+         * @description The best match saved to Plex: the biggest cover of this very album (same title and
+         *     artist) on Deezer, iTunes, Tidal and the Cover Art Archive, at least 1000 x 1000.
+         */
+        post: operations["apply_best_api_servers__server_id__artwork_albums__rating_key__best_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/artwork/albums/best": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Best
+         * @description Apply the best match to every album the list shows with this filter and search (in
+         *     the background, a few seconds an album).
+         */
+        post: operations["start_best_api_servers__server_id__artwork_albums_best_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/albums/{rating_key}/keep": {
         parameters: {
             query?: never;
@@ -4031,6 +4073,31 @@ export interface components {
             /** Plex Poster */
             plex_poster: boolean;
         };
+        /** AlbumBestOut */
+        AlbumBestOut: {
+            /**
+             * Outcome
+             * @description applied: saved to Plex; not_found: no cover of this album at least 1000 x 1000 (and square); already: Plex's cover is at least as big.
+             * @enum {string}
+             */
+            outcome: "applied" | "not_found" | "already";
+            /** @description The album now (applied, already). */
+            cover: components["schemas"]["AlbumCoverOut"] | null;
+            /**
+             * Source
+             * @description Where the best match is from.
+             */
+            source: string | null;
+            /** Width */
+            width: number | null;
+            /** Height */
+            height: number | null;
+            /**
+             * Problems
+             * @description Sources that couldn't be asked, and why.
+             */
+            problems: string[];
+        };
         /** AlbumColourOut */
         AlbumColourOut: {
             /** Rating Key */
@@ -4440,7 +4507,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "fanart" | "export" | "import";
+            kind: "fanart" | "export" | "import" | "covers";
             /**
              * Status
              * @enum {string}
@@ -4513,6 +4580,18 @@ export interface components {
             connected: boolean;
             /** Allowed */
             allowed: boolean;
+        };
+        /** BestCoversJobIn */
+        BestCoversJobIn: {
+            /**
+             * Show
+             * @description The albums listed with this filter (and search).
+             * @default needs
+             * @enum {string}
+             */
+            show: "needs" | "missing" | "low";
+            /** Q */
+            q?: string | null;
         };
         /** CandidateOut */
         CandidateOut: {
@@ -12939,6 +13018,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumCoverOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_best_api_servers__server_id__artwork_albums__rating_key__best_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumBestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_best_api_servers__server_id__artwork_albums_best_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BestCoversJobIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkJobOut"];
                 };
             };
             /** @description Validation Error */

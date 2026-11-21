@@ -238,6 +238,7 @@ export function useArtworkJobs(serverId: number) {
       const wasActive = previous?.some((j) => j.status === 'queued' || j.status === 'running')
       if (wasActive && !jobs.some((j) => j.status === 'queued' || j.status === 'running')) {
         void qc.invalidateQueries({ queryKey: [...artworkKeys.all(serverId), 'artists'] })
+        void qc.invalidateQueries({ queryKey: [...artworkKeys.all(serverId), 'albums'] })
         void qc.invalidateQueries({ queryKey: libraryKeys.library(serverId) })
       }
       return jobs
