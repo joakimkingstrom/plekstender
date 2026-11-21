@@ -110,7 +110,16 @@ describe('GigsPage', () => {
   it('adds a gig by hand', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Add a gig' }))
-    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2024-05-01' } })
+    // The date picker: the title goes to months, then years; then 2024, May, the 1st.
+    fireEvent.click(screen.getByLabelText('Date'))
+    const title = screen.getByRole('dialog').querySelector('[aria-live]')!
+    fireEvent.click(title)
+    fireEvent.click(title)
+    fireEvent.click(screen.getByRole('button', { name: '2024' }))
+    fireEvent.click(screen.getByRole('button', { name: 'May' }))
+    fireEvent.click(screen.getByRole('button', { name: /May 1, 2024|1 May 2024/ }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Date')).toHaveTextContent(/2024/)
     fireEvent.change(screen.getByLabelText(/^Artists/), { target: { value: 'Massive Attack\nYoung Fathers\n' } })
     fireEvent.change(screen.getByLabelText('Venue'), { target: { value: 'Brixton Academy' } })
     fireEvent.change(screen.getByLabelText('Country'), { target: { value: 'gb' } })

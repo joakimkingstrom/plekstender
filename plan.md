@@ -398,6 +398,7 @@ Requests after using Phases 1–4 on the real library. Notes in italics are how 
   *A small Tooltip component (shown on hover and keyboard focus, positioned to stay on screen); replace every `title=` in the UI.*
 - [x] Site-native dropdowns instead of the browser's `<select>`.
   *A Select / listbox component with full keyboard support (arrows, type-ahead, Esc) and grouped options (fonts); replace every `<select>`.*
+- [x] Site-native date picker instead of the browser's `<input type="date">` (21 Nov): a button with the date, opening a calendar in the site's colours (Monday first, today ringed, the chosen day in the accent); the title goes to months, then years, for dates far back; keyboard as a calendar grid (arrows, Page Up / Down, Home / End, Enter, Esc); min and max respected. Used for adding a gig and Rewind's own dates.
 - [x] Everything else that still looks like a browser default: checkboxes, range sliders, file pickers, colour pickers, number inputs, scrollbars.
   *Styled replacements sharing the same tokens; file pickers become a button with drag-and-drop.*
 - [ ] Choose the accent colour (the yellow/orange) yourself.

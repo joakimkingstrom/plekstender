@@ -15,6 +15,7 @@ import {
 import { useActiveServer } from '../api/library'
 import { useStarShow } from '../api/live'
 import { FilePicker } from '../components/controls'
+import { DatePicker } from '../components/DatePicker'
 import { GigStats } from '../components/GigStats'
 import { Select } from '../components/Select'
 import { Button, Card, Notice, Spinner } from '../components/ui'
@@ -315,6 +316,7 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
   const [notes, setNotes] = useState(gig?.notes ?? '')
   const [url, setUrl] = useState(gig?.url ?? '')
   const names = artists.split('\n').map((a) => a.trim()).filter(Boolean)
+  const dateId = useId()
   const valid = Boolean(date) && names.length > 0 && (!country || /^[A-Za-z]{2}$/.test(country)) && (!url || /^https?:\/\//.test(url))
   const body: GigIn = {
     date,
@@ -335,10 +337,12 @@ function GigForm({ gig, onDone }: { gig?: Gig; onDone: () => void }) {
           if (valid) save.mutate({ id: gig?.id, gig: body }, { onSuccess: onDone })
         }}
       >
-        <label className="space-y-1 text-sm">
-          <span className="block font-medium">Date</span>
-          <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={field} />
-        </label>
+        <div className="space-y-1 text-sm">
+          <span id={dateId} className="block font-medium">
+            Date
+          </span>
+          <DatePicker value={date} onChange={setDate} labelledBy={dateId} className="w-full" />
+        </div>
         <label className="space-y-1 text-sm">
           <span className="block font-medium">Festival or tour (optional)</span>
           <input value={name} onChange={(e) => setName(e.target.value)} className={field} />

@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { api, errorMessage, unwrap, type Schemas } from '../api/client'
 import { imageUrl, useActiveServer } from '../api/library'
 import { localTimeZone } from '../api/stats'
+import { DatePicker } from '../components/DatePicker'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatListeningTime } from '../format'
 
@@ -34,6 +35,8 @@ export function RewindPage() {
   const today = options[0].end
   const [range, setRange] = useState<Range>(options[0])
   const [custom, setCustom] = useState({ start: options[4].start, end: options[4].end })
+  const fromId = useId()
+  const toId = useId()
   const [playing, setPlaying] = useState<Range | null>(null)
   return (
     <div className="space-y-4">
@@ -64,14 +67,18 @@ export function RewindPage() {
             if (custom.start && custom.end && custom.start <= custom.end) setPlaying({ ...custom, label: `${custom.start} – ${custom.end}` })
           }}
         >
-          <label className="block">
-            <span className="mb-1 block text-xs text-muted">From</span>
-            <input type="date" value={custom.start} max={custom.end} onChange={(e) => setCustom({ ...custom, start: e.target.value })} className="rounded-lg border border-border bg-surface-2 px-2 py-1.5" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs text-muted">To</span>
-            <input type="date" value={custom.end} min={custom.start} max={today} onChange={(e) => setCustom({ ...custom, end: e.target.value })} className="rounded-lg border border-border bg-surface-2 px-2 py-1.5" />
-          </label>
+          <div>
+            <span id={fromId} className="mb-1 block text-xs text-muted">
+              From
+            </span>
+            <DatePicker value={custom.start} max={custom.end || today} onChange={(start) => setCustom({ ...custom, start })} labelledBy={fromId} size="sm" />
+          </div>
+          <div>
+            <span id={toId} className="mb-1 block text-xs text-muted">
+              To
+            </span>
+            <DatePicker value={custom.end} min={custom.start} max={today} onChange={(end) => setCustom({ ...custom, end })} labelledBy={toId} size="sm" />
+          </div>
           <Button type="submit" variant="ghost">
             Play these dates
           </Button>
