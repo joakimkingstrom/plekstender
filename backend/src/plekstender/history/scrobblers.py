@@ -1,5 +1,5 @@
 """Scrobbling to more services than ListenBrainz: any ListenBrainz-compatible server (Maloja,
-Koito, Multi-Scrobbler…) and Libre.fm (or another GNU FM server, Last.fm's 2.0 API).
+Koito, Multi-Scrobbler…), Libre.fm (or another GNU FM server) and Last.fm (their 2.0 API).
 
 Each is a `ScrobbleTarget` that sends the user's new Plex plays like the ListenBrainz link
 does (the same loop: batches, refused plays skipped, a rejected token pauses it).
@@ -7,15 +7,20 @@ does (the same loop: batches, refused plays skipped, a rejected token pauses it)
 Libre.fm signs in with the username and password once (`auth.getMobileSession`, with
 `authToken = md5(lower(username) + md5(password))`); only the session key it gives back is
 kept. GNU FM accepts any 32-character API key and signature; they're still made properly.
+
+Last.fm uses the instance's API key and shared secret (an admin's), and its web sign-in: the
+person approves Plekstender on last.fm, which sends them back with a token that's swapped
+for a session key (`auth.getSession`). Their password never passes through Plekstender.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import hmac
 import logging
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 from sqlalchemy import select
@@ -23,7 +28,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender import __version__
 from plekstender.config import Settings
+from plekstender.db.instance import get_lastfm_api_key, get_lastfm_shared_secret
 from plekstender.db.models import Listen, ScrobbleTarget
+from plekstender.history.lastfm import KEY_REJECTED
 from plekstender.history.listenbrainz import (
     ListenBrainzClient,
     ListenBrainzError,
@@ -40,6 +47,12 @@ LIBREFM_URL = "https://libre.fm/2.0/"
 API_KEY = hashlib.md5(b"plekstender").hexdigest()  # noqa: S324 - an identifier, not security
 API_SECRET = hashlib.md5(b"plekstender-secret").hexdigest()  # noqa: S324
 LIBREFM_BATCH = 50
+LASTFM_AUTH_URL = "https://www.last.fm/api/auth/"
+CONNECT_WINDOW = 3600  # seconds to approve Plekstender on last.fm
+LASTFM_UNAVAILABLE = (
+    "Last.fm scrobbling isn't set up on this server at the moment (an admin needs to add "
+    "the API key and its shared secret). Plays wait until it is."
+)
 
 SERVICES: dict[str, tuple[str, str]] = {
     # service: (kind, label)
@@ -48,6 +61,7 @@ SERVICES: dict[str, tuple[str, str]] = {
     "multi-scrobbler": ("listenbrainz", "Multi-Scrobbler"),
     "listenbrainz-other": ("listenbrainz", "ListenBrainz-compatible server"),
     "librefm": ("librefm", "Libre.fm"),
+    "lastfm": ("lastfm", "Last.fm"),
 }
 
 
@@ -104,23 +118,38 @@ async def check_listenbrainz(http: httpx.AsyncClient, base: str, token: str) -> 
     return str(name) if name else None
 
 
-def _sign(params: dict[str, str]) -> str:
+def _sign(params: dict[str, str], secret: str) -> str:
     """Last.fm's signature: md5 of the sorted name+value pairs and the secret."""
     text = "".join(f"{k}{params[k]}" for k in sorted(params) if k not in ("format", "callback"))
-    return hashlib.md5((text + API_SECRET).encode()).hexdigest()  # noqa: S324 - the protocol's
+    return hashlib.md5((text + secret).encode()).hexdigest()  # noqa: S324 - the protocol's
 
 
-class LibreFmClient:
-    def __init__(self, http: httpx.AsyncClient, base_url: str, session_key: str | None = None):
+class AudioscrobblerClient:
+    """Last.fm's 2.0 API, as Last.fm itself and Libre.fm (GNU FM) answer it."""
+
+    def __init__(
+        self,
+        http: httpx.AsyncClient,
+        base_url: str,
+        session_key: str | None = None,
+        *,
+        api_key: str = API_KEY,
+        api_secret: str = API_SECRET,
+        name: str = "Libre.fm",
+    ):
         self._http = http
         self._base = base_url
         self._sk = session_key
+        self._key = api_key
+        self._secret = api_secret
+        self._name = name
 
     async def _call(self, method: str, params: dict[str, str]) -> dict[str, Any]:
-        body = {"method": method, "api_key": API_KEY, **params}
+        name = self._name
+        body = {"method": method, "api_key": self._key, **params}
         if self._sk:
             body["sk"] = self._sk
-        body["api_sig"] = _sign(body)
+        body["api_sig"] = _sign(body, self._secret)
         body["format"] = "json"
         try:
             resp = await self._http.post(
@@ -130,38 +159,60 @@ class LibreFmClient:
                 timeout=30,
             )
         except httpx.HTTPError as exc:
-            raise ListenBrainzError("Libre.fm couldn't be reached.") from exc
-        if resp.status_code >= 500:
-            raise ListenBrainzError(
-                f"Libre.fm is unavailable (HTTP {resp.status_code}).", status=503
-            )
+            raise ListenBrainzError(f"{name} couldn't be reached.") from exc
+        if resp.status_code >= 500 or resp.status_code == 429:
+            raise ListenBrainzError(f"{name} is unavailable (HTTP {resp.status_code}).", status=503)
         try:
             data = resp.json()
         except ValueError as exc:
-            raise ListenBrainzError("Libre.fm sent an answer that isn't JSON.", status=503) from exc
+            raise ListenBrainzError(f"{name} sent an answer that isn't JSON.", status=503) from exc
         if isinstance(data, dict) and "error" in data:
             code, message = data.get("error"), str(data.get("message") or "")
             # 4: wrong password, 9: session key no longer valid, 14/15: unauthorised token.
             if code in (4, 9, 14, 15):
-                raise ListenBrainzError(f"Libre.fm: {message or 'not signed in'}", status=401)
+                raise ListenBrainzError(f"{name}: {message or 'not signed in'}", status=401)
+            # 10/26: the API key is refused or suspended, 13: the signature (the shared
+            # secret) is wrong. Nothing to do with the plays or the person's session, so
+            # they wait (not skipped, not paused) until an admin fixes it.
+            if code in (10, 26):
+                raise ListenBrainzError(
+                    KEY_REJECTED if self._name == "Last.fm" else f"{name}: {message}", status=403
+                )
+            if code == 13:
+                raise ListenBrainzError(
+                    f"{name} didn't accept the signature: check the API key's shared secret.",
+                    status=403,
+                )
             if code in (11, 16, 29):  # service offline, temporary error, rate limited
-                raise ListenBrainzError(f"Libre.fm: {message or 'try again later'}", status=503)
-            raise ListenBrainzError(f"Libre.fm refused it: {message}", status=400)
+                raise ListenBrainzError(f"{name}: {message or 'try again later'}", status=503)
+            raise ListenBrainzError(f"{name} refused it: {message}", status=400)
         if not isinstance(data, dict):
-            raise ListenBrainzError("Libre.fm sent an unexpected answer.", status=503)
+            raise ListenBrainzError(f"{name} sent an unexpected answer.", status=503)
         return data
 
-    async def session(self, username: str, password: str) -> tuple[str, str]:
-        """Sign in once: (session key, the account's name)."""
-        password_md5 = hashlib.md5(password.encode()).hexdigest()  # noqa: S324 - the protocol's
-        token = hashlib.md5((username.lower() + password_md5).encode()).hexdigest()  # noqa: S324
-        data = await self._call("auth.getMobileSession", {"username": username, "authToken": token})
+    @staticmethod
+    def _session(data: dict[str, Any], fallback: str) -> tuple[str, str]:
         found = data.get("session")
         session: dict[str, Any] = found if isinstance(found, dict) else {}
         key = session.get("key")
         if not key:
-            raise ListenBrainzError("Libre.fm didn't give a session.", status=401)
-        return str(key), str(session.get("name") or username)
+            raise ListenBrainzError("No session was given.", status=401)
+        return str(key), str(session.get("name") or fallback)
+
+    async def session(self, username: str, password: str) -> tuple[str, str]:
+        """Libre.fm: sign in once with the password: (session key, the account's name)."""
+        password_md5 = hashlib.md5(password.encode()).hexdigest()  # noqa: S324 - the protocol's
+        token = hashlib.md5((username.lower() + password_md5).encode()).hexdigest()  # noqa: S324
+        data = await self._call("auth.getMobileSession", {"username": username, "authToken": token})
+        return self._session(data, username)
+
+    async def web_session(self, token: str) -> tuple[str, str]:
+        """Last.fm: the session for a token the person approved on last.fm (web sign-in)."""
+        return self._session(await self._call("auth.getSession", {"token": token}), "")
+
+    async def check(self) -> None:
+        """Raises if the API key or its shared secret is refused (a signed call)."""
+        await self._call("auth.getToken", {})
 
     async def send(self, listens: list[Listen]) -> None:
         for start in range(0, len(listens), LIBREFM_BATCH):
@@ -177,6 +228,27 @@ class LibreFmClient:
                 if listen.recording_mbid:
                     params[f"mbid[{i}]"] = listen.recording_mbid
             await self._call("track.scrobble", params)
+
+
+def lastfm_auth_url(api_key: str, callback: str) -> str:
+    """Where a person approves Plekstender on last.fm; it then comes back to `callback`
+    with `token` added."""
+    return f"{LASTFM_AUTH_URL}?{urlencode({'api_key': api_key, 'cb': callback})}"
+
+
+def connect_state(settings: Settings, user_id: int, at: int | None = None) -> str:
+    """Ties a Last.fm sign-in to the person who started it (and expires), so nobody can
+    have someone else's Plekstender scrobble to their Last.fm account."""
+    at = int(now().timestamp()) if at is None else at
+    mac = hmac.new(settings.derive_key("lastfm-connect"), f"{user_id}.{at}".encode(), "sha256")
+    return f"{at}.{mac.hexdigest()[:32]}"
+
+
+def check_state(settings: Settings, user_id: int, state: str) -> bool:
+    at, _, _ = state.partition(".")
+    if not at.isdigit() or now().timestamp() - int(at) > CONNECT_WINDOW:
+        return False
+    return hmac.compare_digest(connect_state(settings, user_id, int(at)), state)
 
 
 def _cipher(settings: Settings) -> TokenCipher:
@@ -201,11 +273,23 @@ async def submit_targets(
     )
     for target in targets:
         secret = _cipher(settings).decrypt(target.token_enc, purpose=PURPOSE)
-        client: Any = (
-            LibreFmClient(http, target.api_url, secret)
-            if target.kind == "librefm"
-            else ListenBrainzClient(http, target.api_url, secret)
-        )
+        client: Any
+        if target.kind == "lastfm":
+            api_key, _ = await get_lastfm_api_key(db, settings)
+            api_secret = await get_lastfm_shared_secret(db, settings)
+            if not api_key or not api_secret:
+                # Waits (not paused) until an admin sets the key and secret again.
+                target.last_error = LASTFM_UNAVAILABLE
+                results[target.id] = SubmitResult(error=LASTFM_UNAVAILABLE)
+                await db.commit()
+                continue
+            client = AudioscrobblerClient(
+                http, target.api_url, secret, api_key=api_key, api_secret=api_secret, name="Last.fm"
+            )
+        elif target.kind == "librefm":
+            client = AudioscrobblerClient(http, target.api_url, secret)
+        else:
+            client = ListenBrainzClient(http, target.api_url, secret)
         results[target.id] = await send_pending(db, target, client, service_label(target.service))
     return results
 

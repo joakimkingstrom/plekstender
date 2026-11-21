@@ -157,10 +157,12 @@ export function useLastFmKey(enabled: boolean) {
 export function useSetLastFmKey() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (apiKey: string | null) => unwrap(api.PUT('/api/admin/lastfm', { body: { api_key: apiKey } })),
+    /** A key (with or without its shared secret), a secret for the key there, or `{}` to clear both. */
+    mutationFn: (body: Schemas['LastFmKeyIn']) => unwrap(api.PUT('/api/admin/lastfm', { body })),
     onSuccess: (data) => {
       qc.setQueryData(listenKeys.lastfmKey, data)
       void qc.invalidateQueries({ queryKey: listenKeys.lastfm })
+      void qc.invalidateQueries({ queryKey: ['scrobblers', 'lastfm'] })
     },
   })
 }

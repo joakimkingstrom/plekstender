@@ -56,6 +56,7 @@ from plekstender.db.instance import (
     get_jambase_api_key,
     get_jambase_usage,
     get_lastfm_api_key,
+    get_lastfm_shared_secret,
     get_library_settings,
     get_setlistfm_api_key,
     get_spotify_app,
@@ -76,7 +77,9 @@ from plekstender.db.instance import (
     set_ticketmaster_api_key,
 )
 from plekstender.db.models import PlexServer, User, UserServer
+from plekstender.history import scrobblers
 from plekstender.history.lastfm import LastFmClient, LastFmError
+from plekstender.history.listenbrainz import ListenBrainzError
 from plekstender.live import datathistle, jambase, ticketmaster
 from plekstender.sync.popularity import preview_artist_ranking
 from plekstender.worker import enqueue_popularity_recompute
@@ -236,21 +239,44 @@ async def preview_popularity(
 @router.get("/lastfm", response_model=LastFmKeyOut)
 async def get_lastfm(db: DbDep, _: AdminDep, settings: SettingsDep) -> LastFmKeyOut:
     key, source = await get_lastfm_api_key(db, settings)
-    return LastFmKeyOut(configured=key is not None, source=source)
+    secret = await get_lastfm_shared_secret(db, settings)
+    return LastFmKeyOut(configured=key is not None, source=source, scrobbling=bool(key and secret))
 
 
 @router.put("/lastfm", response_model=LastFmKeyOut)
 async def put_lastfm(
     body: LastFmKeyIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
 ) -> LastFmKeyOut:
-    """Set (after checking it with Last.fm) or clear the instance's Last.fm API key."""
+    """Set (after checking them with Last.fm) or clear the instance's Last.fm API key and
+    its shared secret. A secret on its own goes with the key that's set already."""
     if body.api_key:
         try:
             await LastFmClient(http, body.api_key, settings.lastfm_api_url).check_key()
         except LastFmError as exc:
             code = status.HTTP_502_BAD_GATEWAY if exc.transient else status.HTTP_400_BAD_REQUEST
             raise HTTPException(code, str(exc)) from exc
-    await set_lastfm_api_key(db, settings, body.api_key)
+    key, source = await get_lastfm_api_key(db, settings)
+    if body.shared_secret:
+        api_key = body.api_key or key
+        if not api_key:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Add the API key first.")
+        client = scrobblers.AudioscrobblerClient(
+            http,
+            settings.lastfm_api_url,
+            api_key=api_key,
+            api_secret=body.shared_secret,
+            name="Last.fm",
+        )
+        try:
+            await client.check()
+        except ListenBrainzError as exc:
+            refused = exc.status in (400, 401, 403)
+            code = status.HTTP_400_BAD_REQUEST if refused else status.HTTP_502_BAD_GATEWAY
+            raise HTTPException(code, str(exc)) from exc
+    # A new key without a secret drops the old secret (it belonged to the old key); a
+    # secret on its own keeps the key saved here.
+    keep_key = body.api_key or (key if body.shared_secret and source == "settings" else None)
+    await set_lastfm_api_key(db, settings, keep_key, body.shared_secret)
     await db.commit()
     return await get_lastfm(db, admin, settings)
 

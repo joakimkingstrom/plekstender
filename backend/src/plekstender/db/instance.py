@@ -107,6 +107,7 @@ async def set_library_settings(db: AsyncSession, settings: LibrarySettings) -> N
 
 LASTFM_KEY = "lastfm"
 LASTFM_PURPOSE = "instance.lastfm_api_key"
+LASTFM_SECRET_PURPOSE = "instance.lastfm_shared_secret"  # noqa: S105 - a label
 
 
 def _cipher(settings: Settings) -> TokenCipher:
@@ -128,15 +129,35 @@ async def get_lastfm_api_key(
     return None, None
 
 
-async def set_lastfm_api_key(db: AsyncSession, settings: Settings, api_key: str | None) -> None:
+async def get_lastfm_shared_secret(db: AsyncSession, settings: Settings) -> str | None:
+    """The shared secret that goes with the API key (scrobbling needs both): Settings page
+    first, then LASTFM_SHARED_SECRET."""
+    stored = await _get(db, LASTFM_KEY) or {}
+    if encrypted := stored.get("shared_secret_enc"):
+        try:
+            return _cipher(settings).decrypt(encrypted, purpose=LASTFM_SECRET_PURPOSE)
+        except DecryptionError:
+            pass
+    if settings.lastfm_shared_secret and (
+        env := settings.lastfm_shared_secret.get_secret_value().strip()
+    ):
+        return env
+    return None
+
+
+async def set_lastfm_api_key(
+    db: AsyncSession, settings: Settings, api_key: str | None, shared_secret: str | None = None
+) -> None:
+    """Store the key and/or its shared secret (a secret alone goes with the key from the
+    environment); neither clears both."""
+    value: dict[str, str] = {}
     if api_key:
-        await _put(
-            db,
-            LASTFM_KEY,
-            {"api_key_enc": _cipher(settings).encrypt(api_key, purpose=LASTFM_PURPOSE)},
+        value["api_key_enc"] = _cipher(settings).encrypt(api_key, purpose=LASTFM_PURPOSE)
+    if shared_secret:
+        value["shared_secret_enc"] = _cipher(settings).encrypt(
+            shared_secret, purpose=LASTFM_SECRET_PURPOSE
         )
-    else:
-        await _put(db, LASTFM_KEY, {})
+    await _put(db, LASTFM_KEY, value)
 
 
 # --- fanart.tv API key --------------------------------------------------------------------

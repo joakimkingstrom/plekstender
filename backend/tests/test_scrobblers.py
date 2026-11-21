@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
@@ -16,7 +16,7 @@ from plekstender.config import get_settings
 from plekstender.db import get_sessionmaker
 from plekstender.db.models import Listen, ScrobbleTarget, User
 from plekstender.history import scrobblers
-from tests.fakes import CSRF, FakePlex, sign_in
+from tests.fakes import CSRF, LASTFM_KEY, LASTFM_URL, FakeLastFm, FakePlex, sign_in
 from tests.test_sync import connect, owner_with_library, run_queued_syncs
 
 MALOJA = "https://maloja.example/apis/listenbrainz"
@@ -211,3 +211,128 @@ async def test_scrobble_services(app: FastAPI, plex: FakePlex) -> None:
         await owner.delete(f"/api/scrobblers/{maloja.json()['id']}", headers=CSRF)
     ).status_code == 204
     assert len((await owner.get("/api/scrobblers")).json()) == 2
+
+
+LASTFM_SECRET = "fedcba9876543210fedcba9876543210"
+
+
+class FakeLastFmWrite:
+    """Last.fm's signed calls (POST): auth.getToken, auth.getSession and track.scrobble,
+    checking each signature against the shared secret."""
+
+    def __init__(self, plex: FakePlex) -> None:
+        self.scrobbles: list[dict[str, list[str]]] = []
+        self.session_valid = True
+        plex.router.post(LASTFM_URL).mock(side_effect=self._handle)
+
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        form = {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
+        if form["api_key"] != LASTFM_KEY:
+            return httpx.Response(200, json={"error": 10, "message": "Invalid API key"})
+        signed = "".join(f"{k}{form[k]}" for k in sorted(form) if k not in ("format", "api_sig"))
+        if hashlib.md5((signed + LASTFM_SECRET).encode()).hexdigest() != form["api_sig"]:
+            return httpx.Response(200, json={"error": 13, "message": "Invalid method signature"})
+        method = form["method"]
+        if method == "auth.getToken":
+            return httpx.Response(200, json={"token": "unused"})
+        if method == "auth.getSession":
+            if form["token"] != "approved":
+                return httpx.Response(200, json={"error": 14, "message": "Unauthorized Token"})
+            return httpx.Response(200, json={"session": {"name": "Joakim", "key": "lfm-sk"}})
+        assert method == "track.scrobble"
+        if not self.session_valid or form["sk"] != "lfm-sk":
+            return httpx.Response(200, json={"error": 9, "message": "Invalid session key"})
+        self.scrobbles.append(parse_qs(request.content.decode()))
+        return httpx.Response(200, json={"scrobbles": {"@attr": {"accepted": 1, "ignored": 0}}})
+
+
+def _location(resp: httpx.Response) -> str:
+    assert resp.status_code == 303, resp.text
+    return resp.headers["location"]
+
+
+@pytest.mark.db
+async def test_lastfm_scrobbling(app: FastAPI, plex: FakePlex, lastfm: FakeLastFm) -> None:
+    fake = FakeLastFmWrite(plex)
+    owner, _ = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        user_id = await db.scalar(select(User.id).where(User.username == "owner"))
+        assert user_id
+
+    # The key alone is enough to import, not to scrobble.
+    key = await owner.put("/api/admin/lastfm", json={"api_key": LASTFM_KEY}, headers=CSRF)
+    assert key.json() == {"configured": True, "source": "settings", "scrobbling": False}
+    assert (await owner.get("/api/scrobblers/lastfm")).json() == {"available": False}
+    assert _location(await owner.get("/api/scrobblers/lastfm/connect")).endswith(
+        "?lastfm=unavailable"
+    )
+    # Its shared secret is checked with a signed call, then kept with the key.
+    wrong = await owner.put("/api/admin/lastfm", json={"shared_secret": "0" * 32}, headers=CSRF)
+    assert wrong.status_code == 400 and "shared secret" in wrong.json()["detail"]
+    ok = await owner.put("/api/admin/lastfm", json={"shared_secret": LASTFM_SECRET}, headers=CSRF)
+    assert ok.json() == {"configured": True, "source": "settings", "scrobbling": True}
+    assert (await owner.get("/api/scrobblers/lastfm")).json() == {"available": True}
+    nope = await owner.post("/api/scrobblers", json={"service": "lastfm"}, headers=CSRF)
+    assert nope.status_code == 422
+
+    # Connecting: off to last.fm, which comes back with a token for the callback.
+    auth = urlsplit(_location(await owner.get("/api/scrobblers/lastfm/connect")))
+    assert f"{auth.scheme}://{auth.netloc}{auth.path}" == "https://www.last.fm/api/auth/"
+    query = parse_qs(auth.query)
+    assert query["api_key"] == [LASTFM_KEY]
+    callback = urlsplit(query["cb"][0])
+    assert callback.path == "/api/scrobblers/lastfm/callback"
+    state = parse_qs(callback.query)["state"][0]
+    # Someone else's sign-in (or a made-up one) isn't taken.
+    friend, _ = await sign_in(app, plex, "friend-token")
+    stolen = await friend.get(
+        "/api/scrobblers/lastfm/callback", params={"state": state, "token": "approved"}
+    )
+    assert _location(stolen).endswith("?lastfm=expired")
+    refused = await owner.get(
+        "/api/scrobblers/lastfm/callback", params={"state": state, "token": "not-approved"}
+    )
+    assert _location(refused).endswith("?lastfm=refused")
+    back = await owner.get(
+        "/api/scrobblers/lastfm/callback", params={"state": state, "token": "approved"}
+    )
+    assert _location(back) == "/settings/scrobbling?lastfm=connected"
+    listed = (await owner.get("/api/scrobblers")).json()
+    assert [(t["service"], t["label"], t["username"]) for t in listed] == [
+        ("lastfm", "Last.fm", "Joakim")
+    ]
+    async with get_sessionmaker()() as db:
+        assert "lfm-sk" not in (await db.scalar(select(ScrobbleTarget.token_enc)) or "")
+
+    # New plays are scrobbled, signed with the instance's secret and the person's session.
+    await add_plays(user_id, 2)
+    results = await send(user_id)
+    assert [r.sent for r in results.values()] == [2]
+    form = fake.scrobbles[0]
+    assert (form["artist[0]"], form["track[1]"], form["sk"]) == (
+        ["Radiohead"],
+        ["Song 1"],
+        ["lfm-sk"],
+    )
+
+    # Without the key, plays wait (not paused) until an admin adds it again.
+    await owner.put("/api/admin/lastfm", json={"api_key": None}, headers=CSRF)
+    await add_plays(user_id, 1)
+    await send(user_id)
+    waiting = (await owner.get("/api/scrobblers")).json()[0]
+    assert not waiting["paused"] and waiting["pending"] == 1
+    assert "isn't set up" in waiting["error"]
+    await owner.put(
+        "/api/admin/lastfm",
+        json={"api_key": LASTFM_KEY, "shared_secret": LASTFM_SECRET},
+        headers=CSRF,
+    )
+    await send(user_id)
+    assert (await owner.get("/api/scrobblers")).json()[0]["sent"] == 3
+
+    # Access withdrawn on last.fm: paused until connected again.
+    fake.session_valid = False
+    await add_plays(user_id, 1)
+    await send(user_id)
+    paused = (await owner.get("/api/scrobblers")).json()[0]
+    assert paused["paused"] and "Connect Last.fm again" in paused["error"]

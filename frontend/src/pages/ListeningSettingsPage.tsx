@@ -9,11 +9,9 @@ import {
   useListenBrainz,
   useListenBrainzImport,
   useListenBrainzSend,
-  useLastFmKey,
   useLastFmStatus,
   usePlexCapture,
   useResumeImport,
-  useSetLastFmKey,
   useStartLastFmImport,
   useStartListenBrainzImport,
   useStartListenBrainzSend,
@@ -176,7 +174,17 @@ export function LastFmImportCard({ isAdmin }: { isAdmin: boolean }) {
         {!available ? (
           <Notice>
             Last.fm import isn't set up on this instance yet.{' '}
-            {isAdmin ? 'Add a Last.fm API key in the card next to this one.' : 'Ask an admin to add a Last.fm API key.'}
+            {isAdmin ? (
+              <>
+                Add a Last.fm API key in{' '}
+                <Link to="/settings/scrobbling" className="underline">
+                  Settings → Scrobbling
+                </Link>
+                .
+              </>
+            ) : (
+              'Ask an admin to add a Last.fm API key.'
+            )}
           </Notice>
         ) : active ? (
           <ImportProgress job={active} />
@@ -472,87 +480,6 @@ function DeleteHistoryCard() {
           <ConfirmDelete label="Delete imported ListenBrainz listens" source="listenbrainz" />
           <ConfirmDelete label="Delete all listening history" source={null} />
         </div>
-      </div>
-    </Card>
-  )
-}
-
-export function LastFmKeyCard() {
-  const key = useLastFmKey(true)
-  const save = useSetLastFmKey()
-  const [value, setValue] = useState('')
-  const [saved, setSaved] = useState(false)
-  const valid = /^[0-9A-Fa-f]{32}$/.test(value.trim())
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    if (!valid) return
-    save.mutate(value.trim(), {
-      onSuccess: () => {
-        setValue('')
-        setSaved(true)
-      },
-    })
-  }
-
-  return (
-    <Card title="Last.fm API key">
-      <div className="space-y-4">
-        <p className="text-sm text-muted">
-          Used for everyone's Last.fm imports on this instance. Create one at{' '}
-          <a href="https://www.last.fm/api/account/create" target="_blank" rel="noreferrer" className="text-accent underline">
-            last.fm/api/account/create
-          </a>
-          . From 1 December 2026 it only works while its owner has Last.fm Pro.
-        </p>
-        {key.isPending ? (
-          <Spinner small />
-        ) : key.isError ? (
-          <Notice tone="error">{errorMessage(key.error)}</Notice>
-        ) : (
-          <p className="text-sm">
-            {key.data.source === 'settings'
-              ? 'A key is set on this page.'
-              : key.data.source === 'environment'
-                ? 'Using the key from the LASTFM_API_KEY environment variable. A key saved here takes precedence.'
-                : 'No key is set.'}
-          </p>
-        )}
-        <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
-          <label className="min-w-0 flex-1">
-            <span className="mb-1 block text-sm font-medium">{key.data?.configured ? 'Replace key' : 'API key'}</span>
-            <input
-              type="password"
-              value={value}
-              onChange={(e) => {
-                setSaved(false)
-                setValue(e.target.value)
-              }}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="32 characters"
-              className={`${inputClass} font-mono`}
-            />
-          </label>
-          <Button type="submit" variant="primary" disabled={!valid} busy={save.isPending && save.variables !== null}>
-            Check and save
-          </Button>
-        </form>
-        {value && !valid && <p className="text-xs text-danger">A Last.fm API key is 32 letters and digits (0–9, a–f).</p>}
-        {key.data?.source === 'settings' && (
-          <Button
-            variant="ghost"
-            busy={save.isPending && save.variables === null}
-            onClick={() => {
-              setSaved(false)
-              save.mutate(null)
-            }}
-          >
-            Remove key
-          </Button>
-        )}
-        {saved && <Notice>Saved. Last.fm accepted the key.</Notice>}
-        {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
       </div>
     </Card>
   )

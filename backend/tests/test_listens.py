@@ -95,7 +95,11 @@ async def admin_with_key(app: FastAPI, plex: FakePlex) -> httpx.AsyncClient:
 @pytest.mark.db
 async def test_admin_sets_lastfm_key(app: FastAPI, plex: FakePlex, lastfm: FakeLastFm) -> None:
     owner, _ = await sign_in(app, plex, "owner-token")
-    assert (await owner.get("/api/admin/lastfm")).json() == {"configured": False, "source": None}
+    assert (await owner.get("/api/admin/lastfm")).json() == {
+        "configured": False,
+        "source": None,
+        "scrobbling": False,
+    }
     status = (await owner.get("/api/listens/lastfm")).json()
     assert status["available"] is False
 
@@ -106,11 +110,11 @@ async def test_admin_sets_lastfm_key(app: FastAPI, plex: FakePlex, lastfm: FakeL
     assert "Last.fm Pro" in rejected.json()["detail"]
 
     ok = await owner.put("/api/admin/lastfm", json={"api_key": LASTFM_KEY}, headers=CSRF)
-    assert ok.json() == {"configured": True, "source": "settings"}
+    assert ok.json() == {"configured": True, "source": "settings", "scrobbling": False}
     assert (await owner.get("/api/listens/lastfm")).json()["available"] is True
 
     cleared = await owner.put("/api/admin/lastfm", json={"api_key": None}, headers=CSRF)
-    assert cleared.json() == {"configured": False, "source": None}
+    assert cleared.json() == {"configured": False, "source": None, "scrobbling": False}
 
 
 @pytest.mark.db
@@ -122,6 +126,7 @@ async def test_lastfm_key_from_environment(
     assert (await owner.get("/api/admin/lastfm")).json() == {
         "configured": True,
         "source": "environment",
+        "scrobbling": False,
     }
 
 

@@ -26,3 +26,11 @@ export function useRemoveScrobbler() {
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   })
 }
+
+/** Whether people can add Last.fm (an admin has set the API key and its shared secret). */
+export function useLastFmScrobbling() {
+  return useQuery({ queryKey: [...key, 'lastfm'], queryFn: () => unwrap(api.GET('/api/scrobblers/lastfm')) })
+}
+
+/** Off to last.fm to approve Plekstender; it comes back to Settings → Scrobbling. */
+export const LASTFM_CONNECT = '/api/scrobblers/lastfm/connect'

@@ -2303,6 +2303,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/scrobblers/lastfm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lastfm Scrobbling
+         * @description Whether people can add Last.fm (an admin has set the API key and its secret).
+         */
+        get: operations["lastfm_scrobbling_api_scrobblers_lastfm_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scrobblers/lastfm/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lastfm Connect
+         * @description Off to last.fm to approve Plekstender; it comes back to the callback below.
+         */
+        get: operations["lastfm_connect_api_scrobblers_lastfm_connect_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scrobblers/lastfm/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lastfm Callback
+         * @description Back from last.fm: swap the approved token for a session key and add Last.fm.
+         */
+        get: operations["lastfm_callback_api_scrobblers_lastfm_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scrobblers/{target_id}": {
         parameters: {
             query?: never;
@@ -3245,7 +3305,8 @@ export interface paths {
         get: operations["get_lastfm_api_admin_lastfm_get"];
         /**
          * Put Lastfm
-         * @description Set (after checking it with Last.fm) or clear the instance's Last.fm API key.
+         * @description Set (after checking them with Last.fm) or clear the instance's Last.fm API key and
+         *     its shared secret. A secret on its own goes with the key that's set already.
          */
         put: operations["put_lastfm_api_admin_lastfm_put"];
         post?: never;
@@ -5304,10 +5365,16 @@ export interface components {
             /** Username */
             username: string;
         };
-        /** LastFmKeyIn */
+        /**
+         * LastFmKeyIn
+         * @description A key (with or without its shared secret), a secret for the key already there, or
+         *     neither to clear both.
+         */
         LastFmKeyIn: {
             /** Api Key */
             api_key?: string | null;
+            /** Shared Secret */
+            shared_secret?: string | null;
         };
         /** LastFmKeyOut */
         LastFmKeyOut: {
@@ -5315,6 +5382,19 @@ export interface components {
             configured: boolean;
             /** Source */
             source: ("settings" | "environment") | null;
+            /**
+             * Scrobbling
+             * @description The shared secret is set too, so people can scrobble.
+             */
+            scrobbling: boolean;
+        };
+        /** LastFmScrobblingOut */
+        LastFmScrobblingOut: {
+            /**
+             * Available
+             * @description An admin has set the Last.fm API key and its secret.
+             */
+            available: boolean;
         };
         /** LeaderboardRow */
         LeaderboardRow: {
@@ -7027,7 +7107,7 @@ export interface components {
              * Service
              * @enum {string}
              */
-            service: "maloja" | "koito" | "multi-scrobbler" | "listenbrainz-other" | "librefm";
+            service: "maloja" | "koito" | "multi-scrobbler" | "listenbrainz-other" | "librefm" | "lastfm";
             /**
              * Url
              * @description The server's address.
@@ -7057,7 +7137,7 @@ export interface components {
              * Service
              * @enum {string}
              */
-            service: "maloja" | "koito" | "multi-scrobbler" | "listenbrainz-other" | "librefm";
+            service: "maloja" | "koito" | "multi-scrobbler" | "listenbrainz-other" | "librefm" | "lastfm";
             /** Label */
             label: string;
             /** Url */
@@ -12037,6 +12117,74 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ScrobbleTargetOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lastfm_scrobbling_api_scrobblers_lastfm_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LastFmScrobblingOut"];
+                };
+            };
+        };
+    };
+    lastfm_connect_api_scrobblers_lastfm_connect_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    lastfm_callback_api_scrobblers_lastfm_callback_get: {
+        parameters: {
+            query: {
+                state: string;
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

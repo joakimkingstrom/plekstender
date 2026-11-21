@@ -15,6 +15,7 @@ const targets = [
   },
 ]  // prettier-ignore
 
+let lastfmAvailable = true
 let fetchMock: ReturnType<typeof vi.fn<(input: Request | string) => Promise<Response>>>
 const posted = () =>
   fetchMock.mock.calls
@@ -22,11 +23,13 @@ const posted = () =>
     .filter((r): r is Request => typeof r !== 'string' && r.method === 'POST' && new URL(r.url).pathname === '/api/scrobblers')
 
 beforeEach(() => {
+  lastfmAvailable = true
   fetchMock = vi.fn(async (input: Request | string) => {
     const req = typeof input === 'string' ? null : input
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     if (req?.method === 'POST') return json({ ...targets[0], id: 3, service: 'maloja', label: 'Maloja' }, 201)
+    if (req && new URL(req.url).pathname === '/api/scrobblers/lastfm') return json({ available: lastfmAvailable })
     return json(targets)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -46,6 +49,33 @@ function renderCard() {
 }
 
 describe('More scrobble services', () => {
+  it('connects Last.fm by signing in on last.fm', async () => {
+    renderCard()
+    fireEvent.click(await screen.findByRole('button', { name: /^Add a scrobble service/ }))
+    fireEvent.click(screen.getByRole('option', { name: 'Last.fm' }))
+    expect(await screen.findByRole('link', { name: 'Connect Last.fm' })).toHaveAttribute('href', '/api/scrobblers/lastfm/connect')
+    expect(screen.getByText(/password isn’t shared/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+  })
+
+  it('says when Last.fm isn’t set up, and offers to connect a paused one again', async () => {
+    lastfmAvailable = false
+    targets.push({
+      ...targets[1], id: 4, service: 'lastfm', label: 'Last.fm', url: 'https://ws.audioscrobbler.com/2.0/',
+      error: "Last.fm no longer accepts Plekstender's access, so scrobbling is paused. Connect Last.fm again to resume.",
+    })  // prettier-ignore
+    try {
+      renderCard()
+      expect(await screen.findByRole('link', { name: 'Connect again' })).toHaveAttribute('href', '/api/scrobblers/lastfm/connect')
+      fireEvent.click(screen.getByRole('button', { name: /^Add a scrobble service/ }))
+      fireEvent.click(screen.getByRole('option', { name: 'Last.fm' }))
+      expect(await screen.findByText(/an admin needs to add a Last.fm API key and its shared secret/)).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Connect Last.fm' })).not.toBeInTheDocument()
+    } finally {
+      targets.pop()
+    }
+  })
+
   it('lists the added services compactly', async () => {
     renderCard()
     expect(await screen.findByText('120 sent · 2 waiting')).toBeInTheDocument()

@@ -28,7 +28,7 @@ const finished = {
   error: null,
 }
 
-function renderPage(responses: Record<string, unknown>, page: ReactNode = <ListeningSettingsPage />) {
+function renderPage(responses: Record<string, unknown>, page: ReactNode = <ListeningSettingsPage />, path = '/') {
   responses = {
     'GET /api/listens/plex': [],
     'GET /api/listens/imports/listenbrainz': { available: true, username: null, active: null, last: null },
@@ -46,7 +46,7 @@ function renderPage(responses: Record<string, unknown>, page: ReactNode = <Liste
   vi.stubGlobal('fetch', fetch)
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         {page}
       </MemoryRouter>
     </QueryClientProvider>,
@@ -201,5 +201,37 @@ describe('Import from ListenBrainz', () => {
         fetch.mock.calls.some(([r]) => r.method === 'POST' && r.url.endsWith('/api/listens/imports/listenbrainz')),
       ).toBe(true),
     )
+  })
+})
+
+describe('Last.fm on Settings → Scrobbling', () => {
+  const admin = { ...user, id: 1, username: 'owner', is_admin: true }
+  const base = {
+    'GET /api/listens/lastfm': { available: true, username: null, active: null, last: null },
+    'GET /api/scrobblers': [],
+    'GET /api/scrobblers/lastfm': { available: false },
+  }
+
+  it('lets an admin add the shared secret to the key that’s there', async () => {
+    const fetch = renderPage({
+      ...base,
+      'GET /api/auth/me': admin,
+      'GET /api/admin/lastfm': { configured: true, source: 'settings', scrobbling: false },
+      'PUT /api/admin/lastfm': { configured: true, source: 'settings', scrobbling: true },
+    }, <ScrobblingPage />)
+    expect(await screen.findByText('Add the shared secret to let people scrobble to Last.fm.')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Shared secret'), { target: { value: 'f'.repeat(32) } })
+    fireEvent.click(screen.getByRole('button', { name: 'Check and save' }))
+    expect(await screen.findByText('Saved. Last.fm accepted the secret.')).toBeInTheDocument()
+    expect(screen.getByText(/people can scrobble to Last.fm/)).toBeInTheDocument()
+    const put = fetch.mock.calls.find(([r]) => r.method === 'PUT')
+    expect(await put![0].json()).toEqual({ api_key: null, shared_secret: 'f'.repeat(32) })
+  })
+
+  it('shows how connecting went, and no key card to non-admins', async () => {
+    renderPage({ ...base, 'GET /api/auth/me': user }, <ScrobblingPage />, '/settings/scrobbling?lastfm=connected')
+    expect(await screen.findByText(/Last.fm is connected/)).toBeInTheDocument()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByText('Last.fm API key')).not.toBeInTheDocument()
   })
 })

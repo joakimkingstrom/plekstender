@@ -423,10 +423,19 @@ class DeletedOut(BaseModel):
 class LastFmKeyOut(BaseModel):
     configured: bool
     source: Literal["settings", "environment"] | None
+    scrobbling: bool = Field(description="The shared secret is set too, so people can scrobble.")
 
 
 class LastFmKeyIn(BaseModel):
+    """A key (with or without its shared secret), a secret for the key already there, or
+    neither to clear both."""
+
     api_key: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{32}$")
+    shared_secret: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{32}$")
+
+
+class LastFmScrobblingOut(BaseModel):
+    available: bool = Field(description="An admin has set the Last.fm API key and its secret.")
 
 
 class PlexCaptureOut(BaseModel):
@@ -1684,7 +1693,9 @@ class GigStatsOut(BaseModel):
     seasons: dict[str, int] = Field(description="winter, spring, summer, autumn (by hemisphere).")
 
 
-ScrobbleService = Literal["maloja", "koito", "multi-scrobbler", "listenbrainz-other", "librefm"]
+ScrobbleService = Literal[
+    "maloja", "koito", "multi-scrobbler", "listenbrainz-other", "librefm", "lastfm"
+]
 
 
 class ScrobbleTargetIn(BaseModel):

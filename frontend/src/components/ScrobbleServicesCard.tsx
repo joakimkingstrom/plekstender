@@ -1,6 +1,14 @@
 import { useId, useState } from 'react'
 import { errorMessage } from '../api/client'
-import { useAddScrobbler, useRemoveScrobbler, useScrobblers, type ScrobbleService, type ScrobbleTarget } from '../api/scrobblers'
+import {
+  LASTFM_CONNECT,
+  useAddScrobbler,
+  useLastFmScrobbling,
+  useRemoveScrobbler,
+  useScrobblers,
+  type ScrobbleService,
+  type ScrobbleTarget,
+} from '../api/scrobblers'
 import { formatCount, formatRelative } from '../format'
 import { Select } from './Select'
 import { Button, Card, Notice, Spinner } from './ui'
@@ -36,9 +44,11 @@ const SERVICES: { value: ScrobbleService; label: string; group: string; url?: st
     url: 'https://scrobbler.example.com',
     token: 'The token the server gives you for ListenBrainz-style scrobbling.',
   },
+  { value: 'lastfm', label: 'Last.fm', group: 'Last.fm-style' },
   { value: 'librefm', label: 'Libre.fm', group: 'Last.fm-style' },
 ]
 const field = 'w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm'
+const linkButton = 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors'
 
 /** Other places your new Plex plays are scrobbled to: listed compactly, added from a list. */
 export function ScrobbleServicesCard() {
@@ -50,7 +60,7 @@ export function ScrobbleServicesCard() {
     <Card title="More scrobble services">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          Send your new Plex plays to other services too, like Maloja, Koito, Multi-Scrobbler or Libre.fm.
+          Send your new Plex plays to other services too, like Last.fm, Maloja, Koito, Multi-Scrobbler or Libre.fm.
         </p>
         {targets.isPending ? (
           <Spinner small />
@@ -65,7 +75,14 @@ export function ScrobbleServicesCard() {
             </ul>
           )
         )}
-        {adding ? (
+        {adding === 'lastfm' ? (
+          <LastFmConnect
+            onDone={() => {
+              setChoice('')
+              setAgain(null)
+            }}
+          />
+        ) : adding ? (
           <AddForm
             key={`${adding}-${again?.id ?? ''}`}
             service={adding}
@@ -112,15 +129,56 @@ function TargetRow({ target, onAgain }: { target: ScrobbleTarget; onAgain: () =>
               }`}
         </p>
       </div>
-      {target.paused && (
-        <Button variant="secondary" onClick={onAgain}>
-          {target.service === 'librefm' ? 'Sign in again' : 'New token'}
-        </Button>
-      )}
+      {target.paused &&
+        (target.service === 'lastfm' ? (
+          <a href={LASTFM_CONNECT} className={`${linkButton} bg-surface-2 text-text hover:bg-border`}>
+            Connect again
+          </a>
+        ) : (
+          <Button variant="secondary" onClick={onAgain}>
+            {target.service === 'librefm' ? 'Sign in again' : 'New token'}
+          </Button>
+        ))}
       <Button variant="ghost" busy={remove.isPending} onClick={() => remove.mutate(target.id)} aria-label={`Remove ${target.label}`}>
         Remove
       </Button>
     </li>
+  )
+}
+
+/**
+ * Last.fm: approved on last.fm itself (Plekstender never sees the password), which sends
+ * the person back to Settings → Scrobbling.
+ */
+function LastFmConnect({ onDone }: { onDone: () => void }) {
+  const lastfm = useLastFmScrobbling()
+  return (
+    <div className="space-y-2 rounded-lg border border-border p-3">
+      <p className="font-medium">Last.fm</p>
+      {lastfm.isPending ? (
+        <Spinner small />
+      ) : lastfm.data?.available ? (
+        <p className="text-muted">
+          You’ll go to last.fm to let Plekstender scrobble for you, then come back here. Your Last.fm password isn’t
+          shared with Plekstender. Plays from then on are sent (like ListenBrainz above).
+        </p>
+      ) : (
+        <p className="text-muted">
+          Not set up on this server yet: an admin needs to add a Last.fm API key and its shared secret (Settings →
+          Scrobbling).
+        </p>
+      )}
+      <div className="flex gap-2">
+        {lastfm.data?.available && (
+          <a href={LASTFM_CONNECT} className={`${linkButton} bg-accent text-on-accent hover:bg-accent-strong`}>
+            Connect Last.fm
+          </a>
+        )}
+        <Button variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   )
 }
 

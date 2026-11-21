@@ -212,11 +212,14 @@ async def send_pending(
             if exc.status == 401:
                 state.paused = True
                 state.last_error = (
-                    f"{service} rejected the token, so scrobbling is paused. "
-                    "Add it again with a new token to resume."
-                    if service != "ListenBrainz"
-                    else "ListenBrainz rejected the token, so scrobbling is paused. "
+                    "ListenBrainz rejected the token, so scrobbling is paused. "
                     "Paste a new token to resume."
+                    if service == "ListenBrainz"
+                    else "Last.fm no longer accepts Plekstender's access, so scrobbling is "
+                    "paused. Connect Last.fm again to resume."
+                    if service == "Last.fm"
+                    else f"{service} rejected the token, so scrobbling is paused. "
+                    "Add it again with a new token to resume."
                 )
             result.error = state.last_error
             await db.commit()
