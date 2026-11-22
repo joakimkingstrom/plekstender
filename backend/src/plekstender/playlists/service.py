@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import os
 import random
 from collections import Counter
 from typing import Any
@@ -186,7 +185,12 @@ def _library_root(first: str | None, last: str | None) -> str:
         return ""
     # Character by character on purpose: trimmed back to the last separator below, which
     # also works for Plex servers on Windows (backslashes).
-    common = os.path.commonprefix([first, last])  # noqa: RUF071
+    # (os.path.commonprefix does this too, but it's deprecated from Python 3.15.)
+    same = next(
+        (i for i, (a, b) in enumerate(zip(first, last, strict=False)) if a != b),
+        min(len(first), len(last)),
+    )
+    common = first[:same]
     cut = max(common.rfind("/"), common.rfind("\\"))
     return common[: cut + 1] if cut >= 0 else ""
 

@@ -39,28 +39,39 @@ def _migration_files() -> list[Path]:
     return sorted(p for p in path.glob("*.sql"))
 
 
-def apply_procrastinate_schema(conninfo: str) -> list[str]:
-    """Returns the names of the procrastinate migrations applied in this run."""
-    applied: list[str] = []
-    with psycopg.connect(conninfo, autocommit=False) as conn:
-        conn.execute("SELECT pg_advisory_xact_lock(%s)", (MIGRATE_LOCK_ID,))
-        conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {TRACKING_TABLE} ("
-            "name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
-        )
-        row = conn.execute("SELECT to_regclass('procrastinate_jobs') IS NOT NULL").fetchone()
-        installed = bool(row and row[0])
-        files = _migration_files()
+def _runs_alone(sql: str) -> bool:
+    """A migration that can't run inside a transaction: procrastinate builds and drops some
+    indexes CONCURRENTLY (so the job table isn't locked), each in a file of its own."""
+    return "CONCURRENTLY" in sql.upper()
 
-        if not installed:
-            log.info("installing procrastinate schema")
-            conn.execute(SchemaManager.get_schema())
-            for f in files:
-                conn.execute(
-                    f"INSERT INTO {TRACKING_TABLE} (name) VALUES (%s) ON CONFLICT DO NOTHING",  # noqa: S608
-                    (f.name,),
-                )
-        else:
+
+def apply_procrastinate_schema(conninfo: str) -> list[str]:
+    """Returns the names of the procrastinate migrations applied in this run.
+
+    Each migration runs in its own transaction and is recorded with it, except those that
+    can't run in one (see _runs_alone): they run on their own and are recorded straight
+    after. A session lock keeps two containers from migrating at once."""
+    applied: list[str] = []
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATE_LOCK_ID,))
+        try:
+            conn.execute(
+                f"CREATE TABLE IF NOT EXISTS {TRACKING_TABLE} ("
+                "name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+            )
+            row = conn.execute("SELECT to_regclass('procrastinate_jobs') IS NOT NULL").fetchone()
+            installed = bool(row and row[0])
+            files = _migration_files()
+            record = f"INSERT INTO {TRACKING_TABLE} (name) VALUES (%s) ON CONFLICT DO NOTHING"  # noqa: S608
+
+            if not installed:
+                log.info("installing procrastinate schema")
+                with conn.transaction():
+                    conn.execute(SchemaManager.get_schema())
+                    for f in files:
+                        conn.execute(record, (f.name,))
+                return applied
+
             done = {r[0] for r in conn.execute(f"SELECT name FROM {TRACKING_TABLE}")}  # noqa: S608
             if not done:
                 raise RuntimeError(
@@ -71,10 +82,17 @@ def apply_procrastinate_schema(conninfo: str) -> list[str]:
                 if f.name in done:
                     continue
                 log.info("applying procrastinate migration %s", f.name)
-                conn.execute(f.read_text())
-                conn.execute(f"INSERT INTO {TRACKING_TABLE} (name) VALUES (%s)", (f.name,))  # noqa: S608
+                sql = f.read_text()
+                if _runs_alone(sql):
+                    conn.execute(sql)
+                    conn.execute(record, (f.name,))
+                else:
+                    with conn.transaction():
+                        conn.execute(sql)
+                        conn.execute(record, (f.name,))
                 applied.append(f.name)
-        conn.commit()
+        finally:
+            conn.execute("SELECT pg_advisory_unlock(%s)", (MIGRATE_LOCK_ID,))
     return applied
 
 
