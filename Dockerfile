@@ -21,7 +21,7 @@ ADD --checksum=sha256:3aa1498126ed272d805bc9d081c77965c9e1e1a0891bb112c13b56ef2a
 FROM fpcalc-${TARGETARCH} AS fpcalc
 
 # --- python runtime ---------------------------------------------------------------
-FROM python:3.14-slim AS app
+FROM python:3.15-slim AS app
 COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
