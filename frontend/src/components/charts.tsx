@@ -23,6 +23,11 @@ function niceStep(max: number): number {
   return Math.max(1, Math.ceil(step))
 }
 
+/**
+ * The element's width, kept up to date. Charts draw at this width, laid over a box of their
+ * own height (absolute), so the drawing never makes the box (or the page) wider: a too-wide
+ * first measurement on a phone would otherwise stick.
+ */
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null)
   const [width, setWidth] = useState(0)
@@ -82,9 +87,9 @@ export function ColumnChart({
   const hovered = hover !== null ? points[hover] : null
 
   return (
-    <div ref={ref} className="relative" onMouseLeave={() => setHover(null)}>
+    <div ref={ref} className="relative w-full" style={{ height }} onMouseLeave={() => setHover(null)}>
       {width > 0 && (
-        <svg width={width} height={height} role="img" aria-label={caption} className="block">
+        <svg width={width} height={height} role="img" aria-label={caption} className="absolute inset-0 block">
           {[0, step, top].map((tick) => (
             <g key={tick}>
               <line x1={AXIS_W} x2={width} y1={y(tick)} y2={y(tick)} stroke="var(--color-border)" strokeWidth={1} />
@@ -370,14 +375,14 @@ export function AreaChart({
   const hovered = hover !== null ? points[hover] : null
 
   return (
-    <div ref={ref} className="relative" onMouseLeave={() => setHover(null)}>
+    <div ref={ref} className="relative w-full" style={{ height }} onMouseLeave={() => setHover(null)}>
       {width > 0 && (
         <svg
           width={width}
           height={height}
           role="img"
           aria-label={caption}
-          className="block touch-pan-y"
+          className="absolute inset-0 block touch-pan-y"
           onMouseMove={(e) => pick(e.clientX, e.currentTarget.getBoundingClientRect())}
           onTouchMove={(e) => pick(e.touches[0].clientX, e.currentTarget.getBoundingClientRect())}
           onTouchStart={(e) => pick(e.touches[0].clientX, e.currentTarget.getBoundingClientRect())}

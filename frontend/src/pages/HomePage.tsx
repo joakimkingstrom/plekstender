@@ -53,7 +53,7 @@ export function HomePage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
         <div className="md:col-span-2">
           <YourListening serverId={libraryServer?.id ?? null} />
         </div>

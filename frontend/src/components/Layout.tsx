@@ -142,10 +142,16 @@ export function Layout() {
             </NavLink>
             <button
               type="button"
-              className="hidden rounded-lg px-2 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-text sm:block"
+              aria-label="Sign out"
+              title="Sign out"
+              className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-text"
               onClick={() => logout.mutate(undefined, { onSuccess: () => navigate('/login') })}
             >
-              Sign out
+              <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+                <path d="M10 17l-5-5 5-5" />
+                <path d="M5 12h11" />
+              </svg>
             </button>
           </div>
         </div>

@@ -8,6 +8,7 @@ import { imageUrl, useActiveServer } from '../api/library'
 import { localTimeZone } from '../api/stats'
 import { playSample, stopAudio, unlockAudio, useAudio } from '../audio'
 import { DatePicker } from '../components/DatePicker'
+import { rewindBackground } from '../rewindPatterns'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatListeningTime } from '../format'
 
@@ -193,9 +194,8 @@ function RewindStory({ range, onClose }: { range: Range; onClose: () => void }) 
 
   const slide = slides[index]
   const next = slides[Math.min(last, index + 1)]
-  const background = slide
-    ? `linear-gradient(150deg, color-mix(in oklab, ${slide.colour} 78%, black), color-mix(in oklab, ${next?.colour ?? slide.colour} 45%, black))`
-    : '#17181c'
+  // A pattern in the period's cover colours, a different kind on each slide.
+  const background = slide ? rewindBackground(index, slide.key, slide.colour, next?.colour ?? slide.colour) : { backgroundColor: '#17181c' }
 
   return createPortal(
     <div
@@ -203,8 +203,8 @@ function RewindStory({ range, onClose }: { range: Range; onClose: () => void }) 
       aria-modal="true"
       aria-label={`Rewind: ${range.label}`}
       data-colour={slide?.colour}
-      className="fixed inset-0 z-50 flex flex-col text-white motion-safe:transition-[background] motion-safe:duration-700"
-      style={{ background }}
+      className="fixed inset-0 z-50 flex flex-col text-white"
+      style={background}
     >
       <div className="flex items-center gap-2 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
         <div className="flex flex-1 gap-1" aria-hidden>
@@ -295,7 +295,7 @@ function Heading({ kicker, children }: { kicker: string; children: ReactNode }) 
 
 function Cover({ serverId, item, round = false, big = false }: { serverId: number | null; item: Item; round?: boolean; big?: boolean }) {
   const src = serverId !== null ? imageUrl(serverId, item.thumb, big ? 600 : 128) : null
-  const size = big ? 'size-32 sm:size-52' : 'size-10 sm:size-12'
+  const size = big ? 'size-32 sm:size-52' : 'size-12 sm:size-14'
   return src ? (
     <img src={src} alt="" className={`${size} shrink-0 object-cover shadow-lg ${round ? 'rounded-full' : 'rounded-md'}`} />
   ) : (
@@ -303,12 +303,42 @@ function Cover({ serverId, item, round = false, big = false }: { serverId: numbe
   )
 }
 
-function Ranked({ items, serverId, round = false, unit = 'listens' }: { items: Item[]; serverId: number | null; round?: boolean; unit?: string }) {
+/** The #1's cover, as big as the screen allows, with who it's by and how often it played. */
+function HeroCover({ serverId, item, named = false }: { serverId: number | null; item: Item; named?: boolean }) {
+  const src = serverId !== null ? imageUrl(serverId, item.thumb, 1000) : null
+  const box = 'aspect-square w-full max-w-[min(100%,42dvh)] rounded-xl shadow-2xl'
+  return (
+    <figure className="mb-5 flex flex-col items-center">
+      {src ? <img src={src} alt="" className={`${box} object-cover`} /> : <span className={`${box} bg-white/15`} />}
+      <figcaption className="mt-3 text-center text-sm text-white/85 sm:text-base">
+        {named && <span className="font-semibold text-white">{item.name}</span>}
+        {named && item.artist && ' · '}
+        {item.artist && <span>{item.artist}</span>}
+        {(named || item.artist) && ' · '}
+        {formatCount(item.listens)} {item.listens === 1 ? 'listen' : 'listens'}
+      </figcaption>
+    </figure>
+  )
+}
+
+function Ranked({
+  items,
+  serverId,
+  round = false,
+  unit = 'listens',
+  start = 1,
+}: {
+  items: Item[]
+  serverId: number | null
+  round?: boolean
+  unit?: string
+  start?: number
+}) {
   return (
     <ol className="space-y-2 sm:space-y-3">
       {items.map((item, i) => (
         <li key={`${item.name}-${item.artist}`} className="flex items-center gap-3">
-          <span className="w-5 text-right font-display text-xl font-bold text-white/70 sm:w-6 sm:text-2xl">{i + 1}</span>
+          <span className="w-5 text-right font-display text-xl font-bold text-white/70 sm:w-6 sm:text-2xl">{i + start}</span>
           <Cover serverId={serverId} item={item} round={round} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-base font-semibold sm:text-lg">{item.name}</span>
@@ -419,7 +449,8 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
       body: (
         <>
           <Heading kicker="Your top albums">{r.top_albums[0].name}</Heading>
-          <Ranked items={r.top_albums} serverId={serverId} />
+          <HeroCover serverId={serverId} item={r.top_albums[0]} />
+          <Ranked items={r.top_albums.slice(1)} serverId={serverId} start={2} />
         </>
       ),
     })
@@ -430,7 +461,8 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
       body: (
         <>
           <Heading kicker="Your top songs">{r.top_tracks[0].name}</Heading>
-          <Ranked items={r.top_tracks} serverId={serverId} />
+          <HeroCover serverId={serverId} item={r.top_tracks[0]} />
+          <Ranked items={r.top_tracks.slice(1)} serverId={serverId} start={2} />
         </>
       ),
     })
@@ -441,6 +473,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
       body: (
         <>
           <Heading kicker="New obsessions">First heard, then on and on</Heading>
+          {r.new_albums[0] && <HeroCover serverId={serverId} item={r.new_albums[0]} named />}
           {r.new_artists.length > 0 && (
             <>
               <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-white/60">Artists</p>
@@ -463,7 +496,8 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
       body: (
         <>
           <Heading kicker="Fresh out">The new releases you played most</Heading>
-          <Ranked items={r.new_releases} serverId={serverId} />
+          <HeroCover serverId={serverId} item={r.new_releases[0]} named />
+          <Ranked items={r.new_releases.slice(1)} serverId={serverId} start={2} />
         </>
       ),
     })
