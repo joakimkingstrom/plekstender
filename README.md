@@ -29,7 +29,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Open `APP_URL` and sign in with Plex. The first account to sign in becomes the instance admin (set `INITIAL_ADMIN` to your Plex username or email if the instance is reachable from the internet before then). Then connect a Plex server and choose its music library.
+Open `APP_URL` and sign in with Plex. The first account to sign in becomes the instance admin. To make sure that's you, it has to enter the **setup code** the web app writes to its log while nobody has signed in (`docker compose logs frontend`; a new code at each start until the instance is claimed). `INITIAL_ADMIN` can also limit it to your Plex username or email. Then connect a Plex server and choose its music library.
 
 Services:
 

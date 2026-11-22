@@ -32,6 +32,15 @@ async def _put(db: AsyncSession, key: str, value: dict[str, Any]) -> None:
     await db.execute(stmt)
 
 
+async def get_instance_value(db: AsyncSession, key: str) -> dict[str, Any] | None:
+    """A stored instance value (for modules with their own settings, e.g. auth.setup)."""
+    return await _get(db, key)
+
+
+async def put_instance_value(db: AsyncSession, key: str, value: dict[str, Any]) -> None:
+    await _put(db, key, value)
+
+
 class AccessSettings:
     def __init__(self, mode: AccessMode, allowlist: list[str]) -> None:
         self.mode = mode

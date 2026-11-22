@@ -111,13 +111,16 @@ export function usePlexSignIn(onSignedIn: () => void) {
     }
   }, [finish, stop])
 
-  const start = useCallback(async () => {
+  /** `setupCode`: while nobody has signed in, the code from the web app's log. */
+  const start = useCallback(async (setupCode?: string) => {
     stop()
     setState({ phase: 'waiting' })
     // Open the popup synchronously in the click handler so it isn't blocked.
     const popup = window.open('', 'plex-auth', 'popup,width=600,height=760')
     try {
-      const { auth_url } = await unwrap(api.POST('/api/auth/plex/pin'))
+      const { auth_url } = await unwrap(
+        api.POST('/api/auth/plex/pin', { body: setupCode ? { setup_code: setupCode } : {} }),
+      )
       if (popup && !popup.closed) {
         popup.location.href = auth_url
         startPolling()

@@ -82,8 +82,20 @@ class UserOut(BaseModel):
     preferences: Preferences = Field(default_factory=Preferences)
 
 
+class PinStartIn(BaseModel):
+    setup_code: str | None = Field(
+        default=None,
+        max_length=64,
+        description="While nobody has signed in: the setup code from the web app's log.",
+    )
+
+
 class PinStartOut(BaseModel):
     auth_url: str
+
+
+class SetupOut(BaseModel):
+    claimed: bool = Field(description="Someone has signed in (so no setup code is needed).")
 
 
 class PinCheckOut(BaseModel):

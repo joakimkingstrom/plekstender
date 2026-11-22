@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
-import { errorMessage } from '../api/client'
+import { api, errorMessage, unwrap } from '../api/client'
 import { useMe } from '../api/hooks'
 import { broadcastResult, checkPin, usePlexSignIn } from '../auth/plexSignIn'
 import { Wordmark } from '../components/Layout'
@@ -34,6 +35,11 @@ export function LoginPage() {
   const target = safeRedirect(location.state)
   const onSignedIn = useCallback(() => navigate(target, { replace: true }), [navigate, target])
   const { state, start, cancel } = usePlexSignIn(onSignedIn)
+  // A new instance: whoever signs in first becomes its admin, with the setup code from the log.
+  const setup = useQuery({ queryKey: ['auth', 'setup'], queryFn: () => unwrap(api.GET('/api/auth/setup')) })
+  const unclaimed = setup.data?.claimed === false
+  const [code, setCode] = useState('')
+  const codeId = useId()
 
   if (me) return <Navigate to={target} replace />
 
@@ -53,7 +59,35 @@ export function LoginPage() {
         <div className="space-y-4">
           {state.phase === 'denied' && <Notice tone="warn">{state.message}</Notice>}
           {state.phase === 'error' && <Notice tone="error">{state.message}</Notice>}
-          <Button variant="primary" size="lg" className="w-full" onClick={() => void start()}>
+          {unclaimed && (
+            <div className="space-y-2 text-left text-sm">
+              <p className="text-muted">
+                This Plekstender hasn’t been set up yet. Whoever signs in first becomes its admin, with the setup code from
+                the web app’s log: run <code className="rounded bg-surface-2 px-1">docker compose logs frontend</code>, or
+                open the frontend container’s log in your Docker tool.
+              </p>
+              <label htmlFor={codeId} className="block font-medium">
+                Setup code
+              </label>
+              <input
+                id={codeId}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="XXXX-XXXX-XXXX"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono tracking-wider"
+              />
+            </div>
+          )}
+          <Button
+            variant="primary"
+            size="lg"
+            className="w-full"
+            disabled={unclaimed && !code.trim()}
+            onClick={() => void start(unclaimed ? code.trim() : undefined)}
+          >
             Sign in with Plex
           </Button>
         </div>

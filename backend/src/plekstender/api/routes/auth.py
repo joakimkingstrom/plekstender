@@ -20,12 +20,15 @@ from plekstender.api.deps import (
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.schemas import (
     PinCheckOut,
+    PinStartIn,
     PinStartOut,
     Preferences,
     ProfileOut,
     ProfileServer,
+    SetupOut,
     UserOut,
 )
+from plekstender.auth import setup
 from plekstender.auth.access import AccessDecision, decide_access, decide_bootstrap
 from plekstender.auth.sessions import (
     PIN_COOKIE,
@@ -73,10 +76,38 @@ def load_preferences(user: User) -> Preferences:
     return Preferences.model_validate(valid)
 
 
+@router.get("/setup", response_model=SetupOut)
+async def setup_state(db: DbDep) -> SetupOut:
+    """Whether the instance is claimed yet (if not, sign-in asks for the setup code)."""
+    return SetupOut(claimed=await setup.is_claimed(db))
+
+
 @router.post("/plex/pin", response_model=PinStartOut, dependencies=[rate_limit("pin", 10, 60)])
 async def start_plex_pin(
-    response: Response, plex: PlexTvDep, signer: SignerDep, settings: SettingsDep
+    response: Response,
+    db: DbDep,
+    plex: PlexTvDep,
+    signer: SignerDep,
+    settings: SettingsDep,
+    body: PinStartIn | None = None,
 ) -> PinStartOut:
+    """Start signing in with Plex. While nobody has signed in, the setup code from the log
+    is checked first; its hash goes along in the sign-in cookie for the claim."""
+    setup_hash = ""
+    if not await setup.is_claimed(db):
+        if await setup.current_hash(db) is None:  # none made at start-up (e.g. no database yet)
+            await setup.issue(db, settings.app_url)
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "A setup code has just been written to the web app's log. Enter it to continue.",
+            )
+        setup_hash = await setup.check(db, body.setup_code if body else None) or ""
+        if not setup_hash:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "That isn't this Plekstender's setup code. It's in the web app's log "
+                "(docker compose logs frontend); the newest one counts.",
+            )
     try:
         pin = await plex.create_pin()
     except (httpx.HTTPError, PlexError) as exc:
@@ -84,7 +115,7 @@ async def start_plex_pin(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Couldn't reach plex.tv") from exc
     response.set_cookie(
         PIN_COOKIE,
-        signer.sign(str(pin.id)),
+        signer.sign(f"{pin.id}:{setup_hash}" if setup_hash else str(pin.id)),
         max_age=PIN_MAX_AGE,
         httponly=True,
         secure=settings.secure_cookies,
@@ -107,8 +138,9 @@ async def check_plex_pin(
     settings: SettingsDep,
 ) -> PinCheckOut:
     signed = request.cookies.get(PIN_COOKIE)
-    pin_id = signer.unsign(signed, max_age=PIN_MAX_AGE) if signed else None
-    if pin_id is None:
+    value = signer.unsign(signed, max_age=PIN_MAX_AGE) if signed else None
+    pin_id, _, setup_hash = (value or "").partition(":")
+    if not pin_id:
         return PinCheckOut(status="expired", detail="Sign-in timed out, please try again.")
 
     try:
@@ -120,7 +152,9 @@ async def check_plex_pin(
             return PinCheckOut(status="pending")
         token = pin.auth_token
         account = await plex.get_account(token)
-        decision, user = await _admit(db, plex, account, token, settings.initial_admin)
+        decision, user = await _admit(
+            db, plex, account, token, settings.initial_admin, setup_hash or None
+        )
     except (httpx.HTTPError, PlexError) as exc:
         log.warning("Plex sign-in failed: %s", exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Couldn't reach plex.tv") from exc
@@ -142,6 +176,8 @@ async def check_plex_pin(
     user.plex_token_enc = cipher.encrypt(token, purpose="user.plex_token")
     user.is_admin = user.is_admin or decision.make_admin
     user.last_login_at = now
+    if decision.make_admin:  # the first sign-in: the instance is claimed
+        await setup.clear(db)
     await db.flush()
     session_token = await create_session(db, user, settings, request.headers.get("user-agent"))
     await db.commit()
@@ -151,13 +187,26 @@ async def check_plex_pin(
 
 
 async def _admit(
-    db: DbDep, plex: PlexTvClient, account: PlexAccount, token: str, initial_admin: str | None
+    db: DbDep,
+    plex: PlexTvClient,
+    account: PlexAccount,
+    token: str,
+    initial_admin: str | None,
+    setup_hash: str | None = None,
 ) -> tuple[AccessDecision, User | None]:
     await db.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": BOOTSTRAP_LOCK_ID})
     user = await db.scalar(select(User).where(User.plex_account_id == account.id))
     has_users = bool(await db.scalar(select(func.count()).select_from(User)))
     if not has_users:
-        return decide_bootstrap(account, initial_admin), None
+        decision = decide_bootstrap(account, initial_admin)
+        # The setup code entered when this sign-in started must still be the current one.
+        current = await setup.current_hash(db)
+        if decision.allowed and (not setup_hash or setup_hash != current):
+            return AccessDecision(
+                False,
+                reason="Enter the setup code from the web app's log, then sign in again.",
+            ), None
+        return decision, None
 
     access = await get_access_settings(db)
     accessible: set[str] | None = None

@@ -17,6 +17,8 @@ PLEX_TV = "https://plex.tv"
 CLIENTS = "https://clients.plex.tv"
 SERVER_URI = "https://10-0-0-2.abc.plex.direct:32400"
 CSRF = {"X-Plekstender": "1"}
+# The setup code every test instance gets (conftest makes auth.setup.new_code return it).
+SETUP_CODE = "TEST-CODE-2468"
 NOW = 1_790_000_000
 SECTION = "3"
 
@@ -581,8 +583,9 @@ def client_for(app: FastAPI) -> httpx.AsyncClient:
 
 async def sign_in(app: FastAPI, plex: FakePlex, token: str) -> tuple[httpx.AsyncClient, Any]:
     client = client_for(app)
-    resp = await client.post("/api/auth/plex/pin", headers=CSRF)
-    assert resp.status_code == 200
+    # The setup code is only asked for while nobody has signed in; it's ignored after.
+    resp = await client.post("/api/auth/plex/pin", json={"setup_code": SETUP_CODE}, headers=CSRF)
+    assert resp.status_code == 200, resp.text
     assert "app.plex.tv/auth" in resp.json()["auth_url"]
 
     pending = await client.post("/api/auth/plex/check", headers=CSRF)

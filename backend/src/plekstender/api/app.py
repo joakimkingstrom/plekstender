@@ -10,7 +10,6 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
 
 from plekstender import __version__
 from plekstender.api.middleware import CSRFMiddleware, RateLimiter, SecurityHeadersMiddleware
@@ -45,31 +44,23 @@ from plekstender.api.routes import (
     sync,
     tag_editing,
 )
+from plekstender.auth import setup
 from plekstender.config import Settings, get_settings
 from plekstender.db import get_engine, get_sessionmaker
-from plekstender.db.models import User
 from plekstender.worker import app as jobs
 
 log = logging.getLogger(__name__)
 
 
-async def _warn_if_unclaimed(settings: Settings) -> None:
-    """Nobody has signed in yet and INITIAL_ADMIN isn't set: whoever signs in first becomes
-    the admin, so say so plainly in the log."""
-    if settings.initial_admin:
-        return
+async def _offer_setup_code(settings: Settings) -> None:
+    """Nobody has signed in yet: make a setup code and write it to the log, for whoever
+    claims the instance (see plekstender.auth.setup)."""
     try:
         async with get_sessionmaker()() as db:
-            claimed = bool(await db.scalar(select(func.count()).select_from(User)))
-    except Exception:  # the database may not be up yet; the app retries on its own
-        return
-    if not claimed:
-        log.warning(
-            "Nobody has signed in yet and INITIAL_ADMIN isn't set: the first Plex account to "
-            "sign in at %s becomes the admin. Sign in now, or set INITIAL_ADMIN to your Plex "
-            "username or email.",
-            settings.app_url,
-        )
+            if not await setup.is_claimed(db):
+                await setup.issue(db, settings.app_url)
+    except Exception:  # the database may not be up yet; sign-in makes a code then
+        log.info("No setup code made at start-up (database not ready?)", exc_info=True)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -85,7 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             jobs.open_async(),
         ):
             app.state.http = http
-            await _warn_if_unclaimed(settings)
+            await _offer_setup_code(settings)
             yield
         await get_engine().dispose()
 

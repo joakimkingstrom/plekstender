@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Setup State
+         * @description Whether the instance is claimed yet (if not, sign-in asks for the setup code).
+         */
+        get: operations["setup_state_api_auth_setup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/plex/pin": {
         parameters: {
             query?: never;
@@ -30,7 +50,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start Plex Pin */
+        /**
+         * Start Plex Pin
+         * @description Start signing in with Plex. While nobody has signed in, the setup code from the log
+         *     is checked first; its hash goes along in the sign-in cookie for the claim.
+         */
         post: operations["start_plex_pin_api_auth_plex_pin_post"];
         delete?: never;
         options?: never;
@@ -6624,6 +6648,14 @@ export interface components {
             detail?: string | null;
             user?: components["schemas"]["UserOut"] | null;
         };
+        /** PinStartIn */
+        PinStartIn: {
+            /**
+             * Setup Code
+             * @description While nobody has signed in: the setup code from the web app's log.
+             */
+            setup_code?: string | null;
+        };
         /** PinStartOut */
         PinStartOut: {
             /** Auth Url */
@@ -7844,6 +7876,14 @@ export interface components {
             /** Page */
             page: number;
         };
+        /** SetupOut */
+        SetupOut: {
+            /**
+             * Claimed
+             * @description Someone has signed in (so no setup code is needed).
+             */
+            claimed: boolean;
+        };
         /** ShrinkCoversIn */
         ShrinkCoversIn: {
             /**
@@ -8612,7 +8652,7 @@ export interface operations {
             };
         };
     };
-    start_plex_pin_api_auth_plex_pin_post: {
+    setup_state_api_auth_setup_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -8627,7 +8667,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["SetupOut"];
+                };
+            };
+        };
+    };
+    start_plex_pin_api_auth_plex_pin_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PinStartIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["PinStartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

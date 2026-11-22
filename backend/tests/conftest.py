@@ -39,6 +39,15 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip)
 
 
+@pytest.fixture(autouse=True)
+def known_setup_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test instance's setup code is SETUP_CODE (the real one is random)."""
+    from plekstender.auth import setup
+    from tests.fakes import SETUP_CODE
+
+    monkeypatch.setattr(setup, "new_code", lambda: SETUP_CODE)
+
+
 @pytest.fixture(scope="session")
 def migrated_db() -> None:
     import psycopg
