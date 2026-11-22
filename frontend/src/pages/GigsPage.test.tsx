@@ -171,7 +171,7 @@ describe('GigsPage', () => {
     renderPage()
     expect(await screen.findByText('Busiest year')).toBeInTheDocument()
     expect(screen.getByText('Most seen artists')).toBeInTheDocument()
-    expect(screen.getByText(/by season winter 0, spring 0, summer 1, autumn 1/)).toBeInTheDocument()
+    expect(screen.queryByText(/by season/)).not.toBeInTheDocument() // the chart says it
     expect(screen.getByText('Royal Albert Hall', { selector: 'li span' })).toBeInTheDocument()
   })
 

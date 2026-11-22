@@ -56,6 +56,7 @@ export function ColumnChart({
   height = 180,
   caption,
   onSelect,
+  labelSpacing = 64,
 }: {
   points: ColumnPoint[]
   unit: (n: number) => string
@@ -63,6 +64,8 @@ export function ColumnChart({
   caption: string
   /** Makes bars clickable (and reachable with the arrow keys). */
   onSelect?: (index: number) => void
+  /** Room each axis label needs (px); short labels (a month's letter) can go under every bar. */
+  labelSpacing?: number
 }) {
   const [ref, width] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
@@ -83,7 +86,7 @@ export function ColumnChart({
   const band = points.length ? plotW / points.length : 0
   const barW = Math.max(1, Math.min(BAR_MAX, band - GAP))
   const y = (v: number) => TOP + plotH - (v / top) * plotH
-  const labelEvery = Math.max(1, Math.ceil(points.length / Math.max(1, Math.floor(plotW / 64))))
+  const labelEvery = Math.max(1, Math.ceil(points.length / Math.max(1, Math.floor(plotW / labelSpacing))))
   const hovered = hover !== null ? points[hover] : null
 
   return (

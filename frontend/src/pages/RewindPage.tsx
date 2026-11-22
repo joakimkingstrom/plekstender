@@ -9,6 +9,7 @@ import { localTimeZone } from '../api/stats'
 import { playSample, stopAudio, unlockAudio, useAudio } from '../audio'
 import { DatePicker } from '../components/DatePicker'
 import { rewindBackground } from '../rewindPatterns'
+import { Pile } from '../components/Pile'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatListeningTime } from '../format'
 
@@ -234,7 +235,7 @@ function RewindStory({ range, onClose }: { range: Range; onClose: () => void }) 
       <div
         className="flex min-h-0 flex-1 cursor-pointer flex-col overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-6"
         onClick={(e) => {
-          if (slides.length < 2 || (e.target as HTMLElement).closest('a, button')) return
+          if (slides.length < 2 || (e.target as HTMLElement).closest('a, button, [data-pile]')) return
           const box = e.currentTarget.getBoundingClientRect()
           go(e.clientX - box.left < box.width / 3 ? -1 : 1)
         }}
@@ -303,21 +304,83 @@ function Cover({ serverId, item, round = false, big = false }: { serverId: numbe
   )
 }
 
-/** The #1's cover, as big as the screen allows, with who it's by and how often it played. */
-function HeroCover({ serverId, item, named = false }: { serverId: number | null; item: Item; named?: boolean }) {
+// Vinyl: grooves, a little light catching them, and the dark run-out around the label.
+const VINYL = [
+  'conic-gradient(from 20deg, rgba(255,255,255,0.10), transparent 12%, transparent 45%, rgba(255,255,255,0.07) 55%, transparent 68%)',
+  'radial-gradient(circle, transparent 0 31%, #0b0b0b 31% 34%, transparent 34%)',
+  'repeating-radial-gradient(circle, #0e0e0e 0 1.5px, #1d1d1d 1.5px 3px)',
+].join(', ')
+// The sleeve: light from the top left, a little shade at the far edge, and ring wear (the
+// outline of the record inside, rubbed through the cardboard over the years).
+const SHEEN = 'linear-gradient(120deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.06) 30%, transparent 50%, rgba(0,0,0,0.22) 100%)'
+const RING_WEAR = 'radial-gradient(circle at 50% 50%, transparent 0 44%, rgba(255,255,255,0.07) 45.5%, transparent 47.5%)'
+
+/** An LP: its sleeve (the cover, tilted and lit a little) with the record sliding out of it
+ * when it's on top of the pile. */
+function Record({ serverId, item, onTop }: { serverId: number | null; item: Item; onTop: boolean }) {
   const src = serverId !== null ? imageUrl(serverId, item.thumb, 1000) : null
-  const box = 'aspect-square w-full max-w-[min(100%,42dvh)] rounded-xl shadow-2xl'
   return (
-    <figure className="mb-5 flex flex-col items-center">
-      {src ? <img src={src} alt="" className={`${box} object-cover`} /> : <span className={`${box} bg-white/15`} />}
-      <figcaption className="mt-3 text-center text-sm text-white/85 sm:text-base">
-        {named && <span className="font-semibold text-white">{item.name}</span>}
-        {named && item.artist && ' · '}
-        {item.artist && <span>{item.artist}</span>}
-        {(named || item.artist) && ' · '}
-        {formatCount(item.listens)} {item.listens === 1 ? 'listen' : 'listens'}
-      </figcaption>
-    </figure>
+    // Wider than the sleeve, so the pile is centred with the record pulled out.
+    <div className="relative h-[var(--lp)] w-[calc(var(--lp)*1.3)]">
+      <div
+        aria-hidden
+        className="absolute left-[2%] top-[3%] size-[calc(var(--lp)*0.94)] rounded-full motion-safe:transition-transform motion-safe:duration-500 motion-safe:ease-out"
+        style={{
+          background: VINYL,
+          boxShadow: '0 8px 22px rgba(0,0,0,0.55)',
+          transform: `translateX(${onTop ? 30 : 0}%) rotate(${onTop ? 50 : 0}deg)`,
+        }}
+      >
+        <div className="absolute inset-[34%] rounded-full shadow-inner" style={{ background: item.colour ?? '#b23a48' }}>
+          <div className="absolute inset-[44%] rounded-full bg-black/85" />
+        </div>
+      </div>
+      <div
+        className="relative size-[var(--lp)] overflow-hidden rounded-[4px]"
+        style={{
+          transform: 'perspective(1200px) rotateY(-9deg) rotateX(3deg)',
+          transformOrigin: 'left center',
+          boxShadow: '0 1px 0 rgba(255,255,255,0.15) inset, 0 22px 40px -8px rgba(0,0,0,0.65), 0 6px 14px rgba(0,0,0,0.35)',
+        }}
+      >
+        {src ? (
+          <img src={src} alt="" draggable={false} className="size-full select-none object-cover" />
+        ) : (
+          // No cover in Plex: a plain sleeve in the album's colour.
+          <div className="size-full" style={{ background: item.colour ?? '#3a3a40' }} />
+        )}
+        <div className="absolute inset-0" style={{ background: SHEEN }} />
+        <div className="absolute inset-0" style={{ background: RING_WEAR }} />
+        <div className="absolute inset-y-0 left-0 w-[3%]" style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.28), rgba(0,0,0,0.18))' }} />
+      </div>
+    </div>
+  )
+}
+
+/** A pile of LPs, the #1 on top; flip through with the wheel, a swipe, a tap or the arrows. */
+function Records({ serverId, items, noun }: { serverId: number | null; items: Item[]; noun: string }) {
+  const [top, setTop] = useState(0)
+  const item = items[Math.min(top, items.length - 1)]
+  return (
+    <div className="mb-4">
+      <Pile
+        items={items}
+        itemKey={(i) => `${i.name}|${i.artist ?? ''}|${i.rating_key ?? ''}`}
+        renderItem={(i, onTop) => <Record serverId={serverId} item={i} onTop={onTop} />}
+        label={`Your top ${noun}s`}
+        noun={noun}
+        className="h-[calc(var(--lp)+2.25rem)] w-full [--lp:min(60vw,36dvh,21rem)]"
+        messiness={0.45}
+        onTopChange={setTop}
+        dark
+      />
+      {item && (
+        <p className="mt-1 text-center text-sm text-white/85 sm:text-base" aria-live="polite">
+          <span className="font-display font-bold text-white">#{top + 1}</span> <span className="font-semibold text-white">{item.name}</span>
+          {item.artist && <> · {item.artist}</>} · {formatCount(item.listens)} {item.listens === 1 ? 'listen' : 'listens'}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -449,8 +512,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
       body: (
         <>
           <Heading kicker="Your top albums">{r.top_albums[0].name}</Heading>
-          <HeroCover serverId={serverId} item={r.top_albums[0]} />
-          <Ranked items={r.top_albums.slice(1)} serverId={serverId} start={2} />
+          <Records serverId={serverId} items={r.top_albums} noun="album" />
         </>
       ),
     })
@@ -461,8 +523,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
       body: (
         <>
           <Heading kicker="Your top songs">{r.top_tracks[0].name}</Heading>
-          <HeroCover serverId={serverId} item={r.top_tracks[0]} />
-          <Ranked items={r.top_tracks.slice(1)} serverId={serverId} start={2} />
+          <Records serverId={serverId} items={r.top_tracks} noun="song" />
         </>
       ),
     })
@@ -473,18 +534,12 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
       body: (
         <>
           <Heading kicker="New obsessions">First heard, then on and on</Heading>
-          {r.new_albums[0] && <HeroCover serverId={serverId} item={r.new_albums[0]} named />}
+          {r.new_albums.length > 0 && <Records serverId={serverId} items={r.new_albums} noun="album" />}
           {r.new_artists.length > 0 && (
             <>
               <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-white/60">Artists</p>
               <Ranked items={r.new_artists} serverId={serverId} round />
             </>
-          )}
-          {r.new_albums.length > 0 && (
-            <div className={r.new_artists.length ? 'mt-5' : ''}>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-white/60">Albums</p>
-              <Ranked items={r.new_albums} serverId={serverId} />
-            </div>
           )}
         </>
       ),
@@ -496,8 +551,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
       body: (
         <>
           <Heading kicker="Fresh out">The new releases you played most</Heading>
-          <HeroCover serverId={serverId} item={r.new_releases[0]} named />
-          <Ranked items={r.new_releases.slice(1)} serverId={serverId} start={2} />
+          <Records serverId={serverId} items={r.new_releases} noun="release" />
         </>
       ),
     })

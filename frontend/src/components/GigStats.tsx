@@ -7,12 +7,6 @@ import { ColumnChart } from './charts'
 import { Card } from './ui'
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1))
-const SEASONS = [
-  ['winter', 'Winter'],
-  ['spring', 'Spring'],
-  ['summer', 'Summer'],
-  ['autumn', 'Autumn'],
-] as const
 const gigs = (n: number) => `${formatCount(n)} ${n === 1 ? 'gig' : 'gigs'}`
 
 function Tile({ label, value, note }: { label: string; value: string; note?: string | null }) {
@@ -32,8 +26,6 @@ export function GigStats() {
   const s = stats.data
   if (!s || s.total === 0) return null
   const busiest = s.years.reduce((a, b) => (b.gigs > a.gigs ? b : a), s.years[0])
-  const topSeason = SEASONS.reduce((a, b) => ((s.seasons[b[0]] ?? 0) > (s.seasons[a[0]] ?? 0) ? b : a), SEASONS[0])
-  const topMonth = s.months.indexOf(Math.max(...s.months))
   const year = (iso: string) => localDate(iso).getFullYear()
   return (
     <div className="space-y-4">
@@ -61,12 +53,8 @@ export function GigStats() {
             unit={gigs}
             height={140}
             caption="Gigs in each month"
+            labelSpacing={14}
           />
-          <p className="mt-2 text-sm text-muted">
-            Most in {MONTHS[topMonth].toLocaleDateString(undefined, { month: 'long' })}; by season{' '}
-            {SEASONS.map(([key, label]) => `${label.toLowerCase()} ${s.seasons[key] ?? 0}`).join(', ')} (most in{' '}
-            {topSeason[1].toLowerCase()}).
-          </p>
         </Card>
         <Card title="Most seen artists">
           <ol className="space-y-1.5 text-sm">
