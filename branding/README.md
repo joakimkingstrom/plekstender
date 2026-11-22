@@ -55,3 +55,14 @@ The pick spins in 3D around a vertical axis through its tip, like a coin spun on
 | `plekstender-loader-spin.svg` | Animated SVG, theme-aware like the strum loader |
 | `loader-spin-light-{128,256}.gif` | GIF on white |
 | `loader-spin-dark-{128,256}.gif` | GIF on the dark plate |
+
+## GitHub
+
+| File | Use |
+|---|---|
+| `github/social-preview.png` | Repository social preview (1280 × 640): the card shown when the repo is linked on social media or chat |
+| `github/readme-header-light.png` / `-dark.png` | Logo with the name at the top of the main README; GitHub picks the one matching the reader's theme |
+
+These set the wordmark in Bricolage Grotesque from the frontend's `@fontsource` package, so run `npm install` in `frontend/` before `generate.py` (it skips them otherwise).
+
+The social preview can't be set from the repo itself: upload `github/social-preview.png` under the repository's **Settings → General → Social preview → Edit → Upload an image**.
