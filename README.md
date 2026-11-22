@@ -1,4 +1,9 @@
-# Plekstender
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="branding/github/readme-header-dark.png">
+    <img src="branding/github/readme-header-light.png" alt="Plekstender" width="450">
+  </picture>
+</h1>
 
 A self-hosted helper app for Plex & Plexamp music libraries: rate songs, albums and artists quickly, keep a listening history with stats, replace artist photos with logos, and build playlists that are smarter than "artist title contains…" filters. Several people can use one instance, each with their own Plex account.
 

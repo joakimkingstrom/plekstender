@@ -10,7 +10,7 @@ Needs only Pillow.
 import math
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 OUT = Path(__file__).parent
 
@@ -348,9 +348,116 @@ def write_loader_spin(frames=48):
                      [spin_frame(size, i / frames, colors).quantize(colors=64) for i in range(frames)], ms)
 
 
+# --- GitHub: social preview + README header ------------------------------------
+# Text is set in Bricolage Grotesque from the frontend's @fontsource package
+# (WOFF, which FreeType reads); run `npm install` in frontend/ first.
+FONT_DIR = OUT.parent / "frontend/node_modules/@fontsource/bricolage-grotesque/files"
+MUTED_DARK = "#a19f99"  # app's muted text on dark
+GH_SS = 4               # supersampling for the GitHub images
+
+
+def font(weight, px):
+    return ImageFont.truetype(str(FONT_DIR / f"bricolage-grotesque-latin-{weight}-normal.woff"), round(px))
+
+
+def mark_at(img, x, y, h, colors):
+    """Draw the mark with its bounding box (54 x 55.5 grid units) at x, y, h px tall."""
+    unit = h / 55.5
+    ox, oy = x - 5 * unit, y - 4 * unit
+    paint(img, lambda pts: [(ox + px * unit, oy + py * unit) for px, py in pts], unit, colors)
+
+
+def star_row(img, x, cy, size, rating, color, bg, count=5, spacing=1.3):
+    """A row of rating stars, `rating` out of `count`, in half-star steps."""
+    d = ImageDraw.Draw(img)
+    R = size / 2
+    k_out, k_in = _star_offset_scale(STAR_STROKE / 2), _star_offset_scale(-STAR_STROKE / 2)
+    for i in range(count):
+        cx = x + R + i * size * spacing
+        pts = lambda k: star_points(cx, cy, R * k, R * k * STAR_r / STAR_R)
+        d.polygon(pts(k_out), fill=color)
+        d.polygon(pts(k_in), fill=bg)
+        fill = min(max(rating - i, 0), 1)
+        if fill >= 1:
+            d.polygon(pts(1), fill=color)
+        elif fill > 0:
+            d.polygon(clip_left(pts(1), cx), fill=color)
+
+
+def fit_font(weight, px, text, max_w):
+    while px > 10 and font(weight, px).getlength(text) > max_w:
+        px -= 1
+    return font(weight, px)
+
+
+def social_preview(tagline="Rate, tidy and curate your Plex music library."):
+    S = GH_SS
+    W, H = 1280 * S, 640 * S
+    img = Image.new("RGB", (W, H), PLATE_DARK)
+    d = ImageDraw.Draw(img)
+
+    mark_h = 300 * S
+    mark_w = mark_h * 54 / 55.5
+    word_f = font(700, 124 * S)
+    word = "plekstender"
+    word_w = word_f.getlength(word)
+    gap = 60 * S
+    x0 = (W - (mark_w + gap + word_w)) / 2
+    mark_at(img, x0, (H - mark_h) / 2, mark_h, DARK)
+
+    # Text column: wordmark, tagline (fitted to the wordmark's width), 3.5 stars.
+    tx = x0 + mark_w + gap
+    tag_f = fit_font(500, 34 * S, tagline, word_w)
+    star = 30 * S
+    wt, wb = word_f.getbbox(word)[1], word_f.getbbox(word)[3]
+    tt, tb = tag_f.getbbox(tagline)[1], tag_f.getbbox(tagline)[3]
+    gap1, gap2 = 26 * S, 34 * S
+    block = (wb - wt) + gap1 + (tb - tt) + gap2 + star
+    y = (H - block) / 2
+    d.text((tx, y - wt), word, font=word_f, fill=INK_DARK)
+    y += (wb - wt) + gap1
+    d.text((tx, y - tt), tagline, font=tag_f, fill=MUTED_DARK)
+    y += (tb - tt) + gap2
+    star_row(img, tx + 2 * S, y + star / 2, star, 3.5, AMBER_DARK, PLATE_DARK)
+
+    return img.resize((W // S, H // S), Image.LANCZOS)
+
+
+def readme_header(colors, ink, scale=2):
+    """Transparent mark + wordmark for the top of README.md (rendered at 2x)."""
+    S = GH_SS * scale
+    mark_h, word_px, gap, pad = 72 * S, 60 * S, 18 * S, 4 * S
+    mark_w = mark_h * 54 / 55.5
+    word_f = font(700, word_px)
+    word = "plekstender"
+    bt, bb = word_f.getbbox(word)[1], word_f.getbbox(word)[3]
+    W = round(pad * 2 + mark_w + gap + word_f.getlength(word))
+    H = round(pad * 2 + mark_h)
+    W, H = W + (-W) % S, H + (-H) % S
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    mark_at(img, pad, pad, mark_h, colors)
+    # Centre the x-height band of the word on the pick's shoulders.
+    xb = word_f.getbbox("x")
+    y = pad + mark_h * 0.42 - (xb[1] + xb[3]) / 2
+    ImageDraw.Draw(img).text((pad + mark_w + gap, y), word, font=word_f, fill=ink)
+    return img.resize((W // GH_SS, H // GH_SS), Image.LANCZOS)
+
+
+def write_github():
+    if not FONT_DIR.exists():
+        print("skipped GitHub images: run `npm install` in frontend/ for the Bricolage font")
+        return
+    gh = OUT / "github"
+    gh.mkdir(exist_ok=True)
+    social_preview().save(gh / "social-preview.png", optimize=True)
+    readme_header(LIGHT, INK_LIGHT).save(gh / "readme-header-light.png", optimize=True)
+    readme_header(DARK, INK_DARK).save(gh / "readme-header-dark.png", optimize=True)
+
+
 if __name__ == "__main__":
     write_svgs()
     write_pngs()
     write_loader()
     write_loader_spin()
+    write_github()
     print("wrote assets to", OUT)
