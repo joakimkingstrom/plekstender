@@ -41,9 +41,9 @@ from plekstender.db.models import (
     UserSectionSync,
     UserServer,
 )
-from plekstender.plex.server import PlexServerClient
+from plekstender.plex.server import PlexServerClient, client_for
 from plekstender.plex.tv import PlexAuthError, PlexError
-from plekstender.security.crypto import DecryptionError, TokenCipher
+from plekstender.security.crypto import DecryptionError
 from plekstender.sync.parse import (
     PLEX_TYPES,
     ROW_BUILDERS,
@@ -401,9 +401,7 @@ async def run_sync(
 
     sync: Sync | None = None
     try:
-        cipher = TokenCipher(settings.derive_key("token-encryption"))
-        token = cipher.decrypt(us.access_token_enc, purpose="user_server.access_token")
-        client = PlexServerClient(settings, http, us.connection_uri, token)
+        client = client_for(settings, http, us)
         sync = Sync(db, client, run, us, started=started, full_requested=run.kind == "full")
         for section in list(us.music_section_keys):
             await sync.sync_section(section)

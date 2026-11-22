@@ -32,7 +32,6 @@ from plekstender.tags.read import AUDIO_EXTENSIONS
 
 log = logging.getLogger(__name__)
 
-DEFAULT_TEMPLATE = "{albumartist}/{album}/[{disc}-][{track:02} - ]{title}"
 FIELDS = ("albumartist", "artist", "album", "year", "title", "track", "disc", "genre")
 # Used when a field outside brackets is empty (a path needs a name).
 PLACEHOLDERS = {

@@ -42,7 +42,7 @@ from plekstender.history.lastfm_import import next_window_start
 from plekstender.history.listenbrainz import (
     TOKEN_PURPOSE,
     ListenBrainzClient,
-    ListenBrainzError,
+    ScrobbleServiceError,
     count_pending,
     listen_payload,
 )
@@ -500,7 +500,7 @@ async def connect_listenbrainz(
         username = await ListenBrainzClient(
             http, settings.listenbrainz_api_url, body.token
         ).validate()
-    except ListenBrainzError as exc:
+    except ScrobbleServiceError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     if username is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "ListenBrainz didn't accept this token.")

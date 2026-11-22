@@ -1,10 +1,14 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { api, unwrap, type Schemas } from './client'
+import type { paths } from './schema'
 import type { SourceSpec } from './artwork'
 
 export type AlbumCover = Schemas['AlbumCoverOut']
-export type CoverFilter = 'needs' | 'missing' | 'low' | 'all'
+// The list's filter, as the API defines it (`show`).
+export type CoverFilter = NonNullable<
+  NonNullable<paths['/api/servers/{server_id}/artwork/albums']['get']['parameters']['query']>['show']
+>
 export type CoverSource = 'coverartarchive' | 'deezer' | 'itunes' | 'tidal' | 'fanart' | 'plex' | 'search'
 
 const keys = {

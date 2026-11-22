@@ -24,7 +24,7 @@ from plekstender.api.schemas import (
 from plekstender.db.instance import get_lastfm_api_key, get_lastfm_shared_secret
 from plekstender.db.models import ScrobbleTarget, User
 from plekstender.history import scrobblers
-from plekstender.history.listenbrainz import ListenBrainzError, count_pending
+from plekstender.history.listenbrainz import ScrobbleServiceError, count_pending
 from plekstender.worker import enqueue_listenbrainz
 
 log = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ async def add_target(
                 secret, username = await scrobblers.AudioscrobblerClient(http, url).session(
                     body.username.strip(), body.password
                 )
-            except ListenBrainzError as exc:
+            except ScrobbleServiceError as exc:
                 code = (
                     status.HTTP_400_BAD_REQUEST
                     if exc.status == 401
@@ -213,7 +213,7 @@ async def lastfm_callback(
     )
     try:
         secret, name = await client.web_session(token)
-    except ListenBrainzError as exc:
+    except ScrobbleServiceError as exc:
         log.warning("Last.fm sign-in failed for user %s: %s", user.id, exc)
         return _back(lastfm="refused" if exc.status in (400, 401) else "failed")
     try:

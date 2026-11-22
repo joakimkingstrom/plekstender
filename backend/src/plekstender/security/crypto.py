@@ -7,9 +7,13 @@ import hashlib
 import hmac
 import os
 import time
+from typing import TYPE_CHECKING
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+if TYPE_CHECKING:
+    from plekstender.config import Settings
 
 _VERSION = "v1"
 
@@ -77,3 +81,9 @@ class Signer:
 
 def hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def token_cipher(settings: Settings) -> TokenCipher:
+    """The cipher for secrets stored in the database (Plex tokens, API keys, scrobble
+    tokens), keyed from APP_SECRET_KEY."""
+    return TokenCipher(settings.derive_key("token-encryption"))

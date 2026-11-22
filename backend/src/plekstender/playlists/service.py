@@ -17,9 +17,9 @@ from plekstender.config import Settings
 from plekstender.db.models import Artist, Playlist, PlexServer, Track, UserServer
 from plekstender.playlists.builder import Song, matching_songs, pick
 from plekstender.playlists.definition import Definition
-from plekstender.plex.server import PlexServerClient
+from plekstender.plex.server import PlexServerClient, client_for
 from plekstender.plex.tv import PlexAuthError, PlexError
-from plekstender.security.crypto import DecryptionError, TokenCipher
+from plekstender.security.crypto import DecryptionError
 
 log = logging.getLogger(__name__)
 
@@ -70,12 +70,10 @@ async def select_songs(
 
 
 def _client(settings: Settings, http: httpx.AsyncClient, us: UserServer) -> PlexServerClient:
-    cipher = TokenCipher(settings.derive_key("token-encryption"))
     try:
-        token = cipher.decrypt(us.access_token_enc, purpose="user_server.access_token")
+        return client_for(settings, http, us)
     except DecryptionError as exc:
         raise PlaylistError("Reconnect this server in Settings, then try again.") from exc
-    return PlexServerClient(settings, http, us.connection_uri, token)
 
 
 async def write_to_plex(

@@ -162,9 +162,9 @@ export function StatsPage() {
       <Card>
         <p className="text-sm text-muted">
           No listens yet. Plays from your Plex servers are added every few minutes once a library has
-          synced, and you can import your Last.fm history on{' '}
-          <Link to="/settings/listening" className="text-accent underline">
-            Settings → Listening
+          synced, and you can import your Last.fm or ListenBrainz history on{' '}
+          <Link to="/settings/export/history" className="text-accent underline">
+            Settings → Export &amp; import → History
           </Link>
           .
         </p>

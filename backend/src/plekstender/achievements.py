@@ -117,7 +117,6 @@ CATALOGUE: tuple[Achievement, ...] = (
       "A thousand artists heard. Somewhere, a record shop clerk weeps with pride.",
       "1,000 different artists heard"),
 )  # fmt: skip
-BY_ID = {a.id: a for a in CATALOGUE}
 
 
 async def enabled_for_everyone(db: AsyncSession) -> bool:

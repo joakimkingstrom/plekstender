@@ -62,7 +62,7 @@ class Skip(Exception):
 async def _plex_picture(
     settings: Settings, http: httpx.AsyncClient, db: AsyncSession, server: PlexServer, thumb: str
 ) -> bytes:
-    from plekstender.artwork.jobs import client_for
+    from plekstender.plex.server import client_for
 
     owner = await db.scalar(
         select(UserServer).where(UserServer.server_id == server.id, UserServer.is_owner.is_(True))

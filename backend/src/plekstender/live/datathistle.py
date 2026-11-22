@@ -29,8 +29,6 @@ PAGE_SIZE = 20
 MILES = 1.609344
 # Renew the access token when it has fewer days than this left.
 RENEW_BEFORE = dt.timedelta(days=5)
-ADD_EVENT_URL = "https://www.datathistle.com/update/event-listing/"
-SITE_URL = "https://www.datathistle.com/"
 
 
 class DataThistleError(Exception):

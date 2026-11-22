@@ -48,7 +48,6 @@ class Draft:
     url: str | None = None
     source: str = "csv"
     source_ref: str | None = None
-    extra_refs: list[str] = field(default_factory=list)
     # What was played, per artist: [{"artist", "url", "songs": [{"name", "cover", "tape"}]}].
     setlists: list[dict[str, Any]] = field(default_factory=list)
 

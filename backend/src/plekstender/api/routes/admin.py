@@ -84,7 +84,7 @@ from plekstender.db.instance import (
 from plekstender.db.models import PlexServer, User, UserServer
 from plekstender.history import scrobblers
 from plekstender.history.lastfm import LastFmClient, LastFmError
-from plekstender.history.listenbrainz import ListenBrainzError
+from plekstender.history.listenbrainz import ScrobbleServiceError
 from plekstender.live import datathistle, jambase, ticketmaster
 from plekstender.sync.popularity import preview_artist_ranking
 from plekstender.worker import enqueue_popularity_recompute
@@ -278,7 +278,7 @@ async def put_lastfm(
         )
         try:
             await client.check()
-        except ListenBrainzError as exc:
+        except ScrobbleServiceError as exc:
             refused = exc.status in (400, 401, 403)
             code = status.HTTP_400_BAD_REQUEST if refused else status.HTTP_502_BAD_GATEWAY
             raise HTTPException(code, str(exc)) from exc

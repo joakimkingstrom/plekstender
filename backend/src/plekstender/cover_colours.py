@@ -17,10 +17,9 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from plekstender.artwork.jobs import client_for
 from plekstender.config import Settings
 from plekstender.db.models import Album, AlbumColour, UserServer
-from plekstender.plex.server import PlexServerClient
+from plekstender.plex.server import PlexServerClient, client_for
 from plekstender.plex.tv import PlexError
 
 log = logging.getLogger(__name__)

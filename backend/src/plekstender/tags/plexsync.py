@@ -22,10 +22,6 @@ from plekstender.tags.read import unread_fields
 from plekstender.tags.write import clean
 
 Scope = Literal["library", "artist", "album"]
-SYNC_FIELDS = (
-    "title", "artist", "album", "albumartist", "tracknumber", "discnumber", "date", "genre",
-    "rating",
-)  # fmt: skip
 
 
 @dataclass

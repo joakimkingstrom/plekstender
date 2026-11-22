@@ -670,9 +670,10 @@ class TrackIntro(Base):
 
 
 class Notification(Base):
-    """Something someone relies on that stopped working or nears a limit (Phase 17). One row
-    per problem (`key`): repeats update it, and it's resolved when the problem goes away.
-    `user_id` None: about the instance, for admins."""
+    """Something in the bell (Phase 17): a problem (something someone relies on stopped
+    working or nears a limit; resolved when it goes away) or news (level "info": new gigs,
+    top-10 changes). One row per `key`: repeats update it. `user_id` None: about the
+    instance, for admins."""
 
     __tablename__ = "notifications"
     __table_args__ = (Index("ix_notifications_user", "user_id"),)
@@ -1109,7 +1110,7 @@ class GigPlace(Base):
 
 
 class ScrobbleTarget(Base):
-    """Another service a user's new Plex plays are sent to: a ListenBrainz-compatible
+    """Another service a user's new Plex plays are sent to: Last.fm, a ListenBrainz-compatible
     server (Maloja, Koito, Multi-Scrobbler…) or Libre.fm (or another GNU FM server)."""
 
     __tablename__ = "scrobble_targets"
@@ -1117,11 +1118,11 @@ class ScrobbleTarget(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    kind: Mapped[str] = mapped_column(String(16))  # listenbrainz | librefm (the protocol)
-    # What was picked: maloja | koito | multi-scrobbler | listenbrainz-other | librefm
+    kind: Mapped[str] = mapped_column(String(16))  # listenbrainz | librefm | lastfm (protocol)
+    # What was picked: maloja | koito | multi-scrobbler | listenbrainz-other | librefm | lastfm
     service: Mapped[str] = mapped_column(String(24))
     api_url: Mapped[str] = mapped_column(Text)
-    # The token (ListenBrainz-compatible) or session key (Libre.fm), encrypted.
+    # The token (ListenBrainz-compatible) or session key (Libre.fm, Last.fm), encrypted.
     token_enc: Mapped[str] = mapped_column(Text)
     username: Mapped[str | None] = mapped_column(String(255))
     # Only plays that started from this time on are sent.

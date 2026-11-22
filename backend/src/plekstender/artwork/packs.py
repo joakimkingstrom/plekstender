@@ -12,7 +12,6 @@ import datetime as dt
 import hashlib
 import json
 import re
-import uuid
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,7 +64,8 @@ async def run_export(
     db: AsyncSession, http: httpx.AsyncClient, settings: Settings, job: ArtworkJob, us: UserServer
 ) -> None:
     """Zip the current Plex image of every artist marked done or custom."""
-    from plekstender.artwork.jobs import client_for, utcnow
+    from plekstender.artwork.jobs import utcnow
+    from plekstender.plex.server import client_for
 
     client = client_for(settings, http, us)
     rows = (
@@ -189,14 +189,6 @@ def pack_path(settings: Settings, import_id: str) -> Path:
     return path
 
 
-def save_pack(settings: Settings, data: bytes) -> str:
-    import_id = uuid.uuid4().hex
-    folder = imports_dir(settings)
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{import_id}.zip").write_bytes(data)
-    return import_id
-
-
 @dataclass
 class Match:
     entry: PackEntry
@@ -249,7 +241,8 @@ async def run_import(
     db: AsyncSession, http: httpx.AsyncClient, settings: Settings, job: ArtworkJob, us: UserServer
 ) -> None:
     """Apply the chosen pack images to their artists."""
-    from plekstender.artwork.jobs import client_for, utcnow
+    from plekstender.artwork.jobs import utcnow
+    from plekstender.plex.server import client_for
 
     try:
         path = pack_path(settings, str(job.params.get("import_id", "")))

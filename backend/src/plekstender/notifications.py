@@ -1,5 +1,6 @@
 """Notifications: telling people when something they rely on stops working or nears its
-limit, before they notice it themselves.
+limit, before they notice it themselves; and news (level "info") such as new gigs or top-10
+changes, raised by those features (live.refresh, history.top_watch).
 
 The worker looks at every connection's status every few minutes (the same view as Home's
 Status card): each one that's amber or red is a notification, raised once per problem.
@@ -22,6 +23,8 @@ from plekstender.config import Settings
 from plekstender.db.models import Notification, NotificationState, User
 
 LEVELS = {"info": 0, "warning": 1, "error": 2}
+# The connection states (Home's Status card) that are problems to tell people about.
+PROBLEM_STATES = frozenset({"warning", "error"})
 NEW_GIGS = "gigs:new:"  # + user id
 
 
@@ -112,7 +115,7 @@ async def check(db: AsyncSession, http: httpx.AsyncClient, settings: Settings) -
                 link=c.link,
             )
             for c in await your_connections(db, user_id)
-            if c.state in LEVELS
+            if c.state in PROBLEM_STATES
         ]
         for p in problems:
             await raise_problem(db, p, now)
@@ -128,7 +131,7 @@ async def check(db: AsyncSession, http: httpx.AsyncClient, settings: Settings) -
             link=c.link,
         )
         for c in await instance_connections(db, http, settings, admin=True)
-        if c.state in LEVELS
+        if c.state in PROBLEM_STATES
     ]
     for p in instance:
         await raise_problem(db, p, now)

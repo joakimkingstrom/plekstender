@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.config import AccessMode, Settings, get_settings
 from plekstender.db.models import InstanceSetting
-from plekstender.security.crypto import DecryptionError, TokenCipher
+from plekstender.security.crypto import DecryptionError, TokenCipher, token_cipher
 
 ACCESS_KEY = "access"
 WORKER_HEARTBEAT_KEY = "worker_heartbeat"
@@ -111,7 +111,7 @@ LASTFM_SECRET_PURPOSE = "instance.lastfm_shared_secret"  # noqa: S105 - a label
 
 
 def _cipher(settings: Settings) -> TokenCipher:
-    return TokenCipher(settings.derive_key("token-encryption"))
+    return token_cipher(settings)
 
 
 async def get_lastfm_api_key(

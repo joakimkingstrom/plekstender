@@ -21,9 +21,8 @@ from plekstender.db.models import PlaySession, UserServer
 from plekstender.history.geo import geo_lookup
 from plekstender.history.places import Placer
 from plekstender.history.plex_capture import account_map
-from plekstender.plex.server import PlexServerClient
+from plekstender.plex.server import PlexServerClient, client_for
 from plekstender.plex.tv import PlexError
-from plekstender.security.crypto import TokenCipher
 
 log = logging.getLogger(__name__)
 
@@ -48,12 +47,6 @@ def describe_player(player: dict[str, Any]) -> str | None:
     if len(parts) == 2 and parts[0] == parts[1]:
         parts = parts[:1]
     return " · ".join(parts) or None
-
-
-def client_for(settings: Settings, http: httpx.AsyncClient, us: UserServer) -> PlexServerClient:
-    cipher = TokenCipher(settings.derive_key("token-encryption"))
-    token = cipher.decrypt(us.access_token_enc, purpose="user_server.access_token")
-    return PlexServerClient(settings, http, us.connection_uri, token)
 
 
 async def poll_once(

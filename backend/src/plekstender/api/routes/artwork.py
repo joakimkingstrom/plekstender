@@ -10,6 +10,7 @@ import asyncio
 import datetime as dt
 import logging
 import os
+import uuid
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import urlencode
@@ -665,7 +666,7 @@ async def upload_pack(
     us = await owner_server(db, user, server_id)
     folder = packs.imports_dir(settings)
     await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
-    import_id = __import__("uuid").uuid4().hex
+    import_id = uuid.uuid4().hex
     path = folder / f"{import_id}.zip"
     size = 0
     try:

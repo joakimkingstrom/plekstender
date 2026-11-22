@@ -24,7 +24,7 @@ from plekstender.api.schemas import (
 from plekstender.config import AccessMode
 from plekstender.db.instance import get_access_settings
 from plekstender.db.models import PlexServer, SyncRun, User, UserItemState, UserServer
-from plekstender.plex.server import PlexServerClient, choose_connection
+from plekstender.plex.server import PlexServerClient, choose_connection, client_for
 from plekstender.plex.tv import PlexAuthError, PlexError
 from plekstender.security.crypto import DecryptionError, TokenCipher
 from plekstender.worker import enqueue_sync
@@ -67,10 +67,9 @@ def server_client(
     us: UserServer, cipher: TokenCipher, settings: SettingsDep, http: httpx.AsyncClient
 ) -> PlexServerClient:
     try:
-        token = cipher.decrypt(us.access_token_enc, purpose="user_server.access_token")
+        return client_for(settings, http, us, cipher)
     except DecryptionError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "Reconnect this server") from exc
-    return PlexServerClient(settings, http, us.connection_uri, token)
 
 
 @router.get("", response_model=list[ServerOut])

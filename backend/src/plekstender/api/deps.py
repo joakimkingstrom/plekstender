@@ -13,7 +13,7 @@ from plekstender.config import Settings, get_settings
 from plekstender.db import get_db
 from plekstender.db.models import User
 from plekstender.plex.tv import PlexTvClient
-from plekstender.security.crypto import Signer, TokenCipher
+from plekstender.security.crypto import Signer, TokenCipher, token_cipher
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -28,7 +28,7 @@ HttpDep = Annotated[httpx.AsyncClient, Depends(get_http)]
 
 
 def get_cipher(settings: SettingsDep) -> TokenCipher:
-    return TokenCipher(settings.derive_key("token-encryption"))
+    return token_cipher(settings)
 
 
 def get_signer(settings: SettingsDep) -> Signer:

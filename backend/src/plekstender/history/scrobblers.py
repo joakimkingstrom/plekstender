@@ -35,11 +35,11 @@ from plekstender.db.models import Listen, ScrobbleTarget
 from plekstender.history.lastfm import KEY_REJECTED
 from plekstender.history.listenbrainz import (
     ListenBrainzClient,
-    ListenBrainzError,
+    ScrobbleServiceError,
     SubmitResult,
     send_pending,
 )
-from plekstender.security.crypto import TokenCipher
+from plekstender.security.crypto import TokenCipher, token_cipher
 
 log = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ async def check_listenbrainz(http: httpx.AsyncClient, base: str, token: str) -> 
     client = ListenBrainzClient(http, base, token)
     try:
         resp = await client._request("GET", "/1/validate-token")
-    except ListenBrainzError as exc:
+    except ScrobbleServiceError as exc:
         raise ScrobblerError("The server couldn't be reached.") from exc
     if resp.status_code in (404, 405, 501):
         return None
@@ -197,35 +197,39 @@ class AudioscrobblerClient:
                 timeout=30,
             )
         except httpx.HTTPError as exc:
-            raise ListenBrainzError(f"{name} couldn't be reached.") from exc
+            raise ScrobbleServiceError(f"{name} couldn't be reached.") from exc
         if resp.status_code >= 500 or resp.status_code == 429:
-            raise ListenBrainzError(f"{name} is unavailable (HTTP {resp.status_code}).", status=503)
+            raise ScrobbleServiceError(
+                f"{name} is unavailable (HTTP {resp.status_code}).", status=503
+            )
         try:
             data = resp.json()
         except ValueError as exc:
-            raise ListenBrainzError(f"{name} sent an answer that isn't JSON.", status=503) from exc
+            raise ScrobbleServiceError(
+                f"{name} sent an answer that isn't JSON.", status=503
+            ) from exc
         if isinstance(data, dict) and "error" in data:
             code, message = data.get("error"), str(data.get("message") or "")
             # 4: wrong password, 9: session key no longer valid, 14/15: unauthorised token.
             if code in (4, 9, 14, 15):
-                raise ListenBrainzError(f"{name}: {message or 'not signed in'}", status=401)
+                raise ScrobbleServiceError(f"{name}: {message or 'not signed in'}", status=401)
             # 10/26: the API key is refused or suspended, 13: the signature (the shared
             # secret) is wrong. Nothing to do with the plays or the person's session, so
             # they wait (not skipped, not paused) until an admin fixes it.
             if code in (10, 26):
-                raise ListenBrainzError(
+                raise ScrobbleServiceError(
                     KEY_REJECTED if self._name == "Last.fm" else f"{name}: {message}", status=403
                 )
             if code == 13:
-                raise ListenBrainzError(
+                raise ScrobbleServiceError(
                     f"{name} didn't accept the signature: check the API key's shared secret.",
                     status=403,
                 )
             if code in (11, 16, 29):  # service offline, temporary error, rate limited
-                raise ListenBrainzError(f"{name}: {message or 'try again later'}", status=503)
-            raise ListenBrainzError(f"{name} refused it: {message}", status=400)
+                raise ScrobbleServiceError(f"{name}: {message or 'try again later'}", status=503)
+            raise ScrobbleServiceError(f"{name} refused it: {message}", status=400)
         if not isinstance(data, dict):
-            raise ListenBrainzError(f"{name} sent an unexpected answer.", status=503)
+            raise ScrobbleServiceError(f"{name} sent an unexpected answer.", status=503)
         return data
 
     @staticmethod
@@ -234,7 +238,7 @@ class AudioscrobblerClient:
         session: dict[str, Any] = found if isinstance(found, dict) else {}
         key = session.get("key")
         if not key:
-            raise ListenBrainzError("No session was given.", status=401)
+            raise ScrobbleServiceError("No session was given.", status=401)
         return str(key), str(session.get("name") or fallback)
 
     async def session(self, username: str, password: str) -> tuple[str, str]:
@@ -292,7 +296,7 @@ def check_state(settings: Settings, user_id: int, state: str) -> bool:
 
 
 def _cipher(settings: Settings) -> TokenCipher:
-    return TokenCipher(settings.derive_key("token-encryption"))
+    return token_cipher(settings)
 
 
 def encrypt(settings: Settings, secret: str) -> str:

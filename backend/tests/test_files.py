@@ -1032,9 +1032,12 @@ def test_a_changed_file_is_left_alone_with_a_clear_reason(tmp_path: Path) -> Non
 # --- Renaming and moving files ---------------------------------------------------------------
 
 
+# Plex's own layout: the rename template the app suggests (frontend/src/api/files.ts).
+DEFAULT_TEMPLATE = "{albumartist}/{album}/[{disc}-][{track:02} - ]{title}"
+
+
 def test_rename_templates() -> None:
     from plekstender.tags.rename import (
-        DEFAULT_TEMPLATE,
         TemplateError,
         check_template,
         render,

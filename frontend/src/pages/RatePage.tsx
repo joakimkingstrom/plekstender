@@ -301,8 +301,8 @@ function Rater({ serverId }: { serverId: number }) {
             <p className="text-sm text-muted">
               Nothing left to rate here. Try another selection{settings.pool === 'listened' ? ', or import your listening history on ' : '.'}
               {settings.pool === 'listened' && (
-                <Link to="/settings/listening" className="text-accent underline">
-                  Settings → Listening
+                <Link to="/settings/export/history" className="text-accent underline">
+                  Settings → Export &amp; import → History
                 </Link>
               )}
             </p>

@@ -16,8 +16,7 @@ from plekstender.artwork.images import Transform
 from plekstender.config import Settings
 from plekstender.db.instance import get_fanart_api_key
 from plekstender.db.models import Artist, ArtistArtwork, ArtworkJob, UserItemState, UserServer
-from plekstender.plex.server import PlexServerClient
-from plekstender.security.crypto import TokenCipher
+from plekstender.plex.server import client_for
 
 log = logging.getLogger(__name__)
 
@@ -28,12 +27,6 @@ Runner = Callable[
 
 def utcnow() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
-
-
-def client_for(settings: Settings, http: httpx.AsyncClient, us: UserServer) -> PlexServerClient:
-    cipher = TokenCipher(settings.derive_key("token-encryption"))
-    token = cipher.decrypt(us.access_token_enc, purpose="user_server.access_token")
-    return PlexServerClient(settings, http, us.connection_uri, token)
 
 
 async def job_artists(db: AsyncSession, job: ArtworkJob, us: UserServer) -> list[int]:

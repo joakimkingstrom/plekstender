@@ -56,7 +56,7 @@ from plekstender.live import datathistle, feeds, jambase, ticketmaster
 from plekstender.live.events import Event, Performer
 from plekstender.live.geocode import distance_km
 from plekstender.notifications import notify_new_gigs
-from plekstender.security.crypto import DecryptionError, TokenCipher
+from plekstender.security.crypto import DecryptionError, token_cipher
 from plekstender.sync.parse import normalise_artist
 
 log = logging.getLogger(__name__)
@@ -596,7 +596,7 @@ async def _calendars(
 ) -> None:
     """The user's calendar links: every upcoming event in them (it's their own calendar),
     linked to their artists where the billing names them."""
-    cipher = TokenCipher(ctx.settings.derive_key("token-encryption"))
+    cipher = token_cipher(ctx.settings)
     match = Matcher(everyone, fuzzy=False)
     for feed_id in feed_ids:
         async with ctx.sessions() as db:

@@ -22,20 +22,11 @@ from plekstender.db.models import Listen, PlaySession, PlexServer, User, UserSer
 from plekstender.history import stats
 from plekstender.history.geo import GeoLookup, Place, geo_lookup
 from plekstender.plex.tv import PlexError, PlexTvClient
-from plekstender.security.crypto import DecryptionError, TokenCipher
+from plekstender.security.crypto import DecryptionError, token_cipher
 
 log = logging.getLogger(__name__)
 
 FILL_BATCH = 2000
-CONTINENTS = {
-    "AF": "Africa",
-    "AN": "Antarctica",
-    "AS": "Asia",
-    "EU": "Europe",
-    "NA": "North America",
-    "OC": "Oceania",
-    "SA": "South America",
-}
 
 
 # --- filling in places ------------------------------------------------------------------
@@ -48,7 +39,7 @@ async def refresh_public_addresses(
     servers = list(await db.scalars(select(PlexServer).where(PlexServer.public_address.is_(None))))
     if not servers:
         return 0
-    cipher = TokenCipher(settings.derive_key("token-encryption"))
+    cipher = token_cipher(settings)
     plex = PlexTvClient(settings, http)
     found = 0
     for server in servers:

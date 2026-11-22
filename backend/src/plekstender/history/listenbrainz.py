@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from plekstender import __version__
 from plekstender.config import Settings
 from plekstender.db.models import Listen, ListenBrainzLink
-from plekstender.security.crypto import TokenCipher
+from plekstender.security.crypto import token_cipher
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +23,10 @@ BATCH = 100  # ListenBrainz allows up to 1000 per request
 LISTEN_MINIMUM_TS = 1_033_430_400  # ListenBrainz rejects older timestamps
 
 
-class ListenBrainzError(Exception):
+class ScrobbleServiceError(Exception):
+    """A scrobble service (ListenBrainz or compatible, Last.fm, Libre.fm) couldn't be reached
+    or refused a request; `status` is its HTTP status, when it answered."""
+
     def __init__(self, message: str, *, status: int | None = None) -> None:
         super().__init__(message)
         self.status = status
@@ -41,13 +44,13 @@ class ListenBrainzClient:
                 method, f"{self._base}{path}", headers=self._headers, timeout=30, **kwargs
             )
         except httpx.HTTPError as exc:
-            raise ListenBrainzError("Could not reach ListenBrainz.") from exc
+            raise ScrobbleServiceError("Could not reach ListenBrainz.") from exc
 
     async def validate(self) -> str | None:
         """The token's ListenBrainz username, or None if the token isn't valid."""
         resp = await self._request("GET", "/1/validate-token")
         if resp.status_code != 200:
-            raise ListenBrainzError(
+            raise ScrobbleServiceError(
                 f"ListenBrainz is unavailable (HTTP {resp.status_code}).", status=resp.status_code
             )
         data = resp.json()
@@ -64,19 +67,19 @@ class ListenBrainzClient:
         if resp.status_code == 200:
             return
         if resp.status_code == 401:
-            raise ListenBrainzError("ListenBrainz rejected the token.", status=401)
+            raise ScrobbleServiceError("ListenBrainz rejected the token.", status=401)
         if resp.status_code == 400:
             try:
                 detail = str(resp.json().get("error") or "")
             except ValueError:
                 detail = ""
-            raise ListenBrainzError(f"ListenBrainz refused a listen: {detail}", status=400)
+            raise ScrobbleServiceError(f"ListenBrainz refused a listen: {detail}", status=400)
         if resp.status_code == 429:
             wait = resp.headers.get("X-RateLimit-Reset-In", "?")
-            raise ListenBrainzError(
+            raise ScrobbleServiceError(
                 f"ListenBrainz asked to slow down (retry in {wait} s).", status=429
             )
-        raise ListenBrainzError(
+        raise ScrobbleServiceError(
             f"ListenBrainz is unavailable (HTTP {resp.status_code}).", status=resp.status_code
         )
 
@@ -155,7 +158,7 @@ async def submit_pending(
     link = await db.get(ListenBrainzLink, user_id)
     if link is None or link.paused:
         return SubmitResult()
-    cipher = TokenCipher(settings.derive_key("token-encryption"))
+    cipher = token_cipher(settings)
     client = ListenBrainzClient(
         http, settings.listenbrainz_api_url, cipher.decrypt(link.token_enc, purpose=TOKEN_PURPOSE)
     )
@@ -194,7 +197,7 @@ async def send_pending(
                 await client.send(batch)
                 for listen in batch:
                     handled(listen, sent=True)
-            except ListenBrainzError as exc:
+            except ScrobbleServiceError as exc:
                 if exc.status != 400:
                     raise
                 # Find the listen(s) it refuses by sending them one at a time.
@@ -202,12 +205,12 @@ async def send_pending(
                     try:
                         await client.send([listen])
                         handled(listen, sent=True)
-                    except ListenBrainzError as single:
+                    except ScrobbleServiceError as single:
                         if single.status != 400:
                             raise
                         log.warning("%s refused listen %s: %s", service, listen.id, single)
                         handled(listen, sent=False)
-        except ListenBrainzError as exc:
+        except ScrobbleServiceError as exc:
             state.last_error = str(exc)
             if exc.status == 401:
                 state.paused = True

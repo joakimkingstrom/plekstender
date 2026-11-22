@@ -158,12 +158,6 @@ export function stopAudio() {
   set({ key: null, status: 'idle' })
 }
 
-/** Seconds into the current clip (from where its music started), or 0. */
-export function audioElapsed(preview: Preview | null): number {
-  if (!audio || !preview) return 0
-  return Math.max(0, audio.currentTime - preview.start_ms / 1000)
-}
-
 export function useAudio(): State {
   return useSyncExternalStore(
     (l) => {

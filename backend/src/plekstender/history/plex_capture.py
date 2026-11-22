@@ -16,9 +16,8 @@ from sqlalchemy.orm import aliased
 from plekstender.config import Settings
 from plekstender.db.models import Album, Artist, HistoryCursor, Listen, Track, User, UserServer
 from plekstender.history.duplicates import mark_duplicates
-from plekstender.plex.server import PlexServerClient
+from plekstender.plex.server import client_for
 from plekstender.plex.tv import PlexError
-from plekstender.security.crypto import TokenCipher
 from plekstender.sync.parse import epoch, normalise_artist, normalise_title
 
 log = logging.getLogger(__name__)
@@ -164,9 +163,7 @@ async def capture_plays(
 ) -> CaptureResult:
     """Read new plays for one server connection, all its music libraries."""
     result = CaptureResult()
-    cipher = TokenCipher(settings.derive_key("token-encryption"))
-    token = cipher.decrypt(us.access_token_enc, purpose="user_server.access_token")
-    client = PlexServerClient(settings, http, us.connection_uri, token)
+    client = client_for(settings, http, us)
     accounts = await account_map(db, us)
     # Plain values: a rollback after a failed request expires `us`.
     us_id, server_id, sections = us.id, us.server_id, list(us.music_section_keys)

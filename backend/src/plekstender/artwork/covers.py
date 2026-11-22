@@ -28,11 +28,10 @@ from plekstender import tidal as tidal_api
 from plekstender.artwork import images, sources
 from plekstender.artwork.fetch import USER_AGENT, FetchError, fetch, image_size
 from plekstender.artwork.images import ImageError
-from plekstender.artwork.jobs import client_for
 from plekstender.artwork.sources import Candidate, SourceError
 from plekstender.config import Settings
 from plekstender.db.models import Album, AlbumCover, UserServer
-from plekstender.plex.server import PlexServerClient
+from plekstender.plex.server import PlexServerClient, client_for
 from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import normalise_artist, normalise_title
 

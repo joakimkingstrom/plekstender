@@ -260,7 +260,7 @@ async def _tell_plex(
     moved file from a deleted one)."""
     if not (touched or moved) or not server.plex_path_prefix:
         return
-    from plekstender.artwork.jobs import client_for
+    from plekstender.plex.server import client_for
 
     owner = await db.scalar(
         select(UserServer).where(UserServer.server_id == server.id, UserServer.is_owner.is_(True))

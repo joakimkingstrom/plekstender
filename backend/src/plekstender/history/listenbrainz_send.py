@@ -33,7 +33,7 @@ from plekstender.history.listenbrainz import (
     LISTEN_MINIMUM_TS,
     TOKEN_PURPOSE,
     ListenBrainzClient,
-    ListenBrainzError,
+    ScrobbleServiceError,
     listen_payload,
 )
 from plekstender.history.listenbrainz_import import (
@@ -41,7 +41,7 @@ from plekstender.history.listenbrainz_import import (
     ListenBrainzImportError,
     lb_get,
 )
-from plekstender.security.crypto import TokenCipher
+from plekstender.security.crypto import token_cipher
 from plekstender.sync.parse import normalise_title
 
 log = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ async def _retrying(sleep: Sleep, call: Any) -> Any:
             if not exc.transient or attempt == MAX_ATTEMPTS:
                 raise SendError(str(exc)) from exc
             await sleep(max(exc.wait, RETRY_DELAY * 2 ** (attempt - 1)))
-        except ListenBrainzError as exc:
+        except ScrobbleServiceError as exc:
             if exc.status == 401:
                 raise SendError(
                     "ListenBrainz rejected your token; paste a new one under Connections."
@@ -150,7 +150,7 @@ async def _submit(
     try:
         await _retrying(sleep, functools.partial(client.submit, payload))
         return len(listens), 0
-    except ListenBrainzError as exc:
+    except ScrobbleServiceError as exc:
         if exc.status != 400:
             raise SendError(str(exc)) from exc
     sent = refused = 0
@@ -159,7 +159,7 @@ async def _submit(
         try:
             await _retrying(sleep, functools.partial(client.submit, single))
             sent += 1
-        except ListenBrainzError as exc:
+        except ScrobbleServiceError as exc:
             if exc.status != 400:
                 raise SendError(str(exc)) from exc
             log.warning("ListenBrainz refused listen %s: %s", listen.id, exc)
@@ -191,7 +191,7 @@ async def run_listenbrainz_send(
             raise SendError("Connect your ListenBrainz account first.")
         if link.paused:
             raise SendError("ListenBrainz rejected your token; paste a new one under Connections.")
-        cipher = TokenCipher(settings.derive_key("token-encryption"))
+        cipher = token_cipher(settings)
         client = ListenBrainzClient(
             http,
             settings.listenbrainz_api_url,

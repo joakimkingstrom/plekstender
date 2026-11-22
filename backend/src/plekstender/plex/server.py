@@ -6,7 +6,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from PIL import ImageFile
@@ -14,6 +14,10 @@ from pydantic import BaseModel, Field
 
 from plekstender.config import Settings
 from plekstender.plex.tv import Connection, PlexAuthError, PlexError, Resource, plex_headers
+from plekstender.security.crypto import TokenCipher, token_cipher
+
+if TYPE_CHECKING:
+    from plekstender.db.models import UserServer
 
 log = logging.getLogger(__name__)
 
@@ -409,3 +413,18 @@ async def choose_connection(
             return ChosenConnection(uri=result.uri, kind=result.kind), list(results)
     log.info("no reachable connection for server %s", resource.client_identifier)
     return None, list(results)
+
+
+def client_for(
+    settings: Settings,
+    http: httpx.AsyncClient,
+    us: UserServer,
+    cipher: TokenCipher | None = None,
+) -> PlexServerClient:
+    """A client for a person's connection to a Plex server, with their own token. Raises
+    DecryptionError if the token can't be read (APP_SECRET_KEY changed): the server has to
+    be connected again."""
+    token = (cipher or token_cipher(settings)).decrypt(
+        us.access_token_enc, purpose="user_server.access_token"
+    )
+    return PlexServerClient(settings, http, us.connection_uri, token)

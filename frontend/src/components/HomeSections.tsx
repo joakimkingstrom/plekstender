@@ -38,8 +38,8 @@ export function YourListening({ serverId }: { serverId: number | null }) {
       <Card title="Your listening">
         <p className="text-sm text-muted">
           No listens yet. Plays in Plex show up here, and you can import your Last.fm or ListenBrainz history on{' '}
-          <Link to="/settings/listening" className="text-accent hover:underline">
-            Settings → Listening history
+          <Link to="/settings/export/history" className="text-accent hover:underline">
+            Settings → Export &amp; import → History
           </Link>
           .
         </p>
