@@ -77,8 +77,11 @@ CSP = "; ".join(
 
 
 class SecurityHeadersMiddleware:
-    def __init__(self, app: ASGIApp) -> None:
+    """`hsts`: served over https (APP_URL), so browsers are told to keep to https."""
+
+    def __init__(self, app: ASGIApp, *, hsts: bool = False) -> None:
         self.app = app
+        self.hsts = hsts
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -92,6 +95,8 @@ class SecurityHeadersMiddleware:
                 headers.setdefault("Referrer-Policy", "same-origin")
                 headers.setdefault("X-Frame-Options", "DENY")
                 headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+                if self.hsts:
+                    headers.setdefault("Strict-Transport-Security", "max-age=31536000")
                 if headers.get("content-type", "").startswith("text/html"):
                     headers.setdefault("Content-Security-Policy", CSP)
                 if scope["path"].startswith("/api/"):

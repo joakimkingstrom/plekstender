@@ -336,3 +336,22 @@ async def test_lastfm_scrobbling(app: FastAPI, plex: FakePlex, lastfm: FakeLastF
     await send(user_id)
     paused = (await owner.get("/api/scrobblers")).json()[0]
     assert paused["paused"] and "Connect Last.fm again" in paused["error"]
+
+
+@pytest.mark.db
+async def test_scrobble_servers_cant_be_this_machine(app: FastAPI, plex: FakePlex) -> None:
+    owner, _ = await owner_with_library(app, plex)
+    # Not this machine, cloud metadata or Plekstender's own services (home servers are fine).
+    for url in (
+        "http://localhost:42010/apis/listenbrainz",
+        "http://127.0.0.1:42010/apis/listenbrainz",
+        "http://169.254.169.254/latest",
+        "http://db:5432",
+        "http://[::1]:8080",
+    ):
+        refused = await owner.post(
+            "/api/scrobblers", json={"service": "maloja", "url": url, "token": "t"}, headers=CSRF
+        )
+        assert (
+            refused.status_code == 400 and "can't be a scrobble server" in refused.json()["detail"]
+        ), url

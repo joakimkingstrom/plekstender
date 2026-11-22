@@ -88,3 +88,38 @@ def clear_session_cookie(response: Response, settings: Settings) -> None:
     response.delete_cookie(
         SESSION_COOKIE, httponly=True, secure=settings.secure_cookies, samesite="lax", path="/"
     )
+
+
+async def end_sessions_without_access(db: AsyncSession) -> int:
+    """After the access rules change: sign out the people who no longer qualify, rather than
+    waiting for their sessions to run out. Admins always qualify. With approved servers,
+    "qualifies" means they've connected an approved server here (anyone who has access but
+    hasn't connected one just signs in again). Returns how many sessions ended."""
+    from plekstender.config import AccessMode
+    from plekstender.db.instance import get_access_settings
+    from plekstender.db.models import PlexServer, UserServer
+
+    access = await get_access_settings(db)
+    if access.mode == AccessMode.OPEN:
+        return 0
+    users = list(await db.scalars(select(User).where(User.is_admin.is_(False))))
+    if access.mode == AccessMode.ALLOWLIST:
+        listed = {x.lower() for x in access.allowlist}
+        out = [
+            u.id
+            for u in users
+            if not ({(u.username or "").lower(), (u.email or "").lower()} & listed)
+        ]
+    else:
+        approved = set(
+            await db.scalars(
+                select(UserServer.user_id)
+                .join(PlexServer, PlexServer.id == UserServer.server_id)
+                .where(PlexServer.approved.is_(True))
+            )
+        )
+        out = [u.id for u in users if u.id not in approved]
+    if not out:
+        return 0
+    result = await db.execute(delete(Session).where(Session.user_id.in_(out)))
+    return int(getattr(result, "rowcount", 0) or 0)

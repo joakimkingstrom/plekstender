@@ -1217,3 +1217,15 @@ async def test_new_shows(app: FastAPI, plex: FakePlex) -> None:
         await db.commit()
     assert (await refresh(user_id, datathistle="no")).complete
     assert await news() == []
+
+
+def test_only_web_links_are_kept() -> None:
+    from plekstender.live.refresh import web_link
+
+    assert (
+        web_link("https://www.ticketmaster.se/event/A1") == "https://www.ticketmaster.se/event/A1"
+    )
+    assert web_link("HTTP://example.com/x") == "HTTP://example.com/x"
+    assert web_link("javascript:alert(1)") is None
+    assert web_link("data:text/html,hi") is None
+    assert web_link("") is None and web_link(None) is None

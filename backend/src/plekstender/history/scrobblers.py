@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import hmac
+import ipaddress
 import logging
 from typing import Any
 from urllib.parse import urlencode, urlsplit
@@ -27,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender import __version__
+from plekstender.artwork import fetch
 from plekstender.config import Settings
 from plekstender.db.instance import get_lastfm_api_key, get_lastfm_shared_secret
 from plekstender.db.models import Listen, ScrobbleTarget
@@ -44,8 +46,10 @@ log = logging.getLogger(__name__)
 PURPOSE = "user.scrobble_target"
 LIBREFM_URL = "https://libre.fm/2.0/"
 # Plekstender's own Last.fm-style application key and secret (GNU FM accepts any).
-API_KEY = hashlib.md5(b"plekstender").hexdigest()  # noqa: S324 - an identifier, not security
-API_SECRET = hashlib.md5(b"plekstender-secret").hexdigest()  # noqa: S324
+# MD5 is what the Audioscrobbler protocol uses (identifiers and request signatures), not a
+# security choice of Plekstender's.
+API_KEY = hashlib.md5(b"plekstender", usedforsecurity=False).hexdigest()
+API_SECRET = hashlib.md5(b"plekstender-secret", usedforsecurity=False).hexdigest()
 LIBREFM_BATCH = 50
 LASTFM_AUTH_URL = "https://www.last.fm/api/auth/"
 CONNECT_WINDOW = 3600  # seconds to approve Plekstender on last.fm
@@ -86,6 +90,40 @@ def listenbrainz_base(url: str) -> str:
     return url
 
 
+# Never a scrobble server: Plekstender's own services in its Compose stack, and this machine.
+OWN_HOSTS = frozenset({"localhost", "db", "db-init", "frontend", "worker", "searxng", "traefik"})
+
+
+def _never_a_server(address: str) -> bool:
+    """This machine, link-local (which includes cloud metadata services) and other
+    addresses nobody runs a scrobble server on. Private (home network) ones are fine."""
+    ip = ipaddress.ip_address(address.split("%")[0])
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return (
+        ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_multicast or ip.is_reserved
+    )
+
+
+async def check_server_address(url: str) -> None:
+    """Refuse addresses that can't be a scrobble server (see _never_a_server), so the server
+    can't be pointed at itself or its own services. A name that doesn't resolve is left for
+    the connection to report."""
+    host = (urlsplit(url).hostname or "").lower()
+    refused = ScrobblerError(
+        "That address can't be a scrobble server: it's this machine or one of Plekstender's "
+        "own services."
+    )
+    if host in OWN_HOSTS or host.endswith(".localhost"):
+        raise refused
+    try:
+        addresses = await fetch.resolver(host)
+    except OSError, UnicodeError:
+        return
+    if any(_never_a_server(a) for a in addresses):
+        raise refused
+
+
 def librefm_base(url: str | None) -> str:
     url = (url or LIBREFM_URL).strip()
     parts = urlsplit(url)
@@ -121,7 +159,7 @@ async def check_listenbrainz(http: httpx.AsyncClient, base: str, token: str) -> 
 def _sign(params: dict[str, str], secret: str) -> str:
     """Last.fm's signature: md5 of the sorted name+value pairs and the secret."""
     text = "".join(f"{k}{params[k]}" for k in sorted(params) if k not in ("format", "callback"))
-    return hashlib.md5((text + secret).encode()).hexdigest()  # noqa: S324 - the protocol's
+    return hashlib.md5((text + secret).encode(), usedforsecurity=False).hexdigest()
 
 
 class AudioscrobblerClient:
@@ -201,8 +239,10 @@ class AudioscrobblerClient:
 
     async def session(self, username: str, password: str) -> tuple[str, str]:
         """Libre.fm: sign in once with the password: (session key, the account's name)."""
-        password_md5 = hashlib.md5(password.encode()).hexdigest()  # noqa: S324 - the protocol's
-        token = hashlib.md5((username.lower() + password_md5).encode()).hexdigest()  # noqa: S324
+        password_md5 = hashlib.md5(password.encode(), usedforsecurity=False).hexdigest()
+        token = hashlib.md5(
+            (username.lower() + password_md5).encode(), usedforsecurity=False
+        ).hexdigest()
         data = await self._call("auth.getMobileSession", {"username": username, "authToken": token})
         return self._session(data, username)
 

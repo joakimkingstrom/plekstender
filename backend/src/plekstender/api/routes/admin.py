@@ -46,6 +46,7 @@ from plekstender.api.schemas import (
 from plekstender.artwork.catalogue import catalogue, find
 from plekstender.artwork.sources import SourceError, fanart_logos
 from plekstender.artwork.text import FontError, check_font
+from plekstender.auth.sessions import end_sessions_without_access
 from plekstender.db.instance import (
     DataThistleTokens,
     LibrarySettings,
@@ -106,6 +107,8 @@ async def put_access(
     body: AccessSettingsIn, db: DbDep, _: AdminDep, settings: SettingsDep
 ) -> AccessSettingsOut:
     await set_access_settings(db, body.mode, body.allowlist)
+    # Tighter rules apply now, not when people's sessions run out.
+    await end_sessions_without_access(db)
     await db.commit()
     return await get_access(db, _, settings)
 
@@ -138,6 +141,8 @@ async def update_server(
     if server is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Server not found")
     server.approved = body.approved
+    if not body.approved:
+        await end_sessions_without_access(db)
     await db.commit()
     count = await db.scalar(
         select(func.count(UserServer.id)).where(UserServer.server_id == server.id)

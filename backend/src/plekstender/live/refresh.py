@@ -770,6 +770,11 @@ def _collect(
         found[event.id] = (event, matched)
 
 
+def web_link(url: str | None) -> str | None:
+    """Only http(s) links are kept, whatever a source sends (they're shown as links)."""
+    return url if url and url.lower().startswith(("https://", "http://")) else None
+
+
 async def _store(
     db: AsyncSession,
     user_id: int,
@@ -803,9 +808,9 @@ async def _store(
                 "latitude": event.latitude,
                 "longitude": event.longitude,
                 "distance_km": distance,
-                "ticket_url": event.ticket_url,
+                "ticket_url": web_link(event.ticket_url),
                 "seller": event.seller,
-                "page_url": event.page_url,
+                "page_url": web_link(event.page_url),
                 "price_min": event.price_min,
                 "price_max": event.price_max,
                 "currency": event.currency,

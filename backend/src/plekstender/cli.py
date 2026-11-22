@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import logging
 import sys
 import urllib.request
 
@@ -13,11 +12,9 @@ from plekstender.config import get_settings
 
 
 def _setup_logging() -> None:
-    logging.basicConfig(
-        level=get_settings().log_level.upper(),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stdout,
-    )
+    from plekstender.logs import setup_logging
+
+    setup_logging(get_settings().log_level)
 
 
 def cmd_web(_: argparse.Namespace) -> int:

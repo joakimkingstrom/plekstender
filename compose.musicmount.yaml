@@ -58,8 +58,10 @@ services:
   frontend:
     <<: *plekstender
     command: ["plekstender", "web"]
+    # Published on every interface by default; behind a reverse proxy on this host, set
+    # PLEKSTENDER_LISTEN=127.0.0.1:8080 so only the proxy can reach it.
     ports:
-      - "${PLEKSTENDER_PORT:-8080}:8080"
+      - "${PLEKSTENDER_LISTEN:-${PLEKSTENDER_PORT:-8080}}:8080"
     networks:
       - db
       - default
@@ -104,7 +106,7 @@ services:
   # Optional image search for artist logos: `docker compose --profile search up -d`.
   # Not published on any port; only Plekstender can reach it.
   searxng:
-    image: searxng/searxng:latest
+    image: searxng/searxng:2026.11.21-c6ee3e9fd
     profiles: ["search"]
     restart: unless-stopped
     environment:
@@ -126,7 +128,7 @@ services:
   # `docker compose --profile traefik up -d` (and set TRAEFIK_ENABLE=true, PLEKSTENDER_HOST).
   # Already run Traefik? See compose.override.example.yaml instead.
   traefik:
-    image: traefik:v3
+    image: traefik:v3.7.19
     profiles: ["traefik"]
     restart: unless-stopped
     command:

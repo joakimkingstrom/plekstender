@@ -5,7 +5,7 @@
 #   PLEKSTENDER_HOST=plekstender.example.com
 #   TRAEFIK_ENTRYPOINT=websecure            # your entrypoint name
 #   TRAEFIK_CERTRESOLVER=myresolver         # your cert resolver name
-#   FORWARDED_ALLOW_IPS=*
+#   FORWARDED_ALLOW_IPS=*                   # safe here: the port isn't published (below)
 #   APP_URL=https://plekstender.example.com
 services:
   frontend:
@@ -23,8 +23,8 @@ networks:
 
 # Optional: let Plekstender save artist.jpg into your artist folders (and, later, edit tags).
 # Mount the music folder read-write into the worker only (here at /music): the web app
-# never touches music files. Then in Settings -> Artwork set "Music folder as Plex sees
-# it" and "Same folder in Plekstender's container" (/music).
+# never touches music files. Then in Settings -> Music files set where the music is as Plex
+# sees it, and as Plekstender's worker sees it (/music).
 #
 # services:
 #   worker:

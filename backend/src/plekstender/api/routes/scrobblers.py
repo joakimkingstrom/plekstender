@@ -78,6 +78,7 @@ async def add_target(
     try:
         if kind == "librefm":
             url = scrobblers.librefm_base(body.url)
+            await scrobblers.check_server_address(url)
             if not body.username or not body.password:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter the username and password."
@@ -100,6 +101,7 @@ async def add_target(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter the address and token."
                 )
             url = scrobblers.listenbrainz_base(body.url)
+            await scrobblers.check_server_address(url)
             secret = body.token.strip()
             name = await scrobblers.check_listenbrainz(http, url, secret)
     except scrobblers.ScrobblerError as exc:

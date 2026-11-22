@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import FileResponse
+from sqlalchemy import func, select
 
 from plekstender import __version__
 from plekstender.api.middleware import CSRFMiddleware, RateLimiter, SecurityHeadersMiddleware
@@ -44,8 +46,30 @@ from plekstender.api.routes import (
     tag_editing,
 )
 from plekstender.config import Settings, get_settings
-from plekstender.db import get_engine
+from plekstender.db import get_engine, get_sessionmaker
+from plekstender.db.models import User
 from plekstender.worker import app as jobs
+
+log = logging.getLogger(__name__)
+
+
+async def _warn_if_unclaimed(settings: Settings) -> None:
+    """Nobody has signed in yet and INITIAL_ADMIN isn't set: whoever signs in first becomes
+    the admin, so say so plainly in the log."""
+    if settings.initial_admin:
+        return
+    try:
+        async with get_sessionmaker()() as db:
+            claimed = bool(await db.scalar(select(func.count()).select_from(User)))
+    except Exception:  # the database may not be up yet; the app retries on its own
+        return
+    if not claimed:
+        log.warning(
+            "Nobody has signed in yet and INITIAL_ADMIN isn't set: the first Plex account to "
+            "sign in at %s becomes the admin. Sign in now, or set INITIAL_ADMIN to your Plex "
+            "username or email.",
+            settings.app_url,
+        )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -61,6 +85,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             jobs.open_async(),
         ):
             app.state.http = http
+            await _warn_if_unclaimed(settings)
             yield
         await get_engine().dispose()
 
@@ -74,7 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.rate_limiter = RateLimiter()
     app.add_middleware(CSRFMiddleware, allowed_origin=settings.app_origin)
-    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware, hsts=settings.secure_cookies)
 
     for module in (
         health,

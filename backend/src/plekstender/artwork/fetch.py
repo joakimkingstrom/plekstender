@@ -9,10 +9,13 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
+from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+import httpcore
 import httpx
 from PIL import ImageFile
 
@@ -54,7 +57,9 @@ def is_public(address: str) -> bool:
     )
 
 
-async def check_url(url: str) -> None:
+async def check_url(url: str) -> str:
+    """Refuse anything but http(s) on the standard ports to a host whose every address is
+    public. Returns the address to connect to."""
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise FetchError("Only http(s) URLs can be fetched.")
@@ -68,25 +73,88 @@ async def check_url(url: str) -> None:
         raise FetchError(f"Couldn't find {parts.hostname}.") from exc
     if not addresses or not all(is_public(a) for a in addresses):
         raise FetchError("That address isn't on the public internet.")
+    return addresses[0]
+
+
+# The addresses check_url approved, by host, for the fetch under way in this task.
+_approved: ContextVar[dict[str, str] | None] = ContextVar("approved_addresses", default=None)
+
+
+class _ApprovedOnly(httpcore.AsyncNetworkBackend):
+    """Connects only to the address check_url approved for the host. Without this the
+    connection would look the host up again, and a DNS server answering differently the
+    second time could point it at the local network ("DNS rebinding")."""
+
+    def __init__(self) -> None:
+        self._inner = httpcore.AnyIOBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,  # noqa: ASYNC109 - httpcore's interface
+        local_address: str | None = None,
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        address = (_approved.get() or {}).get(host)
+        if address is None:
+            raise httpcore.ConnectError(f"{host} wasn't checked.")
+        return await self._inner.connect_tcp(
+            address,
+            port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,  # noqa: ASYNC109 - httpcore's interface
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        raise httpcore.ConnectError("Not a web address.")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+_SSL = httpx.create_ssl_context()
+
+
+class _ApprovedTransport(httpx.AsyncHTTPTransport):
+    """httpx's transport, connecting through _ApprovedOnly (TLS is still checked against the
+    host name, as the URL keeps it)."""
+
+    def __init__(self) -> None:
+        super().__init__(verify=_SSL, trust_env=False)
+        self._pool = httpcore.AsyncConnectionPool(ssl_context=_SSL, network_backend=_ApprovedOnly())
 
 
 @asynccontextmanager
 async def _open(http: httpx.AsyncClient, url: str) -> AsyncIterator[httpx.Response]:
-    """A streamed GET of a public URL, redirects followed by hand (each hop checked)."""
+    """A streamed GET of a public URL, redirects followed by hand (each hop checked, and
+    connected to the address that was checked). `http` isn't used for the request itself:
+    it goes through a client that can only reach approved addresses."""
     for _ in range(MAX_REDIRECTS + 1):
-        await check_url(url)
+        address = await check_url(url)
+        host = httpx.URL(url).raw_host.decode("ascii")
+        approved = _approved.set({**(_approved.get() or {}), host: address})
         try:
-            async with http.stream(
-                "GET",
-                url,
-                follow_redirects=False,
-                timeout=TIMEOUT,
-                headers={
-                    "User-Agent": USER_AGENT,
-                    # Formats Pillow reads everywhere first (some hosts default to AVIF).
-                    "Accept": "image/png,image/jpeg,image/webp,image/gif;q=0.9,image/*;q=0.5",
-                },
-            ) as resp:
+            async with (
+                httpx.AsyncClient(transport=_ApprovedTransport()) as client,
+                client.stream(
+                    "GET",
+                    url,
+                    follow_redirects=False,
+                    timeout=TIMEOUT,
+                    headers={
+                        "User-Agent": USER_AGENT,
+                        # Formats Pillow reads everywhere first (some hosts default to AVIF).
+                        "Accept": "image/png,image/jpeg,image/webp,image/gif;q=0.9,image/*;q=0.5",
+                    },
+                ) as resp,
+            ):
                 if resp.is_redirect:
                     location = resp.headers.get("location")
                     if not location:
@@ -99,6 +167,8 @@ async def _open(http: httpx.AsyncClient, url: str) -> AsyncIterator[httpx.Respon
                 return
         except httpx.HTTPError as exc:
             raise FetchError("The image couldn't be downloaded.") from exc
+        finally:
+            _approved.reset(approved)
     raise FetchError("Too many redirects.")
 
 

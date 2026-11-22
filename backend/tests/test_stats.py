@@ -52,7 +52,8 @@ def test_streaks() -> None:
 
 
 async def add_listens(user_id: int, plays: list[tuple[int, str, str, str]]) -> None:
-    """(days ago, artist, album, track) listens, each a minute before now minus those days."""
+    """(days ago, artist, album, track) listens, each a second before now minus those days.
+    Seconds, not minutes: a day's listens then stay on that day even just after midnight."""
     now = dt.datetime.now(dt.UTC)
     rows = [
         scrobble_row(
@@ -60,7 +61,7 @@ async def add_listens(user_id: int, plays: list[tuple[int, str, str, str]]) -> N
             None,
             "lastfm",
             Scrobble(
-                listened_at=now - dt.timedelta(days=days, minutes=1 + i),
+                listened_at=now - dt.timedelta(days=days, seconds=1 + i),
                 artist=artist,
                 album=album,
                 track=track,

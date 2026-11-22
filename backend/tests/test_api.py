@@ -111,6 +111,37 @@ async def test_admin_access_settings(app: FastAPI, plex: FakePlex) -> None:
     assert demote_self.status_code == 409
 
 
+async def test_tighter_access_signs_people_out(app: FastAPI, plex: FakePlex) -> None:
+    """Changed rules apply straight away, not when people's sessions run out."""
+    owner, _ = await sign_in(app, plex, "owner-token")
+    await owner.post("/api/servers", json={"machine_identifier": "home-machine"}, headers=CSRF)
+    friend, admitted = await sign_in(app, plex, "friend-token")
+    assert admitted["status"] == "ok"
+    resp = await friend.post(
+        "/api/servers", json={"machine_identifier": "home-machine"}, headers=CSRF
+    )
+    assert resp.status_code == 200
+
+    # The owner's server is withdrawn: the friend (who relies on it) is signed out.
+    [server] = (await owner.get("/api/admin/servers")).json()
+    withdrawn = await owner.put(
+        f"/api/admin/servers/{server['id']}", json={"approved": False}, headers=CSRF
+    )
+    assert withdrawn.status_code == 200
+    assert (await friend.get("/api/auth/me")).status_code == 401
+    assert (await owner.get("/api/auth/me")).status_code == 200  # admins stay
+
+    # Approved again, the friend signs back in; an allowlist without them signs them out.
+    await owner.put(f"/api/admin/servers/{server['id']}", json={"approved": True}, headers=CSRF)
+    friend, again = await sign_in(app, plex, "friend-token")
+    assert again["status"] == "ok"
+    await owner.put(
+        "/api/admin/access", json={"mode": "allowlist", "allowlist": ["stranger"]}, headers=CSRF
+    )
+    assert (await friend.get("/api/auth/me")).status_code == 401
+    assert (await owner.get("/api/auth/me")).status_code == 200
+
+
 async def test_csrf_and_logout(app: FastAPI, plex: FakePlex) -> None:
     client, _ = await sign_in(app, plex, "owner-token")
 
