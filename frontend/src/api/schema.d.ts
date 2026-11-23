@@ -865,6 +865,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stats/skip-rate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Skip Rate
+         * @description The share of Plex plays skipped, and the artists skipped most often relative to how
+         *     much they're played (only artists with a few plays, so one skip isn't 100%).
+         */
+        get: operations["skip_rate_api_stats_skip_rate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stats/places": {
         parameters: {
             query?: never;
@@ -7901,6 +7922,36 @@ export interface components {
             /** Rating Key */
             rating_key: number | null;
         };
+        /** SkipRateOut */
+        SkipRateOut: {
+            /**
+             * Threshold
+             * @description Percent heard below which a play counts as skipped.
+             */
+            threshold: number;
+            /**
+             * Watching
+             * @description Whether any plays have been seen live yet.
+             */
+            watching: boolean;
+            /** Skips */
+            skips: number;
+            /**
+             * Plays
+             * @description Plex plays seen live by the session watcher in the period.
+             */
+            plays: number;
+            /**
+             * Min Plays
+             * @description Plays an artist needs to be in `artists`.
+             */
+            min_plays: number;
+            /**
+             * Artists
+             * @description Highest share of plays skipped first.
+             */
+            artists: components["schemas"]["SkippedItemOut"][];
+        };
         /** SkippedItemOut */
         SkippedItemOut: {
             /** Rating Key */
@@ -10164,6 +10215,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkipsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_rate_api_stats_skip_rate_get: {
+        parameters: {
+            query: {
+                server_id: number;
+                /** @description 7d, 30d, 365d, y2024, all */
+                range?: string;
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkipRateOut"];
                 };
             };
             /** @description Validation Error */

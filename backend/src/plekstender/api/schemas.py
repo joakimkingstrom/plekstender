@@ -882,6 +882,15 @@ class SkipsOut(BaseModel):
     items: list[SkippedItemOut]
 
 
+class SkipRateOut(BaseModel):
+    threshold: int = Field(description="Percent heard below which a play counts as skipped.")
+    watching: bool = Field(description="Whether any plays have been seen live yet.")
+    skips: int
+    plays: int = Field(description="Plex plays seen live by the session watcher in the period.")
+    min_plays: int = Field(description="Plays an artist needs to be in `artists`.")
+    artists: list[SkippedItemOut] = Field(description="Highest share of plays skipped first.")
+
+
 # --- smart playlists ---------------------------------------------------------------------
 
 Schedule = Literal["manual", "daily", "weekly", "monthly"]

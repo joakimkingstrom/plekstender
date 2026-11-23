@@ -48,6 +48,16 @@ export function useSkips(serverId: number | null, range: string, kind: SkipKind)
   })
 }
 
+export function useSkipRate(serverId: number | null, range: string) {
+  const tz = localTimeZone()
+  return useQuery({
+    queryKey: ['listens', 'stats', 'skip-rate', serverId, range, tz],
+    enabled: serverId !== null,
+    queryFn: () => unwrap(api.GET('/api/stats/skip-rate', { params: { query: { server_id: serverId!, range, tz } } })),
+    placeholderData: keepPreviousData,
+  })
+}
+
 /** An area of the listens map: the whole world, a continent or a country. */
 export type MapArea =
   | { level: 'world' }

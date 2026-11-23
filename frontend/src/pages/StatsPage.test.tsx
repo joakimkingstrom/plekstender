@@ -122,6 +122,44 @@ describe('Most skipped', () => {
   })
 })
 
+describe('Skip rate', () => {
+  it('shows the share of Plex plays skipped, and the artists skipped most often', async () => {
+    renderPage({
+      '/api/servers': [{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }],
+      '/api/stats/skips': { threshold: 80, watching: true, items: [] },
+      '/api/stats/skip-rate': {
+        threshold: 80,
+        watching: true,
+        skips: 45,
+        plays: 300,
+        min_plays: 5,
+        artists: [
+          { rating_key: 101, name: 'Portishead', artist: null, thumb: null, skips: 4, plays: 5 },
+          { rating_key: 100, name: 'Radiohead', artist: null, thumb: null, skips: 3, plays: 12 },
+        ],
+      },
+    })
+    const card = (await screen.findByRole('heading', { name: 'Skip rate' })).closest('section')!
+    expect(await within(card).findByText('15%')).toBeInTheDocument()
+    expect(within(card).getByText('45 of 300 plays skipped in Plex')).toBeInTheDocument()
+    const rows = within(card).getAllByRole('listitem')
+    expect(rows.map((li) => [li.querySelector('p')!.textContent, li.lastElementChild!.textContent])).toEqual([
+      ['Portishead', '80%'],
+      ['Radiohead', '25%'],
+    ])
+    expect(within(card).getByText('80%')).toHaveAttribute('title', '4 of 5 plays skipped')
+  })
+
+  it('says when there were no Plex plays', async () => {
+    renderPage({
+      '/api/servers': [{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }],
+      '/api/stats/skips': { threshold: 80, watching: true, items: [] },
+      '/api/stats/skip-rate': { threshold: 80, watching: true, skips: 0, plays: 0, min_plays: 5, artists: [] },
+    })
+    expect(await screen.findByText('No Plex plays in this period.')).toBeInTheDocument()
+  })
+})
+
 describe('chart details', () => {
   it('shows the listens behind a heatmap square', async () => {
     const fetch = renderPage()

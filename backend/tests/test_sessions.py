@@ -11,6 +11,7 @@ import respx
 from fastapi import FastAPI
 from sqlalchemy import select
 
+from plekstender.api.routes import stats as stats_routes
 from plekstender.config import get_settings
 from plekstender.db import get_sessionmaker
 from plekstender.db.models import PlaySession
@@ -59,7 +60,9 @@ def fixed_geo(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.db
-async def test_watcher_records_skips_players_and_places(app: FastAPI, plex: FakePlex) -> None:
+async def test_watcher_records_skips_players_and_places(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
     lib = plex.library
     owner, sid = await owner_with_library(app, plex)
     friend, _ = await sign_in(app, plex, "friend-token")
@@ -99,12 +102,24 @@ async def test_watcher_records_skips_players_and_places(app: FastAPI, plex: Fake
         await owner.get("/api/stats/skips", params={"server_id": sid, "kind": "artist"})
     ).json()
     assert [i["name"] for i in by_artist["items"]] == ["Radiohead"]
+    # The skip rate: 1 of the owner's 2 plays (the last song stopped with nothing after).
+    rate = (await owner.get("/api/stats/skip-rate", params={"server_id": sid})).json()
+    assert (rate["skips"], rate["plays"], rate["min_plays"], rate["artists"]) == (1, 2, 5, [])
+    monkeypatch.setattr(stats_routes, "SKIP_RATE_MIN_PLAYS", 1)
+    rate = (await owner.get("/api/stats/skip-rate", params={"server_id": sid})).json()
+    assert [(a["name"], a["skips"], a["plays"]) for a in rate["artists"]] == [("Radiohead", 1, 2)]
+    friend_rate = (
+        await friend.get("/api/stats/skip-rate", params={"server_id": friend_sid})
+    ).json()
+    assert (friend_rate["skips"], friend_rate["plays"]) == (0, 1)
     albums = await owner.get("/api/stats/skips", params={"server_id": sid, "kind": "album"})
     assert albums.status_code == 422  # skipping an album isn't something that can be told
     # Only plays where less than the threshold was heard count: at 20%, 1:00 of 4:00 isn't one.
     await owner.put("/api/auth/me/preferences", json={"skip_threshold": 20}, headers=CSRF)
     lenient = (await owner.get("/api/stats/skips", params={"server_id": sid})).json()
     assert (lenient["threshold"], lenient["items"]) == (20, [])
+    lenient_rate = (await owner.get("/api/stats/skip-rate", params={"server_id": sid})).json()
+    assert (lenient_rate["skips"], lenient_rate["plays"]) == (0, 2)
 
     # When Plex records the friend's play, it gets the player and place seen live.
     lib.play(2, 304, int(time.time()))

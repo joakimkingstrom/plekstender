@@ -3,14 +3,14 @@ import { Link, useSearchParams } from 'react-router'
 import { Tooltip } from '../components/Tooltip'
 import { errorMessage, type Schemas } from '../api/client'
 import { useActiveServer } from '../api/library'
-import { localTimeZone, useSkips, useStatsActivity, useStatsOverview, type SkipKind, type TopBy } from '../api/stats'
+import { localTimeZone, useSkipRate, useSkips, useStatsActivity, useStatsOverview, type SkipKind, type TopBy } from '../api/stats'
 import type { ListenFilter } from '../api/listens'
 import { ListensDialog } from '../components/listens'
 import { ColumnChart, Heatmap, type ColumnPoint } from '../components/charts'
 import { Artwork } from '../components/library'
 import { RangePicker } from '../components/RangePicker'
 import { Card, Notice, Spinner } from '../components/ui'
-import { formatChange, formatCount, formatListeningTime } from '../format'
+import { formatChange, formatCount, formatListeningTime, formatShare } from '../format'
 
 const PREVIOUS: Record<string, string> = {
   '7d': 'previous 7 days',
@@ -249,7 +249,12 @@ export function StatsPage() {
         <TopList title="Top songs" items={o.top_tracks} kind="track" serverId={serverId} compared={compared} by={by} />
       </div>
 
-      {serverId !== null && <MostSkipped serverId={serverId} range={range} />}
+      {serverId !== null && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <MostSkipped serverId={serverId} range={range} />
+          <SkipRate serverId={serverId} range={range} />
+        </div>
+      )}
 
       <Card title="When you listen">
         {activity.data ? (
@@ -277,6 +282,61 @@ export function StatsPage() {
       </Card>
       {drill && <ListensDialog title={drill.title} filter={drill.filter} onClose={() => setDrill(null)} />}
     </div>
+  )
+}
+
+function skipNote(skips: number, plays: number) {
+  return `${formatCount(skips)} of ${formatCount(plays)} ${plays === 1 ? 'play' : 'plays'} skipped`
+}
+
+function SkipRate({ serverId, range }: { serverId: number; range: string }) {
+  const rate = useSkipRate(serverId, range)
+  const data = rate.data
+  return (
+    <Card title="Skip rate">
+      {rate.isPending ? (
+        <Spinner small />
+      ) : rate.isError ? (
+        <Notice tone="error">{errorMessage(rate.error)}</Notice>
+      ) : !data!.watching ? (
+        <p className="text-sm text-muted">Skips are recorded from now on, for songs played in Plex.</p>
+      ) : data!.plays === 0 ? (
+        <p className="text-sm text-muted">No Plex plays in this period.</p>
+      ) : (
+        <>
+          <p className="font-display text-3xl font-bold tabular-nums">{formatShare(data!.skips, data!.plays)}</p>
+          <p className="text-xs text-muted">{skipNote(data!.skips, data!.plays)} in Plex</p>
+          <h3 className="mt-4 mb-2 text-sm font-medium">Artists you skip most often</h3>
+          {data!.artists.length === 0 ? (
+            <p className="text-sm text-muted">
+              No artist with {data!.min_plays} or more plays has been skipped in this period.
+            </p>
+          ) : (
+            <ol className="space-y-2">
+              {data!.artists.map((artist, i) => (
+                <li key={artist.rating_key} className="flex items-center gap-3">
+                  <span className="w-5 shrink-0 text-right text-xs text-muted tabular-nums">{i + 1}</span>
+                  <Artwork serverId={serverId} path={artist.thumb} title={artist.name} size={96} round className="size-9 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{artist.name}</p>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+                      <div className="h-full rounded-full bg-accent" style={{ width: `${(artist.skips / artist.plays) * 100}%` }} />
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-right text-xs text-muted tabular-nums" title={skipNote(artist.skips, artist.plays)}>
+                    {formatShare(artist.skips, artist.plays)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-3 text-xs text-muted">
+            Of their plays in Plex, for artists played at least {data!.min_plays} times. Last.fm and ListenBrainz plays
+            aren't counted, since they don't say how much of a song was heard.
+          </p>
+        </>
+      )}
+    </Card>
   )
 }
 
@@ -331,7 +391,7 @@ function MostSkipped({ serverId, range }: { serverId: number; range: string }) {
               </div>
               <span
                 className="shrink-0 text-right text-xs text-muted tabular-nums"
-                title={`${formatCount(item.skips)} of ${formatCount(item.plays)} ${item.plays === 1 ? 'play' : 'plays'} skipped`}
+                title={skipNote(item.skips, item.plays)}
               >
                 {formatCount(item.skips)} {item.skips === 1 ? 'skip' : 'skips'}
               </span>

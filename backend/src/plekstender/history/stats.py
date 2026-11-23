@@ -458,6 +458,33 @@ _SKIP_GROUPS = {
 SKIP_GAP = dt.timedelta(seconds=30)
 
 
+# Each Plex play the watcher saw, and whether it was a skip: less than `threshold` percent of
+# the track heard, and another song started straight after (within SKIP_GAP, same player).
+_SKIP_PLAYS = """
+    WITH plays AS (
+        SELECT ps.rating_key,
+               ps.max_offset_ms * 100 < ps.duration_ms * :threshold AND EXISTS (
+                   SELECT 1 FROM play_sessions nx
+                   WHERE nx.user_id = ps.user_id AND nx.id <> ps.id
+                     AND nx.rating_key <> ps.rating_key
+                     AND nx.client IS NOT DISTINCT FROM ps.client
+                     AND nx.started_at BETWEEN ps.ended_at - interval '10 seconds'
+                                           AND ps.ended_at + :gap
+               ) AS skipped
+        FROM play_sessions ps
+        WHERE ps.user_id = :user_id AND ps.server_id = :server_id
+          AND ps.ended_at IS NOT NULL AND ps.duration_ms > 0
+          AND ps.started_at < :end
+          AND (CAST(:start AS timestamptz) IS NULL OR ps.started_at >= :start)
+    )
+"""
+
+_SKIP_ORDER = {
+    "skips": "skips DESC, plays DESC",
+    "rate": "count(*) FILTER (WHERE p.skipped)::float / count(*) DESC, skips DESC",
+}
+
+
 async def skipped(
     db: AsyncSession,
     user_id: int,
@@ -467,29 +494,14 @@ async def skipped(
     end: dt.datetime,
     threshold: int,
     limit: int = 10,
+    order: Literal["skips", "rate"] = "skips",
+    min_plays: int = 1,
 ) -> list[Skipped]:
-    """Most skipped songs / artists, from the session watcher: plays where less than
-    `threshold` percent of the track was heard and another song started straight after
-    (within SKIP_GAP, on the same player)."""
+    """Most skipped songs / artists, from the session watcher's plays: by number of skips,
+    or by the share of their plays skipped (`order="rate"`, with at least `min_plays`)."""
     key, name, artist, thumb = _SKIP_GROUPS[kind]
     query = text(
-        f"""
-        WITH plays AS (
-            SELECT ps.rating_key,
-                   ps.max_offset_ms * 100 < ps.duration_ms * :threshold AND EXISTS (
-                       SELECT 1 FROM play_sessions nx
-                       WHERE nx.user_id = ps.user_id AND nx.id <> ps.id
-                         AND nx.rating_key <> ps.rating_key
-                         AND nx.client IS NOT DISTINCT FROM ps.client
-                         AND nx.started_at BETWEEN ps.ended_at - interval '10 seconds'
-                                               AND ps.ended_at + :gap
-                   ) AS skipped
-            FROM play_sessions ps
-            WHERE ps.user_id = :user_id AND ps.server_id = :server_id
-              AND ps.ended_at IS NOT NULL AND ps.duration_ms > 0
-              AND ps.started_at < :end
-              AND (CAST(:start AS timestamptz) IS NULL OR ps.started_at >= :start)
-        )
+        f"""{_SKIP_PLAYS}
         SELECT {key} AS rating_key, min({name}) AS name, min({artist}) AS artist,
                min({thumb}) AS thumb,
                count(*) FILTER (WHERE p.skipped) AS skips,
@@ -500,24 +512,49 @@ async def skipped(
         LEFT JOIN artists ar ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
         WHERE {key} IS NOT NULL
         GROUP BY {key}
-        HAVING count(*) FILTER (WHERE p.skipped) > 0
-        ORDER BY skips DESC, plays DESC, min({name})
+        HAVING count(*) FILTER (WHERE p.skipped) > 0 AND count(*) >= :min_plays
+        ORDER BY {_SKIP_ORDER[order]}, min({name})
         LIMIT :limit
         """  # noqa: S608 - constant SQL fragments
     )
     rows = await db.execute(
         query,
-        {
-            "user_id": user_id,
-            "server_id": server_id,
-            "start": start,
-            "end": end,
-            "threshold": threshold,
-            "gap": SKIP_GAP,
-            "limit": limit,
-        },
+        _skip_params(user_id, server_id, start, end, threshold)
+        | {"limit": limit, "min_plays": min_plays},
     )
     return [Skipped(r.rating_key, r.name, r.artist, r.thumb, r.skips, r.plays) for r in rows.all()]
+
+
+async def skip_totals(
+    db: AsyncSession,
+    user_id: int,
+    server_id: int,
+    start: dt.datetime | None,
+    end: dt.datetime,
+    threshold: int,
+) -> tuple[int, int]:
+    """(skips, plays) among the Plex plays the session watcher saw in the period."""
+    totals = f"{_SKIP_PLAYS} SELECT count(*) FILTER (WHERE skipped), count(*) FROM plays"  # noqa: S608
+    row = (
+        await db.execute(
+            text(totals),
+            _skip_params(user_id, server_id, start, end, threshold),
+        )
+    ).one()
+    return row[0], row[1]
+
+
+def _skip_params(
+    user_id: int, server_id: int, start: dt.datetime | None, end: dt.datetime, threshold: int
+) -> dict[str, object]:
+    return {
+        "user_id": user_id,
+        "server_id": server_id,
+        "start": start,
+        "end": end,
+        "threshold": threshold,
+        "gap": SKIP_GAP,
+    }
 
 
 async def has_sessions(db: AsyncSession, user_id: int) -> bool:

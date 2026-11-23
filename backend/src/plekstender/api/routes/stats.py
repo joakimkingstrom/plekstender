@@ -19,6 +19,7 @@ from plekstender.api.schemas import (
     PlaceDetailOut,
     PlacesOut,
     SkippedItemOut,
+    SkipRateOut,
     SkipsOut,
     StatsActivityOut,
     StatsOverviewOut,
@@ -148,6 +149,46 @@ async def skips(
         threshold=threshold,
         watching=await stats.has_sessions(db, user.id),
         items=[SkippedItemOut(**s.__dict__) for s in found],
+    )
+
+
+SKIP_RATE_MIN_PLAYS = 5
+
+
+@router.get("/skip-rate", response_model=SkipRateOut)
+async def skip_rate(
+    db: DbDep,
+    user: UserDep,
+    server_id: int,
+    range: RangeQuery = "30d",
+    tz: TzQuery = "UTC",
+) -> SkipRateOut:
+    """The share of Plex plays skipped, and the artists skipped most often relative to how
+    much they're played (only artists with a few plays, so one skip isn't 100%)."""
+    period, _ = _period(range, tz)
+    us = await get_user_server(db, user, server_id)
+    threshold = load_preferences(user).skip_threshold
+    skips, plays = await stats.skip_totals(
+        db, user.id, us.server_id, period.start, period.end, threshold
+    )
+    artists = await stats.skipped(
+        db,
+        user.id,
+        us.server_id,
+        "artist",
+        period.start,
+        period.end,
+        threshold,
+        order="rate",
+        min_plays=SKIP_RATE_MIN_PLAYS,
+    )
+    return SkipRateOut(
+        threshold=threshold,
+        watching=await stats.has_sessions(db, user.id),
+        skips=skips,
+        plays=plays,
+        min_plays=SKIP_RATE_MIN_PLAYS,
+        artists=[SkippedItemOut(**a.__dict__) for a in artists],
     )
 
 
