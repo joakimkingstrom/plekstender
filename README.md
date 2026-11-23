@@ -9,6 +9,8 @@ A self-hosted helper app for Plex & Plexamp music libraries: rate songs, albums 
 
 Plekstender isn't affiliated with or endorsed by Plex.
 
+![artist page](screenshots/SCR-20261122-bucl.png)
+
 ## What it does
 
 - **Library:** browse artists, albums and songs from your Plex servers, with your own ratings and plays. Releases are grouped into albums, EPs, singles, compilations and live albums.
@@ -20,6 +22,18 @@ Plekstender isn't affiliated with or endorsed by Plex.
 - **Playlists:** start from artists, songs or a genre, add similar and sonically similar artists, keep only what you rate highly or each artist's best-known songs, and save the result to Plex. Playlists can refresh themselves daily, weekly or monthly, and download as M3U8.
 - **Music files** (server owners, with the music folder mounted on the worker): scan your files' tags and see them on album pages next to Plex's metadata, differences highlighted. Once turned on (Settings → Music files): edit tags, write Plex's metadata (and, if you like, your ratings) into the files for the whole library or an artist, or pick an album's release on MusicBrainz (as in Picard) and write its tags and IDs. Files with missing tags can be identified by how they sound (AcoustID), and files can be renamed and moved into folders from a template (with a dry run first). Every change is previewed first, recorded, and can be undone.
 - **Exports:** your library with ratings and plays (CSV / JSON), and your listening history in ListenBrainz's format.
+
+![artist image tool](screenshots/SCR-20261122-bvqi.png)
+
+![bulk tag editor using musicbrainz metadata](screenshots/SCR-20261122-bxrk.png)
+
+![rating tool](screenshots/SCR-20261122-bumj.png)
+
+![upcoming gigs](screenshots/SCR-20261122-byfd.png)
+
+![playlist creator/editor](screenshots/SCR-20261122-cawg.png)
+
+![discover tool](screenshots/SCR-20261122-bvcx.png)
 
 ## Running with Docker
 
