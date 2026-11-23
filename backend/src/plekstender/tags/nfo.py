@@ -13,6 +13,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
+from defusedxml import DefusedXmlException
+from defusedxml.ElementTree import fromstring
+
 NAMES = {"artist.nfo": "artist", "album.nfo": "album"}
 MAX_BYTES = 1_000_000
 MAX_TEXT = 20_000
@@ -72,12 +75,12 @@ def parse(path: Path) -> tuple[str, dict[str, Any]]:
         raw = path.read_bytes()
     except OSError as exc:
         raise NfoError(f"Couldn't read it: {exc.strerror or exc}") from exc
-    if b"<!ENTITY" in raw or b"<!DOCTYPE" in raw:
-        raise NfoError("Not a Kodi .nfo file (it declares entities).")
     try:
-        # Safe: documents declaring a DOCTYPE or entities were refused above, so there are
-        # no entity expansions or external references to resolve.
-        root = ET.fromstring(raw)  # noqa: S314
+        # Kodi's files never need a DOCTYPE: refusing any (in whatever encoding the file is
+        # in) rules out entity expansion and external references.
+        root = fromstring(raw, forbid_dtd=True)
+    except DefusedXmlException as exc:
+        raise NfoError("Not a Kodi .nfo file (it declares entities).") from exc
     except ET.ParseError as exc:
         raise NfoError("Not a Kodi .nfo file (not XML).") from exc
     found = _children(root)

@@ -1276,6 +1276,11 @@ def test_reading_nfo_files(tmp_path: Path) -> None:
     )
     with pytest.raises(NfoError, match="entities"):
         parse(tmp_path / "bomb.nfo")
+    # The same in UTF-16, which a search of the raw bytes for "<!ENTITY" wouldn't find.
+    wide = '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE a [<!ENTITY a "a">]><album>&a;</album>'
+    (tmp_path / "wide.nfo").write_bytes(wide.encode("utf-16"))
+    with pytest.raises(NfoError, match="entities"):
+        parse(tmp_path / "wide.nfo")
 
 
 @pytest.mark.db
