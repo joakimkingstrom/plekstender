@@ -1,0 +1,146 @@
+# Architecture
+
+How Plekstender is put together. For running it, see the [wiki](https://github.com/joakimkingstrom/plekstender/wiki); for how individual features behave, [how-it-works.md](how-it-works.md).
+
+```
+            ┌──────────── traefik (optional, profile) ────────────┐
+            │                                                      │
+browser ──► frontend  (FastAPI: /api + built React SPA)            │
+               │  ▲                                                │
+               ▼  │                                                │
+              db (Postgres) ◄── worker (same image, job runner)    │
+               ▲                    │                              │
+           db-init (migrations)     ├──► Plex servers (users')     │
+                                    ├──► fanart.tv / MusicBrainz   │
+                                    └──► searxng (internal only)   │
+```
+
+### Services (compose.yaml)
+
+| Service | Image | Role |
+|---|---|---|
+| `db` | `postgres:18` | Primary store. Healthcheck with `pg_isready`. |
+| `db-init` | app image | Runs `alembic upgrade head`, then exits. Others depend on `service_completed_successfully`. |
+| `frontend` | app image | FastAPI (uvicorn) serving `/api/*` and the static SPA build. Only service with a published port (`PLEKSTENDER_LISTEN`). |
+| `worker` | app image | Procrastinate worker (Postgres-backed queue, supports periodic tasks; no Redis needed). |
+| `searxng` | `searxng/searxng` | Profile `search`. No published port, internal network only. |
+| `traefik` | `traefik:v3` | Profile `traefik`. For people without an existing reverse proxy; its one route is an inline config (no Docker socket). Labels on `frontend` are for a Traefik you already run. |
+
+One Docker image is built from the repo (multi-stage: Node builds the SPA → Python runtime image copies `dist/`). `frontend`, `worker` and `db-init` differ only in `command`.
+
+Networks: `db` (`internal: true`, no internet: db, db-init, frontend, worker) and `default` (frontend, worker, searxng, traefik).
+
+Container hardening (as in other stacks): non-root user, `read_only: true` + `tmpfs: /tmp`, `cap_drop: ALL`, `no-new-privileges`, healthchecks on every long-running service.
+
+### Repo layout
+
+```
+plekstender/                         # repo
+├── compose.yaml                     # db, db-init, frontend, worker (+ searxng, traefik profiles)
+├── compose.override.example.yaml    # running behind an existing Traefik
+├── .env.example
+├── Dockerfile                       # multi-stage: web build + python runtime, one image
+├── searxng/settings.yml
+├── backend/
+│   ├── pyproject.toml / uv.lock     # uv-managed, Python 3.15 (the image)
+│   ├── alembic.ini                  # for `alembic revision --autogenerate` in development
+│   ├── scripts/spikes/              # probes run against a real Plex server while building
+│   ├── tests/
+│   └── src/plekstender/
+│       ├── cli.py                   # plekstender web | worker | migrate | healthcheck | openapi
+│       ├── config.py                # pydantic-settings
+│       ├── migrate.py               # Alembic + procrastinate schema management
+│       ├── migrations/              # Alembic revisions
+│       ├── worker.py                # procrastinate app + periodic tasks
+│       ├── api/                     # FastAPI app, middleware, routes, schemas
+│       ├── auth/                    # access policy, sessions, the setup code
+│       ├── db/                      # SQLAlchemy 2.0 models, instance settings
+│       ├── plex/                    # plex.tv + Plex server clients, connection picker
+│       ├── security/                # token encryption, signing
+│       ├── sync/                    # library mirror
+│       ├── ratings/                 # rating queues, rating writes
+│       ├── history/                 # listening history: Plex play capture, imports, scrobbling, stats
+│       ├── artwork/                 # artist images and album covers; the safe outbound fetcher
+│       ├── playlists/               # smart playlists: definitions, builder, schedule
+│       ├── tags/                    # music files: scans, the tag editor, pictures in files
+│       ├── live/                    # upcoming gigs: JamBase, Ticketmaster, Data Thistle, calendar links
+│       ├── gigs/                    # gigs been to: imports, exports, places, stats
+│       └── *.py                     # smaller areas: achievements, notifications, previews, Tidal, ...
+└── frontend/
+    ├── package.json                 # Vite 8, React 19, TypeScript 7, oxlint, vitest
+    └── src/
+        ├── api/                     # openapi-fetch client, generated schema.d.ts, query hooks
+        ├── auth/                    # Plex sign-in flow
+        ├── components/              # layout, UI primitives, shared pieces
+        └── pages/                   # one per route
+```
+
+Frontend libraries: React Router, TanStack Query, Tailwind v4, `openapi-fetch` with types generated by `openapi-typescript` (`npm run gen:api`; run via `npx` because it needs TypeScript 5 while the app uses 7). Installable as an app through a small hand-written service worker (`public/sw.js`).
+
+## Core idea: a local mirror of the Plex library
+
+Almost every feature (weighted rating queues, "top 10 artists in genre X", popularity percentiles, similar-artist expansion, metadata backup) is a database query once the library is mirrored locally, and slow or impossible against the Plex API. So **library sync is built first** and the metadata-backup feature is a by-product.
+
+- Full sync: walk the music section(s) for artists, albums and tracks, including genres, moods, styles, popularity, MBIDs and similar artists.
+- Incremental sync: periodic job using `updatedAt` (metadata) and `lastViewedAt` / `lastRatedAt` (personal state) greater than the last sync; manual "sync now" button.
+- Per-user state (ratings, play counts, last played) is per Plex account. It is synced with *each user's* token into a separate table.
+- Ratings written in the app go to Plex first, then the mirror is updated (Plex stays the source of truth).
+
+### Data model (first cut)
+
+The tables as first planned; `db/models.py` has them all as they are now.
+
+- `users`: Plex account id, username, thumb, `is_instance_admin`
+- `sessions`: server-side sessions (id, user_id, expires_at, user agent)
+- `plex_servers`: machine identifier, name, owner account id
+- `user_servers`: user ↔ server, encrypted access token, `is_owner`, preferred connection URI, selected music section(s)
+- `server_settings`: library path mapping (Plex path → container path), capability flags
+- `artists`, `albums`, `tracks`: keyed by `(server_id, rating_key)`; title, sort title, parent keys, MBID/guid, year, duration, summary, popularity (tracks: Plex `ratingCount`; albums/artists: derived from their tracks), thumb path, `raw jsonb`
+- `tags` + `item_tags`: genres/moods/styles (normalised, per server)
+- `similar_artists`: `(server_id, artist_key, similar_name, similar_key nullable, source)`
+- `user_item_state`: `(user_id, server_id, item_type, rating_key)` → user_rating, view_count, last_viewed_at
+- `rating_events`: append-only log (enables undo and history)
+- `artist_artwork`: status (todo/custom/done), source, transform settings jsonb, image hash, updated_by
+- `playlists`: owner, server, Plex playlist key, name, `definition jsonb`, schedule, last build result
+- `sync_runs`: job bookkeeping and progress for the UI
+- `listens`: one row per play per user: time, artist/album/track names as played, MBIDs, duration, source + source reference, matched `(server_id, track rating_key)` (nullable), `duplicate_of`, ListenBrainz submission status
+- `listen_imports`: import jobs (Last.fm, ListenBrainz) with resumable cursor, progress and counts
+- `user_integrations`: per-user Last.fm username, encrypted ListenBrainz token, scrobbling on/off
+
+## Authentication, multi-user & security
+
+### Sign-in
+1. Plex PIN flow: `POST plex.tv/api/v2/pins` → redirect to `app.plex.tv/auth#?clientID=…&code=…&forwardUrl=…` → poll/confirm the PIN → user token.
+2. `GET plex.tv/api/v2/resources?includeHttps=1` → list servers (with per-server access tokens) → user picks a server and music library.
+3. Connection picker: the backend tests the server's connections in order (local → remote → relay) **from the backend's point of view** and stores the first that responds.
+
+### Instance access control
+- The first user to sign in becomes the instance admin, with the one-time setup code the web app logs while nobody has signed in (and only the `INITIAL_ADMIN` account, when set).
+- `ACCESS_MODE` setting: `open` (any Plex user), `servers` (only users who have access to admin-approved servers, e.g. friends sharing your server), `allowlist` (explicit Plex usernames). Default: `servers`.
+
+### Security requirements
+- **Tokens never reach the browser.** Plex and plex.tv tokens are encrypted at rest (AES-GCM, key from `APP_SECRET_KEY`) and only used by the backend.
+- **Image proxy only for allowed Plex paths.** `/api/servers/{id}/image?path=/library/metadata/123/thumb/…` checks session ↔ server, accepts only `/library/…` and `/photo/:/transcode` paths, and resizes through Plex's transcoder. No "fetch any URL" endpoint.
+- **Safe outbound fetcher** for fanart.tv, search results and user-provided URLs: http(s) only, DNS resolution checked against private/loopback/link-local ranges (blocks requests into the internal network, i.e. SSRF), max size (e.g. 15 MB), content-type sniffing with Pillow, timeouts everywhere.
+- **Uploads:** size limit, re-encoded through Pillow (strips anything that isn't an image), stored under random names.
+- **Authorization:** every request is scoped to a `(user, server)` pair the user owns a token for, and writes use *that user's* token, so Plex enforces its own permissions. Server-wide actions (artist images, folder writes) require `is_owner`, i.e. the server admin.
+- **Sessions:** httpOnly, `Secure`, `SameSite=Lax` cookie; state-changing requests also require a custom header (CSRF protection).
+- **Rate limits:** sign-in endpoints, image search, bulk jobs (per user, per server).
+- **Tests:** per-user isolation tests (user A cannot read or modify user B's playlists, ratings or servers).
+
+### Capability flags per server
+Some features only work when the app runs next to the Plex server:
+- `can_write_artwork_to_folders`: requires the music share mounted into the container plus a path mapping.
+- `is_owner`: required for changing artist posters.
+
+The UI hides or disables features based on these flags rather than failing.
+
+## Versions and releases
+
+- Every image built from `main` gets a version: major.minor from `backend/pyproject.toml`, then
+  the number of commits (`.github/scripts/version.sh`). It's passed into the build, reported by
+  `/api/health`, shown on Home → Status, and the page offers a reload when the server's version
+  changes under it.
+- A release (Actions → Release) names the newest published build: a `v<version>` tag and GitHub
+  release with notes from the commits since the last one, and the image tag `stable`.
+- For 0.2 or 1.0, change the version in `backend/pyproject.toml`.

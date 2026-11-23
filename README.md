@@ -99,7 +99,7 @@ Plex tokens are stored encrypted with a key derived from `APP_SECRET_KEY` and ar
 
 ## Development
 
-Requirements: Python 3.14 with [uv](https://docs.astral.sh/uv/), Node 24+, and a Postgres database.
+Requirements: Python 3.14+ with [uv](https://docs.astral.sh/uv/), Node 24+, and a Postgres database.
 
 ```bash
 # Backend (http://localhost:8080)
@@ -127,6 +127,15 @@ cd frontend && npm run lint && npm run typecheck && npm test
 
 After changing API routes or schemas, regenerate the frontend types with `npm run gen:api`.
 New database migrations: `cd backend && uv run alembic revision --autogenerate -m "…"`.
+
+More for developers in [`docs/`](docs): [architecture](docs/architecture.md), [how the features work](docs/how-it-works.md) and [ideas](docs/ideas.md).
+
+### Versions and releases
+
+Every image built from `main` gets the next version number (`0.1.<commits>`), shown on Home → Status.
+To make a release, run **Actions → Release**: it tags the newest published build (`v0.1.214`),
+writes the release notes from the commits since the last release, and moves the image tag `stable`
+to it. For 0.2 or 1.0, change the version in `backend/pyproject.toml` first.
 
 ## Credits
 
