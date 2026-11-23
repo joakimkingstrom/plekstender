@@ -1,14 +1,13 @@
 name: Publish image
 
-# After CI passes on main (or for a version tag), build the image for amd64 and arm64
-# and push it to GitHub Container Registry: ghcr.io/<owner>/plekstender.
+# After CI passes on main, build the image for amd64 and arm64 and push it to GitHub
+# Container Registry: ghcr.io/<owner>/plekstender, tagged latest, with its version (0.1.212)
+# and with its commit (sha-1a2b3c4). Releases (release.yml) name one of these builds.
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: read
@@ -20,13 +19,13 @@ concurrency:
 
 jobs:
   image:
-    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The commit CI tested, not whatever main is now.
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           # All of history: the version's last number counts the commits.
           fetch-depth: 0
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -36,29 +35,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The commit being built: the one CI tested (workflow_run), or the tagged one. Worked
-      # out here because metadata-action's own sha is the latest commit on main, and its git
-      # context can't read a detached checkout.
+      # The commit being built: the one CI tested. Worked out here because metadata-action's
+      # own sha is the latest commit on main, and its git context can't read a detached checkout.
       - id: commit
         env:
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "short=${SHA::7}" >> "$GITHUB_OUTPUT"
-      # The version: for a version tag (v1.2.3), the tag; otherwise major.minor from
-      # backend/pyproject.toml and the number of commits up to this one, so every commit on
-      # main gets the next number (0.1.212, 0.1.213, ...) without committing anything back.
+      # The version (see .github/scripts/version.sh): 0.1.<number of commits>.
       - id: version
-        env:
-          REF: ${{ github.ref }}
-          EVENT: ${{ github.event_name }}
         run: |
-          if [ "$EVENT" = push ] && [[ "$REF" == refs/tags/v* ]]; then
-            version="${REF#refs/tags/v}"
-          else
-            base=$(sed -nE 's/^version = "([0-9]+)\.([0-9]+)\..*"/\1.\2/p' backend/pyproject.toml | head -1)
-            version="$base.$(git rev-list --count HEAD)"
-          fi
+          version=$(.github/scripts/version.sh)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Building Plekstender $version" >> "$GITHUB_STEP_SUMMARY"
       - id: meta
@@ -66,11 +54,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/plekstender
           tags: |
-            type=raw,value=latest,enable=${{ github.event_name == 'workflow_run' }}
+            type=raw,value=latest
+            type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=sha-${{ steps.commit.outputs.short }}
-            type=raw,value=${{ steps.version.outputs.version }},enable=${{ github.event_name == 'workflow_run' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
           labels: |
             org.opencontainers.image.title=Plekstender
             org.opencontainers.image.description=Self-hosted helper app for Plex and Plexamp music libraries

@@ -1,0 +1,103 @@
+name: Release
+
+# Run by hand (Actions -> Release -> Run workflow) to make a release of the newest image built
+# from main. It doesn't build anything: it names a build that's already published.
+# - A GitHub release v<version> at that commit, its notes listing the commits since the last
+#   release (dependency updates separately), after anything written in "notes".
+# - The image tag `stable`, moved to that build, for setups that follow releases only.
+# To go to 0.2 or 1.0, change the version in backend/pyproject.toml first.
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "A few words at the top of the release notes (optional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write # the release and its tag
+  packages: write # the `stable` image tag
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The newest published build: main's newest commit that has an image (main may be a
+      # commit or two ahead of the last build, while CI runs or after a combined push).
+      - id: build
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/plekstender
+        run: |
+          for sha in $(git rev-list --max-count=20 HEAD); do
+            if docker buildx imagetools inspect "$IMAGE:sha-${sha::7}" > /dev/null 2>&1; then
+              git checkout --quiet "$sha"
+              version=$(.github/scripts/version.sh)
+              echo "sha=$sha" >> "$GITHUB_OUTPUT"
+              echo "version=$version" >> "$GITHUB_OUTPUT"
+              echo "Releasing $version (${sha::7})"
+              exit 0
+            fi
+          done
+          echo "::error::None of main's last 20 commits has a published image yet."
+          exit 1
+
+      - name: Release notes
+        env:
+          SHA: ${{ steps.build.outputs.sha }}
+          VERSION: ${{ steps.build.outputs.version }}
+          NOTES: ${{ inputs.notes }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "::error::v$VERSION is already released."
+            exit 1
+          fi
+          previous=$(git tag --list 'v*' --merged "$SHA" --sort=-v:refname | head -1)
+          range=${previous:+$previous..}$SHA
+          {
+            if [ -n "$NOTES" ]; then printf '%s\n\n' "$NOTES"; fi
+            echo "## Changes"
+            echo
+            # Author, a tab, the line: split into ours and Dependabot's.
+            log=$(git log --no-merges --format='%an%x09- %s (%h)' "$range")
+            grep -v '^dependabot' <<< "$log" | cut -f2- || true
+            deps=$(grep '^dependabot' <<< "$log" | cut -f2- || true)
+            if [ -n "$deps" ]; then
+              printf '\n## Dependency updates\n\n%s\n' "$deps"
+            fi
+            echo
+            echo "Image: \`ghcr.io/${{ github.repository_owner }}/plekstender:$VERSION\` (also \`stable\`)."
+            if [ -n "$previous" ]; then
+              echo
+              echo "All changes: https://github.com/${{ github.repository }}/compare/$previous...v$VERSION"
+            fi
+          } > notes.md
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tag the image `stable`
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/plekstender
+          VERSION: ${{ steps.build.outputs.version }}
+        run: docker buildx imagetools create --tag "$IMAGE:stable" "$IMAGE:$VERSION"
+
+      - name: Make the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.build.outputs.sha }}
+          VERSION: ${{ steps.build.outputs.version }}
+        run: gh release create "v$VERSION" --target "$SHA" --title "Plekstender $VERSION" --notes-file notes.md
