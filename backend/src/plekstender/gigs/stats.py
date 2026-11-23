@@ -9,16 +9,6 @@ from typing import Any
 from plekstender.db.models import Gig
 from plekstender.sync.parse import fold, normalise_artist
 
-SEASONS = ("winter", "spring", "summer", "autumn")
-
-
-def season(month: int, latitude: float | None) -> str:
-    """Meteorological seasons (December to February is winter), flipped south of the equator."""
-    index = (month % 12) // 3  # 0 winter, 1 spring, 2 summer, 3 autumn (north)
-    if latitude is not None and latitude < 0:
-        index = (index + 2) % 4
-    return SEASONS[index]
-
 
 @dataclass
 class GigStats:
@@ -31,7 +21,6 @@ class GigStats:
     top_venues: list[dict[str, Any]] = field(default_factory=list)
     years: list[dict[str, int]] = field(default_factory=list)
     months: list[int] = field(default_factory=lambda: [0] * 12)
-    seasons: dict[str, int] = field(default_factory=lambda: dict.fromkeys(SEASONS, 0))
 
 
 def gig_stats(gigs: list[Gig], top: int = 10) -> GigStats:
@@ -57,7 +46,6 @@ def gig_stats(gigs: list[Gig], top: int = 10) -> GigStats:
             venue_name.setdefault(vkey, (gig.venue, gig.city))
         year_counts[gig.date.year] += 1
         stats.months[gig.date.month - 1] += 1
-        stats.seasons[season(gig.date.month, gig.latitude)] += 1
     stats.artists = len(artist_counts)
     stats.venues = len(venue_counts)
     stats.first = min(g.date for g in gigs)

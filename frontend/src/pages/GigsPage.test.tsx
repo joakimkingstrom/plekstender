@@ -72,7 +72,6 @@ beforeEach(() => {
           top_venues: [{ name: 'Royal Albert Hall', city: 'London', gigs: 1 }],
           years: [{ year: 2017, gigs: 1 }, { year: 2018, gigs: 0 }, { year: 2019, gigs: 1 }],
           months: [0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0],
-          seasons: { winter: 0, spring: 0, summer: 1, autumn: 1 },
         })
       case '/api/gigs/setlistfm/search':
         return json({

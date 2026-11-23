@@ -355,7 +355,7 @@ async def from_live(body: GigFromLiveIn, db: DbDep, user: UserDep) -> GigOut:
 
 @router.get("/stats", response_model=GigStatsOut)
 async def stats(db: DbDep, user: UserDep) -> GigStatsOut:
-    """Most seen artists and venues, gigs a year, by month and by season."""
+    """Most seen artists and venues, gigs a year and by month."""
     gigs = list(await db.scalars(select(Gig).where(Gig.user_id == user.id)))
     return GigStatsOut.model_validate(gig_stats(gigs), from_attributes=True)
 

@@ -497,16 +497,8 @@ async def test_gig_imports_and_exports(app: FastAPI, plex: FakePlex) -> None:
 
 def test_gig_stats() -> None:
     from plekstender.db.models import Gig
-    from plekstender.gigs.stats import gig_stats, season
+    from plekstender.gigs.stats import gig_stats
 
-    assert [season(m, 51.5) for m in (12, 1, 3, 6, 9)] == [
-        "winter",
-        "winter",
-        "spring",
-        "summer",
-        "autumn",
-    ]
-    assert season(12, -33.9) == "summer"  # Sydney
     gigs = [
         Gig(date=dt.date(2019, 10, 2), venue="Royal Albert Hall", city="London", latitude=51.5,
             artists=[{"name": "Portishead", "rating_key": 101, "server_id": 1}, {"name": "Young Fathers"}]),
@@ -533,12 +525,6 @@ def test_gig_stats() -> None:
         {"year": y, "gigs": n} for y, n in ((2017, 1), (2018, 0), (2019, 2), (2020, 1))
     ]
     assert s.months[9] == 1 and s.months[11] == 1
-    assert s.seasons == {
-        "winter": 1,
-        "spring": 0,
-        "summer": 2,
-        "autumn": 1,
-    }  # Sydney's January is summer
 
 
 SETLIST_PAGE = (
