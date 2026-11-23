@@ -17,7 +17,6 @@ the change then records the SHA-1s of what was there and what was written, so un
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
 import logging
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -252,7 +251,6 @@ async def apply_pictures(
                         "path": change.path,
                         "kind": image_kind(PurePosixPath(change.path).name) or "cover",
                         "error": None,
-                        "scanned_at": dt.datetime.now(dt.UTC),
                         **described,
                     }
                     stmt = insert(FolderImage).values(row)

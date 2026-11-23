@@ -818,7 +818,6 @@ class MediaFile(Base):
     # The Plex track this file is (matched by its path), if any.
     rating_key: Mapped[int | None] = mapped_column(BigInteger)
     error: Mapped[str | None] = mapped_column(Text)
-    scanned_at: Mapped[dt.datetime]
 
 
 class NfoFile(Base):
@@ -836,7 +835,6 @@ class NfoFile(Base):
     mtime: Mapped[float]
     data: Mapped[dict[str, Any]] = mapped_column(default=dict)
     error: Mapped[str | None] = mapped_column(Text)
-    scanned_at: Mapped[dt.datetime]
 
 
 class FolderImage(Base):
@@ -856,7 +854,6 @@ class FolderImage(Base):
     width: Mapped[int | None]
     height: Mapped[int | None]
     error: Mapped[str | None] = mapped_column(Text)
-    scanned_at: Mapped[dt.datetime]
 
 
 class FileScan(Base):

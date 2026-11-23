@@ -165,6 +165,10 @@ async def test_shared_user_sees_only_their_part_of_the_library(
     friend_status = (await friend.get(f"/api/servers/{friend_sid}/sync")).json()
     assert friend_status["counts"]["tracks"] == 5
     assert friend_status["counts"]["rated_tracks"] == 1  # the friend's own rating
+    # Removals are cleared by the owner's full syncs: the friend is told when the last one was.
+    assert friend_status["owner_full_sync_at"] is not None
+    owner_status = (await owner.get(f"/api/servers/{owner_sid}/sync")).json()
+    assert owner_status["owner_full_sync_at"] is None
 
     # The friend's full sync must not delete what only the owner can see.
     owner_artists = (await owner.get(f"/api/servers/{owner_sid}/library/artists")).json()

@@ -223,6 +223,7 @@ async def list_artists(
                 applied_at=w.applied_at if w else None,
                 has_mbid=bool(a.mbid or (w and w.mbid)),
                 folder=w.folder_path if w else None,
+                folder_saved_at=w.folder_saved_at if w else None,
                 folder_error=w.folder_error if w else None,
             )
             for a, w in rows.all()

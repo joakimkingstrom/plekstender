@@ -10,7 +10,13 @@ from plekstender.api.ratelimit import rate_limit
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import LibraryCounts, SyncIn, SyncRunOut, SyncStatusOut
 from plekstender.db.instance import get_library_settings
-from plekstender.db.models import SyncRun, UserItemState, UserSectionSync, UserServer
+from plekstender.db.models import (
+    LibrarySection,
+    SyncRun,
+    UserItemState,
+    UserSectionSync,
+    UserServer,
+)
 from plekstender.worker import ACTIVE, enqueue_sync
 
 router = APIRouter(prefix="/api/servers/{server_id}/sync", tags=["sync"])
@@ -78,11 +84,20 @@ async def sync_status(server_id: int, db: DbDep, user: UserDep) -> SyncStatusOut
             )
         )
     ).one()
+    owner_full_sync_at = None
+    if not us.is_owner:
+        owner_full_sync_at = await db.scalar(
+            select(func.min(LibrarySection.last_owner_full_sync_at)).where(
+                LibrarySection.server_id == us.server_id,
+                LibrarySection.section_key.in_(us.music_section_keys),
+            )
+        )
     return SyncStatusOut(
         active=run_out(active),
         last=run_out(last),
         last_full_sync_at=times[0],
         last_sync_at=times[1],
+        owner_full_sync_at=owner_full_sync_at,
         counts=await library_counts(db, user.id, us),
         incremental_minutes=schedule.incremental_minutes,
         full_days=schedule.full_days,

@@ -128,7 +128,7 @@ export function SyncPanel({ serverId, compact = false }: { serverId: number; com
 
   if (status.isPending) return <Spinner small />
   if (status.isError) return <Notice tone="error">{errorMessage(status.error)}</Notice>
-  const { active, last, last_sync_at, counts, incremental_minutes, full_days } = status.data
+  const { active, last, last_sync_at, owner_full_sync_at, counts, incremental_minutes, full_days } = status.data
 
   return (
     <div className="space-y-4">
@@ -138,6 +138,12 @@ export function SyncPanel({ serverId, compact = false }: { serverId: number; com
         <p className="text-sm text-muted">
           {last_sync_at ? `Synced ${formatRelative(last_sync_at)}.` : 'Not synced yet.'}{' '}
           {!compact && describeSchedule(incremental_minutes, full_days)}
+        </p>
+      )}
+      {!active && !compact && owner_full_sync_at && (
+        <p className="text-xs text-muted">
+          Things removed from Plex are cleared out when the server's owner does a full sync (last{' '}
+          {formatRelative(owner_full_sync_at)}).
         </p>
       )}
       {!active && last?.status === 'failed' && (

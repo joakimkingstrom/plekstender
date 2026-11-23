@@ -4488,6 +4488,11 @@ export interface components {
              */
             folder?: string | null;
             /**
+             * Folder Saved At
+             * @description When it was saved there.
+             */
+            folder_saved_at?: string | null;
+            /**
              * Folder Error
              * @description Why artist.jpg wasn't saved, the last time.
              */
@@ -8111,6 +8116,11 @@ export interface components {
             last_full_sync_at: string | null;
             /** Last Sync At */
             last_sync_at: string | null;
+            /**
+             * Owner Full Sync At
+             * @description On a server someone else owns: their last full sync, the kind that clears out what was removed from Plex (null for the owner, who runs those).
+             */
+            owner_full_sync_at: string | null;
             counts: components["schemas"]["LibraryCounts"];
             /** Incremental Minutes */
             incremental_minutes: number;

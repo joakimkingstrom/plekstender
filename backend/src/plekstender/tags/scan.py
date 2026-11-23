@@ -105,7 +105,6 @@ async def _scan_nfos(db: AsyncSession, server: PlexServer, root: Path, nfos: lis
     for start in range(0, len(changed), BATCH):
         batch = changed[start : start + BATCH]
         read = await asyncio.to_thread(_read_nfos, root, batch)
-        now = dt.datetime.now(dt.UTC)
         rows = [
             {
                 "server_id": server.id,
@@ -115,7 +114,6 @@ async def _scan_nfos(db: AsyncSession, server: PlexServer, root: Path, nfos: lis
                 "mtime": f.mtime,
                 "data": info["data"],
                 "error": info["error"],
-                "scanned_at": now,
             }
             for f, info in zip(batch, read, strict=True)
         ]
@@ -209,7 +207,6 @@ async def _scan_images(
     for start in range(0, len(changed), BATCH):
         batch = changed[start : start + BATCH]
         read = await asyncio.to_thread(_read_images, root, batch, data_dir)
-        now = dt.datetime.now(dt.UTC)
         rows = [
             {
                 "server_id": server.id,
@@ -218,7 +215,6 @@ async def _scan_images(
                 "size": f.size,
                 "mtime": f.mtime,
                 **info,
-                "scanned_at": now,
             }
             for f, info in zip(batch, read, strict=True)
         ]
@@ -321,7 +317,6 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
     for start in range(0, len(changed), BATCH):
         batch = changed[start : start + BATCH]
         read = await asyncio.to_thread(_read_all, root, batch, get_settings().data_dir)
-        now = dt.datetime.now(dt.UTC)
         rows = [
             {
                 "server_id": server.id,
@@ -336,7 +331,6 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
                 "reader": READER,
                 "error": info["error"],
                 "rating_key": tracks.get(plex_path(server, f.path)),
-                "scanned_at": now,
             }
             for f, info in zip(batch, read, strict=True)
         ]

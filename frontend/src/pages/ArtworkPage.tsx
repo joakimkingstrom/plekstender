@@ -236,7 +236,10 @@ function ArtistEditor({
           {artist.folder_error ? (
             <p className="truncate text-xs text-danger">artist.jpg not saved: {artist.folder_error}</p>
           ) : artist.folder ? (
-            <p className="truncate text-xs text-muted">artist.jpg in {artist.folder.replace(/\/artist\.jpg$/, '')}</p>
+            <p className="truncate text-xs text-muted">
+              artist.jpg saved{artist.folder_saved_at ? ` ${formatRelative(artist.folder_saved_at)}` : ''} in{' '}
+              {artist.folder.replace(/\/artist\.jpg$/, '')}
+            </p>
           ) : null}
         </div>
         <div className="inline-flex rounded-lg bg-surface-2 p-0.5" role="group" aria-label="Status">

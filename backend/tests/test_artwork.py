@@ -625,6 +625,9 @@ async def test_saving_to_artist_folders(
     written = await worker_writes(100)
     assert written == {"path": str((music / "Radiohead" / "artist.jpg").resolve()), "error": None}
     assert jpeg_size((music / "Radiohead" / "artist.jpg").read_bytes()) == (1000, 1000)
+    listed = (await owner.get(f"{base}/artists")).json()["items"]
+    saved = next(a for a in listed if a["rating_key"] == 100)
+    assert saved["folder"] == written["path"] and saved["folder_saved_at"]
     from plekstender.artwork.folders import queue_dir
     from plekstender.config import get_settings
 

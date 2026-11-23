@@ -244,7 +244,6 @@ async def _reread(media: MediaFile, path: Path) -> None:
     media.reader = READER
     media.size, media.mtime = st.st_size, st.st_mtime
     media.error = None
-    media.scanned_at = dt.datetime.now(dt.UTC)
 
 
 async def _tell_plex(

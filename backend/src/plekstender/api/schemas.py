@@ -235,6 +235,10 @@ class SyncStatusOut(BaseModel):
     last: SyncRunOut | None
     last_full_sync_at: dt.datetime | None
     last_sync_at: dt.datetime | None
+    owner_full_sync_at: dt.datetime | None = Field(
+        description="On a server someone else owns: their last full sync, the kind that clears "
+        "out what was removed from Plex (null for the owner, who runs those)."
+    )
     counts: LibraryCounts
     # Current schedule (instance-wide, set by admins).
     incremental_minutes: int
@@ -620,6 +624,9 @@ class ArtworkArtistOut(BaseModel):
     applied_at: dt.datetime | None
     has_mbid: bool
     folder: str | None = Field(default=None, description="Where artist.jpg was last saved.")
+    folder_saved_at: dt.datetime | None = Field(
+        default=None, description="When it was saved there."
+    )
     folder_error: str | None = Field(
         default=None, description="Why artist.jpg wasn't saved, the last time."
     )
