@@ -120,15 +120,16 @@ services:
       - no-new-privileges:true
 
   # Optional reverse proxy with Let's Encrypt, for setups without one:
-  # `docker compose --profile traefik up -d` (and set TRAEFIK_ENABLE=true, PLEKSTENDER_HOST).
+  # `docker compose --profile traefik up -d` (and set PLEKSTENDER_HOST, TRAEFIK_ACME_EMAIL).
+  # It only serves Plekstender, so it's told the route in a file (traefik-routes, below)
+  # instead of being given the Docker socket to discover containers.
   # Already run Traefik? See compose.override.example.yaml instead.
   traefik:
     image: traefik:v3.7.19
     profiles: ["traefik"]
     restart: unless-stopped
     command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/etc/traefik/routes.yml
       - --entrypoints.web.address=:80
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.websecure.address=:443
@@ -138,13 +139,33 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    configs:
+      - source: traefik-routes
+        target: /etc/traefik/routes.yml
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
     networks:
       - default
     security_opt:
       - no-new-privileges:true
+
+configs:
+  # The bundled Traefik's one route: PLEKSTENDER_HOST to the web app, over https.
+  traefik-routes:
+    content: |
+      http:
+        routers:
+          plekstender:
+            rule: Host(`${PLEKSTENDER_HOST:-plekstender.localhost}`)
+            entryPoints: [websecure]
+            service: plekstender
+            tls:
+              certResolver: letsencrypt
+        services:
+          plekstender:
+            loadBalancer:
+              servers:
+                - url: http://frontend:8080
 
 networks:
   # Database traffic only; no internet access.
