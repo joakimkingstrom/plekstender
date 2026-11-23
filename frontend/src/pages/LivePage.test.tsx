@@ -90,6 +90,7 @@ const festival = {
 
 let settings: typeof base = base
 let feeds: Record<string, unknown>[] = []
+let calendarMade: string | null = null
 let fetchMock: ReturnType<typeof vi.fn<(input: Request | string, init?: RequestInit) => Promise<Response>>>
 
 beforeEach(() => {
@@ -120,7 +121,11 @@ beforeEach(() => {
       case '/api/live/stars':
         return new Response(null, { status: 204 })
       case '/api/live/calendar':
-        return json({ url: 'https://plek.example/api/live/calendar/secret-token-1234567890.ics' })
+        if (request?.method === 'POST') {
+          calendarMade = '2026-11-23T10:00:00Z'
+          return json({ exists: true, created_at: calendarMade, url: 'https://plek.example/api/live/calendar/secret-token-1234567890.ics' })
+        }
+        return json({ exists: calendarMade !== null, created_at: calendarMade, url: null })
       case '/api/live/feeds':
         if (request?.method === 'POST') {
           const { url: added } = await request.clone().json()
@@ -263,10 +268,11 @@ describe('LivePage', () => {
     )
   })
 
-  it('shows the private calendar address to subscribe to', async () => {
+  it('shows a new private calendar address once, to subscribe to', async () => {
     settings = placed
+    calendarMade = null
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Show calendar address' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Make calendar address' }))
     expect(await screen.findByRole('textbox', { name: 'Calendar address' })).toHaveValue(
       'https://plek.example/api/live/calendar/secret-token-1234567890.ics',
     )
@@ -274,6 +280,16 @@ describe('LivePage', () => {
       'href',
       'webcal://plek.example/api/live/calendar/secret-token-1234567890.ics',
     )
+    expect(screen.getByText(/only shown this once/)).toBeInTheDocument()
+  })
+
+  it('offers a new calendar address when there is one already (it is not shown again)', async () => {
+    settings = placed
+    calendarMade = '2026-11-01T10:00:00Z'
+    renderPage()
+    expect(await screen.findByText(/You have a calendar address, made/)).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Calendar address' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New address' })).toBeInTheDocument()
   })
 
   it('adds a calendar link', async () => {

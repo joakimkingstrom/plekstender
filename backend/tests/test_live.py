@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import re
 from dataclasses import replace
 from typing import Any, ClassVar
@@ -636,8 +637,16 @@ async def test_ticketmaster_merging_stars_and_calendar(app: FastAPI, plex: FakeP
     names = [s["name"] for s in (await owner.get("/api/live/shows")).json()["shows"]]
     assert "Radiohead at Avicii Arena" in names
 
-    # The calendar: a private address, the starred show once, no sign-in needed.
-    address = (await owner.get("/api/live/calendar")).json()["url"]
+    # The calendar: a private address, the starred show once, no sign-in needed. The address
+    # is only shown when it's made (only its token's hash is kept).
+    assert (await owner.get("/api/live/calendar")).json() == {
+        "exists": False,
+        "created_at": None,
+        "url": None,
+    }
+    made = (await owner.post("/api/live/calendar", headers=CSRF)).json()
+    assert made["exists"] and made["created_at"]
+    address = made["url"]
     path = address.removeprefix(get_settings().app_url)
     feed = await httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -668,8 +677,13 @@ async def test_ticketmaster_merging_stars_and_calendar(app: FastAPI, plex: FakeP
         )
     ).text
     assert "STATUS:CONFIRMED" in body and "DESCRIPTION:You have a ticket." in body
-    assert (await owner.get("/api/live/calendar")).json()["url"] == address
-    new = (await owner.post("/api/live/calendar/reset", headers=CSRF)).json()["url"]
+    shown = (await owner.get("/api/live/calendar")).json()
+    assert shown["exists"] and shown["url"] is None
+    token = address.removesuffix(".ics").rsplit("/", 1)[1]
+    async with get_sessionmaker()() as db:
+        live = await db.get(LiveSettings, user_id)
+        assert live and live.calendar_token_hash == hashlib.sha256(token.encode()).hexdigest()
+    new = (await owner.post("/api/live/calendar", headers=CSRF)).json()["url"]
     assert new != address
     gone = await httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"

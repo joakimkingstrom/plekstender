@@ -1620,7 +1620,12 @@ class LiveTicketIn(BaseModel):
 
 
 class LiveCalendarOut(BaseModel):
-    url: str = Field(description="Private address of the starred shows' calendar (iCal).")
+    exists: bool = Field(description="The user has a calendar address.")
+    created_at: dt.datetime | None = Field(description="When it was made (unknown for older ones).")
+    url: str | None = Field(
+        default=None,
+        description="The private address (iCal): only in the answer that makes it (not stored).",
+    )
 
 
 class TicketmasterKeyIn(BaseModel):
@@ -1863,7 +1868,6 @@ class GigStatsOut(BaseModel):
     top_venues: list[GigTopVenue]
     years: list[GigYear] = Field(description="Every year from the first gig's to the last's.")
     months: list[int] = Field(description="Gigs in each month, January first.")
-    seasons: dict[str, int] = Field(description="winter, spring, summer, autumn (by hemisphere).")
 
 
 ScrobbleService = Literal[

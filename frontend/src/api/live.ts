@@ -112,20 +112,20 @@ export function useStarShow() {
   })
 }
 
-export function useCalendarAddress(enabled: boolean) {
+/** Whether the user has a calendar address, and since when (not the address itself). */
+export function useCalendarAddress() {
   return useQuery({
     queryKey: [...liveKeys.all, 'calendar'],
-    enabled,
     queryFn: () => unwrap(api.GET('/api/live/calendar')),
-    staleTime: Infinity,
   })
 }
 
-export function useResetCalendar() {
+/** A new calendar address: the answer is the only time it's shown. */
+export function useNewCalendarAddress() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => unwrap(api.POST('/api/live/calendar/reset')),
-    onSuccess: (data) => qc.setQueryData([...liveKeys.all, 'calendar'], data),
+    mutationFn: () => unwrap(api.POST('/api/live/calendar')),
+    onSuccess: ({ exists, created_at }) => qc.setQueryData([...liveKeys.all, 'calendar'], { exists, created_at, url: null }),
   })
 }
 

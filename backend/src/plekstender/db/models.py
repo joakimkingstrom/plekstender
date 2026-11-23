@@ -961,8 +961,10 @@ class LiveSettings(Base):
     top_percent: Mapped[int] = mapped_column(SmallInteger, default=10, server_default="10")
     # Rank artists by the listens of the past N months (None: all time).
     period_months: Mapped[int | None] = mapped_column(SmallInteger)
-    # Secret part of the address of the user's calendar of starred shows (iCal).
-    calendar_token: Mapped[str | None] = mapped_column(String(64), unique=True)
+    # The address of the user's calendar of starred shows (iCal) ends in a secret token; only
+    # its SHA-256 is kept (like sessions), so the address can only be shown when it's made.
+    calendar_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    calendar_created_at: Mapped[dt.datetime | None]
     # Last refresh: queued | running | done | failed; when; how many artists and requests.
     refresh_status: Mapped[str | None] = mapped_column(String(8))
     refresh_error: Mapped[str | None] = mapped_column(Text)

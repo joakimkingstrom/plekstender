@@ -14,7 +14,7 @@ import {
   useLiveFeeds,
   useRefreshLive,
   useRemoveLiveFeed,
-  useResetCalendar,
+  useNewCalendarAddress,
   useSaveLiveSettings,
   type LiveSettings,
   type LiveShow,
@@ -518,13 +518,14 @@ function Shows({ settings }: { settings: LiveSettings }) {
   )
 }
 
-/** The private calendar of starred shows, to subscribe to in a calendar app. */
+/** The private calendar of starred shows, to subscribe to in a calendar app. Its address is
+ * only shown when it's made (the server keeps just a hash of it). */
 function CalendarCard() {
-  const [open, setOpen] = useState(false)
-  const address = useCalendarAddress(open)
-  const reset = useResetCalendar()
+  const status = useCalendarAddress()
+  const make = useNewCalendarAddress()
   const [copied, setCopied] = useState(false)
-  const url = address.data?.url
+  const url = make.data?.url
+  const made = status.data?.created_at
   return (
     <Card title="Your calendar">
       <div className="space-y-3 text-sm">
@@ -532,49 +533,60 @@ function CalendarCard() {
           Star gigs (☆) to keep them and add them to a calendar you subscribe to once in Apple Calendar, Google Calendar
           or Outlook. It stays up to date by itself.
         </p>
-        {!open ? (
-          <Button onClick={() => setOpen(true)}>Show calendar address</Button>
-        ) : address.isPending ? (
+        {status.isPending ? (
           <Spinner small />
-        ) : address.isError ? (
-          <Notice tone="error">{errorMessage(address.error)}</Notice>
-        ) : (
-          url && (
-            <div className="space-y-2">
-              <input
-                readOnly
-                value={url}
-                aria-label="Calendar address"
-                onFocus={(e) => e.currentTarget.select()}
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs"
-              />
-              <div className="flex flex-wrap gap-2">
-                <a href={url.replace(/^https?:/, 'webcal:')} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-on-accent">
-                  Subscribe
-                </a>
-                <Button
-                  onClick={() =>
-                    navigator.clipboard?.writeText(url).then(
-                      () => setCopied(true),
-                      () => setCopied(false),
-                    )
-                  }
-                >
-                  {copied ? 'Copied' : 'Copy'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  busy={reset.isPending}
-                  onClick={() => window.confirm('Make a new address? The old one stops working.') && reset.mutate()}
-                >
-                  New address
-                </Button>
-              </div>
-              <p className="text-xs text-muted">
-                Anyone with this address can see your starred shows. Google Calendar: Other calendars → From URL.
-              </p>
+        ) : status.isError ? (
+          <Notice tone="error">{errorMessage(status.error)}</Notice>
+        ) : url ? (
+          <div className="space-y-2">
+            <input
+              readOnly
+              value={url}
+              aria-label="Calendar address"
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs"
+            />
+            <div className="flex flex-wrap gap-2">
+              <a href={url.replace(/^https?:/, 'webcal:')} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-on-accent">
+                Subscribe
+              </a>
+              <Button
+                onClick={() =>
+                  navigator.clipboard?.writeText(url).then(
+                    () => setCopied(true),
+                    () => setCopied(false),
+                  )
+                }
+              >
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
             </div>
-          )
+            <Notice tone="warn">Subscribe or copy it now: it's only shown this once.</Notice>
+            <p className="text-xs text-muted">
+              Anyone with this address can see your starred shows. Google Calendar: Other calendars → From URL.
+            </p>
+          </div>
+        ) : status.data?.exists ? (
+          <div className="space-y-2">
+            <p>
+              You have a calendar address{made ? `, made ${new Date(made).toLocaleDateString(undefined, { dateStyle: 'medium' })}` : ''}. It's
+              only shown when it's made: if you've lost it, make a new one.
+            </p>
+            {make.isError && <Notice tone="error">{errorMessage(make.error)}</Notice>}
+            <Button
+              busy={make.isPending}
+              onClick={() => window.confirm('Make a new address? The old one stops working.') && make.mutate()}
+            >
+              New address
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {make.isError && <Notice tone="error">{errorMessage(make.error)}</Notice>}
+            <Button busy={make.isPending} onClick={() => make.mutate()}>
+              Make calendar address
+            </Button>
+          </div>
         )}
       </div>
     </Card>

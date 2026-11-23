@@ -1566,7 +1566,7 @@ export interface paths {
         };
         /**
          * Stats
-         * @description Most seen artists and venues, gigs a year, by month and by season.
+         * @description Most seen artists and venues, gigs a year and by month.
          */
         get: operations["stats_api_gigs_stats_get"];
         put?: never;
@@ -3236,31 +3236,17 @@ export interface paths {
         };
         /**
          * Calendar Address
-         * @description The private address of the user's calendar of starred shows (made on first use).
+         * @description Whether the user has a calendar address, and since when (the address itself is only
+         *     shown when it's made).
          */
         get: operations["calendar_address_api_live_calendar_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/live/calendar/reset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         /**
-         * Reset Calendar
-         * @description A new address: the old one stops working (if it was shared by mistake).
+         * New Calendar Address
+         * @description A new private address for the calendar of starred shows, shown this once. An earlier
+         *     address stops working.
          */
-        post: operations["reset_calendar_api_live_calendar_reset_post"];
+        post: operations["new_calendar_address_api_live_calendar_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5518,13 +5504,6 @@ export interface components {
              * @description Gigs in each month, January first.
              */
             months: number[];
-            /**
-             * Seasons
-             * @description winter, spring, summer, autumn (by hemisphere).
-             */
-            seasons: {
-                [key: string]: number;
-            };
         };
         /** GigTopArtist */
         GigTopArtist: {
@@ -6157,10 +6136,20 @@ export interface components {
         /** LiveCalendarOut */
         LiveCalendarOut: {
             /**
-             * Url
-             * @description Private address of the starred shows' calendar (iCal).
+             * Exists
+             * @description The user has a calendar address.
              */
-            url: string;
+            exists: boolean;
+            /**
+             * Created At
+             * @description When it was made (unknown for older ones).
+             */
+            created_at: string | null;
+            /**
+             * Url
+             * @description The private address (iCal): only in the answer that makes it (not stored).
+             */
+            url?: string | null;
         };
         /** LiveFeedIn */
         LiveFeedIn: {
@@ -14348,7 +14337,7 @@ export interface operations {
             };
         };
     };
-    reset_calendar_api_live_calendar_reset_post: {
+    new_calendar_address_api_live_calendar_post: {
         parameters: {
             query?: never;
             header?: never;

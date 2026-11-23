@@ -54,6 +54,7 @@ from plekstender.live.refresh import (
     period_start,
     seen_key,
 )
+from plekstender.security.crypto import hash_session_token
 from plekstender.worker import LIVE_MANUAL_GAP, enqueue_live_refresh
 
 router = APIRouter(prefix="/api/live", tags=["live"])
@@ -506,26 +507,28 @@ def _calendar_url(settings: Settings, token: str) -> str:
 
 
 @router.get("/calendar", response_model=LiveCalendarOut)
-async def calendar_address(db: DbDep, settings: SettingsDep, user: UserDep) -> LiveCalendarOut:
-    """The private address of the user's calendar of starred shows (made on first use)."""
+async def calendar_address(db: DbDep, user: UserDep) -> LiveCalendarOut:
+    """Whether the user has a calendar address, and since when (the address itself is only
+    shown when it's made)."""
+    live = await db.get(LiveSettings, user.id)
+    exists = live is not None and live.calendar_token_hash is not None
+    return LiveCalendarOut(exists=exists, created_at=live.calendar_created_at if live else None)
+
+
+@router.post("/calendar", response_model=LiveCalendarOut)
+async def new_calendar_address(db: DbDep, settings: SettingsDep, user: UserDep) -> LiveCalendarOut:
+    """A new private address for the calendar of starred shows, shown this once. An earlier
+    address stops working."""
     live = await db.get(LiveSettings, user.id)
     if live is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Choose a place first.")
-    if not live.calendar_token:
-        live.calendar_token = secrets.token_urlsafe(24)
-        await db.commit()
-    return LiveCalendarOut(url=_calendar_url(settings, live.calendar_token))
-
-
-@router.post("/calendar/reset", response_model=LiveCalendarOut)
-async def reset_calendar(db: DbDep, settings: SettingsDep, user: UserDep) -> LiveCalendarOut:
-    """A new address: the old one stops working (if it was shared by mistake)."""
-    live = await db.get(LiveSettings, user.id)
-    if live is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Choose a place first.")
-    live.calendar_token = secrets.token_urlsafe(24)
+    token = secrets.token_urlsafe(24)
+    live.calendar_token_hash = hash_session_token(token)
+    live.calendar_created_at = dt.datetime.now(dt.UTC)
     await db.commit()
-    return LiveCalendarOut(url=_calendar_url(settings, live.calendar_token))
+    return LiveCalendarOut(
+        exists=True, created_at=live.calendar_created_at, url=_calendar_url(settings, token)
+    )
 
 
 def _calendar_shows(groups: list[list[LiveShow]]) -> list[ical.CalendarShow]:
@@ -583,7 +586,8 @@ async def _starred(db: DbDep, user_id: int) -> list[list[LiveShow]]:
 )
 async def calendar_feed(token: str, db: DbDep) -> Response:
     """The starred shows (no sign-in: calendar apps fetch it; the address is the secret)."""
-    live = await db.scalar(select(LiveSettings).where(LiveSettings.calendar_token == token))
+    hashed = hash_session_token(token)
+    live = await db.scalar(select(LiveSettings).where(LiveSettings.calendar_token_hash == hashed))
     if live is None or len(token) < 20:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown calendar")
     body = ical.calendar(_calendar_shows(await _starred(db, live.user_id)), "Plekstender: gigs")
