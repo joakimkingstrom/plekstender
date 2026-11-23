@@ -200,7 +200,8 @@ class WorkerHealth(BaseModel):
 
 class HealthOut(BaseModel):
     status: Literal["ok", "degraded"]
-    version: str
+    version: str = Field(description="e.g. 0.1.212 for a published image; ends in -dev otherwise.")
+    commit: str | None = Field(description="The commit the image was built from, if known.")
     database: bool
     worker: WorkerHealth
 

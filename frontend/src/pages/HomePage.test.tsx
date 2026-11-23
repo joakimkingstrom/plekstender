@@ -59,6 +59,7 @@ beforeEach(() => {
             database: true,
             worker: { healthy: true },
             version: "1.2.3",
+            commit: "abcdef1234567",
           });
         case "/api/status/connections":
           return json([
@@ -165,6 +166,8 @@ it("lists every connection on the Status card", async () => {
   expect(screen.getByText("765 of 900 requests this month")).toBeTruthy();
   expect(screen.getByText("SearXNG (image search)")).toBeTruthy();
   expect(screen.getByText("Not set up: Ticketmaster, Spotify")).toBeTruthy();
+  // The version, and the commit it was built from (linked).
+  expect(screen.getByRole("link", { name: "abcdef1" }).getAttribute("href")).toMatch(/\/commit\/abcdef1234567$/);
   // A summary up top; tiles grouped: Plekstender itself, yours, the services here.
   expect(screen.getByText("1 not working")).toBeTruthy();
   expect(screen.getByRole("region", { name: "Yours" }).textContent).toMatch(/Plex.*Home/);

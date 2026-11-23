@@ -5603,8 +5603,16 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "degraded";
-            /** Version */
+            /**
+             * Version
+             * @description e.g. 0.1.212 for a published image; ends in -dev otherwise.
+             */
             version: string;
+            /**
+             * Commit
+             * @description The commit the image was built from, if known.
+             */
+            commit: string | null;
             /** Database */
             database: boolean;
             worker: components["schemas"]["WorkerHealth"];

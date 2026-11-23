@@ -8,7 +8,10 @@ WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
-RUN npm run build
+# The version the image is published as (empty for a local build): the page compares it with
+# the server's to offer a reload after an update.
+ARG PLEKSTENDER_VERSION=""
+RUN VITE_APP_VERSION="$PLEKSTENDER_VERSION" npm run build
 
 # --- fpcalc (Chromaprint) for identifying files by sound ----------------------------
 # The official static builds (a couple of MB), checked against their published digests.
@@ -55,6 +58,13 @@ ENV PATH=/app/.venv/bin:$PATH \
     DATA_DIR=/data \
     PORT=8080
 EXPOSE 8080
+
+# Last, so a new version doesn't invalidate the layers above. Set by the publish workflow;
+# left empty, the app reports its package version marked -dev.
+ARG PLEKSTENDER_VERSION=""
+ARG PLEKSTENDER_COMMIT=""
+ENV PLEKSTENDER_VERSION=$PLEKSTENDER_VERSION \
+    PLEKSTENDER_COMMIT=$PLEKSTENDER_COMMIT
 
 # The same image runs every service; compose picks the command (web | worker | migrate).
 CMD ["plekstender", "web"]

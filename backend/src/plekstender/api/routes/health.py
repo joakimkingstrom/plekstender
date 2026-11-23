@@ -9,7 +9,7 @@ from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from plekstender import __version__
+from plekstender import __commit__, __version__
 from plekstender.api.deps import DbDep
 from plekstender.api.schemas import HealthOut, WorkerHealth
 from plekstender.db.instance import get_worker_heartbeat
@@ -42,6 +42,7 @@ async def health(db: DbDep, response: Response) -> HealthOut:
     return HealthOut(
         status="ok" if database and worker.healthy else "degraded",
         version=__version__,
+        commit=__commit__,
         database=database,
         worker=worker,
     )

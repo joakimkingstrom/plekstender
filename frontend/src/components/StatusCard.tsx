@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import { useConnections, useHealth, type ConnectionStatus } from '../api/hooks'
 import { Card, Spinner } from './ui'
+import { SOURCE_URL } from '../version'
 
 type State = ConnectionStatus['state']
 type Item = Pick<ConnectionStatus, 'name' | 'state'> & Partial<ConnectionStatus>
@@ -59,7 +60,17 @@ export function StatusCard() {
         <Group title="Services on this Plekstender" items={services} />
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted">
           <span>{off.length > 0 && `Not set up: ${off.map((c) => c.name).join(', ')}`}</span>
-          <span className="tabular-nums">Plekstender {health.data.version}</span>
+          <span className="tabular-nums">
+            Plekstender {health.data.version}
+            {health.data.commit && (
+              <>
+                {' · '}
+                <a href={`${SOURCE_URL}/commit/${health.data.commit}`} target="_blank" rel="noreferrer" className="font-mono hover:text-text hover:underline">
+                  {health.data.commit.slice(0, 7)}
+                </a>
+              </>
+            )}
+          </span>
         </div>
       </div>
     </Card>

@@ -3,6 +3,7 @@ import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-route
 import { useLogout, useMe, useSetPreferences } from '../api/hooks'
 import { useOnline } from '../online'
 import { InstallPrompt } from './InstallPrompt'
+import { UpdateBanner } from './UpdateBanner'
 import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
 import { SPIN_MS, SPIN_SCALE } from '../brand'
@@ -158,6 +159,7 @@ export function Layout() {
       </header>
 
       <InstallPrompt />
+      <UpdateBanner />
       {!online && (
         <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-xs text-warn">
           You're offline. What's on screen may be out of date, and changes can't be saved until you're back online.

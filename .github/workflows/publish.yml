@@ -27,6 +27,8 @@ jobs:
         with:
           # The commit CI tested, not whatever main is now.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # All of history: the version's last number counts the commits.
+          fetch-depth: 0
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -40,7 +42,25 @@ jobs:
       - id: commit
         env:
           SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-        run: echo "short=${SHA::7}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "short=${SHA::7}" >> "$GITHUB_OUTPUT"
+      # The version: for a version tag (v1.2.3), the tag; otherwise major.minor from
+      # backend/pyproject.toml and the number of commits up to this one, so every commit on
+      # main gets the next number (0.1.212, 0.1.213, ...) without committing anything back.
+      - id: version
+        env:
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = push ] && [[ "$REF" == refs/tags/v* ]]; then
+            version="${REF#refs/tags/v}"
+          else
+            base=$(sed -nE 's/^version = "([0-9]+)\.([0-9]+)\..*"/\1.\2/p' backend/pyproject.toml | head -1)
+            version="$base.$(git rev-list --count HEAD)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building Plekstender $version" >> "$GITHUB_STEP_SUMMARY"
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
@@ -48,12 +68,15 @@ jobs:
           tags: |
             type=raw,value=latest,enable=${{ github.event_name == 'workflow_run' }}
             type=raw,value=sha-${{ steps.commit.outputs.short }}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ github.event_name == 'workflow_run' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
           labels: |
             org.opencontainers.image.title=Plekstender
             org.opencontainers.image.description=Self-hosted helper app for Plex and Plexamp music libraries
             org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.commit.outputs.sha }}
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -61,5 +84,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PLEKSTENDER_VERSION=${{ steps.version.outputs.version }}
+            PLEKSTENDER_COMMIT=${{ steps.commit.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

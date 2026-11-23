@@ -166,6 +166,7 @@ async def test_unauthenticated_and_health(app: FastAPI) -> None:
     body = health.json()
     assert body["database"] is True
     assert body["worker"]["healthy"] is False  # no worker in tests
+    assert body["version"] and "commit" in body
     assert health.headers["cache-control"] == "no-store"
     assert health.headers["x-content-type-options"] == "nosniff"
 
