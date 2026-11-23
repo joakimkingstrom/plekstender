@@ -67,8 +67,6 @@ PLEKSTENDER_IMAGE=ghcr.io/joakimkingstrom/plekstender:latest
 PLEKSTENDER_PULL_POLICY=always
 ```
 
-New GitHub packages are private: make the package public on GitHub, or `docker login ghcr.io` on the host first.
-
 ### On a phone
 
 Open your Plekstender address in Safari and choose **Share → Add to Home Screen** (Chrome: **⋮ → Add to Home screen**). Opened from its icon, it runs full screen like an app and starts on the Rate page (Settings → Appearance changes that). The app's shell is kept for offline use; ratings and data need a connection.
@@ -133,9 +131,6 @@ More for developers in [`docs/`](docs): [architecture](docs/architecture.md), [h
 ### Versions and releases
 
 Every image built from `main` gets the next version number (`0.1.<commits>`), shown on Home → Status.
-To make a release, run **Actions → Release**: it tags the newest published build (`v0.1.214`),
-writes the release notes from the commits since the last release, and moves the image tag `stable`
-to it. For 0.2 or 1.0, change the version in `backend/pyproject.toml` first.
 
 ## Credits
 
