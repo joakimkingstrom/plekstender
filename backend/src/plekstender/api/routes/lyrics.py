@@ -4,6 +4,9 @@ plekstender.tags.lyrics."""
 
 from __future__ import annotations
 
+import datetime as dt
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import case, func, select
 
@@ -17,6 +20,7 @@ from plekstender.api.schemas import (
     LyricsLookupIn,
     LyricsPlanOut,
     LyricsSampleOut,
+    LyricsStopIn,
     TagChangeSetOut,
 )
 from plekstender.db.models import FileScan, MediaFile, PlexServer, TagChangeSet
@@ -82,8 +86,11 @@ async def look_up_lyrics(
 
 
 @router.get("/latest", response_model=FileScanOut | None)
-async def latest_lookup(server_id: int, db: DbDep, user: UserDep) -> FileScanOut | None:
-    """The last lyrics lookup for the whole library, if there's been one."""
+async def latest_lookup(
+    server_id: int, db: DbDep, user: UserDep, scope: Literal["library", "any"] = "library"
+) -> FileScanOut | None:
+    """The last lyrics lookup for the whole library (or for anything: `scope=any`), if
+    there's been one."""
     us = await owner_server(db, user, server_id)
     jobs = await db.scalars(
         select(FileScan)
@@ -91,7 +98,7 @@ async def latest_lookup(server_id: int, db: DbDep, user: UserDep) -> FileScanOut
         .order_by(FileScan.id.desc())
         .limit(20)
     )
-    return _scan_out(next((j for j in jobs if not j.params.get("albums")), None))
+    return _scan_out(next((j for j in jobs if scope == "any" or not j.params.get("albums")), None))
 
 
 async def _job(db: DbDep, server_id: int, job_id: int) -> FileScan:
@@ -130,6 +137,44 @@ async def lyrics_plan(
         sample=[LyricsSampleOut(**row._asdict()) for row in sample],
         applied_set_id=job.params.get("applied_set_id"),
     )
+
+
+# A running lookup saves its progress at least every couple of minutes; one that hasn't for
+# this long has no worker (it stopped): stopping it is done here instead.
+NO_WORKER_AFTER = dt.timedelta(minutes=5)
+
+
+@router.post("/{job_id}/stop", response_model=FileScanOut)
+async def stop_lookup(
+    server_id: int, job_id: int, body: LyricsStopIn, db: DbDep, user: UserDep
+) -> FileScanOut:
+    """Stop a lookup (what it found and wrote is kept), or cancel it: what it found is thrown
+    away, and with `undo` what it wrote is taken out again (an undo edit)."""
+    us = await owner_server(db, user, server_id)
+    job = await _job(db, us.server_id, job_id)
+    if job.status not in ("queued", "running"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "It isn't running.")
+    request = "undo" if body.cancel and body.undo else "cancel" if body.cancel else "stop"
+    abandoned = job.status == "running" and (
+        dt.datetime.now(dt.UTC) - job.updated_at > NO_WORKER_AFTER
+    )
+    if job.status == "running" and not abandoned:
+        job.params = {**job.params, "stop": request}  # the worker stops before the next song
+        await db.commit()
+    else:
+        job.status = "failed"
+        job.error = lyrics.STOP_MESSAGES[request]
+        job.finished_at = job.updated_at = dt.datetime.now(dt.UTC)
+        if request != "stop":
+            await lyrics.discard(db, job)
+        await db.commit()
+        set_id = job.params.get("applied_set_id")
+        if set_id and await lyrics.close_edit(db, job, set_id) and request == "undo":
+            await lyrics.undo_edit(db, set_id, user.id)
+    await db.refresh(job)
+    out = _scan_out(job)
+    assert out is not None
+    return out
 
 
 @router.post("/{job_id}/apply", response_model=TagChangeSetOut, status_code=status.HTTP_201_CREATED)

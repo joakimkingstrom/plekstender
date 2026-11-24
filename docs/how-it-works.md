@@ -448,6 +448,12 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 ## Writing lyrics as they're found (25 Nov)
 - A lyrics lookup can be started with `write` (where to write, whether to replace): it then opens one edit (`applied_set_id` on the job, description "…, as found") and goes through every song in scope 50 at a time, asking LRCLIB only for those due a lookup and writing each batch straight away (`add_changes` limited to the batch's files, then `apply_lyrics`). Songs looked up by earlier runs are written without asking again, so an interrupted run loses nothing: starting again carries on. The edit is closed at the end (applied / partial / failed; dropped when it wrote nothing) and Plex is asked to rescan once. Turning file editing off stops it. Without `write`, it's the lookup-then-write flow as before.
 
+## Stopping lyrics lookups; lyrics in the bell (25 Nov)
+- **Stop / Cancel** (`POST …/files/lyrics/{job}/stop`): the page puts `stop` ("stop", "cancel" or "undo") in the job's params, and the worker checks it before every song (and every write batch). Stop keeps what was found and written. Cancel throws away what this lookup found (`track_lyrics` rows looked up since it started: one lookup runs per server at a time) and, with undo, takes out what it wrote: an undo edit made in one `INSERT … SELECT` from the applied changes, queued like any edit. A queued lookup, or one with no progress for 5 minutes (its worker gone), is stopped by the app itself.
+- The edit of a lookup that wrote as it went is closed (applied/partial/failed, or dropped if empty) when the lookup ends, is stopped, or is marked interrupted by the hourly clean-up.
+- **The bell** shows a lyrics lookup like an artwork job (`/files/lyrics/latest?scope=any`, polled every 5 s while one runs, else every minute): progress, files written so far, then how it ended.
+- The lyrics panel shows the write-afterwards step only when "Write lyrics as they're found" is off.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

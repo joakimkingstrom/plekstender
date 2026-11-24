@@ -1423,6 +1423,15 @@ class LyricsPlanOut(BaseModel):
     applied_set_id: int | None
 
 
+class LyricsStopIn(BaseModel):
+    cancel: bool = Field(
+        default=False, description="Throw away the lyrics it found (else they're kept)."
+    )
+    undo: bool = Field(
+        default=True, description="When cancelling: take out the lyrics it wrote too."
+    )
+
+
 class LyricsCoverageOut(BaseModel):
     files: int = Field(description="Music files in the folder.")
     word: int = Field(description="With lyrics timed word by word.")

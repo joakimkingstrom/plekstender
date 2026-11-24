@@ -24,7 +24,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import httpx
-from sqlalchemy import func, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,6 +66,15 @@ _META = re.compile(r"^\[[a-z]+:[^\]]*\]$", re.IGNORECASE)
 
 class LookupStopped(Exception):
     pass
+
+
+class LookupCancelled(LookupStopped):
+    """Stopped on request, throwing away what this lookup found (and, with `undo`, taking
+    out what it wrote)."""
+
+    def __init__(self, message: str, *, undo: bool) -> None:
+        super().__init__(message)
+        self.undo = undo
 
 
 def normalise(text: str | None) -> str | None:
@@ -165,6 +174,7 @@ async def run_lookup(
     await db.commit()
     server: PlexServer | None = None
     change_set: TagChangeSet | None = None
+    undo = False  # cancelled, taking out what was written
     touched: set[tuple[int | None, str]] = set()
     try:
         server = await db.get(PlexServer, job.server_id)
@@ -214,6 +224,7 @@ async def run_lookup(
             for media in batch:
                 if media.id not in due:
                     continue
+                await _check_stop(db, job.id)
                 row, failed = await _look_up(http, settings, root, media)
                 errors = errors + 1 if failed else 0
                 stmt = insert(TrackLyrics).values(row)
@@ -230,6 +241,7 @@ async def run_lookup(
                         + (" and written" if change_set is not None else "")
                         + "; look again later for the rest."
                     )
+            await _check_stop(db, job.id)
             if change_set is not None:
                 assert write is not None
                 if not await _still_editable(db, server.id):
@@ -268,10 +280,15 @@ async def run_lookup(
         job.error = (
             str(exc) if isinstance(exc, LookupStopped) else "Unexpected error; see the worker log."
         )
+        if isinstance(exc, LookupCancelled):
+            await discard(db, job)
+            undo = exc.undo
     job.finished_at = job.updated_at = dt.datetime.now(dt.UTC)
     await db.commit()
     if change_set is not None and server is not None:
         await _finish_edit(db, http, settings, server, job, change_set.id, touched)
+        if undo:
+            await undo_edit(db, change_set.id, job.params.get("user_id"))
 
 
 def _destinations(write: dict[str, Any]) -> Destinations:
@@ -315,9 +332,16 @@ async def _finish_edit(
     rescan what changed."""
     from plekstender.tags.apply import _tell_plex  # apply imports this module
 
+    if await close_edit(db, job, set_id):
+        await _tell_plex(db, http, settings, server, touched)
+
+
+async def close_edit(db: AsyncSession, job: FileScan, set_id: int) -> bool:
+    """Set the status of the edit a lookup wrote along the way from its changes' (dropped
+    when it wrote nothing). Returns whether it wrote anything."""
     change_set = await db.get(TagChangeSet, set_id)
     if change_set is None:
-        return
+        return False
     rows = await db.execute(
         select(TagChange.status, func.count())
         .where(TagChange.change_set_id == set_id)
@@ -328,7 +352,7 @@ async def _finish_edit(
         await db.delete(change_set)
         job.params = {k: v for k, v in job.params.items() if k != "applied_set_id"}
         await db.commit()
-        return
+        return False
     statuses = set(counts)
     change_set.status = (
         "applied"
@@ -339,7 +363,88 @@ async def _finish_edit(
     )
     change_set.applied_at = change_set.updated_at = dt.datetime.now(dt.UTC)
     await db.commit()
-    await _tell_plex(db, http, settings, server, touched)
+    return True
+
+
+# --- stopping and cancelling ----------------------------------------------------------------
+
+STOP_MESSAGES = {
+    "stop": "Stopped. What it found is kept, and what it wrote stays written.",
+    "cancel": "Cancelled: the lyrics it found were thrown away.",
+    "undo": "Cancelled: the lyrics it found were thrown away, and the ones it wrote are being "
+    "taken out again.",
+}
+
+
+def stop_request(params: dict[str, Any]) -> str | None:
+    """ "stop", "cancel" or "undo" (cancel, and take out what was written), if asked."""
+    request = params.get("stop")
+    return request if request in STOP_MESSAGES else None
+
+
+async def _check_stop(db: AsyncSession, job_id: int) -> None:
+    """Stop when asked to (from the page), checked before every song."""
+    params = await db.scalar(select(FileScan.params).where(FileScan.id == job_id))
+    request = stop_request(params or {})
+    if request == "stop":
+        raise LookupStopped(STOP_MESSAGES["stop"])
+    if request in ("cancel", "undo"):
+        raise LookupCancelled(STOP_MESSAGES[request], undo=request == "undo")
+
+
+async def discard(db: AsyncSession, job: FileScan) -> int:
+    """Throw away the lyrics a lookup found (looked up since it started; only one lookup
+    runs on a server at a time). Returns how many. Caller commits."""
+    if job.started_at is None:
+        return 0
+    result = await db.execute(
+        delete(TrackLyrics).where(
+            TrackLyrics.server_id == job.server_id, TrackLyrics.looked_up_at >= job.started_at
+        )
+    )
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
+async def undo_edit(db: AsyncSession, set_id: int, user_id: int | None) -> int | None:
+    """Take out what an edit wrote: a new edit putting back what was there before (like
+    undo in the history, but in one statement however big). Returns its id, if anything
+    was written."""
+    from plekstender.worker import enqueue_tag_changes  # the worker imports this module
+
+    original = await db.get(TagChangeSet, set_id)
+    if original is None:
+        return None
+    applied = await db.scalar(
+        select(func.count()).where(TagChange.change_set_id == set_id, TagChange.status == "applied")
+    )
+    if not applied:
+        return None
+    undo = TagChangeSet(
+        server_id=original.server_id,
+        user_id=user_id,
+        kind="undo",
+        description=f"Undid {applied} {'change' if applied == 1 else 'changes'} "
+        "(a cancelled lyrics lookup)",
+    )
+    db.add(undo)
+    await db.flush()
+    await db.execute(
+        text(
+            """
+            INSERT INTO tag_changes (change_set_id, media_file_id, path, rating_key, field,
+                                     old_value, new_value, status, undoes_id)
+            SELECT :undo_id, media_file_id, path, rating_key, field, new_value, old_value,
+                   'pending', id
+            FROM tag_changes
+            WHERE change_set_id = :set_id AND status = 'applied'
+            ORDER BY id DESC
+            """
+        ),
+        {"undo_id": undo.id, "set_id": set_id},
+    )
+    await db.commit()
+    await enqueue_tag_changes(undo)
+    return undo.id
 
 
 async def _look_up(

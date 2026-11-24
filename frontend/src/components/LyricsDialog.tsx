@@ -54,6 +54,9 @@ export function LyricsPanel({
   const [overwrite, setOverwrite] = useState(false)
   const [written, setWritten] = useState<Schemas['TagChangeSetOut'] | null>(null)
   const [writing, setWriting] = useState(false)
+  const [stopping, setStopping] = useState<'stop' | 'cancel' | null>(null)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [undoWritten, setUndoWritten] = useState(true)
   const plan = useLyricsPlan(serverId, jobId, to, overwrite)
   const nowhere = !to.sidecar && !to.lyricsfile && !to.embedded
 
@@ -82,11 +85,27 @@ export function LyricsPanel({
     }
   }
 
+  const stop = async (cancel: boolean) => {
+    setStopping(cancel ? 'cancel' : 'stop')
+    setConfirmCancel(false)
+    setError(null)
+    try {
+      await bulk.stopLyrics(serverId, jobId!, cancel, undoWritten)
+      await plan.refetch()
+    } catch (e) {
+      setError(errorMessage(e))
+      setStopping(null)
+    }
+  }
+
   const p = plan.data
   const busy = p ? p.job.status === 'queued' || p.job.status === 'running' : jobId !== null
   const progress = p?.job.progress as Progress | undefined
   // Written along the way (this lookup made its own edit), or afterwards from here.
   const wroteAsFound = Boolean(p?.applied_set_id) && !written
+  // Writing afterwards: for a lookup that didn't write as it went, unless the next one will.
+  const writeAfterwards = !wroteAsFound && !written && !(asFound && canWrite)
+  if (stopping && !busy) setStopping(null) // done: the job says how it ended
 
   const destinations = (
     <div className="space-y-3">
@@ -175,6 +194,58 @@ export function LyricsPanel({
                   style={{ width: `${progress?.total ? ((progress.done ?? 0) / progress.total) * 100 : 5}%` }}
                 />
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {stopping ? (
+                  <span className="flex items-center gap-2 text-muted">
+                    <Spinner small /> {stopping === 'cancel' ? 'Cancelling…' : 'Stopping…'}
+                  </span>
+                ) : (
+                  <>
+                    <Button size="sm" onClick={() => void stop(false)}>
+                      Stop
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmCancel(true)}>
+                      Cancel…
+                    </Button>
+                    <span className="text-xs text-muted">
+                      Stop keeps what it found{p.applied_set_id ? ' and wrote' : ''}; starting again carries on.
+                    </span>
+                  </>
+                )}
+              </div>
+              {confirmCancel && (
+                <Dialog title="Cancel the lookup?" onClose={() => setConfirmCancel(false)}>
+                  <div className="space-y-4 text-sm">
+                    <p>
+                      The lyrics this lookup has found are thrown away: a later lookup asks LRCLIB for them again.
+                    </p>
+                    {p.applied_set_id && (
+                      <label className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={undoWritten}
+                          onChange={(e) => setUndoWritten(e.target.checked)}
+                        />
+                        <span>
+                          Take out the lyrics it wrote too
+                          <span className="block text-xs text-muted">
+                            {formatCount(progress?.written ?? 0)} files so far, undone as one edit.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="danger" onClick={() => void stop(true)}>
+                        Cancel the lookup
+                      </Button>
+                      <Button variant="ghost" onClick={() => setConfirmCancel(false)}>
+                        Keep it running
+                      </Button>
+                    </div>
+                  </div>
+                </Dialog>
+              )}
             </div>
           ) : p.job.status === 'failed' ? (
             <Notice tone="warn">{p.job.error ?? 'The lookup stopped.'}</Notice>
@@ -210,7 +281,7 @@ export function LyricsPanel({
             <Notice>
               Writing lyrics to {songs(p.songs)}. Undo it from the edit history on {history}.
             </Notice>
-          ) : (
+          ) : !writeAfterwards ? null : (
             <div className="space-y-3 border-t border-border pt-4">
               {destinations}
               <p>
@@ -257,7 +328,8 @@ export function LyricsPanel({
           )}
           {!busy && (
             <div className="space-y-3 border-t border-border pt-4">
-              {(wroteAsFound || written) && destinations}
+              {!writeAfterwards && destinations}
+              {!writeAfterwards && writeOff}
               {lookUp}
             </div>
           )}

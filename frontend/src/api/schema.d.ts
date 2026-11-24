@@ -2633,7 +2633,8 @@ export interface paths {
         };
         /**
          * Latest Lookup
-         * @description The last lyrics lookup for the whole library, if there's been one.
+         * @description The last lyrics lookup for the whole library (or for anything: `scope=any`), if
+         *     there's been one.
          */
         get: operations["latest_lookup_api_servers__server_id__files_lyrics_latest_get"];
         put?: never;
@@ -2658,6 +2659,27 @@ export interface paths {
         get: operations["lyrics_plan_api_servers__server_id__files_lyrics__job_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics/{job_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Lookup
+         * @description Stop a lookup (what it found and wrote is kept), or cancel it: what it found is thrown
+         *     away, and with `undo` what it wrote is taken out again (an undo edit).
+         */
+        post: operations["stop_lookup_api_servers__server_id__files_lyrics__job_id__stop_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7138,6 +7160,21 @@ export interface components {
              * @description The start of the lyrics.
              */
             preview: string | null;
+        };
+        /** LyricsStopIn */
+        LyricsStopIn: {
+            /**
+             * Cancel
+             * @description Throw away the lyrics it found (else they're kept).
+             * @default false
+             */
+            cancel: boolean;
+            /**
+             * Undo
+             * @description When cancelling: take out the lyrics it wrote too.
+             * @default true
+             */
+            undo: boolean;
         };
         /** MbApplyIn */
         MbApplyIn: {
@@ -14323,7 +14360,9 @@ export interface operations {
     };
     latest_lookup_api_servers__server_id__files_lyrics_latest_get: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: "library" | "any";
+            };
             header?: never;
             path: {
                 server_id: number;
@@ -14376,6 +14415,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LyricsPlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_lookup_api_servers__server_id__files_lyrics__job_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LyricsStopIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
                 };
             };
             /** @description Validation Error */

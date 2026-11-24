@@ -517,6 +517,15 @@ export const bulk = {
         body: { albums, again, write },
       }),
     ),
+  /** Stop a lyrics lookup (keeping what it found), or cancel it (throwing that away, and with
+   * `undo` taking out what it wrote). */
+  stopLyrics: (serverId: number, jobId: number, cancel: boolean, undo: boolean) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/lyrics/{job_id}/stop', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+        body: { cancel, undo },
+      }),
+    ),
   findDuplicates: (serverId: number) =>
     unwrap(api.POST('/api/servers/{server_id}/files/duplicates', { params: { path: { server_id: serverId } } })),
   removeDuplicates: (serverId: number, jobId: number, remove: number[]) =>
@@ -588,11 +597,24 @@ export function useLyricsCoverage(serverId: number) {
   })
 }
 
-/** The last lyrics lookup for the whole library (to come back to its results). */
-export function useLatestLyricsLookup(serverId: number) {
+/** The last lyrics lookup for the whole library (to come back to its results), or of any
+ * kind (`any`: the bell, which polls it: often while it runs, else every minute). */
+export function useLatestLyricsLookup(serverId: number, scope: 'library' | 'any' = 'library', enabled = true) {
   return useQuery({
-    queryKey: [...filesKeys.all(serverId), 'lyrics', 'latest'],
+    queryKey: [...filesKeys.all(serverId), 'lyrics', 'latest', scope],
+    enabled,
     queryFn: () =>
-      unwrap(api.GET('/api/servers/{server_id}/files/lyrics/latest', { params: { path: { server_id: serverId } } })),
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/lyrics/latest', {
+          params: { path: { server_id: serverId }, query: { scope } },
+        }),
+      ),
+    refetchInterval:
+      scope === 'any'
+        ? (query) => {
+            const status = query.state.data?.status
+            return status === 'queued' || status === 'running' ? 5000 : 60_000
+          }
+        : false,
   })
 }

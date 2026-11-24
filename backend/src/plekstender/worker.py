@@ -55,6 +55,7 @@ from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
 from plekstender.tags.apply import run_change_set as run_tag_change_set
+from plekstender.tags.lyrics import close_edit as close_lyrics_edit
 from plekstender.tags.scan import run_scan as run_file_scan
 
 log = logging.getLogger(__name__)
@@ -910,6 +911,16 @@ async def cleanup_sessions(timestamp: int) -> None:
             )
             .values(status="failed", error="Interrupted (the worker stopped). Resume to continue.")
         )
+        # Lyrics lookups that wrote as they went: their edits are closed too (below).
+        stale_lyrics = list(
+            await db.scalars(
+                select(FileScan).where(
+                    FileScan.status == "running",
+                    FileScan.kind == "lyrics",
+                    FileScan.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
+                )
+            )
+        )
         await db.execute(
             update(FileScan)
             .where(
@@ -935,6 +946,9 @@ async def cleanup_sessions(timestamp: int) -> None:
             .values(status="failed", error="Interrupted (the worker stopped). Start it again.")
         )
         await db.commit()
+        for job in stale_lyrics:
+            if set_id := job.params.get("applied_set_id"):
+                await close_lyrics_edit(db, job, set_id)
     remove_old_uploads(get_settings(), dt.timedelta(days=1))
     trim_preview_cache(get_settings())
     remove_old_files(get_settings(), dt.timedelta(days=7))  # artwork exports and imports

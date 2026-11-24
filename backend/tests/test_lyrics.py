@@ -3,6 +3,7 @@ an edit (next to the songs and in their tags) that undo takes out again."""
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 from typing import Any
 
@@ -466,3 +467,196 @@ async def test_writing_lyrics_as_they_are_found(
     await look_up_lyrics.func(job_id=again["id"])
     assert len((await owner.get(f"{base}/changes")).json()) == 1
     assert (await owner.get(f"{base}/lyrics/{again['id']}")).json()["applied_set_id"] is None
+
+
+async def _library_with_lyrics(app: FastAPI, plex: FakePlex, folder: Path) -> tuple[Any, str]:
+    """Owner client and files base URL: LRCLIB has Paranoid Android (synced) and Karma Police
+    (plain); the music folder is scanned and may be written to."""
+    from plekstender.worker import scan_music_files
+
+    def get(request: httpx.Request) -> httpx.Response:
+        if request.url.params["track_name"] == "Paranoid Android":
+            return httpx.Response(200, json={"id": 1, "syncedLyrics": SYNCED})
+        return httpx.Response(404)
+
+    def search(request: httpx.Request) -> httpx.Response:
+        if request.url.params["track_name"] == "Karma Police (Live)":
+            return httpx.Response(200, json=[{"id": 2, "duration": 1, "plainLyrics": "Karma"}])
+        return httpx.Response(200, json=[])
+
+    plex.router.get(f"{LRCLIB}/api/get").mock(side_effect=get)
+    plex.router.get(f"{LRCLIB}/api/search").mock(side_effect=search)
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(folder)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    return owner, base
+
+
+@pytest.mark.db
+async def test_stopping_and_cancelling_a_lookup(
+    app: FastAPI,
+    plex: FakePlex,
+    music: Path,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import func, select, update
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import FileScan, TrackLyrics
+    from plekstender.worker import apply_tag_changes, look_up_lyrics
+
+    monkeypatch.setattr(lrclib, "INTERVAL", 0.0)
+    monkeypatch.setattr(lyrics_mod, "WRITE_BATCH", 1)
+    owner, base = await _library_with_lyrics(app, plex, music)
+    write = {"sidecar": True, "lyricsfile": False, "embedded": False, "overwrite": False}
+
+    async def found() -> int:
+        async with get_sessionmaker()() as db:
+            return int(await db.scalar(select(func.count()).select_from(TrackLyrics)) or 0)
+
+    # Stopped before it started (still queued): done straight away, nothing found.
+    queued = (await owner.post(f"{base}/lyrics", json={}, headers=CSRF)).json()
+    stopped = await owner.post(f"{base}/lyrics/{queued['id']}/stop", json={}, headers=CSRF)
+    assert (stopped.json()["status"], stopped.json()["error"]) == (
+        "failed",
+        lyrics_mod.STOP_MESSAGES["stop"],
+    )
+    await look_up_lyrics.func(job_id=queued["id"])  # the worker leaves it alone
+    assert await found() == 0
+    again = await owner.post(f"{base}/lyrics/{queued['id']}/stop", json={}, headers=CSRF)
+    assert again.status_code == 409  # not running
+
+    # Asked to stop while it runs: the worker stops before its next song, keeping what it found.
+    job = (await owner.post(f"{base}/lyrics", json={}, headers=CSRF)).json()
+    checks = 0
+    real_check = lyrics_mod._check_stop
+
+    async def stop_after_one(db: Any, job_id: int) -> None:
+        nonlocal checks
+        checks += 1
+        if checks == 2:  # the first song is looked up, then the page asks it to stop
+            await db.execute(
+                update(FileScan).where(FileScan.id == job_id).values(params={"stop": "stop"})
+            )
+            await db.commit()
+        await real_check(db, job_id)
+
+    monkeypatch.setattr(lyrics_mod, "_check_stop", stop_after_one)
+    await look_up_lyrics.func(job_id=job["id"])
+    plan = (await owner.get(f"{base}/lyrics/{job['id']}")).json()
+    assert (plan["job"]["status"], plan["job"]["error"]) == (
+        "failed",
+        lyrics_mod.STOP_MESSAGES["stop"],
+    )
+    assert await found() == 1  # kept
+
+    # Cancelled while writing as it goes, taking out what it wrote: what this run found is
+    # thrown away, and an undo edit takes the written lyrics out again.
+    monkeypatch.setattr(lyrics_mod, "_check_stop", real_check)
+    checks = 0
+
+    async def cancel_later(db: Any, job_id: int) -> None:
+        nonlocal checks
+        checks += 1
+        if checks == 6:
+            params = await db.scalar(select(FileScan.params).where(FileScan.id == job_id))
+            await db.execute(
+                update(FileScan)
+                .where(FileScan.id == job_id)
+                .values(params=params | {"stop": "undo"})
+            )
+            await db.commit()
+        await real_check(db, job_id)
+
+    monkeypatch.setattr(lyrics_mod, "_check_stop", cancel_later)
+    writing = (
+        await owner.post(f"{base}/lyrics", json={"write": write, "again": True}, headers=CSRF)
+    ).json()
+    await look_up_lyrics.func(job_id=writing["id"])
+    monkeypatch.setattr(lyrics_mod, "_check_stop", real_check)
+    plan = (await owner.get(f"{base}/lyrics/{writing['id']}")).json()
+    assert plan["job"]["error"] == lyrics_mod.STOP_MESSAGES["undo"]
+    assert (music / "300.lrc").exists()  # written before it was cancelled...
+    assert await found() == 0  # ...but what it found is gone
+    edits = (await owner.get(f"{base}/changes")).json()
+    assert [(e["kind"], e["status"]) for e in edits[:2]] == [
+        ("undo", "queued"),
+        ("edit", "applied"),
+    ]
+    await apply_tag_changes.func(set_id=edits[0]["id"])
+    assert not (music / "300.lrc").exists()  # ...and taken out again
+
+    # A lookup whose worker went away (a restart): stopping it is done by the app itself.
+    lost = (await owner.post(f"{base}/lyrics", json={"write": write}, headers=CSRF)).json()
+    await look_up_lyrics.func(job_id=lost["id"])
+    assert (music / "300.lrc").exists()
+    async with get_sessionmaker()() as db:
+        await db.execute(
+            update(FileScan)
+            .where(FileScan.id == lost["id"])
+            .values(
+                status="running",
+                updated_at=func.now() - dt.timedelta(hours=1),
+                started_at=func.now() - dt.timedelta(hours=2),
+            )
+        )
+        await db.commit()
+    cancel = await owner.post(
+        f"{base}/lyrics/{lost['id']}/stop", json={"cancel": True, "undo": True}, headers=CSRF
+    )
+    assert (cancel.json()["status"], cancel.json()["error"]) == (
+        "failed",
+        lyrics_mod.STOP_MESSAGES["undo"],
+    )
+    assert await found() == 0
+    [undo, *_] = (await owner.get(f"{base}/changes")).json()
+    assert undo["kind"] == "undo"
+    await apply_tag_changes.func(set_id=undo["id"])
+    assert not (music / "300.lrc").exists()
+
+    latest_any = (await owner.get(f"{base}/lyrics/latest", params={"scope": "any"})).json()
+    assert latest_any["id"] == lost["id"]
+
+
+@pytest.mark.db
+async def test_an_interrupted_lookup_closes_its_edit(
+    app: FastAPI,
+    plex: FakePlex,
+    music: Path,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import func, update
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import FileScan, TagChangeSet
+    from plekstender.worker import cleanup_sessions, look_up_lyrics
+
+    monkeypatch.setattr(lrclib, "INTERVAL", 0.0)
+    owner, base = await _library_with_lyrics(app, plex, music)
+    write = {"sidecar": True, "lyricsfile": False, "embedded": False, "overwrite": False}
+    job = (await owner.post(f"{base}/lyrics", json={"write": write}, headers=CSRF)).json()
+    await look_up_lyrics.func(job_id=job["id"])
+    set_id = (await owner.get(f"{base}/lyrics/{job['id']}")).json()["applied_set_id"]
+    # As if the worker had stopped halfway: the lookup and its edit left "running".
+    async with get_sessionmaker()() as db:
+        await db.execute(
+            update(FileScan)
+            .where(FileScan.id == job["id"])
+            .values(status="running", updated_at=func.now() - dt.timedelta(hours=1))
+        )
+        await db.execute(
+            update(TagChangeSet).where(TagChangeSet.id == set_id).values(status="running")
+        )
+        await db.commit()
+    await cleanup_sessions.func(timestamp=0)
+    plan = (await owner.get(f"{base}/lyrics/{job['id']}")).json()
+    assert plan["job"]["status"] == "failed"
+    [edit] = (await owner.get(f"{base}/changes")).json()
+    assert (edit["id"], edit["status"]) == (set_id, "applied")

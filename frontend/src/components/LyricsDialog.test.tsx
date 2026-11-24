@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { LyricsDialog } from './LyricsDialog'
@@ -34,6 +34,8 @@ beforeEach(() => {
         applied_set_id: null,
       })
     }
+    if (url.pathname === '/api/servers/1/files/lyrics/5/stop')
+      return json({ ...job, status: 'running' })
     if (url.pathname === '/api/servers/1/files/lyrics/5/apply')
       return json({ id: 9, kind: 'edit', description: 'Lyrics', status: 'queued', error: null, user: 'me', created_at: '2026-11-24T10:02:00Z', applied_at: null, total: 3, counts: { pending: 3 }, undoable: 0, changes: [] }, 201)
     return json({ detail: 'Not found' }, 404)
@@ -114,5 +116,34 @@ it('writes lyrics as they are found, as one edit', async () => {
     { albums: [], again: false, write: { sidecar: true, lyricsfile: true, embedded: false, overwrite: false } },
   ])
   expect(screen.getByText(/Lyrics are written as they're found, as one edit/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Write lyrics to/ })).not.toBeInTheDocument()
+
+  // Cancelling asks first, and can leave what it wrote in place.
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel…' }))
+  const confirm = await screen.findByRole('dialog', { name: 'Cancel the lookup?' })
+  expect(within(confirm).getByText('25 files so far, undone as one edit.')).toBeInTheDocument()
+  fireEvent.click(within(confirm).getByRole('checkbox', { name: /Take out the lyrics it wrote too/ }))
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel the lookup' }))
+  await vi.waitFor(async () => expect(await posted('/api/servers/1/files/lyrics/5/stop')).toEqual([{ cancel: true, undo: false }]))
+  expect(await screen.findByText('Cancelling…')).toBeInTheDocument()
+})
+
+it('stops a lookup, keeping what it found', async () => {
+  asFound = { running: true }
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <LyricsDialog serverId={1} albums={[]} canWrite onClose={() => {}} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Look up lyrics' }))
+  const stopButton = await screen.findByRole('button', { name: 'Stop' })
+  asFound = { running: false } // what the lookup says once it has stopped
+  fireEvent.click(stopButton)
+  await vi.waitFor(async () => expect(await posted('/api/servers/1/files/lyrics/5/stop')).toEqual([{ cancel: false, undo: true }]))
+  // Stopped: the lookup and where to write are offered again; no write-afterwards section
+  // while "as they're found" is ticked.
+  expect(await screen.findByRole('button', { name: 'Look up again' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Write lyrics to/ })).not.toBeInTheDocument()
 })

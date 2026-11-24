@@ -8,12 +8,14 @@ const job = (status: string, progress: object, stats: object = {}) => ({
   id: 7, kind: 'covers', status, progress, stats, error: null, created_at: '2026-11-21T12:00:00Z', finished_at: null, download: null,
 })  // prettier-ignore
 let jobs: unknown[] = []
+let lyrics: unknown = null
 const fetchMock = vi.fn(async (input: Request | string) => {
   const url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost')
   const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
   if (url.pathname === '/api/servers')
     return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
   if (url.pathname === '/api/servers/1/artwork/jobs') return json(jobs)
+  if (url.pathname === '/api/servers/1/files/lyrics/latest') return json(lyrics)
   if (url.pathname === '/api/notifications') return json({ items: [], unread: 0 })
   return new Response(null, { status: 204 })
 })
@@ -25,6 +27,7 @@ const jobsLoaded = async () => {
 
 beforeEach(() => {
   jobs = []
+  lyrics = null
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -50,7 +53,7 @@ describe('An artwork job in the bell', () => {
   it('shows how far a running job has got, then what it did', async () => {
     jobs = [job('running', { done: 3, total: 10 })]
     const qc = renderBell()
-    const bell = await screen.findByRole('button', { name: 'Notifications (an artwork job is running)' })
+    const bell = await screen.findByRole('button', { name: 'Notifications (a job is running)' })
     fireEvent.click(bell)
     expect(screen.getByText('Applying best album covers…')).toBeInTheDocument()
     expect(screen.getByText('3 / 10')).toBeInTheDocument()
@@ -76,5 +79,29 @@ describe('An artwork job in the bell', () => {
     await jobsLoaded()
     fireEvent.click(screen.getByRole('button', { name: 'Notifications' }))
     expect(screen.queryByText('Best album covers applied')).not.toBeInTheDocument()
+  })
+})
+
+describe('A lyrics lookup in the bell', () => {
+  const lookup = (status: string, progress: object, error: string | null = null) => ({
+    id: 4, status, progress, stats: {}, error, created_at: '2026-11-25T08:00:00Z', finished_at: null,
+  })  // prettier-ignore
+
+  it('shows how far it has got and what it wrote, then how it ended', async () => {
+    lyrics = lookup('running', { done: 400, total: 98840, looked_up: 300, written: 250 })
+    const qc = renderBell()
+    const bell = await screen.findByRole('button', { name: 'Notifications (a job is running)' })
+    fireEvent.click(bell)
+    expect(screen.getByText('Looking up lyrics…')).toBeInTheDocument()
+    expect(screen.getByText('400 / 98,840')).toBeInTheDocument()
+    expect(screen.getByText('250 files written so far')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/library/lyrics')
+    fireEvent.click(bell)
+
+    lyrics = lookup('failed', { done: 500, total: 98840 }, 'Stopped. What it found is kept, and what it wrote stays written.')
+    await qc.invalidateQueries()
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications: 1 new' }))
+    expect(screen.getByText('Lyrics lookup stopped')).toBeInTheDocument()
+    expect(screen.getByText(/What it found is kept/)).toBeInTheDocument()
   })
 })
