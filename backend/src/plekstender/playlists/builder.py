@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plekstender.history.insights import forgotten_keys
 from plekstender.playlists.definition import Definition
 from plekstender.sync.parse import normalise_artist
 
@@ -33,7 +34,8 @@ _SONGS = """
         LEFT JOIN albums al ON al.server_id = t.server_id AND al.rating_key = t.album_rating_key
         LEFT JOIN artists ar ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
         WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
-          AND (t.artist_rating_key = ANY(:artists) OR t.rating_key = ANY(:tracks))
+          AND (t.artist_rating_key = ANY(:artists) OR t.rating_key = ANY(:tracks)
+               OR t.rating_key = ANY(:found))
         WINDOW song AS (PARTITION BY t.artist_rating_key, t.title_norm)
     ),
     ranked AS (
@@ -83,6 +85,8 @@ async def matching_songs(
     db: AsyncSession, *, user_id: int, server_id: int, sections: list[str], d: Definition
 ) -> list[Song]:
     """Every song the definition selects (before the limit), most popular first."""
+    # Songs found by a rule rather than chosen (the rules still apply to them).
+    found = await forgotten_keys(db, user_id, server_id, sections) if d.forgotten else []
     rows = await db.execute(
         text(_SONGS),
         {
@@ -91,6 +95,7 @@ async def matching_songs(
             "sections": sections,
             "artists": d.artists,
             "tracks": d.tracks,
+            "found": found,
             "tags": d.rules.tags,
         },
     )

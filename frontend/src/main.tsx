@@ -26,8 +26,10 @@ import { PlaylistEditorPage, PlaylistsPage } from './pages/PlaylistsPage'
 import { RatePage } from './pages/RatePage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RatingsPage } from './pages/RatingsPage'
+import { RediscoverPage } from './pages/RediscoverPage'
 import { RewindPage } from './pages/RewindPage'
 import { ScoresPage } from './pages/ScoresPage'
+import { TastePage } from './pages/TastePage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
@@ -90,6 +92,8 @@ const router = createBrowserRouter([
           { path: 'scrobbles', element: <ListensPage /> },
           { path: 'listens', element: <Navigate to="/history/scrobbles" replace /> },
           { path: 'map', element: <MapPage /> },
+          { path: 'taste', element: <TastePage /> },
+          { path: 'rediscover', element: <RediscoverPage /> },
           { path: 'gigs', element: <Navigate to="/gigs/been-to" replace /> },
           { path: 'ratings', element: <RatingsPage /> },
           { path: 'scores', element: <ScoresPage /> },

@@ -37,6 +37,8 @@ export function HistoryLayout() {
           { to: '/history', label: 'Overview', end: true },
           { to: '/history/scrobbles', label: 'Scrobbles' },
           { to: '/history/map', label: 'Map' },
+          { to: '/history/taste', label: 'Taste' },
+          { to: '/history/rediscover', label: 'Rediscover' },
           { to: '/history/ratings', label: 'Ratings' },
           { to: '/history/scores', label: 'Scores' },
           { to: '/history/rewind', label: 'Rewind' },

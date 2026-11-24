@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import { api, unwrap, type Schemas } from '../api/client'
 import { useLiveSettings, useLiveShows } from '../api/live'
 import { useRated } from '../api/ratings'
-import { useStatsActivity, useStatsOverview } from '../api/stats'
+import { useOnThisDay, useStatsActivity, useStatsOverview } from '../api/stats'
 import { formatChange, formatCount, formatListeningTime } from '../format'
 import { ColumnChart } from './charts'
 import { GigRow } from './GigRow'
@@ -286,6 +286,69 @@ export function LatestRatings({ serverId }: { serverId: number }) {
                 {item.subtitle && <span className="block truncate text-xs text-muted">{item.subtitle}</span>}
               </span>
               <Stars rating={item.user_rating} className="shrink-0" />
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
+  )
+}
+
+function yearsAgo(year: number, now: number) {
+  const n = now - year
+  return n === 1 ? 'A year ago' : `${n} years ago`
+}
+
+/** What you played on today's date in earlier years (the last few years with listens). */
+export function OnThisDay({ serverId }: { serverId: number | null }) {
+  const day = useOnThisDay(serverId)
+  const years = day.data?.years.slice(0, 4) ?? []
+  if (years.length === 0) return null
+  const now = Number(day.data!.date.slice(0, 4))
+  return (
+    <Card title="On this day" className="md:col-span-2">
+      <ul className="grid gap-4 sm:grid-cols-2">
+        {years.map((y) => {
+          const [top] = y.tracks
+          return (
+            <li key={y.year} className="flex gap-3">
+              {serverId !== null && y.album_thumb ? (
+                <Link to={`/library/albums/${y.album_rating_key}`} className="shrink-0" title={y.album ?? undefined}>
+                  <Artwork serverId={serverId} path={y.album_thumb} title={y.album ?? ''} size={96} className="size-12" />
+                </Link>
+              ) : (
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-surface-2 font-display text-sm font-bold text-muted">
+                  {y.year}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm">
+                  <span className="font-semibold">{yearsAgo(y.year, now)}</span>{' '}
+                  <span className="text-muted">
+                    · {y.year} · {formatCount(y.listens)} {y.listens === 1 ? 'listen' : 'listens'}
+                  </span>
+                </p>
+                <p className="truncate text-sm">
+                  {y.artists.map((a, i) => (
+                    <span key={a.name}>
+                      {i > 0 && ', '}
+                      {a.rating_key !== null ? (
+                        <Link to={`/library/artists/${a.rating_key}`} className="hover:underline">
+                          {a.name}
+                        </Link>
+                      ) : (
+                        a.name
+                      )}
+                    </span>
+                  ))}
+                </p>
+                {top && (
+                  <p className="truncate text-xs text-muted">
+                    Most played: {top.name} by {top.artist}
+                    {top.listens > 1 ? ` (${top.listens}×)` : ''}
+                  </p>
+                )}
+              </div>
             </li>
           )
         })}

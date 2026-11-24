@@ -58,6 +58,39 @@ export function useSkipRate(serverId: number | null, range: string) {
   })
 }
 
+/** What you played on today's date in earlier years. */
+export function useOnThisDay(serverId: number | null) {
+  const tz = localTimeZone()
+  return useQuery({
+    queryKey: ['listens', 'stats', 'on-this-day', serverId, tz],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/stats/on-this-day', {
+          params: { query: { tz, ...(serverId !== null ? { server_id: serverId } : {}) } },
+        }),
+      ),
+  })
+}
+
+/** Genres and release decades per year you listened. */
+export function useTaste(serverId: number | null) {
+  const tz = localTimeZone()
+  return useQuery({
+    queryKey: ['listens', 'stats', 'taste', serverId, tz],
+    enabled: serverId !== null,
+    queryFn: () => unwrap(api.GET('/api/stats/taste', { params: { query: { server_id: serverId!, tz } } })),
+  })
+}
+
+/** Songs whose ratings and plays disagree. Under the library key (libraryKeys.library, not
+ * imported: library.ts imports this file), so rating one refreshes it. */
+export function useRediscover(serverId: number) {
+  return useQuery({
+    queryKey: ['servers', serverId, 'library', 'rediscover'],
+    queryFn: () => unwrap(api.GET('/api/stats/rediscover', { params: { query: { server_id: serverId } } })),
+  })
+}
+
 /** An area of the listens map: the whole world, a continent or a country. */
 export type MapArea =
   | { level: 'world' }

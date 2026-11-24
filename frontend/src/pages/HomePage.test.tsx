@@ -137,6 +137,25 @@ beforeEach(() => {
             items: [{ rating_key: 300, kind: "track", title: "Paranoid Android", subtitle: "Radiohead · OK Computer", thumb: null, user_rating: 9, rated_at: null, link_key: 200 }],
             total: 1,
           });
+        case "/api/stats/on-this-day":
+          return json({
+            date: "2026-11-24",
+            years: [
+              {
+                year: 2025,
+                listens: 34,
+                artists: [
+                  { name: "Radiohead", listens: 20, rating_key: 100, thumb: null },
+                  { name: "Unknown Band", listens: 4, rating_key: null, thumb: null },
+                ],
+                tracks: [{ name: "Airbag", artist: "Radiohead", listens: 5 }],
+                album: "OK Computer",
+                album_rating_key: 200,
+                album_thumb: null,
+              },
+              { year: 2021, listens: 1, artists: [{ name: "Portishead", listens: 1, rating_key: null, thumb: null }], tracks: [{ name: "Roads", artist: "Portishead", listens: 1 }], album: null, album_rating_key: null, album_thumb: null },
+            ],
+          });
         case "/api/live/settings":
           return json({ place_name: null, latitude: null, longitude: null });
         default:
@@ -202,4 +221,10 @@ it("shows your listening, top artists and albums, recent albums, gigs and rating
   // The site's star icons, with a half star (not "★★★★½").
   expect(screen.getByRole("img", { name: "4.5 out of 5 stars" })).toBeInTheDocument();
   expect(screen.queryByText("Coming up")).toBeNull();
+  // On this day, in earlier years.
+  const day = screen.getByRole("heading", { name: "On this day" }).closest("section")!;
+  expect(day.textContent).toMatch(/A year ago · 2025 · 34 listens/);
+  expect(day.textContent).toMatch(/5 years ago · 2021 · 1 listen(?!s)/);
+  expect(day.textContent).toMatch(/Most played: Airbag by Radiohead \(5×\)/);
+  expect(screen.getAllByRole("link", { name: "Radiohead" }).some((a) => a.getAttribute("href") === "/library/artists/100")).toBe(true);
 });

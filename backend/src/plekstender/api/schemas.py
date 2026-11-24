@@ -891,6 +891,80 @@ class SkipRateOut(BaseModel):
     artists: list[SkippedItemOut] = Field(description="Highest share of plays skipped first.")
 
 
+# --- looking back (on this day, taste over time, rediscover) -----------------------------
+
+
+class DayArtistOut(BaseModel):
+    name: str
+    listens: int
+    rating_key: int | None = Field(description="The library artist, when one matches.")
+    thumb: str | None
+
+
+class DayTrackOut(BaseModel):
+    name: str
+    artist: str
+    listens: int
+
+
+class DayYearOut(BaseModel):
+    year: int
+    listens: int
+    artists: list[DayArtistOut] = Field(description="The day's top 3.")
+    tracks: list[DayTrackOut] = Field(description="The day's top 5.")
+    album: str | None = Field(description="The day's most played album.")
+    album_rating_key: int | None
+    album_thumb: str | None
+
+
+class OnThisDayOut(BaseModel):
+    date: dt.date = Field(description="Today, in the time zone asked for.")
+    years: list[DayYearOut] = Field(description="Earlier years with listens on this date.")
+
+
+class ShareOut(BaseModel):
+    name: str
+    shares: list[float] = Field(description="Per year in `years`: the share of matched listens.")
+
+
+class TasteOut(BaseModel):
+    years: list[int]
+    listens: list[int] = Field(description="All listens per year.")
+    genres: list[ShareOut] = Field(description="The most played genres overall.")
+    genre_matched: list[int] = Field(description="Listens per year whose artist has a genre.")
+    decades: list[ShareOut] = Field(description="When the music played was released.")
+    decade_matched: list[int] = Field(description="Listens per year with a known release year.")
+    median_release: list[int | None] = Field(description="Median release year per year.")
+
+
+class RediscoverSongOut(BaseModel):
+    rating_key: int
+    title: str
+    artist: str | None
+    album: str | None
+    album_rating_key: int | None
+    thumb: str | None
+    rating: float | None
+    plays: int
+    last_played_at: dt.datetime | None
+
+
+class RediscoverListOut(BaseModel):
+    total: int
+    items: list[RediscoverSongOut]
+
+
+class RediscoverOut(BaseModel):
+    forgotten: RediscoverListOut = Field(description="Loved, but not played for a year.")
+    unplayed: RediscoverListOut = Field(description="Loved, but hardly ever played.")
+    disliked: RediscoverListOut = Field(description="Played a lot, but rated low.")
+    loved: int = Field(description="Ratings from this (0-10) count as loved.")
+    disliked_below: int = Field(description="Ratings up to this (0-10) count as low.")
+    forgotten_days: int
+    hardly_played: int = Field(description="At most this many plays is hardly played.")
+    played_a_lot: int = Field(description="At least this many plays is a lot.")
+
+
 # --- smart playlists ---------------------------------------------------------------------
 
 Schedule = Literal["manual", "daily", "weekly", "monthly"]

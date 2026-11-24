@@ -341,6 +341,114 @@ export function Heatmap({
   )
 }
 
+export type ShareRow = { name: string; shares: number[] }
+
+/**
+ * Rows (genres, decades) by columns (years), one hue from faint to full: each square is
+ * that row's share of the column. Hover or touch a square for its value.
+ */
+export function ShareGrid({
+  rows,
+  columns,
+  caption,
+  rowHeader,
+  note,
+}: {
+  rows: ShareRow[]
+  columns: string[]
+  caption: string
+  /** What the rows are, for the table view ("Genre"). */
+  rowHeader: string
+  /** More about a column for the readout, e.g. "of 1,204 listens with a genre". */
+  note?: (column: number) => string
+}) {
+  const [hover, setHover] = useState<[number, number] | null>(null)
+  const max = Math.max(0, ...rows.flatMap((r) => r.shares))
+  const percent = (share: number) => `${Math.round(share * 100)}%`
+  // About six year labels, always including the latest.
+  const every = Math.max(1, Math.ceil(columns.length / 6))
+  const labelled = (i: number) => (columns.length - 1 - i) % every === 0
+  const readout = hover
+    ? `${rows[hover[0]].name} · ${columns[hover[1]]}: ${percent(rows[hover[0]].shares[hover[1]])}${note ? ` ${note(hover[1])}` : ''}`
+    : 'Hover a square for details.'
+  return (
+    <div>
+      <div
+        className="grid gap-[2px]"
+        style={{ gridTemplateColumns: `minmax(4.5rem, 9rem) repeat(${columns.length}, minmax(0, 1fr))` }}
+        role="img"
+        aria-label={caption}
+        onMouseLeave={() => setHover(null)}
+      >
+        {rows.map((row, r) => (
+          <div key={row.name} className="contents">
+            <span className="truncate self-center pr-2 text-[11px] text-muted" title={row.name}>
+              {row.name}
+            </span>
+            {row.shares.map((share, c) => (
+              <span
+                key={c}
+                className="h-6 rounded-[3px] sm:h-7"
+                style={{
+                  background: cellColor(share, max),
+                  outline: hover?.[0] === r && hover?.[1] === c ? '2px solid var(--color-text)' : undefined,
+                }}
+                onMouseEnter={() => setHover([r, c])}
+                onTouchStart={() => setHover([r, c])}
+              />
+            ))}
+          </div>
+        ))}
+        <span />
+        {columns.map((label, c) => (
+          <span key={c} className="text-center text-[10px] whitespace-nowrap text-muted">
+            {labelled(c) ? label : ''}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+        <span aria-live="polite">{readout}</span>
+        <span className="flex items-center gap-1" aria-hidden>
+          Less
+          {[-1, ...LEVELS.keys()].map((level) => (
+            <span
+              key={level}
+              className="size-3 rounded-[3px]"
+              style={{ background: level < 0 ? 'var(--color-surface-2)' : levelColor(level) }}
+            />
+          ))}
+          More
+        </span>
+      </div>
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{rowHeader}</th>
+              {columns.map((label, c) => (
+                <th key={c} scope="col">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.name}>
+                <th scope="row">{row.name}</th>
+                {row.shares.map((share, c) => (
+                  <td key={c}>{percent(share)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 /** Single-series line over a soft area, for running totals (one hue, no legend: the card
  * title names it). Hover or touch shows a crosshair and the value. */
 export function AreaChart({

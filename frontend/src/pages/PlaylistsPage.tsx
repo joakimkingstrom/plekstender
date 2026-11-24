@@ -278,6 +278,8 @@ type Draft = {
   schedule: Schedule
   artists: SeedArtist[]
   tracks: SeedTrack[]
+  /** Also your forgotten favourites (found again at each refresh). */
+  forgotten: boolean
   minRating: number | null
   includeUnrated: boolean
   topPercent: number
@@ -291,7 +293,7 @@ type Draft = {
 
 type RuleTag = { id: number; name: string; kind: string }
 
-function draftFrom(p: PlaylistDetail | null): Draft {
+function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
   const d = p?.definition as Definition | undefined
   const display = (p?.display ?? {}) as { genres?: string[]; tags?: RuleTag[] }
   const ruleTags = d?.rules?.tags ?? []
@@ -301,6 +303,7 @@ function draftFrom(p: PlaylistDetail | null): Draft {
     schedule: p?.schedule ?? 'manual',
     artists: p?.seed_artists ?? [],
     tracks: p?.seed_tracks ?? [],
+    forgotten: d?.forgotten ?? forgotten,
     minRating: d?.rules?.min_rating ?? null,
     includeUnrated: d?.rules?.include_unrated ?? true,
     topPercent: d?.rules?.top_percent ?? 0,
@@ -314,10 +317,11 @@ function draftFrom(p: PlaylistDetail | null): Draft {
 }
 
 function definitionOf(draft: Draft): Definition | null {
-  if (draft.artists.length === 0 && draft.tracks.length === 0) return null
+  if (draft.artists.length === 0 && draft.tracks.length === 0 && !draft.forgotten) return null
   return {
     artists: draft.artists.map((a) => a.rating_key),
     tracks: draft.tracks.map((t) => t.rating_key),
+    forgotten: draft.forgotten,
     rules: {
       min_rating: draft.minRating,
       include_unrated: draft.includeUnrated,
@@ -332,7 +336,13 @@ function definitionOf(draft: Draft): Definition | null {
 
 function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDetail | null }) {
   const navigate = useNavigate()
-  const [draft, setDraft] = useState<Draft>(() => draftFrom(initial))
+  const [params] = useSearchParams()
+  // From History → Rediscover ("Make a playlist"): forgotten favourites, refreshed weekly.
+  const [draft, setDraft] = useState<Draft>(() => {
+    const fromRediscover = !initial && params.get('forgotten') === '1'
+    const start = draftFrom(initial, fromRediscover)
+    return fromRediscover ? { ...start, name: 'Forgotten favourites', schedule: 'weekly' } : start
+  })
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
   const definition = useDebounced(definitionOf(draft), 350)
   const save = useSavePlaylist(serverId, initial?.id ?? null)
@@ -362,7 +372,6 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
   const canSave = draft.name.trim().length > 0 && definitionOf(draft) !== null
 
   // From a tag page ("Make a playlist"): its top artists, only songs with the tag.
-  const [params] = useSearchParams()
   const started = useRef(false)
   const [startError, setStartError] = useState<string | null>(null)
   useEffect(() => {
@@ -394,6 +403,21 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
             setDraft((d) => (d.genres.includes(name) ? d : { ...d, genres: [...d.genres, name] }))
           }} />
           {startError && <Notice tone="error">{startError}</Notice>}
+          <label className="mt-4 flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={draft.forgotten}
+              onChange={(e) => set({ forgotten: e.target.checked })}
+            />
+            <span>
+              <span className="font-medium">Your forgotten favourites</span>
+              <span className="block text-xs text-muted">
+                Songs you rated 4½ stars or more but haven't played for a year. Found again at each refresh, so songs
+                you play drop out and new ones come in.
+              </span>
+            </span>
+          </label>
           <Chosen draft={draft} serverId={serverId} set={set} />
         </Card>
         {(draft.artists.length > 0 || draft.tracks.length > 0) && (
@@ -610,7 +634,7 @@ function Chip({ children, onRemove, label }: { children: ReactNode; onRemove: ()
 
 function Chosen({ draft, serverId, set }: { draft: Draft; serverId: number; set: (patch: Partial<Draft>) => void }) {
   if (draft.artists.length === 0 && draft.tracks.length === 0)
-    return <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
+    return draft.forgotten ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
   return (
     <div className="mt-4 space-y-3">
       {draft.artists.length > 0 && (

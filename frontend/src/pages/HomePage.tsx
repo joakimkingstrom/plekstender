@@ -4,6 +4,7 @@ import { useMe, useServers } from "../api/hooks";
 import { useActiveServer } from "../api/library";
 import {
   LatestRatings,
+  OnThisDay,
   RecentlyAdded,
   TopThisMonth,
   UpcomingGigs,
@@ -58,6 +59,7 @@ export function HomePage() {
           <YourListening serverId={libraryServer?.id ?? null} />
         </div>
         <TopThisMonth serverId={libraryServer?.id ?? null} />
+        <OnThisDay serverId={libraryServer?.id ?? null} />
         {libraryServer && <RecentlyAdded serverId={libraryServer.id} />}
         <UpcomingGigs serverId={libraryServer?.id ?? null} />
         {libraryServer && <LatestRatings serverId={libraryServer.id} />}

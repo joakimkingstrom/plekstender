@@ -927,6 +927,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stats/on-this-day": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * On This Day
+         * @description What you played on today's date in earlier years (artists linked to `server_id`).
+         */
+        get: operations["on_this_day_api_stats_on_this_day_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/taste": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taste
+         * @description Your genres and the decades your music is from, per year you listened.
+         */
+        get: operations["taste_api_stats_taste_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/rediscover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rediscover
+         * @description Songs whose ratings and plays disagree: loved but forgotten or hardly played, and
+         *     played a lot but rated low.
+         */
+        get: operations["rediscover_api_stats_rediscover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rewind": {
         parameters: {
             query?: never;
@@ -4883,6 +4944,55 @@ export interface components {
             /** Refresh Token */
             refresh_token: string;
         };
+        /** DayArtistOut */
+        DayArtistOut: {
+            /** Name */
+            name: string;
+            /** Listens */
+            listens: number;
+            /**
+             * Rating Key
+             * @description The library artist, when one matches.
+             */
+            rating_key: number | null;
+            /** Thumb */
+            thumb: string | null;
+        };
+        /** DayTrackOut */
+        DayTrackOut: {
+            /** Name */
+            name: string;
+            /** Artist */
+            artist: string;
+            /** Listens */
+            listens: number;
+        };
+        /** DayYearOut */
+        DayYearOut: {
+            /** Year */
+            year: number;
+            /** Listens */
+            listens: number;
+            /**
+             * Artists
+             * @description The day's top 3.
+             */
+            artists: components["schemas"]["DayArtistOut"][];
+            /**
+             * Tracks
+             * @description The day's top 5.
+             */
+            tracks: components["schemas"]["DayTrackOut"][];
+            /**
+             * Album
+             * @description The day's most played album.
+             */
+            album: string | null;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Album Thumb */
+            album_thumb: string | null;
+        };
         /** DecadeCount */
         DecadeCount: {
             /**
@@ -4902,6 +5012,12 @@ export interface components {
              * @description Always included, rules or not.
              */
             tracks?: number[];
+            /**
+             * Forgotten
+             * @description Also your forgotten favourites: songs rated 4½ stars or more that you haven't played for a year (picked again at each refresh; the rules still apply).
+             * @default false
+             */
+            forgotten: boolean;
             rules?: components["schemas"]["Rules"];
             /**
              * Limit
@@ -6660,6 +6776,20 @@ export interface components {
              */
             ids?: number[] | null;
         };
+        /** OnThisDayOut */
+        OnThisDayOut: {
+            /**
+             * Date
+             * Format: date
+             * @description Today, in the time zone asked for.
+             */
+            date: string;
+            /**
+             * Years
+             * @description Earlier years with listens on this date.
+             */
+            years: components["schemas"]["DayYearOut"][];
+        };
         /** PinCheckOut */
         PinCheckOut: {
             /**
@@ -7350,6 +7480,65 @@ export interface components {
             /** Added At */
             added_at: string | null;
         };
+        /** RediscoverListOut */
+        RediscoverListOut: {
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["RediscoverSongOut"][];
+        };
+        /** RediscoverOut */
+        RediscoverOut: {
+            /** @description Loved, but not played for a year. */
+            forgotten: components["schemas"]["RediscoverListOut"];
+            /** @description Loved, but hardly ever played. */
+            unplayed: components["schemas"]["RediscoverListOut"];
+            /** @description Played a lot, but rated low. */
+            disliked: components["schemas"]["RediscoverListOut"];
+            /**
+             * Loved
+             * @description Ratings from this (0-10) count as loved.
+             */
+            loved: number;
+            /**
+             * Disliked Below
+             * @description Ratings up to this (0-10) count as low.
+             */
+            disliked_below: number;
+            /** Forgotten Days */
+            forgotten_days: number;
+            /**
+             * Hardly Played
+             * @description At most this many plays is hardly played.
+             */
+            hardly_played: number;
+            /**
+             * Played A Lot
+             * @description At least this many plays is a lot.
+             */
+            played_a_lot: number;
+        };
+        /** RediscoverSongOut */
+        RediscoverSongOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string | null;
+            /** Album */
+            album: string | null;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Rating */
+            rating: number | null;
+            /** Plays */
+            plays: number;
+            /** Last Played At */
+            last_played_at: string | null;
+        };
         /** ReleasedAlbum */
         ReleasedAlbum: {
             /** Rating Key */
@@ -7907,6 +8096,16 @@ export interface components {
              */
             claimed: boolean;
         };
+        /** ShareOut */
+        ShareOut: {
+            /** Name */
+            name: string;
+            /**
+             * Shares
+             * @description Per year in `years`: the share of matched listens.
+             */
+            shares: number[];
+        };
         /** ShrinkCoversIn */
         ShrinkCoversIn: {
             /**
@@ -8367,6 +8566,41 @@ export interface components {
              * @description Undo all of an edit (any size).
              */
             set_id?: number | null;
+        };
+        /** TasteOut */
+        TasteOut: {
+            /** Years */
+            years: number[];
+            /**
+             * Listens
+             * @description All listens per year.
+             */
+            listens: number[];
+            /**
+             * Genres
+             * @description The most played genres overall.
+             */
+            genres: components["schemas"]["ShareOut"][];
+            /**
+             * Genre Matched
+             * @description Listens per year whose artist has a genre.
+             */
+            genre_matched: number[];
+            /**
+             * Decades
+             * @description When the music played was released.
+             */
+            decades: components["schemas"]["ShareOut"][];
+            /**
+             * Decade Matched
+             * @description Listens per year with a known release year.
+             */
+            decade_matched: number[];
+            /**
+             * Median Release
+             * @description Median release year per year.
+             */
+            median_release: (number | null)[];
         };
         /** TextLogo */
         TextLogo: {
@@ -10322,6 +10556,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlaceDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    on_this_day_api_stats_on_this_day_get: {
+        parameters: {
+            query?: {
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+                server_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnThisDayOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taste_api_stats_taste_get: {
+        parameters: {
+            query: {
+                server_id: number;
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rediscover_api_stats_rediscover_get: {
+        parameters: {
+            query: {
+                server_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RediscoverOut"];
                 };
             };
             /** @description Validation Error */

@@ -359,6 +359,8 @@ class UserItemState(Base):
     seen_at: Mapped[dt.datetime]
     # The user's listens from Plekstender's history (Plex plays + imports), matched by name.
     listens: Mapped[int] = mapped_column(default=0, server_default="0")
+    # Tracks: the user's latest listen in that history, matched the same way.
+    last_listened_at: Mapped[dt.datetime | None]
 
 
 class SyncRun(Base):
