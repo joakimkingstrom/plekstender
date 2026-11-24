@@ -1372,11 +1372,22 @@ class DuplicatesApplyIn(BaseModel):
     remove: list[int] = Field(min_length=1, max_length=5000, description="Files to take out.")
 
 
+class LyricsApplyIn(BaseModel):
+    sidecar: bool = Field(default=True, description="A .lrc (synced) or .txt next to each song.")
+    lyricsfile: bool = Field(default=False, description="A .lyricsfile.yaml next to each song.")
+    embedded: bool = Field(default=False, description="The plain lyrics in each song's tags.")
+    overwrite: bool = Field(default=False, description="Replace lyrics the files already have.")
+
+
 class LyricsLookupIn(BaseModel):
     albums: list[int] = Field(
         default_factory=list, max_length=1000, description="These albums; none: the library."
     )
     again: bool = Field(default=False, description="Look up songs looked up before as well.")
+    write: LyricsApplyIn | None = Field(
+        default=None,
+        description="Write lyrics as they're found (one edit), instead of after the lookup.",
+    )
 
 
 class LyricsSampleOut(BaseModel):
@@ -1410,13 +1421,6 @@ class LyricsPlanOut(BaseModel):
     songs: int = Field(description="Files that writing would change.")
     sample: list[LyricsSampleOut] = Field(description="The first 100 of them.")
     applied_set_id: int | None
-
-
-class LyricsApplyIn(BaseModel):
-    sidecar: bool = Field(default=True, description="A .lrc (synced) or .txt next to each song.")
-    lyricsfile: bool = Field(default=False, description="A .lyricsfile.yaml next to each song.")
-    embedded: bool = Field(default=False, description="The plain lyrics in each song's tags.")
-    overwrite: bool = Field(default=False, description="Replace lyrics the files already have.")
 
 
 class LyricsCoverageOut(BaseModel):

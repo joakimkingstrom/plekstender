@@ -358,7 +358,7 @@ async def test_a_library_bigger_than_a_query_can_list(
         assert (done.status, done.error, done.progress) == (
             "succeeded",
             None,
-            {"done": 0, "total": 0},
+            {"done": 0, "total": 0, "looked_up": 0, "written": 0},
         )
 
 
@@ -384,3 +384,85 @@ async def test_jobs_of_a_stopped_worker_are_closed(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(worker.app.job_manager, "finish_job", finish_job)
     await worker.close_stalled_jobs.func(timestamp=0)
     assert closed == [(7, Status.FAILED)]
+
+
+@pytest.mark.db
+async def test_writing_lyrics_as_they_are_found(
+    app: FastAPI,
+    plex: FakePlex,
+    music: Path,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A long lookup writes as it goes (one edit), so stopping halfway loses nothing."""
+    from plekstender.worker import look_up_lyrics, scan_music_files
+
+    monkeypatch.setattr(lrclib, "INTERVAL", 0.0)
+    monkeypatch.setattr(lyrics_mod, "WRITE_BATCH", 1)  # a batch per song
+    asked: list[str] = []
+
+    def get(request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.params["track_name"])
+        if request.url.params["track_name"] == "Paranoid Android":
+            body = {"id": 1, "syncedLyrics": SYNCED, "lyricsfile": WORDS, "hasWordSync": True}
+            return httpx.Response(200, json=body)
+        return httpx.Response(404)
+
+    def search(request: httpx.Request) -> httpx.Response:
+        if request.url.params["track_name"] == "Karma Police (Live)":
+            return httpx.Response(200, json=[{"id": 2, "duration": 1, "plainLyrics": "Karma"}])
+        return httpx.Response(200, json=[])
+
+    plex.router.get(f"{LRCLIB}/api/get").mock(side_effect=get)
+    plex.router.get(f"{LRCLIB}/api/search").mock(side_effect=search)
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    write = {"sidecar": True, "lyricsfile": True, "embedded": False, "overwrite": False}
+    # Writing needs file editing on, and somewhere to write.
+    off = await owner.post(f"{base}/lyrics", json={"write": write}, headers=CSRF)
+    assert off.status_code == 403
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    nowhere = {"sidecar": False, "lyricsfile": False, "embedded": False}
+    bad = await owner.post(f"{base}/lyrics", json={"write": nowhere}, headers=CSRF)
+    assert bad.status_code == 422
+
+    # Paranoid Android is looked up first, without writing...
+    first = (await owner.post(f"{base}/lyrics", json={"albums": [200]}, headers=CSRF)).json()
+    await look_up_lyrics.func(job_id=first["id"])
+    assert not (music / "300.lrc").exists()
+    assert asked == ["Paranoid Android", "Karma Police (Live)"]
+    asked.clear()
+
+    # ...then the whole library, writing as it goes: what was found before is written
+    # without asking LRCLIB again.
+    job = (await owner.post(f"{base}/lyrics", json={"write": write}, headers=CSRF)).json()
+    await look_up_lyrics.func(job_id=job["id"])
+    assert asked == []  # every song was looked up already (the demo has no artist)
+    assert (music / "300.lrc").read_text() == SYNCED + "\n"
+    assert (music / "300.lyricsfile.yaml").read_text() == WORDS
+    assert (music / "301.txt").read_text() == "Karma\n"
+    plan = (await owner.get(f"{base}/lyrics/{job['id']}")).json()
+    assert plan["job"]["status"] == "succeeded"
+    assert plan["job"]["progress"]["written"] == 3
+    [edit] = (await owner.get(f"{base}/changes")).json()
+    assert edit["id"] == plan["applied_set_id"]
+    assert edit["description"] == (
+        "Lyrics from LRCLIB (.lrc / .txt, .lyricsfile.yaml; library, as found)"
+    )
+    assert (edit["status"], edit["counts"]) == ("applied", {"applied": 3})
+    apply = await owner.post(f"{base}/lyrics/{job['id']}/apply", json=write, headers=CSRF)
+    assert apply.status_code == 409  # written already
+    assert (await owner.get(f"{base}/lyrics/coverage")).json()["word"] == 1
+
+    # Nothing new to write: no empty edit is left in the history.
+    again = (await owner.post(f"{base}/lyrics", json={"write": write}, headers=CSRF)).json()
+    await look_up_lyrics.func(job_id=again["id"])
+    assert len((await owner.get(f"{base}/changes")).json()) == 1
+    assert (await owner.get(f"{base}/lyrics/{again['id']}")).json()["applied_set_id"] is None

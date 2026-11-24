@@ -504,11 +504,17 @@ export const bulk = {
         params: { path: { server_id: serverId, job_id: jobId } },
       }),
     ),
-  lookUpLyrics: (serverId: number, albums: number[], again: boolean) =>
+  /** `write`: write lyrics as they're found (to these places), instead of after the lookup. */
+  lookUpLyrics: (
+    serverId: number,
+    albums: number[],
+    again: boolean,
+    write: (LyricsDestinations & { overwrite: boolean }) | null = null,
+  ) =>
     unwrap(
       api.POST('/api/servers/{server_id}/files/lyrics', {
         params: { path: { server_id: serverId } },
-        body: { albums, again },
+        body: { albums, again, write },
       }),
     ),
   findDuplicates: (serverId: number) =>

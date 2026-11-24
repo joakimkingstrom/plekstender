@@ -16,13 +16,22 @@ const DESTINATIONS: [keyof LyricsDestinations, string, string][] = [
   ['embedded', "In each song's tags", 'The lyrics as plain text, inside the file.'],
 ]
 
+type Progress = { done?: number; total?: number; looked_up?: number; written?: number }
+
 function songs(n: number) {
   return `${formatCount(n)} ${n === 1 ? 'song' : 'songs'}`
 }
 
+const history = (
+  <Link to="/settings/files" className="underline">
+    Settings → Music files
+  </Link>
+)
+
 /**
- * Lyrics for some albums or the whole library: looked up on LRCLIB (nothing written), then
- * written as one edit that can be undone. `jobId` continues an earlier lookup.
+ * Lyrics for some albums or the whole library from LRCLIB. Either written as they're found
+ * (one edit, written along the way: a long lookup that stops keeps what it wrote), or looked
+ * up first and written afterwards. Both can be undone. `jobId` continues an earlier lookup.
  */
 export function LyricsPanel({
   serverId,
@@ -37,6 +46,7 @@ export function LyricsPanel({
   jobId?: number | null
 }) {
   const [again, setAgain] = useState(false)
+  const [asFound, setAsFound] = useState(canWrite)
   const [jobId, setJobId] = useState<number | null>(startJob)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,13 +55,15 @@ export function LyricsPanel({
   const [written, setWritten] = useState<Schemas['TagChangeSetOut'] | null>(null)
   const [writing, setWriting] = useState(false)
   const plan = useLyricsPlan(serverId, jobId, to, overwrite)
+  const nowhere = !to.sidecar && !to.lyricsfile && !to.embedded
 
   const start = async () => {
     setStarting(true)
     setError(null)
     setWritten(null)
     try {
-      setJobId((await bulk.lookUpLyrics(serverId, albums, again)).id)
+      const write = asFound && canWrite ? { ...to, overwrite } : null
+      setJobId((await bulk.lookUpLyrics(serverId, albums, again, write)).id)
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -72,25 +84,80 @@ export function LyricsPanel({
 
   const p = plan.data
   const busy = p ? p.job.status === 'queued' || p.job.status === 'running' : jobId !== null
-  const progress = p?.job.progress as { done?: number; total?: number } | undefined
-  const nowhere = !to.sidecar && !to.lyricsfile && !to.embedded
+  const progress = p?.job.progress as Progress | undefined
+  // Written along the way (this lookup made its own edit), or afterwards from here.
+  const wroteAsFound = Boolean(p?.applied_set_id) && !written
+
+  const destinations = (
+    <div className="space-y-3">
+      <fieldset className="space-y-2">
+        <legend className="mb-1 font-medium">Where to write lyrics</legend>
+        {DESTINATIONS.map(([key, label, hint]) => (
+          <label key={key} className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={to[key]}
+              onChange={(e) => setTo((t) => ({ ...t, [key]: e.target.checked }))}
+            />
+            <span>
+              {label}
+              <span className="block text-xs text-muted">{hint}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />
+        Replace lyrics songs already have
+      </label>
+    </div>
+  )
   const lookUp = (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button variant={jobId === null ? 'primary' : 'secondary'} busy={starting} onClick={() => void start()}>
-        {jobId === null ? 'Look up lyrics' : 'Look up again'}
-      </Button>
+    <div className="space-y-3">
+      <label className={`flex items-start gap-2 ${canWrite ? '' : 'text-muted'}`}>
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          disabled={!canWrite}
+          checked={asFound && canWrite}
+          onChange={(e) => setAsFound(e.target.checked)}
+        />
+        <span>
+          Write lyrics as they're found
+          <span className="block text-xs text-muted">
+            One edit, written 50 songs at a time while the lookup runs: if it stops, what it found is written already.
+            Songs looked up before are written too, without asking LRCLIB again.
+          </span>
+        </span>
+      </label>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />
         Look again for songs looked up before
       </label>
+      <Button
+        variant={jobId === null ? 'primary' : 'secondary'}
+        busy={starting}
+        disabled={asFound && canWrite && nowhere}
+        onClick={() => void start()}
+      >
+        {jobId === null ? 'Look up lyrics' : 'Look up again'}
+      </Button>
     </div>
+  )
+  const writeOff = !canWrite && (
+    <Notice tone="warn">Writing to the files is off. Turn on tag editing on {history}.</Notice>
   )
 
   return (
     <div className="space-y-4 text-sm">
       {error && <Notice tone="error">{error}</Notice>}
       {jobId === null ? (
-        lookUp
+        <>
+          {destinations}
+          {writeOff}
+          {lookUp}
+        </>
       ) : !p ? (
         <Spinner />
       ) : (
@@ -98,7 +165,9 @@ export function LyricsPanel({
           {busy ? (
             <div>
               <p className="mb-1.5">
-                Looking up lyrics… {progress?.total ? `${formatCount(progress.done ?? 0)} of ${songs(progress.total)}` : ''}
+                {p.applied_set_id ? 'Looking up and writing lyrics…' : 'Looking up lyrics…'}{' '}
+                {progress?.total ? `${formatCount(progress.done ?? 0)} of ${songs(progress.total)}` : ''}
+                {p.applied_set_id && progress?.written ? ` · ${formatCount(progress.written)} files written` : ''}
               </p>
               <div className="h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
                 <div
@@ -132,37 +201,18 @@ export function LyricsPanel({
             {p.untagged > 0 && `; ${formatCount(p.untagged)} have no artist or title to look up`}.
           </p>
 
-          {written ? (
+          {wroteAsFound ? (
             <Notice>
-              Writing lyrics to {songs(p.songs)}. Undo it from the edit history on{' '}
-              <Link to="/settings/files" className="underline">
-                Settings → Music files
-              </Link>
-              .
+              {busy ? 'Lyrics are written as they\'re found' : `Written as they were found: ${formatCount(progress?.written ?? 0)} files`}
+              , as one edit. Undo it from the edit history on {history}.
+            </Notice>
+          ) : written ? (
+            <Notice>
+              Writing lyrics to {songs(p.songs)}. Undo it from the edit history on {history}.
             </Notice>
           ) : (
             <div className="space-y-3 border-t border-border pt-4">
-              <fieldset className="space-y-2">
-                <legend className="mb-1 font-medium">Write them</legend>
-                {DESTINATIONS.map(([key, label, hint]) => (
-                  <label key={key} className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={to[key]}
-                      onChange={(e) => setTo((t) => ({ ...t, [key]: e.target.checked }))}
-                    />
-                    <span>
-                      {label}
-                      <span className="block text-xs text-muted">{hint}</span>
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />
-                Replace lyrics songs already have
-              </label>
+              {destinations}
               <p>
                 {nowhere
                   ? 'Choose where to write them.'
@@ -194,15 +244,7 @@ export function LyricsPanel({
                   ))}
                 </ul>
               )}
-              {!canWrite && (
-                <Notice tone="warn">
-                  Writing to the files is off. Turn on tag editing on{' '}
-                  <Link to="/settings/files" className="underline">
-                    Settings → Music files
-                  </Link>
-                  .
-                </Notice>
-              )}
+              {writeOff}
               <Button
                 variant="primary"
                 disabled={!canWrite || busy || nowhere || p.songs === 0}
@@ -213,7 +255,12 @@ export function LyricsPanel({
               </Button>
             </div>
           )}
-          {!busy && <div className="border-t border-border pt-4">{lookUp}</div>}
+          {!busy && (
+            <div className="space-y-3 border-t border-border pt-4">
+              {(wroteAsFound || written) && destinations}
+              {lookUp}
+            </div>
+          )}
         </>
       )}
     </div>

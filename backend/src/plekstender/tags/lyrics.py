@@ -24,12 +24,20 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import httpx
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.config import Settings
-from plekstender.db.models import FileScan, MediaFile, PlexServer, TagChange, Track, TrackLyrics
+from plekstender.db.models import (
+    FileScan,
+    MediaFile,
+    PlexServer,
+    TagChange,
+    TagChangeSet,
+    Track,
+    TrackLyrics,
+)
 from plekstender.tags import embedded_lyrics, lrclib
 from plekstender.tags.lyrics_kinds import LYRICSFILE, SIDECARS, best, of_sidecar, of_text
 from plekstender.tags.lyrics_kinds import sidecar_path as sidecar
@@ -139,20 +147,47 @@ def _due(row: tuple[str, dt.datetime] | None, again: bool, now: dt.datetime) -> 
     return status in ("none", "untagged") and now - at > LOOK_AGAIN_AFTER
 
 
+WRITE_BATCH = 50  # songs written at a time while looking up
+
+
 async def run_lookup(
     db: AsyncSession, http: httpx.AsyncClient, settings: Settings, job_id: int
 ) -> None:
+    """Look up the job's songs on LRCLIB. With `params["write"]` (where to, whether to
+    replace), also write what's found as it goes: one edit for the whole job, changes
+    recorded and written 50 songs at a time, so a long lookup that stops has written what
+    it found so far. Songs looked up before are written too (without asking LRCLIB again)."""
     job = await db.get(FileScan, job_id)
     if job is None or job.status != "queued" or job.kind != "lyrics":
         return
     now = dt.datetime.now(dt.UTC)
     job.status, job.started_at, job.updated_at = "running", now, now
     await db.commit()
+    server: PlexServer | None = None
+    change_set: TagChangeSet | None = None
+    touched: set[tuple[int | None, str]] = set()
     try:
         server = await db.get(PlexServer, job.server_id)
         if server is None or not server.local_path_prefix:
             raise LookupStopped("Set up the music folder first (Settings → Music files).")
         root = await asyncio.to_thread(Path(server.local_path_prefix).resolve)
+        write = job.params.get("write")
+        if write:
+            if not server.tag_editing:
+                raise LookupStopped(
+                    'Turn on "Allow changing files" first (Settings → Music files).'
+                )
+            change_set = TagChangeSet(
+                server_id=server.id,
+                user_id=job.params.get("user_id"),
+                kind="edit",
+                description=describe(write, job.params.get("albums") or [], as_found=True),
+                status="running",
+            )
+            db.add(change_set)
+            await db.flush()
+            job.params = {**job.params, "applied_set_id": change_set.id}
+            await db.commit()
         files = await _scope(db, job.server_id, job.params)
         # By server, not by the files' ids: a library can have more files than a query can
         # take parameters (65,535).
@@ -167,29 +202,56 @@ async def run_lookup(
             ).all()
         }
         again = bool(job.params.get("again"))
-        todo = [f for f in files if _due(known.get(f.id), again, now)]
-        job.progress = {"done": 0, "total": len(todo)}
+        due = {f.id for f in files if _due(known.get(f.id), again, now)}
+        # Writing: every song (those found before are written as they come); else the due ones.
+        songs = files if change_set is not None else [f for f in files if f.id in due]
+        progress = {"done": 0, "total": len(songs), "looked_up": 0, "written": 0}
+        job.progress = dict(progress)
         await db.commit()
         errors = 0
-        for done, media in enumerate(todo, 1):
-            row, failed = await _look_up(http, settings, root, media)
-            errors = errors + 1 if failed else 0
-            stmt = insert(TrackLyrics).values(row)
-            await db.execute(
-                stmt.on_conflict_do_update(
-                    index_elements=["media_file_id"],
-                    set_={k: stmt.excluded[k] for k in row if k != "media_file_id"},
+        for start in range(0, len(songs), WRITE_BATCH if change_set is not None else 20):
+            batch = songs[start : start + (WRITE_BATCH if change_set is not None else 20)]
+            for media in batch:
+                if media.id not in due:
+                    continue
+                row, failed = await _look_up(http, settings, root, media)
+                errors = errors + 1 if failed else 0
+                stmt = insert(TrackLyrics).values(row)
+                await db.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=["media_file_id"],
+                        set_={k: stmt.excluded[k] for k in row if k != "media_file_id"},
+                    )
                 )
-            )
-            if errors >= MAX_ERRORS:
-                raise LookupStopped(
-                    f"Stopped: {row['error']} Songs looked up so far are kept; "
-                    "look again later for the rest."
+                progress["looked_up"] += 1
+                if errors >= MAX_ERRORS:
+                    raise LookupStopped(
+                        f"Stopped: {row['error']} Songs looked up so far are kept"
+                        + (" and written" if change_set is not None else "")
+                        + "; look again later for the rest."
+                    )
+            if change_set is not None:
+                assert write is not None
+                if not await _still_editable(db, server.id):
+                    raise LookupStopped(
+                        "Stopped: writing to the files was turned off. What was found so far "
+                        "is kept, and what was written is in the edit history."
+                    )
+                progress["written"] += await add_changes(
+                    db,
+                    change_set.id,
+                    server.id,
+                    list(job.params.get("albums") or []),
+                    _destinations(write),
+                    bool(write.get("overwrite")),
+                    file_ids=[m.id for m in batch],
                 )
-            if done % 20 == 0 or done == len(todo):
-                job.progress = {"done": done, "total": len(todo)}
-                job.updated_at = dt.datetime.now(dt.UTC)
                 await db.commit()
+                await apply_lyrics(db, root, server, change_set.id, touched)
+            progress["done"] += len(batch)
+            job.progress = dict(progress)
+            job.updated_at = dt.datetime.now(dt.UTC)
+            await db.commit()
         job.status = "succeeded"
     except Exception as exc:
         if not isinstance(exc, LookupStopped):
@@ -208,6 +270,76 @@ async def run_lookup(
         )
     job.finished_at = job.updated_at = dt.datetime.now(dt.UTC)
     await db.commit()
+    if change_set is not None and server is not None:
+        await _finish_edit(db, http, settings, server, job, change_set.id, touched)
+
+
+def _destinations(write: dict[str, Any]) -> Destinations:
+    return Destinations(
+        sidecar=bool(write.get("sidecar")),
+        lyricsfile=bool(write.get("lyricsfile")),
+        embedded=bool(write.get("embedded")),
+    )
+
+
+def describe(write: dict[str, Any], albums: list[Any], *, as_found: bool = False) -> str:
+    to = _destinations(write)
+    places = [
+        name
+        for name, chosen in (
+            (".lrc / .txt", to.sidecar),
+            (".lyricsfile.yaml", to.lyricsfile),
+            ("tags", to.embedded),
+        )
+        if chosen
+    ]
+    scope = f"{len(albums)} {'album' if len(albums) == 1 else 'albums'}" if albums else "library"
+    found = ", as found" if as_found else ""
+    return f"Lyrics from LRCLIB ({', '.join(places)}; {scope}{found})"
+
+
+async def _still_editable(db: AsyncSession, server_id: int) -> bool:
+    return bool(await db.scalar(select(PlexServer.tag_editing).where(PlexServer.id == server_id)))
+
+
+async def _finish_edit(
+    db: AsyncSession,
+    http: httpx.AsyncClient,
+    settings: Settings,
+    server: PlexServer,
+    job: FileScan,
+    set_id: int,
+    touched: set[tuple[int | None, str]],
+) -> None:
+    """Close the edit written along the way (dropped if it wrote nothing), and ask Plex to
+    rescan what changed."""
+    from plekstender.tags.apply import _tell_plex  # apply imports this module
+
+    change_set = await db.get(TagChangeSet, set_id)
+    if change_set is None:
+        return
+    rows = await db.execute(
+        select(TagChange.status, func.count())
+        .where(TagChange.change_set_id == set_id)
+        .group_by(TagChange.status)
+    )
+    counts: dict[str, int] = {status: n for status, n in rows.all()}
+    if not counts:
+        await db.delete(change_set)
+        job.params = {k: v for k, v in job.params.items() if k != "applied_set_id"}
+        await db.commit()
+        return
+    statuses = set(counts)
+    change_set.status = (
+        "applied"
+        if statuses == {"applied"}
+        else "failed"
+        if "applied" not in statuses
+        else "partial"
+    )
+    change_set.applied_at = change_set.updated_at = dt.datetime.now(dt.UTC)
+    await db.commit()
+    await _tell_plex(db, http, settings, server, touched)
 
 
 async def _look_up(
@@ -363,6 +495,7 @@ def _insert(field: str) -> Any:
         FROM media_files m
         JOIN track_lyrics l ON l.media_file_id = m.id
         WHERE {_SCOPE} AND {want}
+          AND (CAST(:ids AS bigint[]) IS NULL OR m.id = ANY(CAST(:ids AS bigint[])))
         ORDER BY m.path
         """  # noqa: S608 - constant SQL fragments
     )
@@ -397,9 +530,11 @@ async def add_changes(
     albums: list[int],
     to: Destinations,
     overwrite: bool,
+    file_ids: list[int] | None = None,
 ) -> int:
-    """Record the edit's changes (straight from the found lyrics). Returns how many."""
-    params = _params(server_id, albums, to, overwrite) | {"set_id": set_id}
+    """Record the edit's changes (straight from the found lyrics), for every song in scope or
+    just these. Returns how many."""
+    params = _params(server_id, albums, to, overwrite) | {"set_id": set_id, "ids": file_ids}
     added = 0
     for field in _WANT:
         result = await db.execute(_insert(field), params)

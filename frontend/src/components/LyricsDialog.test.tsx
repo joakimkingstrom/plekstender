@@ -7,14 +7,22 @@ import { LyricsDialog } from './LyricsDialog'
 const job = { id: 5, status: 'succeeded', progress: { done: 3, total: 3 }, stats: {}, error: null, created_at: '2026-11-24T10:00:00Z', finished_at: '2026-11-24T10:01:00Z' }
 
 let fetchMock: ReturnType<typeof vi.fn<(input: Request) => Promise<Response>>>
+let asFound: { running: boolean } | null = null
 
 beforeEach(() => {
+  asFound = null
   fetchMock = vi.fn<(input: Request) => Promise<Response>>(async (input: Request) => {
     const url = new URL(input.url)
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     if (url.pathname === '/api/servers/1/files/lyrics' && input.method === 'POST') return json({ ...job, status: 'queued' }, 201)
     if (url.pathname === '/api/servers/1/files/lyrics/5') {
       const tags = url.searchParams.get('embedded') === 'true'
+      if (asFound)
+        return json({
+          job: { ...job, status: asFound.running ? 'running' : 'succeeded', progress: { done: 40, total: 100, looked_up: 30, written: 25 } },
+          files: 100, looked_up: 40, synced: 20, word_synced: 5, plain: 5, instrumental: 0, none: 15, untagged: 0, errors: 0, had_lyrics: 0,
+          lrc: 0, txt: 0, lyricsfile: 0, lyrics: 0, songs: 0, sample: [], applied_set_id: 9,
+        })
       return json({
         job,
         files: 3, looked_up: 3, synced: 1, word_synced: 1, plain: 1, instrumental: 0, none: 1, untagged: 0, errors: 0, had_lyrics: 1,
@@ -49,10 +57,12 @@ it('looks up lyrics for the chosen albums, previews them and writes them as an e
     </QueryClientProvider>,
   )
   expect(screen.getByText(/From LRCLIB, for 2 albums/)).toBeInTheDocument()
+  // Looked up first, written afterwards.
+  fireEvent.click(screen.getByRole('checkbox', { name: /Write lyrics as they're found/ }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Look again for songs looked up before' }))
   fireEvent.click(screen.getByRole('button', { name: 'Look up lyrics' }))
   expect(await screen.findByText('Writing changes 2 songs: 1 .lrc, 1 .txt.')).toBeInTheDocument()
-  expect(await posted('/api/servers/1/files/lyrics')).toEqual([{ albums: [200, 201], again: true }])
+  expect(await posted('/api/servers/1/files/lyrics')).toEqual([{ albums: [200, 201], again: true, write: null }])
   expect(screen.getByText(/Of 3 songs; 1 already had lyrics/)).toBeInTheDocument()
   expect(screen.getByText('.txt · replaces lyrics it had · Karma police')).toBeInTheDocument()
   expect(screen.getByText('.lrc · word-synced · Please could you stop the noise')).toBeInTheDocument()
@@ -85,4 +95,24 @@ it("can't write while writing to files is off", async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Look up lyrics' }))
   expect(await screen.findByRole('button', { name: 'Write lyrics to 2 songs' })).toBeDisabled()
   expect(screen.getByText(/Writing to the files is off/)).toBeInTheDocument()
+})
+
+it('writes lyrics as they are found, as one edit', async () => {
+  asFound = { running: true }
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <LyricsDialog serverId={1} albums={[]} canWrite onClose={() => {}} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+  expect(screen.getByRole('checkbox', { name: /Write lyrics as they're found/ })).toBeChecked()
+  fireEvent.click(screen.getByRole('checkbox', { name: /Next to each song as a Lyricsfile/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Look up lyrics' }))
+  expect(await screen.findByText(/Looking up and writing lyrics… 40 of 100 songs · 25 files written/)).toBeInTheDocument()
+  expect(await posted('/api/servers/1/files/lyrics')).toEqual([
+    { albums: [], again: false, write: { sidecar: true, lyricsfile: true, embedded: false, overwrite: false } },
+  ])
+  expect(screen.getByText(/Lyrics are written as they're found, as one edit/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Write lyrics to/ })).not.toBeInTheDocument()
 })

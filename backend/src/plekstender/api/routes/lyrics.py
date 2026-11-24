@@ -55,19 +55,23 @@ async def lyrics_coverage(server_id: int, db: DbDep, user: UserDep) -> LyricsCov
 async def look_up_lyrics(
     server_id: int, body: LyricsLookupIn, db: DbDep, user: UserDep
 ) -> FileScanOut:
-    """Look up lyrics (in the worker) for the library or some albums. Nothing is written."""
+    """Look up lyrics (in the worker) for the library or some albums. Nothing is written,
+    unless `write` says where: then lyrics are written as they're found."""
     us = await owner_server(db, user, server_id)
     server = await db.get(PlexServer, us.server_id)
     if server is None or not server.local_path_prefix:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Set up the music folder first (Settings → Music files)."
         )
-    job = FileScan(
-        server_id=us.server_id,
-        kind="lyrics",
-        params={"albums": sorted(set(body.albums)), "again": body.again},
-        status="queued",
-    )
+    params: dict[str, object] = {"albums": sorted(set(body.albums)), "again": body.again}
+    if body.write is not None:
+        await _editable(db, user, server_id)
+        if not (body.write.sidecar or body.write.lyricsfile or body.write.embedded):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose where to write them."
+            )
+        params |= {"write": body.write.model_dump(), "user_id": user.id}
+    job = FileScan(server_id=us.server_id, kind="lyrics", params=params, status="queued")
     db.add(job)
     await db.commit()
     await db.refresh(job)
@@ -152,17 +156,7 @@ async def write_lyrics(
     if not added:
         await db.rollback()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nothing to write.")
-    places = [
-        name
-        for name, chosen in (
-            (".lrc / .txt", to.sidecar),
-            (".lyricsfile.yaml", to.lyricsfile),
-            ("tags", to.embedded),
-        )
-        if chosen
-    ]
-    scope = f"{len(albums)} {'album' if len(albums) == 1 else 'albums'}" if albums else "library"
-    change_set.description = f"Lyrics from LRCLIB ({', '.join(places)}; {scope})"
+    change_set.description = lyrics.describe(body.model_dump(), albums)
     job.params = {**job.params, "applied_set_id": change_set.id}
     await db.commit()
     await enqueue_tag_changes(change_set)

@@ -2614,7 +2614,8 @@ export interface paths {
         put?: never;
         /**
          * Look Up Lyrics
-         * @description Look up lyrics (in the worker) for the library or some albums. Nothing is written.
+         * @description Look up lyrics (in the worker) for the library or some albums. Nothing is written,
+         *     unless `write` says where: then lyrics are written as they're found.
          */
         post: operations["look_up_lyrics_api_servers__server_id__files_lyrics_post"];
         delete?: never;
@@ -7022,6 +7023,8 @@ export interface components {
              * @default false
              */
             again: boolean;
+            /** @description Write lyrics as they're found (one edit), instead of after the lookup. */
+            write?: components["schemas"]["LyricsApplyIn"] | null;
         };
         /** LyricsPlanOut */
         LyricsPlanOut: {

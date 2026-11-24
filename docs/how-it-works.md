@@ -445,6 +445,9 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **Library → Lyrics** (server owners): a ring chart of the songs by kind of lyrics (one amber hue from plain to word-synced, neutrals for instrumental and none; the share with lyrics in the middle), and the lyrics lookup for the whole library (continuing the last one). Tag editing keeps the lookup for selected albums. Where to write lyrics is now any of: .lrc/.txt, a Lyricsfile, the tags.
 - **Library → Stats → Types of file**: the library's songs by file extension (from Plex's file paths, so for everyone), the four most common in the categorical slots and the rest as "Other" (listed underneath).
 
+## Writing lyrics as they're found (25 Nov)
+- A lyrics lookup can be started with `write` (where to write, whether to replace): it then opens one edit (`applied_set_id` on the job, description "…, as found") and goes through every song in scope 50 at a time, asking LRCLIB only for those due a lookup and writing each batch straight away (`add_changes` limited to the batch's files, then `apply_lyrics`). Songs looked up by earlier runs are written without asking again, so an interrupted run loses nothing: starting again carries on. The edit is closed at the end (applied / partial / failed; dropped when it wrote nothing) and Plex is asked to rescan once. Turning file editing off stops it. Without `write`, it's the lookup-then-write flow as before.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what
