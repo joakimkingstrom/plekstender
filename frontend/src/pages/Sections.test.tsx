@@ -53,7 +53,7 @@ describe('Library and Gigs', () => {
     renderAt('/library/playlists')
     expect(await screen.findByRole('link', { name: 'Artwork' })).toHaveAttribute('href', '/library/artwork')
     const tabs = screen.getByRole('navigation', { name: 'Library' })
-    expect([...tabs.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Library', 'Stats', 'Playlists', 'Rate', 'Discover', 'Artwork', 'Tag editing'])
+    expect([...tabs.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Library', 'Stats', 'Playlists', 'Rate', 'Releases', 'Discover', 'Artwork', 'Tag editing'])
     expect(screen.getByRole('link', { name: 'Playlists' })).toHaveAttribute('aria-current', 'page')
   })
 
