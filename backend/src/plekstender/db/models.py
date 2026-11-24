@@ -771,6 +771,19 @@ class ArtistReleaseCheck(Base):
     found: Mapped[bool] = mapped_column(default=True)
 
 
+class HiddenSong(Base):
+    """A song someone doesn't want in History -> Rediscover (or its forgotten favourites
+    playlist). Any release of the song hides it."""
+
+    __tablename__ = "hidden_songs"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "server_id", "rating_key"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    rating_key: Mapped[int] = mapped_column(BigInteger)
+    hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
 class HiddenRelease(Base):
     """A release group someone doesn't want to see in Library -> Releases."""
 

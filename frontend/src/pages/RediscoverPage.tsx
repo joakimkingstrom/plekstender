@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useActiveServer } from '../api/library'
 import { useRate } from '../api/ratings'
-import { useRediscover } from '../api/stats'
+import { useHideSong, useRediscover } from '../api/stats'
 import { Artwork } from '../components/library'
 import { StarRating } from '../components/StarRating'
-import { Card, Notice, Spinner } from '../components/ui'
+import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatDate } from '../format'
 
 type Song = Schemas['RediscoverSongOut']
@@ -24,9 +24,10 @@ function stars(rating: number) {
 
 function SongRow({ song, serverId }: { song: Song; serverId: number }) {
   const rate = useRate(serverId)
+  const hide = useHideSong(serverId)
   const detail = [plays(song.plays), song.last_played_at ? `last ${formatDate(song.last_played_at)}` : 'never played']
   return (
-    <li className="flex items-center gap-3">
+    <li className={`flex items-center gap-3 ${song.hidden ? 'opacity-50' : ''}`}>
       <Artwork serverId={serverId} path={song.thumb} title={song.album ?? song.title} size={96} className="size-10 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
@@ -48,6 +49,16 @@ function SongRow({ song, serverId }: { song: Song; serverId: number }) {
         disabled={rate.isPending}
         onChange={(rating) => rate.mutate({ rating_key: song.rating_key, rating })}
       />
+      <Button
+        variant="ghost"
+        size="xs"
+        className="w-20 shrink-0"
+        busy={hide.isPending}
+        onClick={() => hide.mutate({ ratingKey: song.rating_key, hide: !song.hidden })}
+        aria-label={`${song.hidden ? 'Show' : 'Hide'} ${song.title}`}
+      >
+        {song.hidden ? 'Show again' : 'Hide'}
+      </Button>
     </li>
   )
 }
@@ -99,7 +110,8 @@ export function RediscoverPage() {
 }
 
 function Lists({ serverId }: { serverId: number }) {
-  const found = useRediscover(serverId)
+  const [includeHidden, setIncludeHidden] = useState(false)
+  const found = useRediscover(serverId, includeHidden)
   if (found.isPending) return <Spinner />
   if (found.isError) return <Notice tone="error">{errorMessage(found.error)}</Notice>
   const r = found.data
@@ -108,8 +120,13 @@ function Lists({ serverId }: { serverId: number }) {
     <div className="space-y-4">
       <p className="text-sm text-muted">
         Songs where your ratings and your plays disagree: either the rating is wrong, or the song is worth finding again.
-        Change a rating here and the song leaves the list. Plays include your whole history, imports too.
+        Change a rating here and the song leaves the list, or hide it if you'd rather not see it (it's left out of the
+        forgotten favourites playlist too). Plays include your whole history, imports too.
       </p>
+      <label className="flex items-center gap-2 text-sm text-muted">
+        <input type="checkbox" checked={includeHidden} onChange={(e) => setIncludeHidden(e.target.checked)} />
+        Show hidden songs
+      </label>
       <SongList
         title="Forgotten favourites"
         intro={`Rated ${loved} or more, but not played for a year.`}

@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from './client'
 
 /** The viewer's IANA time zone, so days and hours in stats are local. */
@@ -87,10 +87,28 @@ export function useTaste(serverId: number | null, kind: TasteKind = 'genre') {
 
 /** Songs whose ratings and plays disagree. Under the library key (libraryKeys.library, not
  * imported: library.ts imports this file), so rating one refreshes it. */
-export function useRediscover(serverId: number) {
+export function useRediscover(serverId: number, includeHidden = false) {
   return useQuery({
-    queryKey: ['servers', serverId, 'library', 'rediscover'],
-    queryFn: () => unwrap(api.GET('/api/stats/rediscover', { params: { query: { server_id: serverId } } })),
+    queryKey: ['servers', serverId, 'library', 'rediscover', includeHidden],
+    queryFn: () =>
+      unwrap(api.GET('/api/stats/rediscover', { params: { query: { server_id: serverId, include_hidden: includeHidden } } })),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Hide a song from Rediscover (and the forgotten favourites playlist), or show it again. */
+export function useHideSong(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ratingKey, hide }: { ratingKey: number; hide: boolean }) => {
+      const params = { path: { rating_key: ratingKey }, query: { server_id: serverId } }
+      return unwrap(
+        hide
+          ? api.PUT('/api/stats/rediscover/hidden/{rating_key}', { params })
+          : api.DELETE('/api/stats/rediscover/hidden/{rating_key}', { params }),
+      )
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['servers', serverId, 'library', 'rediscover'] }),
   })
 }
 

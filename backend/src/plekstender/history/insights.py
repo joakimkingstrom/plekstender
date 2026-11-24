@@ -369,11 +369,13 @@ class RediscoverSong:
     rating: float | None
     plays: int
     last_played_at: dt.datetime | None
+    hidden: bool = False
 
 
 # One row per song: releases of the same song (by artist and normalised title) count
-# together, shown as the best-rated release. Plays: Plex's count or the whole history's,
-# whichever is higher (the history includes Plex's plays, when they were captured).
+# together, shown as the best-rated release; hidden when any of them was hidden. Plays:
+# Plex's count or the whole history's, whichever is higher (the history includes Plex's
+# plays, when they were captured).
 _SONGS = """
     WITH songs AS (
         SELECT (array_agg(t.rating_key ORDER BY s.user_rating DESC NULLS LAST,
@@ -381,11 +383,14 @@ _SONGS = """
                max(s.user_rating) AS rating,
                greatest(sum(s.view_count), max(s.listens))::int AS plays,
                greatest(max(s.last_viewed_at), max(s.last_listened_at)) AS last_played_at,
-               max(t.popularity) AS popularity
+               max(t.popularity) AS popularity,
+               bool_or(h.rating_key IS NOT NULL) AS hidden
         FROM tracks t
         JOIN user_item_state s
           ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
         LEFT JOIN albums al ON al.server_id = t.server_id AND al.rating_key = t.album_rating_key
+        LEFT JOIN hidden_songs h
+          ON h.user_id = :user_id AND h.server_id = t.server_id AND h.rating_key = t.rating_key
         WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
         GROUP BY t.artist_rating_key, t.title_norm
     )
@@ -432,12 +437,14 @@ async def rediscover(
     kind: RediscoverKind,
     limit: int = 20,
     now: dt.datetime | None = None,
+    include_hidden: bool = False,
 ) -> tuple[list[RediscoverSong], int]:
-    """Songs in one of the Rediscover lists, and how many there are in all."""
+    """Songs in one of the Rediscover lists, and how many there are in all (hidden ones only
+    when asked for)."""
     where, order = _REDISCOVER_WHERE[kind]
     query = text(
         f"""{_SONGS}
-        SELECT so.rating_key, so.rating, so.plays, so.last_played_at,
+        SELECT so.rating_key, so.rating, so.plays, so.last_played_at, so.hidden,
                t.title, coalesce(t.original_title, ar.title) AS artist,
                al.title AS album, al.rating_key AS album_rating_key, al.thumb,
                count(*) OVER () AS total
@@ -445,13 +452,15 @@ async def rediscover(
         JOIN tracks t ON t.server_id = :server_id AND t.rating_key = so.rating_key
         LEFT JOIN albums al ON al.server_id = t.server_id AND al.rating_key = t.album_rating_key
         LEFT JOIN artists ar ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
-        WHERE {where}
+        WHERE {where} AND (:include_hidden OR NOT so.hidden)
         ORDER BY {order}
         LIMIT :limit
         """  # noqa: S608 - constant SQL fragments
     )
     params = _params(user_id, server_id, sections, now or dt.datetime.now(dt.UTC))
-    rows = (await db.execute(query, params | {"limit": limit})).all()
+    rows = (
+        await db.execute(query, params | {"limit": limit, "include_hidden": include_hidden})
+    ).all()
     songs = [
         RediscoverSong(
             rating_key=r.rating_key,
@@ -463,6 +472,7 @@ async def rediscover(
             rating=r.rating,
             plays=r.plays,
             last_played_at=r.last_played_at,
+            hidden=r.hidden,
         )
         for r in rows
     ]
@@ -476,8 +486,38 @@ async def forgotten_keys(
     sections: list[str],
     now: dt.datetime | None = None,
 ) -> list[int]:
-    """Every forgotten favourite (one release per song), for the playlist source."""
+    """Every forgotten favourite (one release per song), for the playlist source; not the
+    ones hidden from Rediscover."""
     where, _ = _REDISCOVER_WHERE["forgotten"]
-    query = text(f"{_SONGS} SELECT so.rating_key FROM songs so WHERE {where}")  # noqa: S608
+    query = text(f"{_SONGS} SELECT so.rating_key FROM songs so WHERE {where} AND NOT so.hidden")  # noqa: S608
     params = _params(user_id, server_id, sections, now or dt.datetime.now(dt.UTC))
     return list((await db.scalars(query, params)).all())
+
+
+async def hide_song(
+    db: AsyncSession, user_id: int, server_id: int, rating_key: int, hide: bool
+) -> None:
+    """Hide a song from Rediscover, or show it again (every release of it). Caller commits."""
+    if hide:
+        await db.execute(
+            text(
+                "INSERT INTO hidden_songs (user_id, server_id, rating_key)"
+                " VALUES (:user_id, :server_id, :rating_key) ON CONFLICT DO NOTHING"
+            ),
+            {"user_id": user_id, "server_id": server_id, "rating_key": rating_key},
+        )
+        return
+    await db.execute(
+        text(
+            """
+            DELETE FROM hidden_songs h
+            USING tracks t, tracks song
+            WHERE h.user_id = :user_id AND h.server_id = :server_id
+              AND t.server_id = :server_id AND t.rating_key = h.rating_key
+              AND song.server_id = :server_id AND song.rating_key = :rating_key
+              AND t.artist_rating_key IS NOT DISTINCT FROM song.artist_rating_key
+              AND t.title_norm = song.title_norm
+            """
+        ),
+        {"user_id": user_id, "server_id": server_id, "rating_key": rating_key},
+    )

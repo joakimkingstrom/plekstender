@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { RediscoverPage } from './RediscoverPage'
@@ -14,20 +14,24 @@ const song = (rating_key: number, title: string, extra: object) => ({
   rating: 10,
   plays: 0,
   last_played_at: null,
+  hidden: false,
   ...extra,
 })
 
+let fetchMock: ReturnType<typeof vi.fn<(input: Request) => Promise<Response>>>
+
 beforeEach(() => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (input: Request) => {
-      const path = new URL(input.url).pathname
+  fetchMock = vi.fn<(input: Request) => Promise<Response>>(async (input: Request) => {
+      const url = new URL(input.url)
+      const path = url.pathname
+      if (path.startsWith('/api/stats/rediscover/hidden/')) return new Response(null, { status: 204 })
+      const hiddenToo = url.searchParams.get('include_hidden') === 'true'
       const body: Record<string, unknown> = {
         '/api/servers': [{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }],
         '/api/stats/rediscover': {
           forgotten: { total: 41, items: [song(304, 'Glory Box', { plays: 12, last_played_at: '2024-03-01T12:00:00Z' })] },
           unplayed: { total: 1, items: [song(303, 'Lucky', { rating: 9, artist: 'Radiohead' })] },
-          disliked: { total: 0, items: [] },
+          disliked: hiddenToo ? { total: 1, items: [song(301, 'Karma Police', { rating: 2, plays: 9, hidden: true })] } : { total: 0, items: [] },
           loved: 9,
           disliked_below: 4,
           forgotten_days: 365,
@@ -39,8 +43,8 @@ beforeEach(() => {
         status: path in body ? 200 : 404,
         headers: { 'content-type': 'application/json' },
       })
-    }),
-  )
+    })
+  vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => {
   cleanup()
@@ -70,4 +74,16 @@ it('lists songs whose ratings and plays disagree, with a playlist for the forgot
   const disliked = screen.getByRole('heading', { name: 'Played a lot, rated low' }).closest('section')!
   expect(within(disliked).getByText('Rated 2 stars or less, but played 5 times or more.')).toBeInTheDocument()
   expect(within(disliked).getByText('None: what you play a lot, you rate well.')).toBeInTheDocument()
+
+  // Hiding a song; hidden ones can be listed, and shown again.
+  fireEvent.click(within(forgotten).getByRole('button', { name: 'Hide Glory Box' }))
+  await vi.waitFor(() =>
+    expect(fetchMock.mock.calls.some(([r]) => r.method === 'PUT' && new URL(r.url).pathname === '/api/stats/rediscover/hidden/304')).toBe(true),
+  )
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Show hidden songs' }))
+  const show = await within(disliked).findByRole('button', { name: 'Show Karma Police' })
+  fireEvent.click(show)
+  await vi.waitFor(() =>
+    expect(fetchMock.mock.calls.some(([r]) => r.method === 'DELETE' && new URL(r.url).pathname === '/api/stats/rediscover/hidden/301')).toBe(true),
+  )
 })

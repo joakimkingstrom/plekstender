@@ -976,6 +976,7 @@ class RediscoverSongOut(BaseModel):
     rating: float | None
     plays: int
     last_played_at: dt.datetime | None
+    hidden: bool = Field(description="Hidden from Rediscover (only listed when asked for).")
 
 
 class RediscoverListOut(BaseModel):

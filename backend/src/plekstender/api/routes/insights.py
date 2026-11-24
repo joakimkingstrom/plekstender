@@ -88,15 +88,19 @@ async def taste(
 
 
 @router.get("/rediscover", response_model=RediscoverOut)
-async def rediscover(db: DbDep, user: UserDep, server_id: int) -> RediscoverOut:
+async def rediscover(
+    db: DbDep, user: UserDep, server_id: int, include_hidden: bool = False
+) -> RediscoverOut:
     """Songs whose ratings and plays disagree: loved but forgotten or hardly played, and
-    played a lot but rated low."""
+    played a lot but rated low. Songs you've hidden only with `include_hidden`."""
     us = await get_user_server(db, user, server_id)
     sections = list(us.music_section_keys)
     lists: dict[str, RediscoverListOut] = {}
     kinds: tuple[insights.RediscoverKind, ...] = ("forgotten", "unplayed", "disliked")
     for kind in kinds:
-        songs, total = await insights.rediscover(db, user.id, us.server_id, sections, kind)
+        songs, total = await insights.rediscover(
+            db, user.id, us.server_id, sections, kind, include_hidden=include_hidden
+        )
         lists[kind] = RediscoverListOut(
             total=total, items=[RediscoverSongOut(**asdict(s)) for s in songs]
         )
@@ -110,3 +114,19 @@ async def rediscover(db: DbDep, user: UserDep, server_id: int) -> RediscoverOut:
         hardly_played=insights.HARDLY_PLAYED,
         played_a_lot=insights.PLAYED_A_LOT,
     )
+
+
+@router.put("/rediscover/hidden/{rating_key}", status_code=status.HTTP_204_NO_CONTENT)
+async def hide_song(db: DbDep, user: UserDep, server_id: int, rating_key: int) -> None:
+    """Hide a song from Rediscover (and the forgotten favourites playlist)."""
+    us = await get_user_server(db, user, server_id)
+    await insights.hide_song(db, user.id, us.server_id, rating_key, hide=True)
+    await db.commit()
+
+
+@router.delete("/rediscover/hidden/{rating_key}", status_code=status.HTTP_204_NO_CONTENT)
+async def show_song(db: DbDep, user: UserDep, server_id: int, rating_key: int) -> None:
+    """Show a hidden song in Rediscover again (whichever release of it was hidden)."""
+    us = await get_user_server(db, user, server_id)
+    await insights.hide_song(db, user.id, us.server_id, rating_key, hide=False)
+    await db.commit()

@@ -999,12 +999,36 @@ export interface paths {
         /**
          * Rediscover
          * @description Songs whose ratings and plays disagree: loved but forgotten or hardly played, and
-         *     played a lot but rated low.
+         *     played a lot but rated low. Songs you've hidden only with `include_hidden`.
          */
         get: operations["rediscover_api_stats_rediscover_get"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/rediscover/hidden/{rating_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Hide Song
+         * @description Hide a song from Rediscover (and the forgotten favourites playlist).
+         */
+        put: operations["hide_song_api_stats_rediscover_hidden__rating_key__put"];
+        post?: never;
+        /**
+         * Show Song
+         * @description Show a hidden song in Rediscover again (whichever release of it was hidden).
+         */
+        delete: operations["show_song_api_stats_rediscover_hidden__rating_key__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -8180,6 +8204,11 @@ export interface components {
             plays: number;
             /** Last Played At */
             last_played_at: string | null;
+            /**
+             * Hidden
+             * @description Hidden from Rediscover (only listed when asked for).
+             */
+            hidden: boolean;
         };
         /** ReleaseArtistOut */
         ReleaseArtistOut: {
@@ -11387,6 +11416,7 @@ export interface operations {
         parameters: {
             query: {
                 server_id: number;
+                include_hidden?: boolean;
             };
             header?: never;
             path?: never;
@@ -11402,6 +11432,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RediscoverOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hide_song_api_stats_rediscover_hidden__rating_key__put: {
+        parameters: {
+            query: {
+                server_id: number;
+            };
+            header?: never;
+            path: {
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    show_song_api_stats_rediscover_hidden__rating_key__delete: {
+        parameters: {
+            query: {
+                server_id: number;
+            };
+            header?: never;
+            path: {
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

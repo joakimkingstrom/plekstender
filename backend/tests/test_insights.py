@@ -14,7 +14,7 @@ from plekstender.db.models import Tag, UserItemState
 from plekstender.history.lastfm import Scrobble
 from plekstender.history.listen_counts import refresh_listen_counts
 from plekstender.history.store import insert_listens, scrobble_row
-from tests.fakes import FakePlex
+from tests.fakes import CSRF, FakePlex
 from tests.test_playlists import keys, preview
 from tests.test_sync import owner_with_library
 
@@ -178,3 +178,28 @@ async def test_rediscover_and_forgotten_playlist(app: FastAPI, plex: FakePlex) -
     async with get_sessionmaker()() as db:
         rock = await db.scalar(select(Tag.id).where(Tag.kind == "genre", Tag.name == "Rock"))
     assert keys(await preview(owner, sid, forgotten=True, rules={"tags": [rock]})) == []
+
+    # Hidden songs leave Rediscover and the playlist, and can be shown again.
+    hidden = f"/api/stats/rediscover/hidden/{{}}?server_id={sid}"
+    assert (await owner.put(hidden.format(304), headers=CSRF)).status_code == 204
+    assert (await owner.put(hidden.format(304), headers=CSRF)).status_code == 204  # still hidden
+    after = (await owner.get("/api/stats/rediscover", params={"server_id": sid})).json()
+    assert after["forgotten"] == {"total": 0, "items": []}
+    assert keys(await preview(owner, sid, forgotten=True)) == []
+    listed = (
+        await owner.get("/api/stats/rediscover", params={"server_id": sid, "include_hidden": True})
+    ).json()
+    assert [(s["title"], s["hidden"]) for s in listed["forgotten"]["items"]] == [
+        ("Glory Box", True)
+    ]
+    # Hiding any release hides the song; showing any release shows it again.
+    await owner.put(hidden.format(302), headers=CSRF)  # Karma Police (Remastered)
+    after = (await owner.get("/api/stats/rediscover", params={"server_id": sid})).json()
+    assert after["disliked"]["items"] == []
+    assert (await owner.delete(hidden.format(301), headers=CSRF)).status_code == 204
+    await owner.delete(hidden.format(304), headers=CSRF)
+    back = (await owner.get("/api/stats/rediscover", params={"server_id": sid})).json()
+    assert [s["title"] for s in back["disliked"]["items"]] == ["Karma Police"]
+    assert [s["title"] for s in back["forgotten"]["items"]] == ["Glory Box"]
+    other = await owner.put(f"/api/stats/rediscover/hidden/304?server_id={sid + 9}", headers=CSRF)
+    assert other.status_code == 404
