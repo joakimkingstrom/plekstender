@@ -9,10 +9,10 @@ from fastapi import FastAPI
 from sqlalchemy import select, update
 
 from plekstender.db import get_sessionmaker
-from plekstender.db.models import Album
+from plekstender.db.models import Album, Track
 from plekstender.library_stats import words
-from tests.fakes import SERVER_URI, FakePlex
-from tests.test_sync import owner_with_library
+from tests.fakes import SERVER_URI, FakePlex, sign_in
+from tests.test_sync import connect, owner_with_library, run_queued_syncs
 
 pytestmark = pytest.mark.db
 
@@ -242,3 +242,23 @@ async def test_recently_added(app: FastAPI, plex: FakePlex) -> None:
     ]
     artists = (await owner.get(base, params={"kind": "artist"})).json()
     assert [a["title"] for a in artists] == ["Secret Band", "Portishead", "Radiohead"]
+
+
+@pytest.mark.db
+async def test_file_types(app: FastAPI, plex: FakePlex) -> None:
+    owner, sid = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        await db.execute(update(Track).where(Track.rating_key == 303).values(file_path="/m/x.MP3"))
+        await db.execute(update(Track).where(Track.rating_key == 304).values(file_path=None))
+        await db.commit()
+    types = (await owner.get(f"/api/servers/{sid}/library/stats/file-types")).json()
+    assert types == [
+        {"format": "flac", "tracks": 4},
+        {"format": "", "tracks": 1},
+        {"format": "mp3", "tracks": 1},
+    ]
+    friend, _ = await sign_in(app, plex, "friend-token")
+    friend_sid = await connect(friend)
+    await run_queued_syncs()
+    seen = (await friend.get(f"/api/servers/{friend_sid}/library/stats/file-types")).json()
+    assert sum(t["tracks"] for t in seen) == 5  # the hidden Secret Song isn't counted

@@ -869,6 +869,10 @@ class MediaFile(Base):
     # The Plex track this file is (matched by its path), if any.
     rating_key: Mapped[int | None] = mapped_column(BigInteger)
     error: Mapped[str | None] = mapped_column(Text)
+    # Lyrics in its tags, and the best it has anywhere (a .lrc, .txt or .lyricsfile.yaml next
+    # to it too): word | synced | plain | instrumental, None: none (see tags/lyrics_kinds.py).
+    embedded_lyrics: Mapped[str | None] = mapped_column(String(12))
+    lyrics: Mapped[str | None] = mapped_column(String(12))
 
 
 class NfoFile(Base):
@@ -947,9 +951,13 @@ class TrackLyrics(Base):
     status: Mapped[str] = mapped_column(String(16))
     synced: Mapped[str | None] = mapped_column(Text)  # LRC, with [mm:ss.xx] times
     plain: Mapped[str | None] = mapped_column(Text)
+    # LRCLIB's Lyricsfile (YAML), and whether it times each word.
+    lyricsfile: Mapped[str | None] = mapped_column(Text)
+    word_synced: Mapped[bool] = mapped_column(default=False, server_default="false")
     lrclib_id: Mapped[int | None] = mapped_column(BigInteger)
     existing_lrc: Mapped[str | None] = mapped_column(Text)
     existing_txt: Mapped[str | None] = mapped_column(Text)
+    existing_lyricsfile: Mapped[str | None] = mapped_column(Text)
     existing_embedded: Mapped[str | None] = mapped_column(Text)
     # Whether lyrics can be written into this file's tags (MP3, FLAC, Ogg, MP4 / M4A).
     embeddable: Mapped[bool] = mapped_column(default=False)

@@ -1,5 +1,10 @@
 """LRCLIB (lrclib.net): free, open lyrics, many of them synced to the music. No key needed.
 
+LRCLIB asks for no more than about 90 requests a minute from an app that names itself in its
+User-Agent, so requests wait their turn (one every 0.7 s, shared by all lookups).
+
+Every answer has a Lyricsfile (YAML, possibly word-synced) as well as LRC and plain text.
+
 A song is looked up by artist, title, album and length (LRCLIB matches the length to within
 a couple of seconds); when that finds nothing, by a search on artist and title, taking a
 result about as long as the file. Requests carry a generic User-Agent, nothing about the
@@ -9,6 +14,7 @@ person using Plekstender.
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,6 +25,11 @@ from plekstender import __version__
 USER_AGENT = f"Plekstender/{__version__} (self-hosted music library tool)"
 LENGTH_SLACK = 3  # seconds a search result's length may differ from the file's
 MAX_LYRICS = 100_000  # characters: anything longer isn't lyrics
+MAX_LYRICSFILE = 1_000_000  # word timings make these bigger
+INTERVAL = 0.7  # seconds between requests (LRCLIB's limit for identified apps)
+
+_lock = asyncio.Lock()
+_last = 0.0
 
 
 class LrclibError(Exception):
@@ -31,12 +42,15 @@ class Found:
     synced: str | None
     plain: str | None
     instrumental: bool
+    lyricsfile: str | None = None
+    word_synced: bool = False
 
 
 def _found(data: dict[str, Any]) -> Found | None:
     synced = (data.get("syncedLyrics") or "").strip()[:MAX_LYRICS] or None
     plain = (data.get("plainLyrics") or "").strip()[:MAX_LYRICS] or None
     instrumental = bool(data.get("instrumental"))
+    lyricsfile = (data.get("lyricsfile") or "").strip()[:MAX_LYRICSFILE] or None
     if not (synced or plain or instrumental):
         return None
     raw_id = data.get("id")
@@ -45,12 +59,20 @@ def _found(data: dict[str, Any]) -> Found | None:
         synced=synced,
         plain=plain,
         instrumental=instrumental and not (synced or plain),
+        lyricsfile=lyricsfile,
+        word_synced=bool(data.get("hasWordSync")) and lyricsfile is not None,
     )
 
 
 async def _get(http: httpx.AsyncClient, base: str, path: str, params: dict[str, str]) -> Any | None:
     """JSON from LRCLIB; None for "not found". Retries once after a pause when it's busy."""
+    global _last
     for attempt in range(2):
+        async with _lock:
+            wait = _last + INTERVAL - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            _last = time.monotonic()
         try:
             resp = await http.get(
                 f"{base.rstrip('/')}{path}",

@@ -388,6 +388,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/stats/file-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * File Types
+         * @description The library's songs by type of file (their extension, as Plex has the files), most
+         *     first.
+         */
+        get: operations["file_types_api_servers__server_id__library_stats_file_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/stats/seen-live": {
         parameters: {
             query?: never;
@@ -2536,6 +2557,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/lyrics/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lyrics Coverage
+         * @description How many of the music folder's songs have which kind of lyrics (as of the last scan
+         *     or lyrics edit).
+         */
+        get: operations["lyrics_coverage_api_servers__server_id__files_lyrics_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/lyrics": {
         parameters: {
             query?: never;
@@ -2556,6 +2598,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/lyrics/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest Lookup
+         * @description The last lyrics lookup for the whole library, if there's been one.
+         */
+        get: operations["latest_lookup_api_servers__server_id__files_lyrics_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/lyrics/{job_id}": {
         parameters: {
             query?: never;
@@ -2565,7 +2627,7 @@ export interface paths {
         };
         /**
          * Lyrics Plan
-         * @description What's been found so far, and what writing it would change.
+         * @description What's been found so far, and what writing it (to these places) would change.
          */
         get: operations["lyrics_plan_api_servers__server_id__files_lyrics__job_id__get"];
         put?: never;
@@ -5432,6 +5494,16 @@ export interface components {
             /** Finished At */
             finished_at: string | null;
         };
+        /** FileTypeCount */
+        FileTypeCount: {
+            /**
+             * Format
+             * @description The file extension, lower case ("flac"); "" when unknown.
+             */
+            format: string;
+            /** Tracks */
+            tracks: number;
+        };
         /** FilesSummaryOut */
         FilesSummaryOut: {
             /**
@@ -6850,17 +6922,67 @@ export interface components {
         /** LyricsApplyIn */
         LyricsApplyIn: {
             /**
-             * Placement
-             * @default sidecar
-             * @enum {string}
+             * Sidecar
+             * @description A .lrc (synced) or .txt next to each song.
+             * @default true
              */
-            placement: "sidecar" | "embedded" | "both";
+            sidecar: boolean;
+            /**
+             * Lyricsfile
+             * @description A .lyricsfile.yaml next to each song.
+             * @default false
+             */
+            lyricsfile: boolean;
+            /**
+             * Embedded
+             * @description The plain lyrics in each song's tags.
+             * @default false
+             */
+            embedded: boolean;
             /**
              * Overwrite
              * @description Replace lyrics the files already have.
              * @default false
              */
             overwrite: boolean;
+        };
+        /** LyricsCoverageOut */
+        LyricsCoverageOut: {
+            /**
+             * Files
+             * @description Music files in the folder.
+             */
+            files: number;
+            /**
+             * Word
+             * @description With lyrics timed word by word.
+             */
+            word: number;
+            /**
+             * Synced
+             * @description With lyrics timed line by line.
+             */
+            synced: number;
+            /**
+             * Plain
+             * @description With lyrics without times.
+             */
+            plain: number;
+            /**
+             * Instrumental
+             * @description Marked as instrumental (a Lyricsfile says so).
+             */
+            instrumental: number;
+            /**
+             * None
+             * @description Without lyrics.
+             */
+            none: number;
+            /**
+             * Unchecked
+             * @description Not looked at since lyrics were counted (scan again).
+             */
+            unchecked: number;
         };
         /** LyricsLookupIn */
         LyricsLookupIn: {
@@ -6888,6 +7010,11 @@ export interface components {
             looked_up: number;
             /** Synced */
             synced: number;
+            /**
+             * Word Synced
+             * @description Of the synced ones, those timed word by word.
+             */
+            word_synced: number;
             /**
              * Plain
              * @description Found without times.
@@ -6919,6 +7046,11 @@ export interface components {
             lrc: number;
             /** Txt */
             txt: number;
+            /**
+             * Lyricsfile
+             * @description .lyricsfile.yaml files writing would make or replace.
+             */
+            lyricsfile: number;
             /**
              * Lyrics
              * @description Files whose tags would get lyrics.
@@ -6953,6 +7085,16 @@ export interface components {
              * @description A .txt (plain lyrics) is written next to it.
              */
             txt: boolean;
+            /**
+             * Lyricsfile
+             * @description A .lyricsfile.yaml is written next to it.
+             */
+            lyricsfile: boolean;
+            /**
+             * Word Synced
+             * @description The lyrics found time each word.
+             */
+            word_synced: boolean;
             /**
              * Lyrics
              * @description The lyrics are written into its tags.
@@ -10127,6 +10269,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumColourOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    file_types_api_servers__server_id__library_stats_file_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTypeCount"][];
                 };
             };
             /** @description Validation Error */
@@ -13985,6 +14158,37 @@ export interface operations {
             };
         };
     };
+    lyrics_coverage_api_servers__server_id__files_lyrics_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LyricsCoverageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     look_up_lyrics_api_servers__server_id__files_lyrics_post: {
         parameters: {
             query?: never;
@@ -14020,10 +14224,43 @@ export interface operations {
             };
         };
     };
+    latest_lookup_api_servers__server_id__files_lyrics_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     lyrics_plan_api_servers__server_id__files_lyrics__job_id__get: {
         parameters: {
             query?: {
-                placement?: "sidecar" | "embedded" | "both";
+                sidecar?: boolean;
+                lyricsfile?: boolean;
+                embedded?: boolean;
                 overwrite?: boolean;
             };
             header?: never;

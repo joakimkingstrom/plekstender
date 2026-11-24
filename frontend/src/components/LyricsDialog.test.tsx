@@ -14,14 +14,14 @@ beforeEach(() => {
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     if (url.pathname === '/api/servers/1/files/lyrics' && input.method === 'POST') return json({ ...job, status: 'queued' }, 201)
     if (url.pathname === '/api/servers/1/files/lyrics/5') {
-      const both = url.searchParams.get('placement') === 'both'
+      const tags = url.searchParams.get('embedded') === 'true'
       return json({
         job,
-        files: 3, looked_up: 3, synced: 1, plain: 1, instrumental: 0, none: 1, untagged: 0, errors: 0, had_lyrics: 1,
-        lrc: 1, txt: 1, lyrics: both ? 1 : 0, songs: 2,
+        files: 3, looked_up: 3, synced: 1, word_synced: 1, plain: 1, instrumental: 0, none: 1, untagged: 0, errors: 0, had_lyrics: 1,
+        lrc: 1, txt: 1, lyricsfile: 0, lyrics: tags ? 1 : 0, songs: 2,
         sample: [
-          { path: 'Radiohead/OK Computer/02 Paranoid Android.flac', status: 'synced', lrc: true, txt: false, lyrics: both, had_lyrics: false, preview: 'Please could you stop the noise\nI am trying to get some rest' },
-          { path: 'Radiohead/OK Computer/06 Karma Police.flac', status: 'plain', lrc: false, txt: true, lyrics: false, had_lyrics: true, preview: 'Karma police' },
+          { path: 'Radiohead/OK Computer/02 Paranoid Android.flac', status: 'synced', lrc: true, txt: false, lyricsfile: false, word_synced: true, lyrics: tags, had_lyrics: false, preview: 'Please could you stop the noise\nI am trying to get some rest' },
+          { path: 'Radiohead/OK Computer/06 Karma Police.flac', status: 'plain', lrc: false, txt: true, lyricsfile: false, word_synced: false, lyrics: false, had_lyrics: true, preview: 'Karma police' },
         ],
         applied_set_id: null,
       })
@@ -55,12 +55,22 @@ it('looks up lyrics for the chosen albums, previews them and writes them as an e
   expect(await posted('/api/servers/1/files/lyrics')).toEqual([{ albums: [200, 201], again: true }])
   expect(screen.getByText(/Of 3 songs; 1 already had lyrics/)).toBeInTheDocument()
   expect(screen.getByText('.txt · replaces lyrics it had · Karma police')).toBeInTheDocument()
+  expect(screen.getByText('.lrc · word-synced · Please could you stop the noise')).toBeInTheDocument()
+  expect(screen.getByText('Word-synced').nextElementSibling).toHaveTextContent('1')
 
-  fireEvent.click(screen.getByRole('button', { name: 'Both' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /In each song's tags/ }))
   expect(await screen.findByText('Writing changes 2 songs: 1 .lrc, 1 .txt, 1 in tags.')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Write lyrics to 2 songs' }))
+  // Nowhere to write: nothing to do.
+  fireEvent.click(screen.getByRole('checkbox', { name: /Next to each song as \.lrc or \.txt/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /In each song's tags/ }))
+  expect(await screen.findByText('Choose where to write them.')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('checkbox', { name: /Next to each song as \.lrc or \.txt/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /In each song's tags/ }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Write lyrics to 2 songs' }))
   expect(await screen.findByText(/Writing lyrics to 2 songs\. Undo it from the edit history/)).toBeInTheDocument()
-  expect(await posted('/api/servers/1/files/lyrics/5/apply')).toEqual([{ placement: 'both', overwrite: false }])
+  expect(await posted('/api/servers/1/files/lyrics/5/apply')).toEqual([
+    { sidecar: true, lyricsfile: false, embedded: true, overwrite: false },
+  ])
 })
 
 it("can't write while writing to files is off", async () => {

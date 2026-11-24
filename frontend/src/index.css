@@ -19,6 +19,20 @@
   --color-ok: #3ccf91;
   --color-warn: #f5c451;
   --color-danger: #f0616d;
+  /* Categorical chart slots, in this order (validated: adjacent pairs, colour-blind safe,
+     >= 3:1 against the surface), and a neutral "Other". */
+  --color-series-1: #3987e5;
+  --color-series-2: #d95926;
+  --color-series-3: #199e70;
+  --color-series-4: #c98500;
+  --color-series-other: #6b6a66;
+  /* Kinds of lyrics: one hue, plain -> synced -> word-synced (validated as an ordinal ramp),
+     and neutrals for instrumental and none. */
+  --color-lyrics-plain: #7d5a2c;
+  --color-lyrics-synced: #b98238;
+  --color-lyrics-word: #f2ad45;
+  --color-lyrics-instrumental: #8b8a85;
+  --color-lyrics-none: #3d3e45;
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Bricolage Grotesque', var(--font-sans);
 }
@@ -38,6 +52,16 @@
   --color-ok: #198754;
   --color-warn: #a86b00;
   --color-danger: #c62f3c;
+  --color-series-1: #2a78d6;
+  --color-series-2: #eb6834;
+  --color-series-3: #1baf7a;
+  --color-series-4: #eda100;
+  --color-series-other: #b5b3ad;
+  --color-lyrics-plain: #e09a45;
+  --color-lyrics-synced: #b86c12;
+  --color-lyrics-word: #7a4708;
+  --color-lyrics-instrumental: #9a978f;
+  --color-lyrics-none: #d9d6ce;
 }
 
 html {

@@ -1,14 +1,15 @@
 """Lyrics for music files (server owners): looked up on LRCLIB by the worker, then written as
 an edit (previewed first, undoable) next to each song, as `.lrc` (synced to the music) or
-`.txt` (plain), which Plex and Plexamp read, and/or into the file's tags.
+`.txt` (plain), which Plex and Plexamp read, as a Lyricsfile (`.lyricsfile.yaml`, word-synced
+when LRCLIB has that), and/or into the file's tags.
 
 A lookup job (`FileScan`, kind "lyrics") covers the whole library or some albums. For each
 file it records in `track_lyrics` what LRCLIB has and which lyrics the file already has, so
 the preview and the edit can be worked out without touching the music folder.
 
-Changes use three fields: "lrc" and "txt" (the file next to the song; the change's `path`
-is that file) and "lyrics" (in the song's tags). Their old and new values are the text
-(None: no lyrics), checked before anything is replaced, as for tags.
+Changes use four fields: "lrc", "txt" and "lyricsfile" (the file next to the song; the
+change's `path` is that file) and "lyrics" (in the song's tags). Their old and new values
+are the text (None: no lyrics), checked before anything is replaced, as for tags.
 """
 
 from __future__ import annotations
@@ -18,8 +19,9 @@ import datetime as dt
 import logging
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 from sqlalchemy import select, text, update
@@ -29,16 +31,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from plekstender.config import Settings
 from plekstender.db.models import FileScan, MediaFile, PlexServer, TagChange, Track, TrackLyrics
 from plekstender.tags import embedded_lyrics, lrclib
+from plekstender.tags.lyrics_kinds import LYRICSFILE, SIDECARS, best, of_sidecar, of_text
+from plekstender.tags.lyrics_kinds import sidecar_path as sidecar
 from plekstender.tags.rename import MoveError, _within
 
 log = logging.getLogger(__name__)
 
-FIELDS = ("lrc", "txt", "lyrics")
-PAUSE = 0.2  # seconds between LRCLIB lookups (it asks for no more than that)
+FIELDS = ("lrc", "txt", "lyricsfile", "lyrics")
 MAX_ERRORS = 5  # LRCLIB errors in a row before the job stops (the rest wait for next time)
 LOOK_AGAIN_AFTER = dt.timedelta(days=30)  # songs LRCLIB didn't have
-MAX_TEXT = 100_000
-Placement = Literal["sidecar", "embedded", "both"]
+MAX_TEXT = 1_000_000  # a word-synced Lyricsfile is long
+
+
+@dataclass(frozen=True)
+class Destinations:
+    """Where lyrics are written."""
+
+    sidecar: bool = True  # .lrc (synced) or .txt (plain) next to the song
+    lyricsfile: bool = False  # .lyricsfile.yaml next to the song
+    embedded: bool = False  # the plain text in the song's tags
+
 
 _TIME = re.compile(r"\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]")
 _META = re.compile(r"^\[[a-z]+:[^\]]*\]$", re.IGNORECASE)
@@ -64,11 +76,6 @@ def without_times(lrc: str | None) -> str | None:
     return normalise("\n".join(lines))
 
 
-def sidecar(path: str, suffix: str) -> str:
-    """The file next to a song with the same name: "a/01 Song.flac" -> "a/01 Song.lrc"."""
-    return str(PurePosixPath(path).with_suffix(suffix))
-
-
 # --- looking up (worker) ---------------------------------------------------------------------
 
 
@@ -82,16 +89,34 @@ def _read_text(root: Path, relative: str) -> str | None:
         return None
 
 
-def _existing(root: Path, media_path: str) -> tuple[str | None, str | None, str | None, bool]:
-    """(.lrc, .txt, embedded lyrics, whether lyrics can be embedded) as the file has them."""
-    lrc = _read_text(root, sidecar(media_path, ".lrc"))
-    txt = _read_text(root, sidecar(media_path, ".txt"))
+def _existing(root: Path, media_path: str) -> dict[str, Any]:
+    """The lyrics a song has (next to it and in its tags), and whether its tags can hold some."""
     path = root / media_path
     try:
         embedded = normalise(embedded_lyrics.read(path))
     except embedded_lyrics.LyricsError:
         embedded = None
-    return lrc, txt, embedded, embedded_lyrics.embeddable(path)
+    return {
+        "existing_lrc": _read_text(root, sidecar(media_path, ".lrc")),
+        "existing_txt": _read_text(root, sidecar(media_path, ".txt")),
+        "existing_lyricsfile": _read_text(root, sidecar(media_path, LYRICSFILE)),
+        "existing_embedded": embedded,
+        "embeddable": embedded_lyrics.embeddable(path),
+    }
+
+
+def lyrics_kind(root: Path, media_path: str) -> tuple[str | None, str | None]:
+    """(the best kind of lyrics a song has anywhere, the kind in its tags) - worker."""
+    try:
+        embedded = of_text(embedded_lyrics.read(root / media_path))
+    except embedded_lyrics.LyricsError:
+        embedded = None
+    beside = [
+        of_sidecar(root / sidecar(media_path, suffix))
+        for suffix in SIDECARS
+        if (root / sidecar(media_path, suffix)).is_file()
+    ]
+    return best(embedded, *beside), embedded
 
 
 async def _scope(db: AsyncSession, server_id: int, params: dict[str, Any]) -> list[MediaFile]:
@@ -163,8 +188,6 @@ async def run_lookup(
                 job.progress = {"done": done, "total": len(todo)}
                 job.updated_at = dt.datetime.now(dt.UTC)
                 await db.commit()
-            if row["status"] not in ("untagged", "error") or not failed:
-                await asyncio.sleep(PAUSE)
         job.status = "succeeded"
     except Exception as exc:
         if not isinstance(exc, LookupStopped):
@@ -191,17 +214,13 @@ async def _look_up(
         "server_id": media.server_id,
         "synced": None,
         "plain": None,
+        "lyricsfile": None,
+        "word_synced": False,
         "lrclib_id": None,
         "error": None,
         "looked_up_at": dt.datetime.now(dt.UTC),
     }
-    lrc, txt, embedded, can_embed = await asyncio.to_thread(_existing, root, media.path)
-    row |= {
-        "existing_lrc": lrc,
-        "existing_txt": txt,
-        "existing_embedded": embedded,
-        "embeddable": can_embed,
-    }
+    row |= await asyncio.to_thread(_existing, root, media.path)
     tags = media.tags or {}
     artist = tags.get("artist") or tags.get("albumartist")
     title = tags.get("title")
@@ -226,6 +245,8 @@ async def _look_up(
         "synced": normalise(found.synced),
         # Plain text too (from the synced lyrics when that's all there is), for the tags.
         "plain": normalise(found.plain) or without_times(found.synced),
+        "lyricsfile": normalise(found.lyricsfile),
+        "word_synced": found.word_synced,
         "lrclib_id": found.id,
     }, False
 
@@ -265,6 +286,13 @@ _WANT: dict[str, tuple[str, str, str, str]] = {
         "l.plain",
         _sidecar_sql(".txt"),
     ),
+    "lyricsfile": (
+        "(:lyricsfile AND l.lyricsfile IS NOT NULL AND (l.existing_lyricsfile IS NULL"
+        " OR (:overwrite AND l.existing_lyricsfile <> l.lyricsfile)))",
+        "l.existing_lyricsfile",
+        "l.lyricsfile",
+        _sidecar_sql(LYRICSFILE),
+    ),
     "lyrics": (
         "(:embedded AND l.embeddable AND l.plain IS NOT NULL"
         " AND (l.existing_embedded IS NULL OR (:overwrite AND l.existing_embedded <> l.plain)))",
@@ -280,6 +308,7 @@ _SUMMARY = text(
     SELECT count(*) AS files,
            count(l.media_file_id) AS looked_up,
            count(*) FILTER (WHERE l.status = 'synced') AS synced,
+           count(*) FILTER (WHERE l.status = 'synced' AND l.word_synced) AS word_synced,
            count(*) FILTER (WHERE l.status = 'plain') AS plain,
            count(*) FILTER (WHERE l.status = 'instrumental') AS instrumental,
            count(*) FILTER (WHERE l.status = 'none') AS none,
@@ -287,10 +316,11 @@ _SUMMARY = text(
            count(*) FILTER (WHERE l.status = 'error') AS errors,
            count(*) FILTER (
                WHERE l.existing_lrc IS NOT NULL OR l.existing_txt IS NOT NULL
-                  OR l.existing_embedded IS NOT NULL
+                  OR l.existing_lyricsfile IS NOT NULL OR l.existing_embedded IS NOT NULL
            ) AS had_lyrics,
            count(*) FILTER (WHERE {_WANT["lrc"][0]}) AS lrc,
            count(*) FILTER (WHERE {_WANT["txt"][0]}) AS txt,
+           count(*) FILTER (WHERE {_WANT["lyricsfile"][0]}) AS lyricsfile,
            count(*) FILTER (WHERE {_WANT["lyrics"][0]}) AS lyrics,
            count(*) FILTER (WHERE {_ANY}) AS songs
     FROM media_files m
@@ -302,9 +332,11 @@ _SUMMARY = text(
 _SAMPLE = text(
     f"""
     SELECT m.path, l.status,
-           {_WANT["lrc"][0]} AS lrc, {_WANT["txt"][0]} AS txt, {_WANT["lyrics"][0]} AS lyrics,
+           {_WANT["lrc"][0]} AS lrc, {_WANT["txt"][0]} AS txt,
+           {_WANT["lyricsfile"][0]} AS lyricsfile, {_WANT["lyrics"][0]} AS lyrics,
            (l.existing_lrc IS NOT NULL OR l.existing_txt IS NOT NULL
-            OR l.existing_embedded IS NOT NULL) AS had_lyrics,
+            OR l.existing_lyricsfile IS NOT NULL OR l.existing_embedded IS NOT NULL) AS had_lyrics,
+           l.word_synced,
            left(l.plain, 200) AS preview
     FROM media_files m
     JOIN track_lyrics l ON l.media_file_id = m.id
@@ -331,24 +363,23 @@ def _insert(field: str) -> Any:
     )
 
 
-def _params(
-    server_id: int, albums: list[int], placement: Placement, overwrite: bool
-) -> dict[str, Any]:
+def _params(server_id: int, albums: list[int], to: Destinations, overwrite: bool) -> dict[str, Any]:
     return {
         "server_id": server_id,
         "albums": albums,
-        "sidecar": placement in ("sidecar", "both"),
-        "embedded": placement in ("embedded", "both"),
+        "sidecar": to.sidecar,
+        "lyricsfile": to.lyricsfile,
+        "embedded": to.embedded,
         "overwrite": overwrite,
     }
 
 
 async def summary(
-    db: AsyncSession, server_id: int, albums: list[int], placement: Placement, overwrite: bool
+    db: AsyncSession, server_id: int, albums: list[int], to: Destinations, overwrite: bool
 ) -> tuple[dict[str, int], list[Any]]:
     """What was found for a job's files, what writing it would change (counts), and the
     first changes."""
-    params = _params(server_id, albums, placement, overwrite)
+    params = _params(server_id, albums, to, overwrite)
     counts = (await db.execute(_SUMMARY, params)).one()._asdict()
     sample = (await db.execute(_SAMPLE, params | {"limit": 100})).all()
     return {k: int(v or 0) for k, v in counts.items()}, list(sample)
@@ -359,11 +390,11 @@ async def add_changes(
     set_id: int,
     server_id: int,
     albums: list[int],
-    placement: Placement,
+    to: Destinations,
     overwrite: bool,
 ) -> int:
     """Record the edit's changes (straight from the found lyrics). Returns how many."""
-    params = _params(server_id, albums, placement, overwrite) | {"set_id": set_id}
+    params = _params(server_id, albums, to, overwrite) | {"set_id": set_id}
     added = 0
     for field in _WANT:
         result = await db.execute(_insert(field), params)
@@ -441,6 +472,7 @@ async def apply_lyrics(
                 column = {
                     "lrc": "existing_lrc",
                     "txt": "existing_txt",
+                    "lyricsfile": "existing_lyricsfile",
                     "lyrics": "existing_embedded",
                 }
                 await db.execute(
@@ -454,4 +486,8 @@ async def apply_lyrics(
             change.status, change.error = "failed", f"Couldn't write it: {exc}"
         if n % 50 == 0:
             await db.commit()
+    # What each song has now (Library -> Lyrics counts them).
+    ids = {c.media_file_id for c in changes if c.status == "applied" and c.media_file_id}
+    for media in await db.scalars(select(MediaFile).where(MediaFile.id.in_(ids))):
+        media.lyrics, media.embedded_lyrics = await asyncio.to_thread(lyrics_kind, root, media.path)
     await db.commit()

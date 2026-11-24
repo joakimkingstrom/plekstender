@@ -520,26 +520,28 @@ export const bulk = {
         body: { remove },
       }),
     ),
-  writeLyrics: (serverId: number, jobId: number, placement: LyricsPlacement, overwrite: boolean) =>
+  writeLyrics: (serverId: number, jobId: number, to: LyricsDestinations, overwrite: boolean) =>
     unwrap(
       api.POST('/api/servers/{server_id}/files/lyrics/{job_id}/apply', {
         params: { path: { server_id: serverId, job_id: jobId } },
-        body: { placement, overwrite },
+        body: { ...to, overwrite },
       }),
     ),
 }
 
-export type LyricsPlacement = Schemas['LyricsApplyIn']['placement'] & string
+/** Where lyrics are written: next to each song (.lrc / .txt, and/or a Lyricsfile), and/or
+ * in its tags. */
+export type LyricsDestinations = { sidecar: boolean; lyricsfile: boolean; embedded: boolean }
 
 /** A lyrics lookup: found so far, and what writing would change (polled while it runs). */
-export function useLyricsPlan(serverId: number, jobId: number | null, placement: LyricsPlacement, overwrite: boolean) {
+export function useLyricsPlan(serverId: number, jobId: number | null, to: LyricsDestinations, overwrite: boolean) {
   return useQuery({
-    queryKey: [...filesKeys.all(serverId), 'lyrics', jobId, placement, overwrite],
+    queryKey: [...filesKeys.all(serverId), 'lyrics', jobId, to, overwrite],
     enabled: jobId !== null,
     queryFn: () =>
       unwrap(
         api.GET('/api/servers/{server_id}/files/lyrics/{job_id}', {
-          params: { path: { server_id: serverId, job_id: jobId! }, query: { placement, overwrite } },
+          params: { path: { server_id: serverId, job_id: jobId! }, query: { ...to, overwrite } },
         }),
       ),
     refetchInterval: (query) => {
@@ -568,5 +570,23 @@ export function useDuplicates(serverId: number) {
       const status = query.state.data?.job.status
       return status === 'queued' || status === 'running' ? 1500 : false
     },
+  })
+}
+
+/** How many of the music folder's songs have which kind of lyrics. */
+export function useLyricsCoverage(serverId: number) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'lyrics', 'coverage'],
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/files/lyrics/coverage', { params: { path: { server_id: serverId } } })),
+  })
+}
+
+/** The last lyrics lookup for the whole library (to come back to its results). */
+export function useLatestLyricsLookup(serverId: number) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'lyrics', 'latest'],
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/files/lyrics/latest', { params: { path: { server_id: serverId } } })),
   })
 }

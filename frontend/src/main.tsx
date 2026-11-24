@@ -17,6 +17,7 @@ import { HistoryLayout, ListensPage } from './pages/HistoryPage'
 import { HomePage, NotFoundPage } from './pages/HomePage'
 import { AlbumPage, ArtistPage, LibraryPage } from './pages/LibraryPage'
 import { LibraryStatsPage } from './pages/LibraryStatsPage'
+import { LyricsPage } from './pages/LyricsPage'
 import { ListeningSettingsPage } from './pages/ListeningSettingsPage'
 import { LivePage } from './pages/LivePage'
 import { GameSettingsPage } from './pages/GameSettingsPage'
@@ -73,6 +74,7 @@ const router = createBrowserRouter([
           { path: 'artwork', element: <ArtworkPage /> },
           { path: 'artwork/albums', element: <ArtworkPage /> },
           { path: 'tag-editing', element: <TagEditingPage /> },
+          { path: 'lyrics', element: <LyricsPage /> },
         ],
       },
       { path: 'library/artists/:key', element: <ArtistPage /> },

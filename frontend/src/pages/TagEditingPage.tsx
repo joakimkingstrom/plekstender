@@ -45,7 +45,7 @@ const FIELD_NAMES: Record<string, string> = {
   genre: 'genre',
 }
 
-type Action = 'musicbrainz' | 'plex' | 'rename' | 'lyrics' | 'library-lyrics' | 'duplicates'
+type Action = 'musicbrainz' | 'plex' | 'rename' | 'lyrics' | 'duplicates'
 
 /** Library → Tag editing (server owners): albums whose files need a look, fixed in bulk. */
 export function TagEditingPage() {
@@ -107,9 +107,12 @@ function TagEditing({ serverId }: { serverId: number }) {
         edit, which you can undo on its album page.
       </p>
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => setAction('library-lyrics')}>
+        <Link
+          to="/library/lyrics"
+          className="inline-flex items-center rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-semibold hover:bg-border"
+        >
           Lyrics for the whole library
-        </Button>
+        </Link>
         <Button size="sm" onClick={() => setAction('duplicates')}>
           Duplicate files
         </Button>
@@ -216,7 +219,6 @@ function TagEditing({ serverId }: { serverId: number }) {
       {action === 'lyrics' && (
         <LyricsDialog serverId={serverId} albums={chosen.map((a) => a.rating_key)} canWrite={canWrite} onClose={() => setAction(null)} />
       )}
-      {action === 'library-lyrics' && <LyricsDialog serverId={serverId} albums={[]} canWrite={canWrite} onClose={() => setAction(null)} />}
       {action === 'duplicates' && <DuplicatesDialog serverId={serverId} canWrite={canWrite} onClose={() => setAction(null)} />}
     </div>
   )

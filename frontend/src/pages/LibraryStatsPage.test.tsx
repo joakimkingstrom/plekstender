@@ -44,6 +44,15 @@ beforeEach(() => {
           return json({ families: [{ name: 'red', albums: 1, hex: '#c81e1e' }, { name: 'blue', albums: 2, hex: '#2850c8' }], strip: ['#c81e1e', '#2850c8', '#2850c8'], albums: 3, waiting: 1 })
         case '/api/servers/1/library/stats/colours/blue':
           return json([{ rating_key: 200, title: 'OK Computer', thumb: null, artist_title: 'Radiohead', hex: '#2850c8' }])
+        case '/api/servers/1/library/stats/file-types':
+          return json([
+            { format: 'flac', tracks: 600 },
+            { format: 'mp3', tracks: 300 },
+            { format: 'm4a', tracks: 50 },
+            { format: 'ogg', tracks: 30 },
+            { format: 'opus', tracks: 12 },
+            { format: '', tracks: 8 },
+          ])
         case '/api/servers/1/library/stats/seen-live':
           return json({ tracks: 1234, seen: 9, setlists: 4, gigs: 6, artists_total: 300, artists_seen: 12, artists: [{ rating_key: 100, title: 'Radiohead', thumb: null, tracks: 40, seen: 8 }] })
         case '/api/servers/1/library/stats/words':
@@ -72,6 +81,16 @@ describe('Library stats', () => {
     )
     expect(await screen.findByText('1,234')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Total tracks by when they were added to Plex' })).toBeInTheDocument()
+    // Types of file: the four most common, the rest as "Other" (named underneath).
+    const types = await screen.findByRole('table', { name: 'Songs by type of file' })
+    expect(within(types).getAllByRole('row').map((r) => r.textContent)).toEqual([
+      'FLAC600 songs60%',
+      'MP3300 songs30%',
+      'M4A50 songs5.0%',
+      'OGG30 songs3.0%',
+      'Other20 songs2.0%',
+    ])
+    expect(screen.getByText('OPUS 12, Unknown 8')).toBeInTheDocument()
     expect(screen.getByText(/1 album without a year isn't counted/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'The 1990s: 2 albums' }))

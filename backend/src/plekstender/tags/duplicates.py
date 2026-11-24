@@ -19,7 +19,7 @@ import datetime as dt
 import logging
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -30,6 +30,7 @@ from plekstender import acoustid
 from plekstender.config import Settings
 from plekstender.db.models import FileFingerprint, FileScan, MediaFile, PlexServer
 from plekstender.sync.parse import normalise_artist, normalise_title
+from plekstender.tags.lyrics_kinds import SIDECARS, sidecar_path
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +41,6 @@ MIN_OVERLAP = 40  # numbers to compare at least (about 5 s)
 LENGTH_SLACK_MS = 4000  # candidates' lengths may differ this much
 MAX_GROUPS = 2000
 LOSSLESS = {"flac", "wav", "aif", "aiff", "ape", "wv", "dsf", "alac"}
-SIDECARS = (".lrc", ".txt")
 
 
 class DuplicatesError(Exception):
@@ -177,7 +177,7 @@ class DupeGroup:
 def _sidecars(root: Path, path: str) -> list[str]:
     out = []
     for suffix in SIDECARS:
-        relative = str(PurePosixPath(path).with_suffix(suffix))
+        relative = sidecar_path(path, suffix)
         candidate = root / relative
         if candidate.is_file() and not candidate.is_symlink():
             out.append(relative)

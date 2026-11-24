@@ -30,6 +30,7 @@ export function LibraryLayout() {
                 { to: '/library/discover', label: 'Discover' },
                 { to: '/library/artwork', label: 'Artwork' },
                 { to: '/library/tag-editing', label: 'Tag editing' },
+                { to: '/library/lyrics', label: 'Lyrics' },
               ]
             : []),
         ]}

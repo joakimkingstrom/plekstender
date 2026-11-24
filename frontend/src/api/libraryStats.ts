@@ -93,6 +93,16 @@ export function useColourFamily(serverId: number, name: ColourName | null) {
   })
 }
 
+/** The library's songs by type of file (extension), most first. */
+export function useFileTypes(serverId: number) {
+  return useQuery({
+    queryKey: [...keys.all(serverId), 'file-types'],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/library/stats/file-types', { params: { path: { server_id: serverId } } })),
+  })
+}
+
 /** The library's songs seen live (from the gigs' setlists), and the artists with the highest share. */
 export function useSeenLive(serverId: number) {
   return useQuery({

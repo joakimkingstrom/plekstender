@@ -121,6 +121,7 @@ async def test_scan_and_compare(app: FastAPI, plex: FakePlex, music: Path) -> No
         "read": 4,
         "unchanged": 0,
         "removed": 0,
+        "lyrics": 0,
         "nfo": 0,
         "images": 0,
         "errors": 1,

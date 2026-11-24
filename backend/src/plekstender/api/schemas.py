@@ -1367,9 +1367,6 @@ class DuplicatesApplyIn(BaseModel):
     remove: list[int] = Field(min_length=1, max_length=5000, description="Files to take out.")
 
 
-LyricsPlacement = Literal["sidecar", "embedded", "both"]
-
-
 class LyricsLookupIn(BaseModel):
     albums: list[int] = Field(
         default_factory=list, max_length=1000, description="These albums; none: the library."
@@ -1382,6 +1379,8 @@ class LyricsSampleOut(BaseModel):
     status: str
     lrc: bool = Field(description="A .lrc (synced lyrics) is written next to it.")
     txt: bool = Field(description="A .txt (plain lyrics) is written next to it.")
+    lyricsfile: bool = Field(description="A .lyricsfile.yaml is written next to it.")
+    word_synced: bool = Field(description="The lyrics found time each word.")
     lyrics: bool = Field(description="The lyrics are written into its tags.")
     had_lyrics: bool = Field(description="It had lyrics already (replaced when overwriting).")
     preview: str | None = Field(description="The start of the lyrics.")
@@ -1392,6 +1391,7 @@ class LyricsPlanOut(BaseModel):
     files: int = Field(description="Files the job covers.")
     looked_up: int
     synced: int
+    word_synced: int = Field(description="Of the synced ones, those timed word by word.")
     plain: int = Field(description="Found without times.")
     instrumental: int
     none: int = Field(description="LRCLIB has nothing for them.")
@@ -1400,6 +1400,7 @@ class LyricsPlanOut(BaseModel):
     had_lyrics: int = Field(description="Files that already had lyrics somewhere.")
     lrc: int = Field(description=".lrc files that writing would make or replace.")
     txt: int
+    lyricsfile: int = Field(description=".lyricsfile.yaml files writing would make or replace.")
     lyrics: int = Field(description="Files whose tags would get lyrics.")
     songs: int = Field(description="Files that writing would change.")
     sample: list[LyricsSampleOut] = Field(description="The first 100 of them.")
@@ -1407,8 +1408,20 @@ class LyricsPlanOut(BaseModel):
 
 
 class LyricsApplyIn(BaseModel):
-    placement: LyricsPlacement = "sidecar"
+    sidecar: bool = Field(default=True, description="A .lrc (synced) or .txt next to each song.")
+    lyricsfile: bool = Field(default=False, description="A .lyricsfile.yaml next to each song.")
+    embedded: bool = Field(default=False, description="The plain lyrics in each song's tags.")
     overwrite: bool = Field(default=False, description="Replace lyrics the files already have.")
+
+
+class LyricsCoverageOut(BaseModel):
+    files: int = Field(description="Music files in the folder.")
+    word: int = Field(description="With lyrics timed word by word.")
+    synced: int = Field(description="With lyrics timed line by line.")
+    plain: int = Field(description="With lyrics without times.")
+    instrumental: int = Field(description="Marked as instrumental (a Lyricsfile says so).")
+    none: int = Field(description="Without lyrics.")
+    unchecked: int = Field(description="Not looked at since lyrics were counted (scan again).")
 
 
 class TagChangeSetOut(BaseModel):
@@ -2259,6 +2272,11 @@ class GrowthPoint(BaseModel):
 class DecadeCount(BaseModel):
     decade: int = Field(description="The decade's first year (or the year, or the month 0-12).")
     albums: int
+
+
+class FileTypeCount(BaseModel):
+    format: str = Field(description='The file extension, lower case ("flac"); "" when unknown.')
+    tracks: int
 
 
 class LibraryStatsOut(BaseModel):

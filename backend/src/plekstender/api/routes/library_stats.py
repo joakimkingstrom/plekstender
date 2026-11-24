@@ -25,6 +25,7 @@ from plekstender.api.schemas import (
     ColoursOut,
     CountryArtists,
     DecadeCount,
+    FileTypeCount,
     GrowthPoint,
     LibraryStatsOut,
     ReleasedAlbum,
@@ -361,6 +362,26 @@ async def colour_family(
 
 SEEN_LIVE_MIN_TRACKS = 5  # fewer, and one song seen live is already a big share
 SEEN_LIVE_ARTISTS = 10
+
+
+@router.get("/file-types", response_model=list[FileTypeCount])
+async def file_types(server_id: int, db: DbDep, user: UserDep) -> list[FileTypeCount]:
+    """The library's songs by type of file (their extension, as Plex has the files), most
+    first."""
+    us = await get_user_server(db, user, server_id)
+    state, cond, where = visible(Track, user.id, us)
+    extension = func.coalesce(
+        func.lower(func.substring(Track.file_path, r"\.([A-Za-z0-9]{1,8})$")), ""
+    )
+    rows = await db.execute(
+        select(extension, func.count())
+        .select_from(Track)
+        .join(state, cond)
+        .where(*where)
+        .group_by(extension)
+        .order_by(func.count().desc(), extension)
+    )
+    return [FileTypeCount(format=fmt, tracks=n) for fmt, n in rows.all()]
 
 
 @router.get("/seen-live", response_model=SeenLiveOut)

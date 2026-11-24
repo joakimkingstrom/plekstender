@@ -1,11 +1,11 @@
-"""Lyrics for music files (server owners): looked up on LRCLIB by the worker, previewed,
-then written as one edit (undo takes them out again). See plekstender.tags.lyrics."""
+"""Lyrics for music files (server owners): how many songs have which kind, looked up on
+LRCLIB by the worker, previewed, then written as one edit (undo takes them out again). See
+plekstender.tags.lyrics."""
 
 from __future__ import annotations
 
-from typing import Annotated
-
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import case, func, select
 
 from plekstender.api.deps import DbDep, UserDep
 from plekstender.api.routes.artwork import owner_server
@@ -13,17 +13,42 @@ from plekstender.api.routes.files import _editable, _scan_out, _sets_out
 from plekstender.api.schemas import (
     FileScanOut,
     LyricsApplyIn,
+    LyricsCoverageOut,
     LyricsLookupIn,
-    LyricsPlacement,
     LyricsPlanOut,
     LyricsSampleOut,
     TagChangeSetOut,
 )
-from plekstender.db.models import FileScan, PlexServer, TagChangeSet
+from plekstender.db.models import FileScan, MediaFile, PlexServer, TagChangeSet
 from plekstender.tags import lyrics
+from plekstender.tags.read import LYRICS_READER
 from plekstender.worker import enqueue_lyrics_lookup, enqueue_tag_changes
 
 router = APIRouter(prefix="/api/servers/{server_id}/files/lyrics", tags=["files"])
+
+
+@router.get("/coverage", response_model=LyricsCoverageOut)
+async def lyrics_coverage(server_id: int, db: DbDep, user: UserDep) -> LyricsCoverageOut:
+    """How many of the music folder's songs have which kind of lyrics (as of the last scan
+    or lyrics edit)."""
+    us = await owner_server(db, user, server_id)
+    unchecked = MediaFile.reader < LYRICS_READER
+    kind = case((unchecked, "unchecked"), else_=func.coalesce(MediaFile.lyrics, "none"))
+    rows = await db.execute(
+        select(kind, func.count())
+        .where(MediaFile.server_id == us.server_id, MediaFile.error.is_(None))
+        .group_by(kind)
+    )
+    counts: dict[str, int] = {str(k): int(n) for k, n in rows.all()}
+    return LyricsCoverageOut(
+        files=sum(counts.values()),
+        word=counts.get("word", 0),
+        synced=counts.get("synced", 0),
+        plain=counts.get("plain", 0),
+        instrumental=counts.get("instrumental", 0),
+        none=counts.get("none", 0),
+        unchecked=counts.get("unchecked", 0),
+    )
 
 
 @router.post("", response_model=FileScanOut, status_code=status.HTTP_201_CREATED)
@@ -52,6 +77,19 @@ async def look_up_lyrics(
     return out
 
 
+@router.get("/latest", response_model=FileScanOut | None)
+async def latest_lookup(server_id: int, db: DbDep, user: UserDep) -> FileScanOut | None:
+    """The last lyrics lookup for the whole library, if there's been one."""
+    us = await owner_server(db, user, server_id)
+    jobs = await db.scalars(
+        select(FileScan)
+        .where(FileScan.server_id == us.server_id, FileScan.kind == "lyrics")
+        .order_by(FileScan.id.desc())
+        .limit(20)
+    )
+    return _scan_out(next((j for j in jobs if not j.params.get("albums")), None))
+
+
 async def _job(db: DbDep, server_id: int, job_id: int) -> FileScan:
     job = await db.get(FileScan, job_id)
     if job is None or job.server_id != server_id or job.kind != "lyrics":
@@ -65,14 +103,20 @@ async def lyrics_plan(
     job_id: int,
     db: DbDep,
     user: UserDep,
-    placement: Annotated[LyricsPlacement, Query()] = "sidecar",
+    sidecar: bool = True,
+    lyricsfile: bool = False,
+    embedded: bool = False,
     overwrite: bool = False,
 ) -> LyricsPlanOut:
-    """What's been found so far, and what writing it would change."""
+    """What's been found so far, and what writing it (to these places) would change."""
     us = await owner_server(db, user, server_id)
     job = await _job(db, us.server_id, job_id)
     counts, sample = await lyrics.summary(
-        db, us.server_id, list(job.params.get("albums") or []), placement, overwrite
+        db,
+        us.server_id,
+        list(job.params.get("albums") or []),
+        lyrics.Destinations(sidecar, lyricsfile, embedded),
+        overwrite,
     )
     out = _scan_out(job)
     assert out is not None
@@ -95,21 +139,30 @@ async def write_lyrics(
         raise HTTPException(status.HTTP_409_CONFLICT, "The lyrics are still being looked up.")
     if job.params.get("applied_set_id"):
         raise HTTPException(status.HTTP_409_CONFLICT, "These lyrics were written already.")
+    to = lyrics.Destinations(body.sidecar, body.lyricsfile, body.embedded)
+    if not (to.sidecar or to.lyricsfile or to.embedded):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose where to write them.")
     albums = list(job.params.get("albums") or [])
     change_set = TagChangeSet(
         server_id=server.id, user_id=user.id, kind="edit", description="Lyrics"
     )
     db.add(change_set)
     await db.flush()
-    added = await lyrics.add_changes(
-        db, change_set.id, server.id, albums, body.placement, body.overwrite
-    )
+    added = await lyrics.add_changes(db, change_set.id, server.id, albums, to, body.overwrite)
     if not added:
         await db.rollback()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nothing to write.")
-    where = {"sidecar": "next to", "embedded": "into", "both": "next to and into"}[body.placement]
+    places = [
+        name
+        for name, chosen in (
+            (".lrc / .txt", to.sidecar),
+            (".lyricsfile.yaml", to.lyricsfile),
+            ("tags", to.embedded),
+        )
+        if chosen
+    ]
     scope = f"{len(albums)} {'album' if len(albums) == 1 else 'albums'}" if albums else "library"
-    change_set.description = f"Lyrics from LRCLIB written {where} the songs ({scope})"
+    change_set.description = f"Lyrics from LRCLIB ({', '.join(places)}; {scope})"
     job.params = {**job.params, "applied_set_id": change_set.id}
     await db.commit()
     await enqueue_tag_changes(change_set)

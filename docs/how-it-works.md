@@ -437,6 +437,14 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - Each group suggests a copy to keep: lossless, then the higher bitrate, then the one Plex has and with a MusicBrainz ID, then the shorter path. Groups not compared by sound are left alone unless a copy is picked.
 - Removing is one edit of `path` moves (like renaming) into `.plekstender-duplicates/<same path>` in the music folder, with the file's `.lrc` / `.txt`; Plex and the scan skip hidden folders, and undo moves them back. A group can't lose every copy; a check over a day old must be run again.
 
+## Releases settings, Lyricsfiles, Library → Lyrics, file types (25 Nov)
+- **Releases settings** (`preferences.releases`): the kinds shown (saved when the chips are toggled), and whom you follow: artists rated from 2 to 5 stars or more (0: not by rating) and your N most played (0: none). The `FOLLOWED` SQL reads each user's own values from `users.preferences`, so the worker's daily refresh follows them too.
+- **Lyricsfile** (`.lyricsfile.yaml`, https://github.com/tranxuanthang/lyricsfile, a draft YAML format: `lines` with `start_ms` and optional `words`, `plain`, `metadata.instrumental`): LRCLIB returns one with every record (`lyricsfile`, plus `hasWordSync`); it's kept in `track_lyrics.lyricsfile` and can be written next to each song as a fourth change field, `lyricsfile`. Lyricsfiles are parsed with a safe YAML loader that refuses aliases, and only version "1.0".
+- LRCLIB requests are now spaced 0.7 s apart (one lock for all lookups): LRCLIB asks identified apps for no more than about 90 a minute.
+- **Kinds of lyrics** (`tags/lyrics_kinds.py`): word-synced (enhanced LRC `<mm:ss.xx>` word times, or a Lyricsfile with `words`), synced (LRC line times, or Lyricsfile `lines`), plain, instrumental (a Lyricsfile says so). The scan notes the kind in each file's tags (`media_files.embedded_lyrics`, reader 6, so every file is read once more) and, on every scan, the best kind of the file and the lyrics files next to it (`media_files.lyrics`: a `.lrc` added beside an unchanged song counts at the next scan). A lyrics edit updates both for the songs it touched.
+- **Library → Lyrics** (server owners): a ring chart of the songs by kind of lyrics (one amber hue from plain to word-synced, neutrals for instrumental and none; the share with lyrics in the middle), and the lyrics lookup for the whole library (continuing the last one). Tag editing keeps the lookup for selected albums. Where to write lyrics is now any of: .lrc/.txt, a Lyricsfile, the tags.
+- **Library → Stats → Types of file**: the library's songs by file extension (from Plex's file paths, so for everyone), the four most common in the categorical slots and the rest as "Other" (listed underneath).
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what
