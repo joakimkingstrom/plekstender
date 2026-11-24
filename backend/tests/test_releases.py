@@ -135,6 +135,12 @@ async def test_releases(app: FastAPI, plex: FakePlex, web: dict[str, int]) -> No
     first = (await owner.get(f"/api/servers/{sid}/releases/missing")).json()
     assert first["artists"] == []
     assert first["coverage"] == {"artists": 3, "with_mbid": 3, "checked": 0}
+    before = (await owner.get(f"/api/servers/{sid}/releases/new")).json()
+    assert (before["following"], before["following_with_mbid"], before["following_read"]) == (
+        1,
+        1,
+        0,
+    )
 
     async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
         # Radiohead (rated 4 stars, so followed) comes first of those never read.
@@ -191,6 +197,7 @@ async def test_releases(app: FastAPI, plex: FakePlex, web: dict[str, int]) -> No
         ("A Fresh One", False, False, "Radiohead"),
     ]  # fmt: skip
     assert (new["following"], new["new_days"]) == (1, 90)
+    assert (new["following_with_mbid"], new["following_read"]) == (1, 1)
     albums_only = await owner.get(f"/api/servers/{sid}/releases/new", params={"kind": "album"})
     assert [r["title"] for r in albums_only.json()["items"]] == ["A Fresh One"]
     assert new["settings"] == {"kinds": ["album", "ep"], "follow_rating": 8, "follow_top": 50}

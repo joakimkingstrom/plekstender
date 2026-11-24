@@ -220,8 +220,9 @@ function NewReleases({
   const followingControls = <Following settings={settings} onSettings={onSettings} />
   if (found.isPending) return <Spinner />
   if (found.isError) return <Notice tone="error">{errorMessage(found.error)}</Notice>
-  const { items, following, new_days } = found.data
+  const { items, following, following_with_mbid: withMbid, following_read: read, new_days } = found.data
   const followingRow = followingControls
+  const reading = read < withMbid
   const upcoming = items.filter((r) => r.upcoming).reverse() // soonest first
   const out = items.filter((r) => !r.upcoming)
   if (following === 0) {
@@ -238,6 +239,12 @@ function NewReleases({
   return (
     <>
       {followingRow}
+      {reading && (
+        <Notice>
+          Still reading releases from MusicBrainz: {formatCount(read)} of the {formatCount(withMbid)} artists you follow so
+          far (a few hundred an hour). Their new releases show up here as they're read.
+        </Notice>
+      )}
       {upcoming.length > 0 && (
         <Card title="Coming up">
           <ul className={GRID}>
@@ -249,7 +256,13 @@ function NewReleases({
       )}
       <Card title={`Out in the last ${new_days} days`}>
         {out.length === 0 ? (
-          <p className="text-sm text-muted">Nothing new from the {formatCount(following)} artists you follow.</p>
+          <p className="text-sm text-muted">
+            {read === 0
+              ? 'Nothing yet: none of the artists you follow have had their releases read.'
+              : reading
+                ? `Nothing in the last ${new_days} days from the ${formatCount(read)} artists read so far.`
+                : `Nothing in the last ${new_days} days from the ${formatCount(following)} artists you follow.`}
+          </p>
         ) : (
           <ul className={GRID}>
             {out.map((r) => (
@@ -257,7 +270,12 @@ function NewReleases({
             ))}
           </ul>
         )}
-        <p className="mt-4 text-xs text-muted">From the {formatCount(following)} artists you follow.</p>
+        <p className="mt-4 text-xs text-muted">
+          Everything the {formatCount(following)} artists you follow have put out (of the kinds chosen above), including what
+          you already have: that's marked "In your library".
+          {following > withMbid &&
+            ` ${formatCount(following - withMbid)} of them have no MusicBrainz ID in Plex, so their releases can't be looked up.`}
+        </p>
       </Card>
     </>
   )

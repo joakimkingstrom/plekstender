@@ -1021,6 +1021,12 @@ class NewReleaseOut(ReleaseOut):
 class NewReleasesOut(BaseModel):
     items: list[NewReleaseOut] = Field(description="Newest first; coming ones first of all.")
     following: int = Field(description="How many of your artists count as followed.")
+    following_with_mbid: int = Field(
+        description="Of those, the ones Plex has a MusicBrainz ID for (only they can be read)."
+    )
+    following_read: int = Field(
+        description="Of those, the ones whose releases have been read from MusicBrainz so far."
+    )
     settings: ReleaseSettings = Field(description="Your settings these were found with.")
     new_days: int = Field(description="Releases from this many days back count as new.")
 

@@ -67,6 +67,7 @@ async def new_releases(
     found = await releases.new_releases(
         db, user.id, us.server_id, sections, list(kind or settings.kinds), today, include_hidden
     )
+    followed = await releases.following(db, user.id, us.server_id, sections)
     return NewReleasesOut(
         items=[
             NewReleaseOut(
@@ -76,7 +77,9 @@ async def new_releases(
             )
             for r, a in found
         ],
-        following=await releases.following(db, user.id, us.server_id, sections),
+        following=followed.artists,
+        following_with_mbid=followed.with_mbid,
+        following_read=followed.read,
         new_days=releases.NEW_FOR.days,
         settings=settings,
     )

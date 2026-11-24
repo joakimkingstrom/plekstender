@@ -445,17 +445,31 @@ async def coverage(db: AsyncSession, user_id: int, server_id: int, sections: lis
 _FOLLOWING = text(
     f"""
     WITH {FOLLOWED}
-    SELECT count(*) FROM followed f
+    SELECT count(*) AS following,
+           count(*) FILTER (WHERE ar.mbid ~ :mbid_pattern) AS with_mbid,
+           count(c.artist_mbid) AS read
+    FROM followed f
     JOIN artists ar ON ar.server_id = f.server_id AND ar.rating_key = f.rating_key
+    LEFT JOIN artist_release_checks c ON c.artist_mbid = ar.mbid
     WHERE f.user_id = :user_id AND f.server_id = :server_id AND ar.section_key = ANY(:sections)
     """  # noqa: S608 - constant SQL fragment
 )
 
 
-async def following(db: AsyncSession, user_id: int, server_id: int, sections: list[str]) -> int:
-    """How many of the user's artists on this server count as followed."""
-    return int(
-        await db.scalar(
+@dataclass
+class Following:
+    artists: int  # the user's artists on this server that count as followed
+    with_mbid: int  # ... that Plex has a MusicBrainz ID for (only those can be looked up)
+    read: int  # ... whose releases have been read from MusicBrainz
+
+
+async def following(
+    db: AsyncSession, user_id: int, server_id: int, sections: list[str]
+) -> Following:
+    """How many of the user's artists on this server count as followed, and how many of
+    those have had their releases read so far."""
+    row = (
+        await db.execute(
             _FOLLOWING,
             {
                 "user_id": user_id,
@@ -463,7 +477,8 @@ async def following(db: AsyncSession, user_id: int, server_id: int, sections: li
                 "sections": sections,
                 "follow_rating": FOLLOW_RATING,
                 "follow_top": FOLLOW_TOP,
+                "mbid_pattern": musicbrainz.MBID.pattern.join("^$"),
             },
         )
-        or 0
-    )
+    ).one()
+    return Following(artists=row.following, with_mbid=row.with_mbid, read=row.read)

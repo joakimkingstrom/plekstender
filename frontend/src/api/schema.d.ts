@@ -7390,6 +7390,16 @@ export interface components {
              * @description How many of your artists count as followed.
              */
             following: number;
+            /**
+             * Following With Mbid
+             * @description Of those, the ones Plex has a MusicBrainz ID for (only they can be read).
+             */
+            following_with_mbid: number;
+            /**
+             * Following Read
+             * @description Of those, the ones whose releases have been read from MusicBrainz so far.
+             */
+            following_read: number;
             /** @description Your settings these were found with. */
             settings: components["schemas"]["ReleaseSettings"];
             /**

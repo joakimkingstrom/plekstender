@@ -42,6 +42,8 @@ beforeEach(() => {
             { ...release(6, 'A Fresh One', { in_library: true }), upcoming: false, artist: radiohead },
           ],
           following: 12,
+          following_with_mbid: 10,
+          following_read: 4,
           new_days: 90,
         })
       case '/api/servers/1/releases/missing':
@@ -88,7 +90,10 @@ it('shows new releases from followed artists, coming ones first, and hides one',
   const out = screen.getByRole('heading', { name: 'Out in the last 90 days' }).closest('section')!
   expect(within(out).getByText('In your library')).toBeInTheDocument()
   expect(within(out).getByRole('link', { name: 'Radiohead' })).toHaveAttribute('href', '/library/artists/100')
-  expect(within(out).getByText(/From the 12 artists you follow/)).toBeInTheDocument()
+  // Releases you have are listed too; artists not read yet are said to be.
+  expect(within(out).getByText(/including what you already have: that's marked "In your library"/)).toBeInTheDocument()
+  expect(within(out).getByText(/2 of them have no MusicBrainz ID in Plex/)).toBeInTheDocument()
+  expect(screen.getByText(/Still reading releases from MusicBrainz: 4 of the 10 artists you follow so far/)).toBeInTheDocument()
   // Albums and EPs unless chosen otherwise.
   expect(requests('/api/servers/1/releases/new')[0].searchParams.getAll('kind')).toEqual(['album', 'ep'])
   // Kinds and whom you follow are saved on your account.
