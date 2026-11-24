@@ -281,8 +281,91 @@ function NewReleases({
   )
 }
 
+const KIND_PLURAL: Record<ReleaseKind, [string, string]> = {
+  album: ['album', 'albums'],
+  ep: ['EP', 'EPs'],
+  single: ['single', 'singles'],
+  live: ['live album', 'live albums'],
+  compilation: ['compilation', 'compilations'],
+  other: ['other', 'other'],
+}
+
+/** "11 albums, 2 EPs", in the order kinds are listed. */
+function kindsText(releases: Release[]): string {
+  return KINDS.map(([kind]) => [kind, releases.filter((r) => r.kind === kind).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([kind, n]) => `${formatCount(n)} ${KIND_PLURAL[kind][n === 1 ? 0 : 1]}`)
+    .join(', ')
+}
+
+type MissingArtist = { rating_key: number; name: string; thumb: string | null; releases: Release[] }
+
+/** An artist and the releases the library doesn't have: one line until opened. */
+function MissingArtistCard({
+  serverId,
+  artist,
+  open,
+  onToggle,
+}: {
+  serverId: number
+  artist: MissingArtist
+  open: boolean
+  onToggle: () => void
+}) {
+  const panel = `missing-${artist.rating_key}`
+  return (
+    <section className="rounded-2xl border border-border bg-surface">
+      <div className="flex items-center gap-3 p-4 sm:px-5">
+        <Link to={`/library/artists/${artist.rating_key}`} className="flex min-w-0 items-center gap-2 font-semibold hover:underline">
+          <Artwork serverId={serverId} path={artist.thumb} title={artist.name} size={64} round className="size-8 shrink-0" />
+          <span className="truncate">{artist.name}</span>
+        </Link>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panel}
+          aria-label={`${open ? 'Hide' : 'Show'} the ${formatCount(artist.releases.length)} missing from ${artist.name}`}
+          onClick={onToggle}
+          className="ml-auto flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-right text-xs text-muted hover:bg-surface-2 hover:text-text"
+        >
+          <span className="truncate">
+            {formatCount(artist.releases.length)} missing
+            <span className="hidden sm:inline"> · {kindsText(artist.releases)}</span>
+          </span>
+          <svg
+            viewBox="0 0 20 20"
+            className={`size-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+          >
+            <path d="M5 8l5 5 5-5" />
+          </svg>
+        </button>
+      </div>
+      {open && (
+        <ul id={panel} className={`${GRID} px-4 pb-4 sm:px-5 sm:pb-5`}>
+          {artist.releases.map((r) => (
+            <ReleaseCard key={r.mbid} release={r} serverId={serverId} />
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 function MissingReleases({ serverId, kinds, includeHidden }: { serverId: number; kinds: ReleaseKind[]; includeHidden: boolean }) {
   const [q, setQ] = useState('')
+  // Artists opened (all start closed).
+  const [opened, setOpened] = useState<Set<number>>(() => new Set())
+  const toggle = (key: number) =>
+    setOpened((was) => {
+      const next = new Set(was)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   const found = useMissingReleases(serverId, kinds, q.trim(), includeHidden)
   const first = found.data?.pages[0]
   const artists = found.data?.pages.flatMap((p) => p.artists) ?? []
@@ -303,6 +386,16 @@ function MissingReleases({ serverId, kinds, includeHidden }: { serverId: number;
             {formatCount(first.total_artists)} {first.total_artists === 1 ? 'artist has' : 'artists have'} releases you don't
           </p>
         )}
+        {artists.length > 0 && (
+          <div className="ml-auto flex gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setOpened(new Set(artists.map((a) => a.rating_key)))}>
+              Expand all
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setOpened(new Set())}>
+              Collapse all
+            </Button>
+          </div>
+        )}
       </div>
       {coverage && coverage.checked < coverage.with_mbid && (
         <Notice>
@@ -322,24 +415,17 @@ function MissingReleases({ serverId, kinds, includeHidden }: { serverId: number;
         </Card>
       ) : (
         <>
-          {artists.map((artist) => (
-            <Card
-              key={artist.rating_key}
-              title={
-                <Link to={`/library/artists/${artist.rating_key}`} className="flex items-center gap-2 hover:underline">
-                  <Artwork serverId={serverId} path={artist.thumb} title={artist.name} size={64} round className="size-7" />
-                  {artist.name}
-                </Link>
-              }
-              action={<span className="text-xs text-muted">{formatCount(artist.releases.length)} missing</span>}
-            >
-              <ul className={GRID}>
-                {artist.releases.map((r) => (
-                  <ReleaseCard key={r.mbid} release={r} serverId={serverId} />
-                ))}
-              </ul>
-            </Card>
-          ))}
+          <div className="space-y-2">
+            {artists.map((artist) => (
+              <MissingArtistCard
+                key={artist.rating_key}
+                serverId={serverId}
+                artist={artist}
+                open={opened.has(artist.rating_key)}
+                onToggle={() => toggle(artist.rating_key)}
+              />
+            ))}
+          </div>
           {found.hasNextPage && (
             <div className="flex justify-center">
               <Button busy={found.isFetchingNextPage} onClick={() => void found.fetchNextPage()}>
