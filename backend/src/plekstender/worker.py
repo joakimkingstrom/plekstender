@@ -864,6 +864,31 @@ async def heartbeat(timestamp: int) -> None:
         await db.commit()
 
 
+# A worker that stopped (a restart, a new image) leaves its running jobs "doing", holding
+# their locks: no other job with the same lock (a lyrics lookup, a scan) could ever start.
+# Its heartbeats stop, so after this long its jobs are closed as failed. The app's own
+# records of them (scans, syncs...) are marked interrupted by cleanup_sessions.
+STALLED_WORKER_SECONDS = 300
+
+
+@app.periodic(cron="*/5 * * * *", periodic_id="close-stalled-jobs")
+@app.task(queue="maintenance", queueing_lock="close-stalled-jobs")
+async def close_stalled_jobs(timestamp: int) -> None:
+    from procrastinate.jobs import Status
+
+    stalled = list(
+        await app.job_manager.get_stalled_jobs(seconds_since_heartbeat=STALLED_WORKER_SECONDS)
+    )
+    for job in stalled:
+        await app.job_manager.finish_job(job, status=Status.FAILED, delete_job=False)
+    if stalled:
+        log.warning(
+            "closed %d jobs left running by a stopped worker: %s",
+            len(stalled),
+            ", ".join(f"{j.task_name}[{j.id}]" for j in stalled),
+        )
+
+
 @app.periodic(cron="17 * * * *", periodic_id="cleanup-sessions")
 @app.task(queue="maintenance", queueing_lock="cleanup-sessions")
 async def cleanup_sessions(timestamp: int) -> None:

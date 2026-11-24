@@ -360,3 +360,27 @@ async def test_a_library_bigger_than_a_query_can_list(
             None,
             {"done": 0, "total": 0},
         )
+
+
+async def test_jobs_of_a_stopped_worker_are_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A lookup cut off by a restart mustn't hold its lock (and block the next) for ever."""
+    from types import SimpleNamespace
+
+    from procrastinate.jobs import Status
+
+    from plekstender import worker
+
+    closed: list[tuple[int, Status]] = []
+    stalled = [SimpleNamespace(id=7, task_name="plekstender.worker.look_up_lyrics")]
+
+    async def get_stalled_jobs(seconds_since_heartbeat: float) -> list[Any]:
+        assert seconds_since_heartbeat == worker.STALLED_WORKER_SECONDS
+        return stalled
+
+    async def finish_job(job: Any, status: Status, delete_job: bool) -> None:
+        closed.append((job.id, status))
+
+    monkeypatch.setattr(worker.app.job_manager, "get_stalled_jobs", get_stalled_jobs)
+    monkeypatch.setattr(worker.app.job_manager, "finish_job", finish_job)
+    await worker.close_stalled_jobs.func(timestamp=0)
+    assert closed == [(7, Status.FAILED)]
