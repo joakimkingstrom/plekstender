@@ -30,7 +30,9 @@ BATCH = 300  # artists a run (about ten minutes)
 PAUSE = 1.0  # seconds, on top of MusicBrainz's own one-a-second spacing
 FOLLOWED_EVERY = dt.timedelta(days=1)
 OTHERS_EVERY = dt.timedelta(days=14)
-# Someone follows an artist they rated 4 stars or more, or one of their 50 most played.
+# Someone follows the artists they rated FOLLOW_RATING or more, and their FOLLOW_TOP most
+# played: unless they've chosen otherwise (Library -> Releases settings, stored with their
+# preferences; 0 turns either off).
 FOLLOW_RATING = 8
 FOLLOW_TOP = 50
 KINDS = ("album", "ep", "single", "live", "compilation", "other")
@@ -45,11 +47,16 @@ FOLLOWED = """
                        PARTITION BY s.user_id
                        ORDER BY greatest(s.view_count, s.listens) DESC, s.rating_key
                    ) AS rank,
-                   greatest(s.view_count, s.listens) AS plays
+                   greatest(s.view_count, s.listens) AS plays,
+                   coalesce(
+                       (u.preferences #>> '{releases,follow_rating}')::int, :follow_rating
+                   ) AS min_rating,
+                   coalesce((u.preferences #>> '{releases,follow_top}')::int, :follow_top) AS top
             FROM user_item_state s
+            JOIN users u ON u.id = s.user_id
             WHERE s.item_type = 'artist'
         ) ranked
-        WHERE user_rating >= :follow_rating OR (rank <= :follow_top AND plays > 0)
+        WHERE (min_rating > 0 AND user_rating >= min_rating) OR (rank <= top AND plays > 0)
     )
 """
 

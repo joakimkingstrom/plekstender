@@ -34,6 +34,30 @@ BestCoverSource = Literal["deezer", "itunes", "tidal", "coverartarchive"]
 BEST_COVER_SOURCES: tuple[BestCoverSource, ...] = ("deezer", "itunes", "tidal", "coverartarchive")
 
 
+ReleaseKind = Literal["album", "ep", "single", "live", "compilation", "other"]
+
+
+def _default_release_kinds() -> list[ReleaseKind]:
+    return ["album", "ep"]
+
+
+class ReleaseSettings(BaseModel):
+    """Library -> Releases, per account."""
+
+    kinds: list[ReleaseKind] = Field(
+        default_factory=_default_release_kinds, max_length=6, description="Kinds shown."
+    )
+    follow_rating: int = Field(
+        default=8,
+        ge=0,
+        le=10,
+        description="Follow artists rated this or more (0-10, half stars = 1); 0: not by rating.",
+    )
+    follow_top: int = Field(
+        default=50, ge=0, le=5000, description="Follow your N most played artists; 0: none."
+    )
+
+
 class Preferences(BaseModel):
     """Per-user settings, stored on the account so they follow the user across devices."""
 
@@ -55,6 +79,7 @@ class Preferences(BaseModel):
         default="rate", description="The page the app opens on, on a phone."
     )
     game: GameSettings = Field(default_factory=GameSettings)
+    releases: ReleaseSettings = Field(default_factory=ReleaseSettings)
     theme: Literal["dark", "light"] | None = Field(
         default=None, description="Light or dark on every device; None: each browser's own choice."
     )
@@ -967,8 +992,6 @@ class RediscoverOut(BaseModel):
 
 # --- releases (MusicBrainz) ----------------------------------------------------------------
 
-ReleaseKind = Literal["album", "ep", "single", "live", "compilation", "other"]
-
 
 class ReleaseOut(BaseModel):
     mbid: str = Field(description="MusicBrainz release group ID.")
@@ -993,6 +1016,7 @@ class NewReleaseOut(ReleaseOut):
 class NewReleasesOut(BaseModel):
     items: list[NewReleaseOut] = Field(description="Newest first; coming ones first of all.")
     following: int = Field(description="How many of your artists count as followed.")
+    settings: ReleaseSettings = Field(description="Your settings these were found with.")
     new_days: int = Field(description="Releases from this many days back count as new.")
 
 

@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert
 from plekstender import musicbrainz, releases
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
+from plekstender.api.routes.auth import load_preferences
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
     MissingArtistOut,
@@ -33,8 +34,9 @@ from plekstender.db.models import HiddenRelease
 router = APIRouter(prefix="/api/servers/{server_id}/releases", tags=["releases"])
 covers_router = APIRouter(prefix="/api/releases", tags=["releases"])
 
-Kinds = Annotated[list[ReleaseKind], Query(description="Kinds of release to show.")]
-DEFAULT_KINDS: list[ReleaseKind] = ["album", "ep"]
+Kinds = Annotated[
+    list[ReleaseKind] | None, Query(description="Kinds of release to show; none: your settings.")
+]
 
 
 def _release_out(r: releases.Release) -> ReleaseOut:
@@ -53,16 +55,17 @@ async def new_releases(
     server_id: int,
     db: DbDep,
     user: UserDep,
-    kind: Kinds = DEFAULT_KINDS,
+    kind: Kinds = None,
     include_hidden: bool = False,
 ) -> NewReleasesOut:
-    """The last 90 days' releases, and those coming up, by artists you follow: rated 4 stars or
-    more, or among your 50 most played."""
+    """The last 90 days' releases, and those coming up, by artists you follow (by default
+    rated 4 stars or more, or among your 50 most played: see your release settings)."""
     us = await get_user_server(db, user, server_id)
+    settings = load_preferences(user).releases
     sections = list(us.music_section_keys)
     today = dt.datetime.now(dt.UTC).date()
     found = await releases.new_releases(
-        db, user.id, us.server_id, sections, list(kind), today, include_hidden
+        db, user.id, us.server_id, sections, list(kind or settings.kinds), today, include_hidden
     )
     return NewReleasesOut(
         items=[
@@ -75,6 +78,7 @@ async def new_releases(
         ],
         following=await releases.following(db, user.id, us.server_id, sections),
         new_days=releases.NEW_FOR.days,
+        settings=settings,
     )
 
 
@@ -83,7 +87,7 @@ async def missing_releases(
     server_id: int,
     db: DbDep,
     user: UserDep,
-    kind: Kinds = DEFAULT_KINDS,
+    kind: Kinds = None,
     q: Annotated[str | None, Query(max_length=200, description="Artist name contains")] = None,
     include_hidden: bool = False,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -98,7 +102,7 @@ async def missing_releases(
         user.id,
         us.server_id,
         sections,
-        list(kind),
+        list(kind or load_preferences(user).releases.kinds),
         dt.datetime.now(dt.UTC).date(),
         q=q,
         include_hidden=include_hidden,

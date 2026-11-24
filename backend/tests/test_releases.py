@@ -193,6 +193,31 @@ async def test_releases(app: FastAPI, plex: FakePlex, web: dict[str, int]) -> No
     assert (new["following"], new["new_days"]) == (1, 90)
     albums_only = await owner.get(f"/api/servers/{sid}/releases/new", params={"kind": "album"})
     assert [r["title"] for r in albums_only.json()["items"]] == ["A Fresh One"]
+    assert new["settings"] == {"kinds": ["album", "ep"], "follow_rating": 8, "follow_top": 50}
+
+    # Your own settings: which kinds, and whom you follow (here: nobody).
+    async def settings(**releases: object) -> None:
+        resp = await owner.put(
+            "/api/auth/me/preferences", json={"releases": releases}, headers=CSRF
+        )
+        assert resp.status_code == 200, resp.text
+
+    await settings(kinds=["single", "album"], follow_rating=0, follow_top=0)
+    nobody = (await owner.get(f"/api/servers/{sid}/releases/new")).json()
+    assert (nobody["following"], nobody["items"]) == (0, [])
+    async with get_sessionmaker()() as db:
+        later = dt.datetime.now(dt.UTC) + dt.timedelta(days=2)
+        assert await releases.to_check(db, later) == []  # nobody followed: not read daily
+    singles = (
+        await owner.get(f"/api/servers/{sid}/releases/missing", params={"q": "radio"})
+    ).json()
+    assert singles["artists"][0]["releases"][0]["title"] == "Creep"
+    await settings(kinds=["album"], follow_rating=6, follow_top=50)
+    fresh = (await owner.get(f"/api/servers/{sid}/releases/new")).json()
+    assert [r["title"] for r in fresh["items"]] == ["A Fresh One"]
+    assert (await owner.put(
+        "/api/auth/me/preferences", json={"releases": {"follow_top": -1}}, headers=CSRF
+    )).status_code == 422  # fmt: skip
 
     # Hiding one: gone from both lists, back with include_hidden, and shown again.
     kid_a = "00000002-0000-4000-8000-000000000000"

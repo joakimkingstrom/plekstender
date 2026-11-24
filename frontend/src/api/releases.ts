@@ -11,9 +11,15 @@ const keys = {
   all: (serverId: number) => ['servers', serverId, 'releases'] as const,
 }
 
-export function useNewReleases(serverId: number, kinds: ReleaseKind[], includeHidden: boolean) {
+export function useNewReleases(
+  serverId: number,
+  kinds: ReleaseKind[],
+  includeHidden: boolean,
+  /** Whom you follow: a change finds other artists' releases. */
+  settings: Required<Schemas['ReleaseSettings']>,
+) {
   return useQuery({
-    queryKey: [...keys.all(serverId), 'new', kinds, includeHidden],
+    queryKey: [...keys.all(serverId), 'new', kinds, includeHidden, settings.follow_rating, settings.follow_top],
     queryFn: () =>
       unwrap(
         api.GET('/api/servers/{server_id}/releases/new', {

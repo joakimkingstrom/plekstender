@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { errorMessage } from '../api/client'
+import { errorMessage, type Schemas } from '../api/client'
+import { useMe, useSetPreferences } from '../api/hooks'
 import {
   formatReleaseDate,
   useHideRelease,
@@ -12,6 +13,7 @@ import {
 } from '../api/releases'
 import { Artwork } from '../components/library'
 import { Segmented } from '../components/Segmented'
+import { Select } from '../components/Select'
 import { Badge, Button, Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { formatCount } from '../format'
@@ -32,8 +34,23 @@ const KIND_NAME: Record<ReleaseKind, string> = {
   compilation: 'Compilation',
   other: 'Other',
 }
-const DEFAULT_KINDS: ReleaseKind[] = ['album', 'ep']
 type View = 'new' | 'missing'
+type Settings = Required<Schemas['ReleaseSettings']>
+const DEFAULT_SETTINGS: Settings = { kinds: ['album', 'ep'], follow_rating: 8, follow_top: 50 }
+
+const RATINGS = [
+  { value: 0, label: 'any rating (off)' },
+  ...[4, 5, 6, 7, 8, 9, 10].map((r) => ({ value: r, label: `${Math.floor(r / 2)}${r % 2 ? '½' : ''} stars` })),
+]
+const TOPS = [0, 25, 50, 100, 200, 500, 1000].map((n) => ({ value: n, label: n === 0 ? 'none' : String(n) }))
+
+/** Your Releases settings (saved on your account), and a way to change some of them. */
+function useReleaseSettings(): [Settings, (patch: Partial<Settings>) => void] {
+  const me = useMe()
+  const save = useSetPreferences()
+  const settings = { ...DEFAULT_SETTINGS, ...me.data?.preferences?.releases }
+  return [settings, (patch) => save.mutate({ releases: { ...settings, ...patch } })]
+}
 
 /** A release group's cover (through Plekstender, from the Cover Art Archive), or its initial. */
 function Cover({ release }: { release: Release }) {
@@ -101,13 +118,14 @@ export function ReleasesPage() {
   const { active, blocker } = useLibraryServer()
   const [params, setParams] = useSearchParams()
   const view: View = params.get('view') === 'missing' ? 'missing' : 'new'
-  const chosen = (params.get('kind') ?? '').split(',').filter((k): k is ReleaseKind => KINDS.some(([key]) => key === k))
-  const kinds = chosen.length ? chosen : DEFAULT_KINDS
+  const [settings, saveSettings] = useReleaseSettings()
+  const kinds = settings.kinds.length ? settings.kinds : DEFAULT_SETTINGS.kinds
   const [includeHidden, setIncludeHidden] = useState(false)
   const update = (patch: Record<string, string>) => setParams({ ...Object.fromEntries(params), ...patch }, { replace: true })
+  // Saved on your account: the same kinds next time, on any device.
   const toggleKind = (kind: ReleaseKind) => {
     const next = kinds.includes(kind) ? kinds.filter((k) => k !== kind) : [...kinds, kind]
-    if (next.length) update({ kind: KINDS.map(([k]) => k).filter((k) => next.includes(k)).join(',') })
+    if (next.length) saveSettings({ kinds: KINDS.map(([k]) => k).filter((k) => next.includes(k)) })
   }
 
   if (blocker) return blocker
@@ -143,7 +161,13 @@ export function ReleasesPage() {
         </label>
       </div>
       {view === 'new' ? (
-        <NewReleases serverId={serverId} kinds={kinds} includeHidden={includeHidden} />
+        <NewReleases
+          serverId={serverId}
+          kinds={kinds}
+          includeHidden={includeHidden}
+          settings={settings}
+          onSettings={saveSettings}
+        />
       ) : (
         <MissingReleases serverId={serverId} kinds={kinds} includeHidden={includeHidden} />
       )}
@@ -155,25 +179,65 @@ export function ReleasesPage() {
   )
 }
 
-function NewReleases({ serverId, kinds, includeHidden }: { serverId: number; kinds: ReleaseKind[]; includeHidden: boolean }) {
-  const found = useNewReleases(serverId, kinds, includeHidden)
+function Following({ settings, onSettings }: { settings: Settings; onSettings: (patch: Partial<Settings>) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-muted">Follow artists you've rated</span>
+      <Select
+        size="sm"
+        label="Follow artists rated at least"
+        value={settings.follow_rating}
+        options={RATINGS}
+        onChange={(follow_rating) => onSettings({ follow_rating })}
+      />
+      <span className="text-muted">or more, and your</span>
+      <Select
+        size="sm"
+        label="Follow your most played artists"
+        value={settings.follow_top}
+        options={TOPS}
+        onChange={(follow_top) => onSettings({ follow_top })}
+      />
+      <span className="text-muted">most played</span>
+    </div>
+  )
+}
+
+function NewReleases({
+  serverId,
+  kinds,
+  includeHidden,
+  settings,
+  onSettings,
+}: {
+  serverId: number
+  kinds: ReleaseKind[]
+  includeHidden: boolean
+  settings: Settings
+  onSettings: (patch: Partial<Settings>) => void
+}) {
+  const found = useNewReleases(serverId, kinds, includeHidden, settings)
+  const followingControls = <Following settings={settings} onSettings={onSettings} />
   if (found.isPending) return <Spinner />
   if (found.isError) return <Notice tone="error">{errorMessage(found.error)}</Notice>
   const { items, following, new_days } = found.data
+  const followingRow = followingControls
   const upcoming = items.filter((r) => r.upcoming).reverse() // soonest first
   const out = items.filter((r) => !r.upcoming)
   if (following === 0) {
     return (
       <Card>
-        <p className="text-sm text-muted">
-          New releases are from the artists you follow: those you've rated 4 stars or more, and your 50 most played. Rate a
-          few artists, or listen for a while, and their new releases show up here.
+        {followingRow}
+        <p className="mt-3 text-sm text-muted">
+          You don't follow any artists yet. Rate a few artists, listen for a while, or follow more of them above, and their
+          new releases show up here.
         </p>
       </Card>
     )
   }
   return (
     <>
+      {followingRow}
       {upcoming.length > 0 && (
         <Card title="Coming up">
           <ul className={GRID}>
@@ -193,9 +257,7 @@ function NewReleases({ serverId, kinds, includeHidden }: { serverId: number; kin
             ))}
           </ul>
         )}
-        <p className="mt-4 text-xs text-muted">
-          From the {formatCount(following)} artists you follow: those you've rated 4 stars or more, and your 50 most played.
-        </p>
+        <p className="mt-4 text-xs text-muted">From the {formatCount(following)} artists you follow.</p>
       </Card>
     </>
   )

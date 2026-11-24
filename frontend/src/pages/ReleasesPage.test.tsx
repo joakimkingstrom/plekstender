@@ -17,13 +17,20 @@ const release = (n: number, title: string, extra: object = {}) => ({
 const radiohead = { rating_key: 100, name: 'Radiohead', thumb: null }
 
 let fetchMock: ReturnType<typeof vi.fn<(input: Request) => Promise<Response>>>
+let preferences: Record<string, unknown>
 
 beforeEach(() => {
+  preferences = { releases: { kinds: ['album', 'ep'], follow_rating: 8, follow_top: 50 } }
   fetchMock = vi.fn<(input: Request) => Promise<Response>>(async (input: Request) => {
     const url = new URL(input.url)
     const json = (body: unknown, status = 200) =>
       new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     switch (url.pathname) {
+      case '/api/auth/me/preferences':
+        preferences = await input.clone().json()
+        return json({ id: 1, username: 'me', email: null, thumb_url: null, is_admin: false, preferences })
+      case '/api/auth/me':
+        return json({ id: 1, username: 'me', email: null, thumb_url: null, is_admin: false, preferences })
       case '/api/servers':
         return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: false, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
       case '/api/servers/1/sync':
@@ -84,10 +91,16 @@ it('shows new releases from followed artists, coming ones first, and hides one',
   expect(within(out).getByText(/From the 12 artists you follow/)).toBeInTheDocument()
   // Albums and EPs unless chosen otherwise.
   expect(requests('/api/servers/1/releases/new')[0].searchParams.getAll('kind')).toEqual(['album', 'ep'])
-  fireEvent.click(screen.getByRole('button', { name: 'Singles' }))
+  // Kinds and whom you follow are saved on your account.
+  fireEvent.click(await screen.findByRole('button', { name: 'Singles' }))
   await vi.waitFor(() =>
     expect(requests('/api/servers/1/releases/new').at(-1)!.searchParams.getAll('kind')).toEqual(['album', 'ep', 'single']),
   )
+  expect(preferences.releases).toEqual({ kinds: ['album', 'ep', 'single'], follow_rating: 8, follow_top: 50 })
+  expect(screen.getByRole('button', { name: /Follow artists rated at least/ })).toHaveTextContent('4 stars')
+  fireEvent.click(screen.getByRole('button', { name: /Follow your most played artists/ }))
+  fireEvent.click(await screen.findByRole('option', { name: '200' }))
+  await vi.waitFor(() => expect(preferences.releases).toMatchObject({ follow_top: 200 }))
   fireEvent.click(within(out).getByRole('button', { name: 'Hide A Fresh One' }))
   await vi.waitFor(() =>
     expect(fetchMock.mock.calls.some(([r]) => r.method === 'PUT' && r.url.endsWith('/releases/hidden/00000006-0000-4000-8000-000000000000'))).toBe(true),

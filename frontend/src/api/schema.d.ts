@@ -1142,8 +1142,8 @@ export interface paths {
         };
         /**
          * New Releases
-         * @description The last 90 days' releases, and those coming up, by artists you follow: rated 4 stars or
-         *     more, or among your 50 most played.
+         * @description The last 90 days' releases, and those coming up, by artists you follow (by default
+         *     rated 4 stars or more, or among your 50 most played: see your release settings).
          */
         get: operations["new_releases_api_servers__server_id__releases_new_get"];
         put?: never;
@@ -7183,6 +7183,8 @@ export interface components {
              * @description How many of your artists count as followed.
              */
             following: number;
+            /** @description Your settings these were found with. */
+            settings: components["schemas"]["ReleaseSettings"];
             /**
              * New Days
              * @description Releases from this many days back count as new.
@@ -7711,6 +7713,7 @@ export interface components {
              */
             phone_start: "rate" | "home";
             game?: components["schemas"]["GameSettings"];
+            releases?: components["schemas"]["ReleaseSettings"];
             /**
              * Theme
              * @description Light or dark on every device; None: each browser's own choice.
@@ -8085,6 +8088,29 @@ export interface components {
             in_library: boolean;
             /** Hidden */
             hidden: boolean;
+        };
+        /**
+         * ReleaseSettings
+         * @description Library -> Releases, per account.
+         */
+        ReleaseSettings: {
+            /**
+             * Kinds
+             * @description Kinds shown.
+             */
+            kinds?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[];
+            /**
+             * Follow Rating
+             * @description Follow artists rated this or more (0-10, half stars = 1); 0: not by rating.
+             * @default 8
+             */
+            follow_rating: number;
+            /**
+             * Follow Top
+             * @description Follow your N most played artists; 0: none.
+             * @default 50
+             */
+            follow_top: number;
         };
         /** ReleasedAlbum */
         ReleasedAlbum: {
@@ -11473,8 +11499,8 @@ export interface operations {
     new_releases_api_servers__server_id__releases_new_get: {
         parameters: {
             query?: {
-                /** @description Kinds of release to show. */
-                kind?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[];
+                /** @description Kinds of release to show; none: your settings. */
+                kind?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[] | null;
                 include_hidden?: boolean;
             };
             header?: never;
@@ -11508,8 +11534,8 @@ export interface operations {
     missing_releases_api_servers__server_id__releases_missing_get: {
         parameters: {
             query?: {
-                /** @description Kinds of release to show. */
-                kind?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[];
+                /** @description Kinds of release to show; none: your settings. */
+                kind?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[] | null;
                 /** @description Artist name contains */
                 q?: string | null;
                 include_hidden?: boolean;
