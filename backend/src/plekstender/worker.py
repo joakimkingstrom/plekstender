@@ -890,6 +890,21 @@ async def close_stalled_jobs(timestamp: int) -> None:
         )
 
 
+@app.periodic(cron="40 3 * * *", periodic_id="prune-history")
+@app.task(queue="maintenance", queueing_lock="prune-history")
+async def prune_history(timestamp: int) -> None:
+    """Daily: finished jobs out of the queue (a week; failed ones a month), and finished
+    task records older than 90 days (keeping the latest few of each kind)."""
+    from plekstender.maintenance import prune_jobs, prune_records
+
+    await prune_jobs(app)
+    async with get_sessionmaker()() as db:
+        removed = await prune_records(db)
+        await db.commit()
+    if any(removed.values()):
+        log.info("pruned old task records: %s", removed)
+
+
 @app.periodic(cron="17 * * * *", periodic_id="cleanup-sessions")
 @app.task(queue="maintenance", queueing_lock="cleanup-sessions")
 async def cleanup_sessions(timestamp: int) -> None:

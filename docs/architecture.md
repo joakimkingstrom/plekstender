@@ -135,6 +135,18 @@ Some features only work when the app runs next to the Plex server:
 
 The UI hides or disables features based on these flags rather than failing.
 
+## Keeping the database in check
+
+Postgres's own autovacuum cleans up dead rows and reuses their space. On top of that, a daily
+worker job (`prune-history`, `maintenance.py`) removes what nothing reads once it's old:
+- finished jobs in the queue (procrastinate's `procrastinate_jobs`, with their events):
+  successful ones after 7 days, failed, cancelled or aborted ones after 30;
+- records of finished background tasks (`file_scans`, `sync_runs`, `artwork_jobs`) after 90
+  days, always keeping the latest 5 of each kind.
+
+Everything else is kept: listens, play sessions, edits with their undo history, lyrics found,
+release groups.
+
 ## Versions and releases
 
 - Every image built from `main` gets a version: major.minor from `backend/pyproject.toml`, then
