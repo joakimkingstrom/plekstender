@@ -146,12 +146,20 @@ async def to_check(db: AsyncSession, now: dt.datetime, limit: int = BATCH) -> li
     return list(rows.all())
 
 
+# Rows saved per statement: some artists have thousands of release groups (live recordings),
+# and a statement takes at most 65,535 values.
+STORE_CHUNK = 1000
+# MusicBrainz errors in a row before a run stops (it's down or busy); one artist's error only
+# skips that artist.
+MAX_ERRORS = 3
+
+
 async def store(db: AsyncSession, artist_mbid: str, groups: list[dict[str, Any]] | None) -> None:
     """Replace an artist's release groups (None: MusicBrainz doesn't know the artist)."""
     await db.execute(delete(ReleaseGroup).where(ReleaseGroup.artist_mbid == artist_mbid))
     rows = rows_for(artist_mbid, groups or [])
-    if rows:
-        await db.execute(insert(ReleaseGroup).values(rows))
+    for start in range(0, len(rows), STORE_CHUNK):
+        await db.execute(insert(ReleaseGroup).values(rows[start : start + STORE_CHUNK]))
     stmt = insert(ArtistReleaseCheck).values(
         artist_mbid=artist_mbid, checked_at=dt.datetime.now(dt.UTC), found=groups is not None
     )
@@ -165,10 +173,12 @@ async def store(db: AsyncSession, artist_mbid: str, groups: list[dict[str, Any]]
 
 async def look_up(db: AsyncSession, http: httpx.AsyncClient, limit: int = BATCH) -> int:
     """Read due artists' release groups from MusicBrainz; returns how many artists were read.
-    Stops early when MusicBrainz is unreachable or busy (the rest wait for the next run)."""
+    An artist that fails is skipped (tried again next run); the run stops when MusicBrainz
+    fails a few times in a row (unreachable or busy: the rest wait for the next run)."""
     done = 0
-    for artist_mbid in await to_check(db, dt.datetime.now(dt.UTC), limit):
-        if done:
+    errors = 0
+    for n, artist_mbid in enumerate(await to_check(db, dt.datetime.now(dt.UTC), limit)):
+        if n:
             await asyncio.sleep(PAUSE)
         try:
             groups: list[dict[str, Any]] | None = await musicbrainz.release_groups(
@@ -177,10 +187,20 @@ async def look_up(db: AsyncSession, http: httpx.AsyncClient, limit: int = BATCH)
         except musicbrainz.NotFound:
             groups = None
         except musicbrainz.MusicBrainzError as exc:
-            log.info("MusicBrainz release lookups paused: %s", exc)
-            break
-        await store(db, artist_mbid, groups)
-        await db.commit()
+            errors += 1
+            log.info("MusicBrainz releases of %s: %s", artist_mbid, exc)
+            if errors >= MAX_ERRORS:
+                log.info("MusicBrainz release lookups paused after %d errors in a row", errors)
+                break
+            continue
+        errors = 0
+        try:
+            await store(db, artist_mbid, groups)
+            await db.commit()
+        except Exception:
+            log.exception("couldn't save the releases of %s", artist_mbid)
+            await db.rollback()
+            continue
         done += 1
     return done
 

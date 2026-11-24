@@ -251,3 +251,53 @@ async def test_releases(app: FastAPI, plex: FakePlex, web: dict[str, int]) -> No
 
     # Another server's id isn't yours.
     assert (await owner.get(f"/api/servers/{sid + 99}/releases/new")).status_code == 404
+
+
+@pytest.mark.db
+async def test_a_huge_discography_and_a_failing_artist_dont_stop_the_rest(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """7,500 release groups (more than one statement takes values for), and an artist
+    MusicBrainz fails on: the others are still read, and the run doesn't get stuck."""
+    from sqlalchemy import func
+
+    from plekstender.db.models import ReleaseGroup
+
+    monkeypatch.setattr(musicbrainz, "INTERVAL", 0.0)
+    monkeypatch.setattr(releases, "PAUSE", 0.0)
+    huge = [rg(n, f"Live {n}", "Album", "1975", "Live") for n in range(1, 7501)]
+
+    def browse(request: httpx.Request) -> httpx.Response:
+        artist = request.url.params["artist"]
+        offset = int(request.url.params["offset"])
+        if artist == GONE:
+            return httpx.Response(500)
+        groups = huge if artist == RADIOHEAD else [rg(9001, "Third", "Album", "2008")]
+        page = groups[offset : offset + 100]
+        return httpx.Response(
+            200, json={"release-group-count": len(groups), "release-groups": page}
+        )
+
+    plex.router.get("https://musicbrainz.org/ws/2/release-group").mock(side_effect=browse)
+    await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        await db.execute(update(Artist).where(Artist.rating_key == 100).values(mbid=RADIOHEAD))
+        await db.execute(update(Artist).where(Artist.rating_key == 101).values(mbid=PORTISHEAD))
+        await db.execute(update(Artist).where(Artist.rating_key == 102).values(mbid=GONE))
+        await db.commit()
+    async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
+        # Radiohead (followed) first, then GONE (failing), then Portishead.
+        assert await releases.to_check(db, dt.datetime.now(dt.UTC)) == [RADIOHEAD, GONE, PORTISHEAD]
+        assert await releases.look_up(db, http) == 2
+        stored = dict(
+            (
+                await db.execute(
+                    select(ReleaseGroup.artist_mbid, func.count()).group_by(
+                        ReleaseGroup.artist_mbid
+                    )
+                )
+            ).all()
+        )
+        assert stored == {RADIOHEAD: 7500, PORTISHEAD: 1}
+        # The failing artist is tried again next time.
+        assert await releases.to_check(db, dt.datetime.now(dt.UTC)) == [GONE]

@@ -76,7 +76,10 @@ async def _get(
         raise MusicBrainzError("MusicBrainz is busy; try again in a moment.")
     if resp.status_code >= 400:
         raise MusicBrainzError(f"MusicBrainz answered {resp.status_code}.")
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise MusicBrainzError("MusicBrainz's answer wasn't readable.") from exc
     if cache:
         _cache[key] = (time.monotonic(), data)
         while len(_cache) > CACHE_SIZE:
