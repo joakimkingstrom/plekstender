@@ -119,6 +119,18 @@ async def test_on_this_day_and_taste(app: FastAPI, plex: FakePlex) -> None:
         "Alternative": [0.0, 0.5, 0.0],
     }
     assert taste["genre_matched"] == [2, 3, 1]  # not the artist that isn't in the library
+    # Styles or moods instead: only Radiohead has them (Art Rock, Melancholy).
+    for kind, name in (("style", "Art Rock"), ("mood", "Melancholy")):
+        tags = (
+            await owner.get(
+                "/api/stats/taste", params={"server_id": sid, "tz": "UTC", "kind": kind}
+            )
+        ).json()
+        assert [(g["name"], g["shares"]) for g in tags["genres"]] == [(name, [0.0, 1.0, 0.0])]
+        assert tags["genre_matched"] == [0, 3, 0]
+        assert tags["decades"] == taste["decades"]  # the same either way
+    bad = await owner.get("/api/stats/taste", params={"server_id": sid, "kind": "colour"})
+    assert bad.status_code == 422
     # Karma Police is on OK Computer (1997) and its 2017 reissue: the earliest counts.
     assert [(d["name"], d["shares"]) for d in taste["decades"]] == [("1990s", [1.0, 1.0, 1.0])]
     assert taste["decade_matched"] == [2, 3, 1]

@@ -64,11 +64,18 @@ async def on_this_day(
 
 
 @router.get("/taste", response_model=TasteOut)
-async def taste(db: DbDep, user: UserDep, server_id: int, tz: TzQuery = "UTC") -> TasteOut:
-    """Your genres and the decades your music is from, per year you listened."""
+async def taste(
+    db: DbDep,
+    user: UserDep,
+    server_id: int,
+    tz: TzQuery = "UTC",
+    kind: insights.TagKind = "genre",
+) -> TasteOut:
+    """Your genres (or styles, or moods: the artists' in Plex) and the decades your music is
+    from, per year you listened. The `genres` fields hold whichever kind was asked for."""
     tzinfo = _zone(tz)
     us = await get_user_server(db, user, server_id)
-    found = await insights.taste(db, user.id, us.server_id, tzinfo)
+    found = await insights.taste(db, user.id, us.server_id, tzinfo, tag_kind=kind)
     return TasteOut(
         years=found.years,
         listens=found.listens,

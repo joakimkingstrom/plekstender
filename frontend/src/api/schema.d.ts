@@ -977,7 +977,8 @@ export interface paths {
         };
         /**
          * Taste
-         * @description Your genres and the decades your music is from, per year you listened.
+         * @description Your genres (or styles, or moods: the artists' in Plex) and the decades your music is
+         *     from, per year you listened. The `genres` fields hold whichever kind was asked for.
          */
         get: operations["taste_api_stats_taste_get"];
         put?: never;
@@ -9293,12 +9294,12 @@ export interface components {
             listens: number[];
             /**
              * Genres
-             * @description The most played genres overall.
+             * @description The most played genres (or styles, or moods: see `kind`) overall.
              */
             genres: components["schemas"]["ShareOut"][];
             /**
              * Genre Matched
-             * @description Listens per year whose artist has a genre.
+             * @description Listens per year whose artist has a genre (or style, or mood).
              */
             genre_matched: number[];
             /**
@@ -11354,6 +11355,7 @@ export interface operations {
                 server_id: number;
                 /** @description IANA time zone, e.g. Europe/London */
                 tz?: string;
+                kind?: "genre" | "style" | "mood";
             };
             header?: never;
             path?: never;

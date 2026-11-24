@@ -222,7 +222,7 @@ _GENRES = text(
         JOIN user_item_state s
           ON s.user_id = :user_id AND s.server_id = ar.server_id AND s.rating_key = ar.rating_key
         JOIN item_tags it ON it.server_id = ar.server_id AND it.rating_key = ar.rating_key
-        JOIN tags tg ON tg.id = it.tag_id AND tg.kind = 'genre'
+        JOIN tags tg ON tg.id = it.tag_id AND tg.kind = :tag_kind
         WHERE ar.server_id = :server_id AND ar.name_key IS NOT NULL
     ),
     weights AS (
@@ -244,7 +244,7 @@ _YEAR_TOTALS = text(
         JOIN user_item_state s
           ON s.user_id = :user_id AND s.server_id = ar.server_id AND s.rating_key = ar.rating_key
         JOIN item_tags it ON it.server_id = ar.server_id AND it.rating_key = ar.rating_key
-        JOIN tags tg ON tg.id = it.tag_id AND tg.kind = 'genre'
+        JOIN tags tg ON tg.id = it.tag_id AND tg.kind = :tag_kind
         WHERE ar.server_id = :server_id AND ar.name_key IS NOT NULL
     )
     SELECT year, sum(n)::int AS listens,
@@ -291,11 +291,20 @@ def _median(counts: dict[int, int]) -> int | None:
     return None  # pragma: no cover - unreachable
 
 
+TagKind = Literal["genre", "style", "mood"]
+
+
 async def taste(
-    db: AsyncSession, user_id: int, server_id: int, tz: ZoneInfo, top_genres: int = 8
+    db: AsyncSession,
+    user_id: int,
+    server_id: int,
+    tz: ZoneInfo,
+    top_genres: int = 8,
+    tag_kind: TagKind = "genre",
 ) -> Taste:
-    """The user's genres and the decades their music is from, per listening year."""
-    params = {"user_id": user_id, "server_id": server_id, "tz": tz.key}
+    """The user's genres (or the artists' styles or moods, in Plex) and the decades their
+    music is from, per listening year."""
+    params = {"user_id": user_id, "server_id": server_id, "tz": tz.key, "tag_kind": tag_kind}
     totals = (await db.execute(_YEAR_TOTALS, params)).all()
     years = [r.year for r in totals]
     index = {year: i for i, year in enumerate(years)}

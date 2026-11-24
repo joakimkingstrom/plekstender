@@ -955,8 +955,12 @@ class ShareOut(BaseModel):
 class TasteOut(BaseModel):
     years: list[int]
     listens: list[int] = Field(description="All listens per year.")
-    genres: list[ShareOut] = Field(description="The most played genres overall.")
-    genre_matched: list[int] = Field(description="Listens per year whose artist has a genre.")
+    genres: list[ShareOut] = Field(
+        description="The most played genres (or styles, or moods: see `kind`) overall."
+    )
+    genre_matched: list[int] = Field(
+        description="Listens per year whose artist has a genre (or style, or mood)."
+    )
     decades: list[ShareOut] = Field(description="When the music played was released.")
     decade_matched: list[int] = Field(description="Listens per year with a known release year.")
     median_release: list[int | None] = Field(description="Median release year per year.")

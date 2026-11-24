@@ -72,13 +72,16 @@ export function useOnThisDay(serverId: number | null) {
   })
 }
 
-/** Genres and release decades per year you listened. */
-export function useTaste(serverId: number | null) {
+export type TasteKind = 'genre' | 'style' | 'mood'
+
+/** Genres (or styles, or moods) and release decades per year you listened. */
+export function useTaste(serverId: number | null, kind: TasteKind = 'genre') {
   const tz = localTimeZone()
   return useQuery({
-    queryKey: ['listens', 'stats', 'taste', serverId, tz],
+    queryKey: ['listens', 'stats', 'taste', serverId, tz, kind],
     enabled: serverId !== null,
-    queryFn: () => unwrap(api.GET('/api/stats/taste', { params: { query: { server_id: serverId!, tz } } })),
+    queryFn: () => unwrap(api.GET('/api/stats/taste', { params: { query: { server_id: serverId!, tz, kind } } })),
+    placeholderData: keepPreviousData,
   })
 }
 

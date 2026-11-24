@@ -20,14 +20,20 @@ const taste = {
   median_release: [1997, 2004, 2016],
 }
 
+const styles = { ...taste, genres: [{ name: 'Art Rock', shares: [1, 0.6, 0.2] }], genre_matched: [50, 100, 10] }
+const asked: URL[] = []
+
 beforeEach(() => {
+  asked.length = 0
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: Request) => {
-      const path = new URL(input.url).pathname
+      const url = new URL(input.url)
+      const path = url.pathname
+      asked.push(url)
       const body: Record<string, unknown> = {
         '/api/servers': [{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }],
-        '/api/stats/taste': taste,
+        '/api/stats/taste': url.searchParams.get('kind') === 'style' ? styles : taste,
       }
       return new Response(JSON.stringify(body[path] ?? { detail: 'Not found' }), {
         status: path in body ? 200 : 404,
@@ -65,4 +71,12 @@ it('shows genres and release decades by year, and how old the music was', async 
   const squares = within(card).getByRole('img').querySelectorAll('span.rounded-\\[3px\\]')
   fireEvent.mouseEnter(squares[1])
   expect(within(card).getByText('Rock · 2025: 25% of 160 listens with a genre')).toBeInTheDocument()
+
+  // Styles instead (when nearly everything is one genre).
+  fireEvent.click(within(card).getByRole('button', { name: 'Styles' }))
+  expect(await screen.findByRole('heading', { name: 'Your styles over the years' })).toBeInTheDocument()
+  expect(asked.at(-1)!.searchParams.get('kind')).toBe('style')
+  const styleTable = await screen.findByRole('table', { name: "Share of each year's listens by style" })
+  expect(within(styleTable).getAllByRole('row').map((r) => r.textContent)).toEqual(['Style202420252026', 'Art Rock100%60%20%'])
+  expect(screen.getByText(/Your 1 most played styles\. Each listen counts towards its artist's styles/)).toBeInTheDocument()
 })
