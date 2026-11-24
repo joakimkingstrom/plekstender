@@ -1133,6 +1133,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/releases/new": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * New Releases
+         * @description The last 90 days' releases, and those coming up, by artists you follow: rated 4 stars or
+         *     more, or among your 50 most played.
+         */
+        get: operations["new_releases_api_servers__server_id__releases_new_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/releases/missing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Missing Releases
+         * @description Released albums (or other kinds) of your library's artists that it doesn't have, by
+         *     artist, most played first.
+         */
+        get: operations["missing_releases_api_servers__server_id__releases_missing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/releases/hidden/{mbid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Hide Release
+         * @description Don't show this release (on any server).
+         */
+        put: operations["hide_release_api_servers__server_id__releases_hidden__mbid__put"];
+        post?: never;
+        /** Show Release */
+        delete: operations["show_release_api_servers__server_id__releases_hidden__mbid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/playlists/search": {
         parameters: {
             query?: never;
@@ -4021,6 +4084,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/releases/{mbid}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Release Cover
+         * @description A release group's front cover from the Cover Art Archive, small, fetched by the server
+         *     (the page only loads images from here).
+         */
+        get: operations["release_cover_api_releases__mbid__cover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6693,6 +6777,76 @@ export interface components {
             /** Length Ms */
             length_ms: number | null;
         };
+        /** MissingArtistOut */
+        MissingArtistOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Name */
+            name: string;
+            /** Thumb */
+            thumb: string | null;
+            /** Releases */
+            releases: components["schemas"]["ReleaseOut"][];
+        };
+        /** MissingReleasesOut */
+        MissingReleasesOut: {
+            /** Artists */
+            artists: components["schemas"]["MissingArtistOut"][];
+            /**
+             * Total Artists
+             * @description Artists with anything missing (all pages).
+             */
+            total_artists: number;
+            coverage: components["schemas"]["ReleaseCoverageOut"];
+        };
+        /** NewReleaseOut */
+        NewReleaseOut: {
+            /**
+             * Mbid
+             * @description MusicBrainz release group ID.
+             */
+            mbid: string;
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "album" | "ep" | "single" | "live" | "compilation" | "other";
+            /**
+             * First Release Date
+             * @description "2019", "2019-05" or "2019-05-21".
+             */
+            first_release_date: string | null;
+            /** In Library */
+            in_library: boolean;
+            /** Hidden */
+            hidden: boolean;
+            artist: components["schemas"]["ReleaseArtistOut"];
+            /**
+             * Upcoming
+             * @description Not out yet.
+             */
+            upcoming: boolean;
+        };
+        /** NewReleasesOut */
+        NewReleasesOut: {
+            /**
+             * Items
+             * @description Newest first; coming ones first of all.
+             */
+            items: components["schemas"]["NewReleaseOut"][];
+            /**
+             * Following
+             * @description How many of your artists count as followed.
+             */
+            following: number;
+            /**
+             * New Days
+             * @description Releases from this many days back count as new.
+             */
+            new_days: number;
+        };
         /** NfoOut */
         NfoOut: {
             /** Path */
@@ -7538,6 +7692,57 @@ export interface components {
             plays: number;
             /** Last Played At */
             last_played_at: string | null;
+        };
+        /** ReleaseArtistOut */
+        ReleaseArtistOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Name */
+            name: string;
+            /** Thumb */
+            thumb: string | null;
+        };
+        /** ReleaseCoverageOut */
+        ReleaseCoverageOut: {
+            /**
+             * Artists
+             * @description Your library's artists.
+             */
+            artists: number;
+            /**
+             * With Mbid
+             * @description Those Plex has a MusicBrainz ID for.
+             */
+            with_mbid: number;
+            /**
+             * Checked
+             * @description Those whose releases have been read from MusicBrainz.
+             */
+            checked: number;
+        };
+        /** ReleaseOut */
+        ReleaseOut: {
+            /**
+             * Mbid
+             * @description MusicBrainz release group ID.
+             */
+            mbid: string;
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "album" | "ep" | "single" | "live" | "compilation" | "other";
+            /**
+             * First Release Date
+             * @description "2019", "2019-05" or "2019-05-21".
+             */
+            first_release_date: string | null;
+            /** In Library */
+            in_library: boolean;
+            /** Hidden */
+            hidden: boolean;
         };
         /** ReleasedAlbum */
         ReleasedAlbum: {
@@ -10911,6 +11116,140 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RatingOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_releases_api_servers__server_id__releases_new_get: {
+        parameters: {
+            query?: {
+                /** @description Kinds of release to show. */
+                kind?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[];
+                include_hidden?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewReleasesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    missing_releases_api_servers__server_id__releases_missing_get: {
+        parameters: {
+            query?: {
+                /** @description Kinds of release to show. */
+                kind?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[];
+                /** @description Artist name contains */
+                q?: string | null;
+                include_hidden?: boolean;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissingReleasesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hide_release_api_servers__server_id__releases_hidden__mbid__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                mbid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    show_release_api_servers__server_id__releases_hidden__mbid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                mbid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -16135,6 +16474,45 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GameRoundOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_cover_api_releases__mbid__cover_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mbid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -46,10 +46,12 @@ def clear_cache() -> None:
     _cache.clear()
 
 
-async def _get(http: httpx.AsyncClient, path: str, params: dict[str, str]) -> Any:
+async def _get(
+    http: httpx.AsyncClient, path: str, params: dict[str, str], *, cache: bool = True
+) -> Any:
     global _last
     key = f"{path}?{urlencode(sorted(params.items()))}"
-    hit = _cache.get(key)
+    hit = _cache.get(key) if cache else None
     if hit is not None and time.monotonic() - hit[0] < CACHE_FOR:
         _cache.move_to_end(key)
         return hit[1]
@@ -75,9 +77,10 @@ async def _get(http: httpx.AsyncClient, path: str, params: dict[str, str]) -> An
     if resp.status_code >= 400:
         raise MusicBrainzError(f"MusicBrainz answered {resp.status_code}.")
     data = resp.json()
-    _cache[key] = (time.monotonic(), data)
-    while len(_cache) > CACHE_SIZE:
-        _cache.popitem(last=False)
+    if cache:
+        _cache[key] = (time.monotonic(), data)
+        while len(_cache) > CACHE_SIZE:
+            _cache.popitem(last=False)
     return data
 
 
@@ -327,3 +330,21 @@ async def find_artist_country(http: httpx.AsyncClient, name: str) -> str | None:
     ]
     countries = {artist_country_of(a) for a in exact}
     return countries.pop() if len(countries) == 1 else None
+
+
+async def release_groups(http: httpx.AsyncClient, artist_mbid: str) -> list[dict[str, Any]]:
+    """Every release group credited to an artist (albums, EPs, singles, live...), a hundred a
+    request. Not cached: the worker reads each artist rarely, and the cache is for the tag
+    editor."""
+    out: list[dict[str, Any]] = []
+    while True:
+        data = await _get(
+            http,
+            "/release-group",
+            {"artist": artist_mbid, "limit": "100", "offset": str(len(out))},
+            cache=False,
+        )
+        page = data.get("release-groups") or []
+        out.extend(page)
+        if not page or len(out) >= int(data.get("release-group-count") or 0):
+            return out

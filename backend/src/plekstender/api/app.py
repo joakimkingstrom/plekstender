@@ -36,6 +36,7 @@ from plekstender.api.routes import (
     playlists,
     previews,
     ratings,
+    releases,
     renames,
     rewind,
     scrobblers,
@@ -107,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rewind,
         statuses,
         ratings,
+        releases,
         playlists,
         previews,
         game,
@@ -129,6 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(artwork.fonts_router)
     app.include_router(game.stats_router)
     app.include_router(game.sample_router)
+    app.include_router(releases.covers_router)
 
     if settings.static_dir:
         _mount_spa(app, settings.static_dir)

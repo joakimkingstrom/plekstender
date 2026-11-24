@@ -733,6 +733,53 @@ class HiddenSuggestion(Base):
     hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 
+class ReleaseGroup(Base):
+    """An artist's release group on MusicBrainz (album, EP, single...), for Library -> Releases.
+    Shared by every server, by the artist's MBID; the worker refreshes them (`releases`)."""
+
+    __tablename__ = "release_groups"
+    __table_args__ = (
+        PrimaryKeyConstraint("artist_mbid", "mbid"),
+        Index("ix_release_groups_mbid", "mbid"),
+        Index("ix_release_groups_released", "released"),
+    )
+
+    artist_mbid: Mapped[str] = mapped_column(String(36))
+    mbid: Mapped[str] = mapped_column(String(36))
+    title: Mapped[str] = mapped_column(Text)
+    # normalise_title(title), to match library albums named the same.
+    title_norm: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(16))  # album|ep|single|live|compilation|other
+    primary_type: Mapped[str | None] = mapped_column(String(32))
+    secondary_types: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    # As MusicBrainz gives it: "2019", "2019-05" or "2019-05-21".
+    first_release_date: Mapped[str | None] = mapped_column(String(10))
+    # The same as a date (the 1st of the month / year when only those are known).
+    released: Mapped[dt.date | None] = mapped_column(Date)
+
+
+class ArtistReleaseCheck(Base):
+    """When an artist's release groups were last read from MusicBrainz."""
+
+    __tablename__ = "artist_release_checks"
+
+    artist_mbid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    checked_at: Mapped[dt.datetime]
+    # False: MusicBrainz doesn't know the MBID (merged or deleted there).
+    found: Mapped[bool] = mapped_column(default=True)
+
+
+class HiddenRelease(Base):
+    """A release group someone doesn't want to see in Library -> Releases."""
+
+    __tablename__ = "hidden_releases"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "mbid"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    mbid: Mapped[str] = mapped_column(String(36))
+    hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
 class UserAchievement(Base):
     """An achievement a person unlocked (see plekstender.achievements), and when they saw
     its celebration."""

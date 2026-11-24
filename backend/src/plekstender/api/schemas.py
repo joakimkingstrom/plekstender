@@ -965,6 +965,53 @@ class RediscoverOut(BaseModel):
     played_a_lot: int = Field(description="At least this many plays is a lot.")
 
 
+# --- releases (MusicBrainz) ----------------------------------------------------------------
+
+ReleaseKind = Literal["album", "ep", "single", "live", "compilation", "other"]
+
+
+class ReleaseOut(BaseModel):
+    mbid: str = Field(description="MusicBrainz release group ID.")
+    title: str
+    kind: ReleaseKind
+    first_release_date: str | None = Field(description='"2019", "2019-05" or "2019-05-21".')
+    in_library: bool
+    hidden: bool
+
+
+class ReleaseArtistOut(BaseModel):
+    rating_key: int
+    name: str
+    thumb: str | None
+
+
+class NewReleaseOut(ReleaseOut):
+    artist: ReleaseArtistOut
+    upcoming: bool = Field(description="Not out yet.")
+
+
+class NewReleasesOut(BaseModel):
+    items: list[NewReleaseOut] = Field(description="Newest first; coming ones first of all.")
+    following: int = Field(description="How many of your artists count as followed.")
+    new_days: int = Field(description="Releases from this many days back count as new.")
+
+
+class MissingArtistOut(ReleaseArtistOut):
+    releases: list[ReleaseOut]
+
+
+class ReleaseCoverageOut(BaseModel):
+    artists: int = Field(description="Your library's artists.")
+    with_mbid: int = Field(description="Those Plex has a MusicBrainz ID for.")
+    checked: int = Field(description="Those whose releases have been read from MusicBrainz.")
+
+
+class MissingReleasesOut(BaseModel):
+    artists: list[MissingArtistOut]
+    total_artists: int = Field(description="Artists with anything missing (all pages).")
+    coverage: ReleaseCoverageOut
+
+
 # --- smart playlists ---------------------------------------------------------------------
 
 Schedule = Literal["manual", "daily", "weekly", "monthly"]

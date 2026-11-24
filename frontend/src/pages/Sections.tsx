@@ -24,6 +24,7 @@ export function LibraryLayout() {
           { to: '/library/stats', label: 'Stats' },
           { to: '/library/playlists', label: 'Playlists' },
           { to: '/library/rate', label: 'Rate' },
+          { to: '/library/releases', label: 'Releases' },
           ...(active?.is_owner
             ? [
                 { to: '/library/discover', label: 'Discover' },

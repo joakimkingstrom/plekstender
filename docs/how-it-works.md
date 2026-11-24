@@ -419,6 +419,14 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **History → Rediscover:** three lists of songs (one row per artist and normalised title, the best-rated release): forgotten favourites (rated 4½★ or more, last played over a year ago), loved but hardly played (4½★ or more, 2 plays at most, not forgotten), and played a lot but rated low (2★ or less, 5 plays or more). Plays are the higher of Plex's count and the history's; "last played" is the later of Plex's `last_viewed_at` and `user_item_state.last_listened_at` (new, kept with the listen counts). Rating a song there refreshes the lists.
 - **Forgotten favourites playlist:** `Definition.forgotten` adds the forgotten favourites (found again at each build) to a smart playlist's songs, with the rules still applying; "Make a playlist" on Rediscover opens the builder with it ticked, named, and refreshing weekly.
 
+## Releases (24 Nov)
+- **Library → Releases** (everyone): MusicBrainz release groups of the library's artists, by the artist MBID Plex has (artists without one can't be looked up; the page says how many).
+- The worker (`releases.py`, hourly, up to 300 artists a run at one every two seconds) reads each artist's release groups (`/ws/2/release-group?artist=…`, 100 a page, not cached in memory) into `release_groups`, shared by every server: artists someone follows daily, the rest every two weeks; `artist_release_checks` records when (and whether MusicBrainz still knows the MBID).
+- Each release group gets one kind: live, compilation (by secondary type, live first), album, EP, single, or other (any other secondary type, broadcasts). Albums and EPs are shown unless more kinds are chosen.
+- **New releases:** the last 90 days and what's announced, from the artists you follow (rated 4★ or more, or among your 50 most played with any plays); coming ones first.
+- **Missing from your library:** released release groups of your artists the library doesn't have, by artist (most played first, 20 a page, search by name). "In the library" means an album with the same release group MBID (Plex's, or the one Album covers found by name) or the same artist and normalised title.
+- Hiding a release (`hidden_releases`, per person) takes it out of both lists; "Show hidden" brings them back to show again. Covers come from the Cover Art Archive through `/api/releases/{mbid}/cover` (the page only loads images from Plekstender), cached a week (a missing one a day).
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

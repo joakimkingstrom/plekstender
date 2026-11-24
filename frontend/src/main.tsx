@@ -27,6 +27,7 @@ import { RatePage } from './pages/RatePage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RatingsPage } from './pages/RatingsPage'
 import { RediscoverPage } from './pages/RediscoverPage'
+import { ReleasesPage } from './pages/ReleasesPage'
 import { RewindPage } from './pages/RewindPage'
 import { ScoresPage } from './pages/ScoresPage'
 import { TastePage } from './pages/TastePage'
@@ -67,6 +68,7 @@ const router = createBrowserRouter([
           { path: 'playlists/new', element: <PlaylistEditorPage /> },
           { path: 'playlists/:id', element: <PlaylistEditorPage /> },
           { path: 'rate', element: <RatePage /> },
+          { path: 'releases', element: <ReleasesPage /> },
           { path: 'discover', element: <DiscoverPage /> },
           { path: 'artwork', element: <ArtworkPage /> },
           { path: 'artwork/albums', element: <ArtworkPage /> },

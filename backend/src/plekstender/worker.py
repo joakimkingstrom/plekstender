@@ -50,6 +50,7 @@ from plekstender.history.scrobblers import submit_targets
 from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
 from plekstender.playlists.service import build as build_playlist_in_plex
 from plekstender.previews import trim_cache as trim_preview_cache
+from plekstender.releases import look_up as look_up_releases
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
@@ -731,6 +732,20 @@ async def find_artist_countries(timestamp: int) -> None:
         done = await look_up_artist_countries(db, http)
     if done:
         log.info("Looked up %d artists' countries on MusicBrainz", done)
+
+
+@app.periodic(cron="55 * * * *", periodic_id="artist-releases")
+@app.task(queue="maintenance", queueing_lock="artist-releases")
+async def find_artist_releases(timestamp: int) -> None:
+    """Hourly: library artists' releases on MusicBrainz (Library -> Releases), a few hundred
+    artists an hour; followed artists daily, the rest every two weeks."""
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        done = await look_up_releases(db, http)
+    if done:
+        log.info("Read %d artists' releases from MusicBrainz", done)
 
 
 @app.periodic(cron="*/15 * * * *", periodic_id="cover-colours")
