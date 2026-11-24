@@ -6,12 +6,14 @@ import datetime as dt
 from typing import Any, ClassVar
 
 from sqlalchemy import (
+    ARRAY,
     BigInteger,
     Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
+    Integer,
     MetaData,
     PrimaryKeyConstraint,
     SmallInteger,
@@ -915,7 +917,7 @@ class FileScan(Base):
     server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(
         String(8), default="scan", server_default="scan"
-    )  # | identify | rename | lyrics
+    )  # | identify | rename | lyrics | dupes
     # What an identify job covers: {"file_ids": [...], "again": bool}.
     params: Mapped[dict[str, Any]] = mapped_column(default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(
@@ -953,6 +955,20 @@ class TrackLyrics(Base):
     embeddable: Mapped[bool] = mapped_column(default=False)
     error: Mapped[str | None] = mapped_column(Text)
     looked_up_at: Mapped[dt.datetime]
+
+
+class FileFingerprint(Base):
+    """A music file's raw Chromaprint fingerprint (first two minutes), to find files that are
+    the same recording. `file_key` is the file's size and modification time when it was made:
+    a changed file is fingerprinted again. Numbers are stored signed (Postgres integers)."""
+
+    __tablename__ = "file_fingerprints"
+
+    media_file_id: Mapped[int] = mapped_column(
+        ForeignKey("media_files.id", ondelete="CASCADE"), primary_key=True
+    )
+    file_key: Mapped[str] = mapped_column(String(64))
+    values: Mapped[list[int]] = mapped_column(ARRAY(Integer))
 
 
 class TagChangeSet(Base):

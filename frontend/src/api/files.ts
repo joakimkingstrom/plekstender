@@ -511,6 +511,15 @@ export const bulk = {
         body: { albums, again },
       }),
     ),
+  findDuplicates: (serverId: number) =>
+    unwrap(api.POST('/api/servers/{server_id}/files/duplicates', { params: { path: { server_id: serverId } } })),
+  removeDuplicates: (serverId: number, jobId: number, remove: number[]) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/duplicates/{job_id}/apply', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+        body: { remove },
+      }),
+    ),
   writeLyrics: (serverId: number, jobId: number, placement: LyricsPlacement, overwrite: boolean) =>
     unwrap(
       api.POST('/api/servers/{server_id}/files/lyrics/{job_id}/apply', {
@@ -545,4 +554,19 @@ export function useLyricsPlan(serverId: number, jobId: number | null, placement:
 export function useRefreshFiles(serverId: number) {
   const qc = useQueryClient()
   return () => qc.invalidateQueries({ queryKey: filesKeys.all(serverId) })
+}
+
+export type Duplicates = Schemas['DuplicatesOut']
+
+/** The last duplicates check (polled while it runs). */
+export function useDuplicates(serverId: number) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'duplicates'],
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/files/duplicates/latest', { params: { path: { server_id: serverId } } })),
+    refetchInterval: (query) => {
+      const status = query.state.data?.job.status
+      return status === 'queued' || status === 'running' ? 1500 : false
+    },
+  })
 }

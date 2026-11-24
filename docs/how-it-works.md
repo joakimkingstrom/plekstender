@@ -432,6 +432,11 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - The preview and the edit are worked out in SQL from `track_lyrics` (a whole library's lyrics never pass through Python): synced lyrics → `<song>.lrc`; plain only → `<song>.txt` (not when there's a `.lrc`); and/or the plain text (times taken out of synced lyrics) in the tags (ID3 USLT, Vorbis LYRICS, MP4 ©lyr; `tags/embedded_lyrics.py`). Lyrics a song already has stay unless "replace" is ticked.
 - Written as one edit with fields `lrc`, `txt` (the change's path is the lyrics file) and `lyrics`, old and new values the text: checked before writing like tags (a file changed meanwhile is a conflict), and undone like any edit (undo removes files it made). The history shows lyrics by their first line. Plex is asked to rescan the folders.
 
+## Duplicate files (24 Nov)
+- **Library → Tag editing → Duplicate files** (server owners): a worker job (`FileScan` kind `dupes`, `tags/duplicates.py`) groups candidates cheaply first: the same MusicBrainz recording ID, or the same normalised artist and title, then split by length (within 4 s, so a live version isn't one). Candidates only are fingerprinted (`fpcalc -raw`, the first two minutes, kept in `file_fingerprints` while the file's size and time are unchanged) and compared pair by pair: the share of matching bits at the best of ±16 shifts (about ±2 s); 0.85 or more is the same recording (re-encodes come out above 0.9, different songs near 0.5). Without fpcalc, groups are listed as "not compared by sound".
+- Each group suggests a copy to keep: lossless, then the higher bitrate, then the one Plex has and with a MusicBrainz ID, then the shorter path. Groups not compared by sound are left alone unless a copy is picked.
+- Removing is one edit of `path` moves (like renaming) into `.plekstender-duplicates/<same path>` in the music folder, with the file's `.lrc` / `.txt`; Plex and the scan skip hidden folders, and undo moves them back. A group can't lose every copy; a check over a day old must be run again.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

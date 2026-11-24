@@ -565,6 +565,24 @@ async def enqueue_rename_plan(job: FileScan) -> None:
 
 
 @app.task(queue="files")
+async def find_duplicates(job_id: int) -> None:
+    from plekstender.tags.duplicates import run_duplicates
+
+    async with get_sessionmaker()() as db:
+        await run_duplicates(db, get_settings(), job_id)
+
+
+async def enqueue_duplicates(job: FileScan) -> None:
+    """Finding duplicate files (fingerprints the candidates; waits for scans and edits)."""
+    try:
+        await find_duplicates.configure(
+            lock=f"folders-{job.server_id}", queueing_lock=f"dupes-{job.id}"
+        ).defer_async(job_id=job.id)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.task(queue="files")
 async def look_up_lyrics(job_id: int) -> None:
     from plekstender.tags.lyrics import run_lookup
 

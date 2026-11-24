@@ -20,6 +20,7 @@ from plekstender.api.routes import (
     artwork,
     auth,
     discover,
+    duplicates,
     export,
     file_artwork,
     files,
@@ -120,6 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tag_editing,
         renames,
         lyrics,
+        duplicates,
         scrobblers,
         album_covers,  # before artwork: /artwork/albums isn't an artist
         artwork,

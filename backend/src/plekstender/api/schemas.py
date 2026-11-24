@@ -1309,6 +1309,40 @@ class TagChangeOut(BaseModel):
     undone: bool = Field(description="An applied undo put this change back.")
 
 
+class DupeFileOut(BaseModel):
+    file_id: int
+    path: str
+    format: str | None
+    size: int
+    duration_ms: int | None
+    kbps: int | None = Field(description="Average bitrate.")
+    rating_key: int | None = Field(description="The Plex track, if Plex has it.")
+    title: str | None
+    artist: str | None
+    album: str | None
+    sidecars: list[str] = Field(description="Lyrics files next to it (moved with it).")
+    keep: bool = Field(description="The suggested copy to keep.")
+
+
+class DupeGroupOut(BaseModel):
+    confirmed: bool = Field(description="Compared by sound: they're the same recording.")
+    similarity: float | None = Field(description="How alike the least alike pair sounds (0-1).")
+    files: list[DupeFileOut]
+
+
+class DuplicatesOut(BaseModel):
+    job: FileScanOut
+    groups: list[DupeGroupOut]
+    total_groups: int
+    files: int = Field(description="Files checked.")
+    fingerprint_error: str | None = Field(description="Why files couldn't be compared by sound.")
+    applied_set_id: int | None
+
+
+class DuplicatesApplyIn(BaseModel):
+    remove: list[int] = Field(min_length=1, max_length=5000, description="Files to take out.")
+
+
 LyricsPlacement = Literal["sidecar", "embedded", "both"]
 
 

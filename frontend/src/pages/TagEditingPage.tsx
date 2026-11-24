@@ -13,6 +13,7 @@ import {
   type RenamePlan,
 } from '../api/files'
 import { Dialog } from '../components/Dialog'
+import { DuplicatesDialog } from '../components/DuplicatesDialog'
 import { LyricsDialog } from '../components/LyricsDialog'
 import { Artwork } from '../components/library'
 import { Select } from '../components/Select'
@@ -44,7 +45,7 @@ const FIELD_NAMES: Record<string, string> = {
   genre: 'genre',
 }
 
-type Action = 'musicbrainz' | 'plex' | 'rename' | 'lyrics' | 'library-lyrics'
+type Action = 'musicbrainz' | 'plex' | 'rename' | 'lyrics' | 'library-lyrics' | 'duplicates'
 
 /** Library → Tag editing (server owners): albums whose files need a look, fixed in bulk. */
 export function TagEditingPage() {
@@ -103,11 +104,16 @@ function TagEditing({ serverId }: { serverId: number }) {
       <p className="text-sm text-muted">
         Albums whose files don't match Plex, have no MusicBrainz release ID or are missing tags. Pick a few and look them
         up on MusicBrainz, write Plex's metadata into them, rename their files or add lyrics: each album becomes its own
-        edit, which you can undo on its album page.{' '}
-        <button type="button" className="text-accent hover:underline" onClick={() => setAction('library-lyrics')}>
-          Lyrics for the whole library
-        </button>
+        edit, which you can undo on its album page.
       </p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => setAction('library-lyrics')}>
+          Lyrics for the whole library
+        </Button>
+        <Button size="sm" onClick={() => setAction('duplicates')}>
+          Duplicate files
+        </Button>
+      </div>
       {!canWrite && (
         <Notice tone="warn">
           Writing to the files is off, so you can look but not fix. Turn on tag editing on{' '}
@@ -211,6 +217,7 @@ function TagEditing({ serverId }: { serverId: number }) {
         <LyricsDialog serverId={serverId} albums={chosen.map((a) => a.rating_key)} canWrite={canWrite} onClose={() => setAction(null)} />
       )}
       {action === 'library-lyrics' && <LyricsDialog serverId={serverId} albums={[]} canWrite={canWrite} onClose={() => setAction(null)} />}
+      {action === 'duplicates' && <DuplicatesDialog serverId={serverId} canWrite={canWrite} onClose={() => setAction(null)} />}
     </div>
   )
 }

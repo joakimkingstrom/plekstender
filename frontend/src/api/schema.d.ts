@@ -2596,6 +2596,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find Duplicates
+         * @description Look for duplicate files (in the worker). Nothing moves.
+         */
+        post: operations["find_duplicates_api_servers__server_id__files_duplicates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/duplicates/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest Duplicates
+         * @description The last check, if there's been one.
+         */
+        get: operations["latest_duplicates_api_servers__server_id__files_duplicates_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/duplicates/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Duplicates */
+        get: operations["duplicates_api_servers__server_id__files_duplicates__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/duplicates/{job_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Duplicates
+         * @description Move the chosen copies (and their lyrics files) out of the library, into a hidden
+         *     folder in the music folder, as one edit.
+         */
+        post: operations["remove_duplicates_api_servers__server_id__files_duplicates__job_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scrobblers": {
         parameters: {
             query?: never;
@@ -5179,6 +5257,88 @@ export interface components {
         DeletedOut: {
             /** Deleted */
             deleted: number;
+        };
+        /** DupeFileOut */
+        DupeFileOut: {
+            /** File Id */
+            file_id: number;
+            /** Path */
+            path: string;
+            /** Format */
+            format: string | null;
+            /** Size */
+            size: number;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /**
+             * Kbps
+             * @description Average bitrate.
+             */
+            kbps: number | null;
+            /**
+             * Rating Key
+             * @description The Plex track, if Plex has it.
+             */
+            rating_key: number | null;
+            /** Title */
+            title: string | null;
+            /** Artist */
+            artist: string | null;
+            /** Album */
+            album: string | null;
+            /**
+             * Sidecars
+             * @description Lyrics files next to it (moved with it).
+             */
+            sidecars: string[];
+            /**
+             * Keep
+             * @description The suggested copy to keep.
+             */
+            keep: boolean;
+        };
+        /** DupeGroupOut */
+        DupeGroupOut: {
+            /**
+             * Confirmed
+             * @description Compared by sound: they're the same recording.
+             */
+            confirmed: boolean;
+            /**
+             * Similarity
+             * @description How alike the least alike pair sounds (0-1).
+             */
+            similarity: number | null;
+            /** Files */
+            files: components["schemas"]["DupeFileOut"][];
+        };
+        /** DuplicatesApplyIn */
+        DuplicatesApplyIn: {
+            /**
+             * Remove
+             * @description Files to take out.
+             */
+            remove: number[];
+        };
+        /** DuplicatesOut */
+        DuplicatesOut: {
+            job: components["schemas"]["FileScanOut"];
+            /** Groups */
+            groups: components["schemas"]["DupeGroupOut"][];
+            /** Total Groups */
+            total_groups: number;
+            /**
+             * Files
+             * @description Files checked.
+             */
+            files: number;
+            /**
+             * Fingerprint Error
+             * @description Why files couldn't be compared by sound.
+             */
+            fingerprint_error: string | null;
+            /** Applied Set Id */
+            applied_set_id: number | null;
         };
         /** EmbedCoverIn */
         EmbedCoverIn: {
@@ -13882,6 +14042,136 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LyricsApplyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_duplicates_api_servers__server_id__files_duplicates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_duplicates_api_servers__server_id__files_duplicates_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatesOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicates_api_servers__server_id__files_duplicates__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_duplicates_api_servers__server_id__files_duplicates__job_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DuplicatesApplyIn"];
             };
         };
         responses: {

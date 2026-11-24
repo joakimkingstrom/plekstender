@@ -44,9 +44,30 @@ class FingerprintError(Exception):
 
 async def fingerprint(fpcalc: str, path: Path) -> tuple[str, int]:
     """The file's Chromaprint fingerprint and its length in seconds."""
+    data = await _fpcalc(fpcalc, path)
+    try:
+        return str(data["fingerprint"]), round(float(data["duration"]))
+    except (ValueError, KeyError, TypeError) as exc:
+        raise FingerprintError("fpcalc gave no fingerprint.") from exc
+
+
+async def raw_fingerprint(fpcalc: str, path: Path) -> list[int]:
+    """The file's fingerprint as Chromaprint's 32-bit numbers (one about every 0.12 s), to
+    compare files with each other."""
+    data = await _fpcalc(fpcalc, path, "-raw")
+    values = data.get("fingerprint") if isinstance(data, dict) else None
+    if not isinstance(values, list) or not values:
+        raise FingerprintError("fpcalc gave no fingerprint.")
+    try:
+        return [int(v) & 0xFFFFFFFF for v in values]
+    except (TypeError, ValueError) as exc:
+        raise FingerprintError("fpcalc gave no fingerprint.") from exc
+
+
+async def _fpcalc(fpcalc: str, path: Path, *options: str) -> Any:
     try:
         proc = await asyncio.create_subprocess_exec(
-            fpcalc, "-json", "-length", str(LENGTH), str(path),
+            fpcalc, "-json", *options, "-length", str(LENGTH), str(path),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )  # fmt: skip
     except OSError as exc:
@@ -63,9 +84,8 @@ async def fingerprint(fpcalc: str, path: Path) -> tuple[str, int]:
         message = err.decode(errors="replace").strip().splitlines()
         raise FingerprintError(message[-1] if message else f"fpcalc failed ({proc.returncode}).")
     try:
-        data = json.loads(out)
-        return str(data["fingerprint"]), round(float(data["duration"]))
-    except (ValueError, KeyError, TypeError) as exc:
+        return json.loads(out)
+    except ValueError as exc:
         raise FingerprintError("fpcalc gave no fingerprint.") from exc
 
 
