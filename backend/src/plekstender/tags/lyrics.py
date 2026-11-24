@@ -154,13 +154,15 @@ async def run_lookup(
             raise LookupStopped("Set up the music folder first (Settings → Music files).")
         root = await asyncio.to_thread(Path(server.local_path_prefix).resolve)
         files = await _scope(db, job.server_id, job.params)
+        # By server, not by the files' ids: a library can have more files than a query can
+        # take parameters (65,535).
         known = {
             file_id: (status, at)
             for file_id, status, at in (
                 await db.execute(
                     select(
                         TrackLyrics.media_file_id, TrackLyrics.status, TrackLyrics.looked_up_at
-                    ).where(TrackLyrics.media_file_id.in_([f.id for f in files]))
+                    ).where(TrackLyrics.server_id == job.server_id)
                 )
             ).all()
         }
@@ -192,7 +194,10 @@ async def run_lookup(
     except Exception as exc:
         if not isinstance(exc, LookupStopped):
             log.exception("lyrics lookup %s failed", job_id)
-        await db.commit()  # keep what was found
+        try:
+            await db.commit()  # keep what was found
+        except Exception:
+            await db.rollback()  # the database refused something: what was saved is kept
         failed_job = await db.get(FileScan, job_id, populate_existing=True)
         if failed_job is None:
             return
@@ -487,7 +492,11 @@ async def apply_lyrics(
         if n % 50 == 0:
             await db.commit()
     # What each song has now (Library -> Lyrics counts them).
-    ids = {c.media_file_id for c in changes if c.status == "applied" and c.media_file_id}
-    for media in await db.scalars(select(MediaFile).where(MediaFile.id.in_(ids))):
-        media.lyrics, media.embedded_lyrics = await asyncio.to_thread(lyrics_kind, root, media.path)
-    await db.commit()
+    ids = sorted({c.media_file_id for c in changes if c.status == "applied" and c.media_file_id})
+    for start in range(0, len(ids), 1000):
+        batch = ids[start : start + 1000]
+        for media in await db.scalars(select(MediaFile).where(MediaFile.id.in_(batch))):
+            media.lyrics, media.embedded_lyrics = await asyncio.to_thread(
+                lyrics_kind, root, media.path
+            )
+        await db.commit()

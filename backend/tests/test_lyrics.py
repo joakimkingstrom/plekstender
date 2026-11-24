@@ -308,3 +308,55 @@ async def test_looking_up_and_writing_lyrics(
     await look_up_lyrics.func(job_id=again["id"])
     some: dict[str, Any] = (await owner.get(f"{base}/lyrics/{again['id']}")).json()
     assert (some["files"], some["lrc"]) == (2, 1)  # the .lrc is gone again after the undo
+
+
+@pytest.mark.db
+async def test_a_library_bigger_than_a_query_can_list(
+    app: FastAPI, plex: FakePlex, tmp_path: Path
+) -> None:
+    """70,000 files: more than Postgres takes parameters in one query (65,535)."""
+    from sqlalchemy import select, text, update
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import FileScan, PlexServer
+    from plekstender.worker import look_up_lyrics
+
+    await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        server = await db.scalar(select(PlexServer))
+        assert server is not None
+        await db.execute(
+            update(PlexServer)
+            .where(PlexServer.id == server.id)
+            .values(local_path_prefix=str(tmp_path))
+        )
+        await db.execute(
+            text(
+                "INSERT INTO media_files (server_id, path, size, mtime, tags, has_cover, reader) "
+                "SELECT :s, 'song' || n || '.flac', 1, 1, '{}', false, 6 "
+                "FROM generate_series(1, 70000) n"
+            ),
+            {"s": server.id},
+        )
+        # Looked up already (not found): nothing to ask LRCLIB.
+        await db.execute(
+            text(
+                "INSERT INTO track_lyrics"
+                " (media_file_id, server_id, status, embeddable, looked_up_at)"
+                " SELECT id, server_id, 'none', false, now() FROM media_files WHERE server_id = :s"
+            ),
+            {"s": server.id},
+        )
+        job = FileScan(server_id=server.id, kind="lyrics", params={}, status="queued")
+        db.add(job)
+        await db.commit()
+        job_id = job.id
+    await look_up_lyrics.func(job_id=job_id)
+    async with get_sessionmaker()() as db:
+        done = await db.get(FileScan, job_id)
+        assert done is not None
+        assert (done.status, done.error, done.progress) == (
+            "succeeded",
+            None,
+            {"done": 0, "total": 0},
+        )
