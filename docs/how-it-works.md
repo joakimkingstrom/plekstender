@@ -427,6 +427,11 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **Missing from your library:** released release groups of your artists the library doesn't have, by artist (most played first, 20 a page, search by name). "In the library" means an album with the same release group MBID (Plex's, or the one Album covers found by name) or the same artist and normalised title.
 - Hiding a release (`hidden_releases`, per person) takes it out of both lists; "Show hidden" brings them back to show again. Covers come from the Cover Art Archive through `/api/releases/{mbid}/cover` (the page only loads images from Plekstender), cached a week (a missing one a day).
 
+## Lyrics (24 Nov)
+- **Library → Tag editing → Lyrics** (server owners; the selected albums, or "Lyrics for the whole library"): a worker job (`FileScan` kind `lyrics`, its own lock so scans aren't held up) looks each file up on LRCLIB (`tags/lrclib.py`: `/api/get` by artist, title, album and length; else `/api/search`, a result within 3 s of the file's length, synced first; 0.2 s apart; stops after 5 errors in a row, keeping what it found). Results go in `track_lyrics` per file, with the lyrics the file already has (`.lrc`, `.txt`, in its tags) and whether its format can hold lyrics in tags. Songs looked up before are skipped (not found: tried again after 30 days) unless "look again".
+- The preview and the edit are worked out in SQL from `track_lyrics` (a whole library's lyrics never pass through Python): synced lyrics → `<song>.lrc`; plain only → `<song>.txt` (not when there's a `.lrc`); and/or the plain text (times taken out of synced lyrics) in the tags (ID3 USLT, Vorbis LYRICS, MP4 ©lyr; `tags/embedded_lyrics.py`). Lyrics a song already has stay unless "replace" is ticked.
+- Written as one edit with fields `lrc`, `txt` (the change's path is the lyrics file) and `lyrics`, old and new values the text: checked before writing like tags (a file changed meanwhile is a conflict), and undone like any edit (undo removes files it made). The history shows lyrics by their first line. Plex is asked to rescan the folders.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

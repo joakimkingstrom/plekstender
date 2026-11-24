@@ -504,6 +504,41 @@ export const bulk = {
         params: { path: { server_id: serverId, job_id: jobId } },
       }),
     ),
+  lookUpLyrics: (serverId: number, albums: number[], again: boolean) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/lyrics', {
+        params: { path: { server_id: serverId } },
+        body: { albums, again },
+      }),
+    ),
+  writeLyrics: (serverId: number, jobId: number, placement: LyricsPlacement, overwrite: boolean) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/lyrics/{job_id}/apply', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+        body: { placement, overwrite },
+      }),
+    ),
+}
+
+export type LyricsPlacement = Schemas['LyricsApplyIn']['placement'] & string
+
+/** A lyrics lookup: found so far, and what writing would change (polled while it runs). */
+export function useLyricsPlan(serverId: number, jobId: number | null, placement: LyricsPlacement, overwrite: boolean) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'lyrics', jobId, placement, overwrite],
+    enabled: jobId !== null,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/lyrics/{job_id}', {
+          params: { path: { server_id: serverId, job_id: jobId! }, query: { placement, overwrite } },
+        }),
+      ),
+    refetchInterval: (query) => {
+      const status = query.state.data?.job.status
+      return status === 'queued' || status === 'running' ? 1500 : false
+    },
+    placeholderData: keepPreviousData,
+  })
 }
 
 /** After bulk writes: the lists, album pages and history show what changed. */

@@ -915,7 +915,7 @@ class FileScan(Base):
     server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(
         String(8), default="scan", server_default="scan"
-    )  # | identify
+    )  # | identify | rename | lyrics
     # What an identify job covers: {"file_ids": [...], "again": bool}.
     params: Mapped[dict[str, Any]] = mapped_column(default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(
@@ -928,6 +928,31 @@ class FileScan(Base):
     started_at: Mapped[dt.datetime | None]
     finished_at: Mapped[dt.datetime | None]
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class TrackLyrics(Base):
+    """Lyrics found for a music file (LRCLIB, looked up by the worker), and the lyrics the file
+    already had when it was looked at: a `.lrc` or `.txt` next to it, or in its tags."""
+
+    __tablename__ = "track_lyrics"
+    __table_args__ = (Index("ix_track_lyrics_server", "server_id"),)
+
+    media_file_id: Mapped[int] = mapped_column(
+        ForeignKey("media_files.id", ondelete="CASCADE"), primary_key=True
+    )
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    # synced | plain | instrumental | none (not found) | untagged (no artist or title) | error
+    status: Mapped[str] = mapped_column(String(16))
+    synced: Mapped[str | None] = mapped_column(Text)  # LRC, with [mm:ss.xx] times
+    plain: Mapped[str | None] = mapped_column(Text)
+    lrclib_id: Mapped[int | None] = mapped_column(BigInteger)
+    existing_lrc: Mapped[str | None] = mapped_column(Text)
+    existing_txt: Mapped[str | None] = mapped_column(Text)
+    existing_embedded: Mapped[str | None] = mapped_column(Text)
+    # Whether lyrics can be written into this file's tags (MP3, FLAC, Ogg, MP4 / M4A).
+    embeddable: Mapped[bool] = mapped_column(default=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    looked_up_at: Mapped[dt.datetime]
 
 
 class TagChangeSet(Base):

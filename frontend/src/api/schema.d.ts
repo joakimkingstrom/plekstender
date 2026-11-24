@@ -2536,6 +2536,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/lyrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Look Up Lyrics
+         * @description Look up lyrics (in the worker) for the library or some albums. Nothing is written.
+         */
+        post: operations["look_up_lyrics_api_servers__server_id__files_lyrics_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lyrics Plan
+         * @description What's been found so far, and what writing it would change.
+         */
+        get: operations["lyrics_plan_api_servers__server_id__files_lyrics__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics/{job_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write Lyrics
+         * @description Write the lyrics found, as one edit.
+         */
+        post: operations["write_lyrics_api_servers__server_id__files_lyrics__job_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scrobblers": {
         parameters: {
             query?: never;
@@ -6626,6 +6686,128 @@ export interface components {
             city: string | null;
             /** Shows */
             shows: number;
+        };
+        /** LyricsApplyIn */
+        LyricsApplyIn: {
+            /**
+             * Placement
+             * @default sidecar
+             * @enum {string}
+             */
+            placement: "sidecar" | "embedded" | "both";
+            /**
+             * Overwrite
+             * @description Replace lyrics the files already have.
+             * @default false
+             */
+            overwrite: boolean;
+        };
+        /** LyricsLookupIn */
+        LyricsLookupIn: {
+            /**
+             * Albums
+             * @description These albums; none: the library.
+             */
+            albums?: number[];
+            /**
+             * Again
+             * @description Look up songs looked up before as well.
+             * @default false
+             */
+            again: boolean;
+        };
+        /** LyricsPlanOut */
+        LyricsPlanOut: {
+            job: components["schemas"]["FileScanOut"];
+            /**
+             * Files
+             * @description Files the job covers.
+             */
+            files: number;
+            /** Looked Up */
+            looked_up: number;
+            /** Synced */
+            synced: number;
+            /**
+             * Plain
+             * @description Found without times.
+             */
+            plain: number;
+            /** Instrumental */
+            instrumental: number;
+            /**
+             * None
+             * @description LRCLIB has nothing for them.
+             */
+            none: number;
+            /**
+             * Untagged
+             * @description No artist or title to look up.
+             */
+            untagged: number;
+            /** Errors */
+            errors: number;
+            /**
+             * Had Lyrics
+             * @description Files that already had lyrics somewhere.
+             */
+            had_lyrics: number;
+            /**
+             * Lrc
+             * @description .lrc files that writing would make or replace.
+             */
+            lrc: number;
+            /** Txt */
+            txt: number;
+            /**
+             * Lyrics
+             * @description Files whose tags would get lyrics.
+             */
+            lyrics: number;
+            /**
+             * Songs
+             * @description Files that writing would change.
+             */
+            songs: number;
+            /**
+             * Sample
+             * @description The first 100 of them.
+             */
+            sample: components["schemas"]["LyricsSampleOut"][];
+            /** Applied Set Id */
+            applied_set_id: number | null;
+        };
+        /** LyricsSampleOut */
+        LyricsSampleOut: {
+            /** Path */
+            path: string;
+            /** Status */
+            status: string;
+            /**
+             * Lrc
+             * @description A .lrc (synced lyrics) is written next to it.
+             */
+            lrc: boolean;
+            /**
+             * Txt
+             * @description A .txt (plain lyrics) is written next to it.
+             */
+            txt: boolean;
+            /**
+             * Lyrics
+             * @description The lyrics are written into its tags.
+             */
+            lyrics: boolean;
+            /**
+             * Had Lyrics
+             * @description It had lyrics already (replaced when overwriting).
+             */
+            had_lyrics: boolean;
+            /**
+             * Preview
+             * @description The start of the lyrics.
+             */
+            preview: string | null;
         };
         /** MbApplyIn */
         MbApplyIn: {
@@ -13596,6 +13778,112 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    look_up_lyrics_api_servers__server_id__files_lyrics_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LyricsLookupIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lyrics_plan_api_servers__server_id__files_lyrics__job_id__get: {
+        parameters: {
+            query?: {
+                placement?: "sidecar" | "embedded" | "both";
+                overwrite?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LyricsPlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_lyrics_api_servers__server_id__files_lyrics__job_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LyricsApplyIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             201: {

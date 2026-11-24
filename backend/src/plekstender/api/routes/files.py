@@ -50,6 +50,7 @@ from plekstender.db.models import (
     User,
     UserServer,
 )
+from plekstender.tags.lyrics import FIELDS as LYRICS_FIELDS
 from plekstender.tags.mbapply import AlbumFile, match, plan_file, wanted
 from plekstender.tags.plexsync import Planned
 from plekstender.tags.plexsync import plan as plan_sync
@@ -271,9 +272,13 @@ def _stored(media: MediaFile, field: str) -> Any:
 LISTED = 200
 
 
-def _shown(value: Any) -> Any:
+def _shown(value: Any, field: str | None = None) -> Any:
     """A change's value for the history: a picture still to be made is described in words
-    (once written, it's the picture's SHA-1)."""
+    (once written, it's the picture's SHA-1); lyrics by their first line."""
+    if field in LYRICS_FIELDS and isinstance(value, str):
+        lines = [line for line in value.splitlines() if line.strip()]
+        first = lines[0] if lines else ""
+        return f"{len(lines)} {'line' if len(lines) == 1 else 'lines'}: {first[:80]}"
     if not isinstance(value, dict):
         return value
     origin = value.get("from")
@@ -353,8 +358,8 @@ async def _sets_out(db: DbDep, sets: list[TagChangeSet]) -> list[TagChangeSetOut
                 path=c.path,
                 rating_key=c.rating_key,
                 field=c.field,
-                old_value=_shown(c.old_value),
-                new_value=_shown(c.new_value),
+                old_value=_shown(c.old_value, c.field),
+                new_value=_shown(c.new_value, c.field),
                 status=c.status,
                 error=c.error,
                 undoes_id=c.undoes_id,

@@ -32,6 +32,7 @@ from plekstender.api.routes import (
     library_stats,
     listens,
     live,
+    lyrics,
     notifications,
     playlists,
     previews,
@@ -118,6 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         identify,
         tag_editing,
         renames,
+        lyrics,
         scrobblers,
         album_covers,  # before artwork: /artwork/albums isn't an artist
         artwork,

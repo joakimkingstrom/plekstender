@@ -65,7 +65,12 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # mutagen's ID3 / MP4 classes have no type hints.
-module = ["plekstender.tags.read", "plekstender.tags.keys", "plekstender.tags.pictures"]
+module = [
+    "plekstender.tags.read",
+    "plekstender.tags.keys",
+    "plekstender.tags.pictures",
+    "plekstender.tags.embedded_lyrics",
+]
 disallow_untyped_calls = false
 
 [tool.pytest.ini_options]

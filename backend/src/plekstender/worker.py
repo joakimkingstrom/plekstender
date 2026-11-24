@@ -565,6 +565,27 @@ async def enqueue_rename_plan(job: FileScan) -> None:
 
 
 @app.task(queue="files")
+async def look_up_lyrics(job_id: int) -> None:
+    from plekstender.tags.lyrics import run_lookup
+
+    async with (
+        httpx.AsyncClient() as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_lookup(db, http, get_settings(), job_id)
+
+
+async def enqueue_lyrics_lookup(job: FileScan) -> None:
+    """Looking up lyrics (mostly waiting on LRCLIB: its own lock, so scans aren't held up)."""
+    try:
+        await look_up_lyrics.configure(
+            lock=f"lyrics-{job.server_id}", queueing_lock=f"lyrics-{job.id}"
+        ).defer_async(job_id=job.id)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.task(queue="files")
 async def apply_tag_changes(set_id: int) -> None:
     async with (
         httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,

@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     # Album covers (Library → Artwork → Album covers): open APIs, no keys (Tidal's is set on
     # Settings by an admin).
     coverartarchive_url: str = "https://coverartarchive.org"
+    lrclib_url: str = "https://lrclib.net"
     itunes_api_url: str = "https://itunes.apple.com"
     deezer_api_url: str = "https://api.deezer.com"
     tidal_api_url: str = "https://openapi.tidal.com/v2"

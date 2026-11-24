@@ -24,6 +24,8 @@ from plekstender.db.models import (
     UserServer,
 )
 from plekstender.plex.tv import PlexError
+from plekstender.tags.lyrics import FIELDS as LYRICS_FIELDS
+from plekstender.tags.lyrics import apply_lyrics
 from plekstender.tags.picture_changes import apply_pictures
 from plekstender.tags.pictures import cover_of
 from plekstender.tags.read import READER, TagReadError, read_file, unread_fields
@@ -33,8 +35,8 @@ from plekstender.tags.write import Planned, TagWriteError, apply, snapshot
 log = logging.getLogger(__name__)
 
 FILE_BATCH = 200
-# Changes handled apart from tags: moves first, then pictures.
-SPECIAL = ("path", "picture", "image")
+# Changes handled apart from tags: moves first, then pictures and lyrics.
+SPECIAL = ("path", "picture", "image", *LYRICS_FIELDS)
 # More folders than this changed: Plex rescans the library section(s) instead.
 MAX_FOLDER_RESCANS = 25
 
@@ -75,6 +77,7 @@ async def run_change_set(
     moved = await _apply_moves(db, root, server, set_id)
     touched: set[tuple[int | None, str]] = set()  # (Plex track, folder) for Plex rescans
     await apply_pictures(db, http, settings, root, server, set_id, touched)
+    await apply_lyrics(db, root, server, set_id, touched)
     # File by file, a batch of files at a time (a library-wide edit can be very big).
     file_ids = list(
         await db.scalars(

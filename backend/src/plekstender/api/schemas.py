@@ -1309,6 +1309,50 @@ class TagChangeOut(BaseModel):
     undone: bool = Field(description="An applied undo put this change back.")
 
 
+LyricsPlacement = Literal["sidecar", "embedded", "both"]
+
+
+class LyricsLookupIn(BaseModel):
+    albums: list[int] = Field(
+        default_factory=list, max_length=1000, description="These albums; none: the library."
+    )
+    again: bool = Field(default=False, description="Look up songs looked up before as well.")
+
+
+class LyricsSampleOut(BaseModel):
+    path: str
+    status: str
+    lrc: bool = Field(description="A .lrc (synced lyrics) is written next to it.")
+    txt: bool = Field(description="A .txt (plain lyrics) is written next to it.")
+    lyrics: bool = Field(description="The lyrics are written into its tags.")
+    had_lyrics: bool = Field(description="It had lyrics already (replaced when overwriting).")
+    preview: str | None = Field(description="The start of the lyrics.")
+
+
+class LyricsPlanOut(BaseModel):
+    job: FileScanOut
+    files: int = Field(description="Files the job covers.")
+    looked_up: int
+    synced: int
+    plain: int = Field(description="Found without times.")
+    instrumental: int
+    none: int = Field(description="LRCLIB has nothing for them.")
+    untagged: int = Field(description="No artist or title to look up.")
+    errors: int
+    had_lyrics: int = Field(description="Files that already had lyrics somewhere.")
+    lrc: int = Field(description=".lrc files that writing would make or replace.")
+    txt: int
+    lyrics: int = Field(description="Files whose tags would get lyrics.")
+    songs: int = Field(description="Files that writing would change.")
+    sample: list[LyricsSampleOut] = Field(description="The first 100 of them.")
+    applied_set_id: int | None
+
+
+class LyricsApplyIn(BaseModel):
+    placement: LyricsPlacement = "sidecar"
+    overwrite: bool = Field(default=False, description="Replace lyrics the files already have.")
+
+
 class TagChangeSetOut(BaseModel):
     id: int
     kind: Literal["edit", "undo"]
