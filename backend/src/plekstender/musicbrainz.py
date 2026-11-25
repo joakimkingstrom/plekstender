@@ -2,8 +2,10 @@
 its tracks, the way Picard offers them.
 
 MusicBrainz allows one request per second per client, so requests wait their turn; answers
-are kept for a day (in memory) so going back and forth between releases is quick. Requests
-carry a generic User-Agent, nothing about the person using it.
+are kept for a day (in memory) so going back and forth between releases is quick. When it's
+busy (503, over its rate limit) a request waits and tries again a few times. Requests carry
+Plekstender's User-Agent, with the admin's contact (MUSICBRAINZ_CONTACT) if one is set, and
+nothing about the person using it.
 """
 
 from __future__ import annotations
@@ -23,6 +25,9 @@ from plekstender import __version__
 URL = "https://musicbrainz.org/ws/2"
 COVER_URL = "https://coverartarchive.org/release/{id}/front-250"
 USER_AGENT = f"Plekstender/{__version__} (self-hosted music library tool)"
+# Waits (seconds) before trying again when MusicBrainz is busy, unless it says how long.
+BUSY_WAITS = (3.0, 10.0, 30.0)
+MAX_RETRY_AFTER = 60.0
 MBID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 INTERVAL = 1.0  # seconds between requests (MusicBrainz's limit)
 CACHE_FOR = 24 * 3600
@@ -55,21 +60,26 @@ async def _get(
     if hit is not None and time.monotonic() - hit[0] < CACHE_FOR:
         _cache.move_to_end(key)
         return hit[1]
+    # Waits hold the lock: while MusicBrainz says it's busy, nothing else here asks it.
     async with _lock:
-        wait = _last + INTERVAL - time.monotonic()
-        if wait > 0:
-            await asyncio.sleep(wait)
-        try:
-            resp = await http.get(
-                f"{URL}{path}",
-                params={**params, "fmt": "json"},
-                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-                timeout=20,
-            )
-        except httpx.HTTPError as exc:
-            raise MusicBrainzError(f"MusicBrainz can't be reached: {exc}") from exc
-        finally:
-            _last = time.monotonic()
+        for attempt in range(len(BUSY_WAITS) + 1):
+            wait = _last + INTERVAL - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            try:
+                resp = await http.get(
+                    f"{URL}{path}",
+                    params={**params, "fmt": "json"},
+                    headers={"User-Agent": user_agent(), "Accept": "application/json"},
+                    timeout=20,
+                )
+            except httpx.HTTPError as exc:
+                raise MusicBrainzError(f"MusicBrainz can't be reached: {exc}") from exc
+            finally:
+                _last = time.monotonic()
+            if resp.status_code != 503 or attempt == len(BUSY_WAITS):
+                break
+            await asyncio.sleep(busy_wait(resp, attempt))
     if resp.status_code in (400, 404):
         raise NotFound("MusicBrainz doesn't have that release.")
     if resp.status_code == 503:
@@ -85,6 +95,28 @@ async def _get(
         while len(_cache) > CACHE_SIZE:
             _cache.popitem(last=False)
     return data
+
+
+def user_agent() -> str:
+    """Plekstender's User-Agent for MusicBrainz, with the admin's contact if one is set."""
+    from plekstender.config import get_settings
+
+    contact = (get_settings().musicbrainz_contact or "").strip()
+    if not contact:
+        return USER_AGENT
+    return f"Plekstender/{__version__} ( {contact} )"
+
+
+def busy_wait(resp: httpx.Response, attempt: int) -> float:
+    """How long to wait after a 503: what MusicBrainz says (Retry-After, in seconds), else
+    a little longer each time."""
+    try:
+        said = float(resp.headers.get("retry-after", ""))
+    except ValueError:
+        said = 0.0
+    if said > 0:
+        return min(said, MAX_RETRY_AFTER)
+    return BUSY_WAITS[attempt]
 
 
 def credit(artist_credit: list[dict[str, Any]] | None) -> str:
@@ -274,7 +306,7 @@ async def cover(http: httpx.AsyncClient, mbid: str) -> bytes | None:
     try:
         resp = await http.get(
             COVER_URL.format(id=mbid),
-            headers={"User-Agent": USER_AGENT},
+            headers={"User-Agent": user_agent()},
             timeout=20,
             follow_redirects=True,
         )

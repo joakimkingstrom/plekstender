@@ -8,6 +8,7 @@ import io
 
 import httpx
 import pytest
+import respx
 from fastapi import FastAPI
 from PIL import Image
 from sqlalchemy import select, update
@@ -308,3 +309,40 @@ async def test_a_huge_discography_and_a_failing_artist_dont_stop_the_rest(
         assert stored == {RADIOHEAD: 7500, PORTISHEAD: 1}
         # The failing artist is tried again next time.
         assert await releases.to_check(db, dt.datetime.now(dt.UTC)) == [GONE]
+
+
+async def test_musicbrainz_busy_waits_and_tries_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    from plekstender.config import get_settings
+
+    waits: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr(musicbrainz, "INTERVAL", 0.0)
+    monkeypatch.setattr(musicbrainz.asyncio, "sleep", sleep)
+    url = "https://musicbrainz.org/ws/2/release-group"
+    page = {"release-group-count": 1, "release-groups": [rg(1, "Kid A", "Album", "2000")]}
+    with respx.mock() as web:
+        route = web.get(url)
+        route.side_effect = [
+            httpx.Response(503, headers={"Retry-After": "2"}),
+            httpx.Response(503),
+            httpx.Response(200, json=page),
+        ]
+        async with httpx.AsyncClient() as http:
+            groups = await musicbrainz.release_groups(http, RADIOHEAD)
+        assert [g["title"] for g in groups] == ["Kid A"]
+        assert waits == [2.0, 10.0]  # what it said, then the second wait of our own
+        # The User-Agent names Plekstender; a contact only when the admin set one.
+        assert route.calls.last.request.headers["user-agent"].startswith("Plekstender/")
+        assert "@" not in route.calls.last.request.headers["user-agent"]
+
+        waits.clear()
+        route.side_effect = [httpx.Response(503)] * 4
+        monkeypatch.setattr(get_settings(), "musicbrainz_contact", "me@example.org")
+        async with httpx.AsyncClient() as http:
+            with pytest.raises(musicbrainz.MusicBrainzError, match="busy"):
+                await musicbrainz.release_groups(http, RADIOHEAD)
+        assert waits == [3.0, 10.0, 30.0]  # then it gives up
+        assert route.calls.last.request.headers["user-agent"].endswith("( me@example.org )")

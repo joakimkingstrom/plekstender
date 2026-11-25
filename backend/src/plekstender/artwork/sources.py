@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from plekstender import musicbrainz
 from plekstender.artwork.fetch import USER_AGENT
 from plekstender.sync.parse import normalise_artist
 
@@ -100,7 +101,7 @@ async def musicbrainz_search(
             resp = await http.get(
                 f"{base_url.rstrip('/')}/{entity}",
                 params={"query": query, "fmt": "json", "limit": limit},
-                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+                headers={"User-Agent": musicbrainz.user_agent(), "Accept": "application/json"},
                 timeout=20,
             )
         except httpx.HTTPError as exc:
