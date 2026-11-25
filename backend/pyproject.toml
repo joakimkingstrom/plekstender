@@ -17,6 +17,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.3.9",
     "pydantic>=2.14.3",
     "pydantic-settings>=2.16.3",
+    "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.9",
     "starlette>=1.10.0",
     "tzdata>=2026.6",
@@ -38,6 +39,7 @@ dev = [
     "respx>=0.23.1",
     "ruff>=0.17.5",
     "types-defusedxml>=0.7.0.20260504",
+    "types-pyyaml>=6.0.12.20261122",
 ]
 
 [tool.ruff]
@@ -65,7 +67,12 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # mutagen's ID3 / MP4 classes have no type hints.
-module = ["plekstender.tags.read", "plekstender.tags.keys", "plekstender.tags.pictures"]
+module = [
+    "plekstender.tags.read",
+    "plekstender.tags.keys",
+    "plekstender.tags.pictures",
+    "plekstender.tags.embedded_lyrics",
+]
 disallow_untyped_calls = false
 
 [tool.pytest.ini_options]

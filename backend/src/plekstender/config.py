@@ -68,9 +68,14 @@ class Settings(BaseSettings):
     fanart_api_key: SecretStr | None = None
     fanart_api_url: str = "https://webservice.fanart.tv/v3"
     musicbrainz_api_url: str = "https://musicbrainz.org/ws/2"
+    # A contact for MusicBrainz (an email address or a web page), added to Plekstender's
+    # User-Agent. MusicBrainz asks apps for one and may slow down those without; it's only
+    # sent to MusicBrainz. None: no contact.
+    musicbrainz_contact: str | None = None
     # Album covers (Library → Artwork → Album covers): open APIs, no keys (Tidal's is set on
     # Settings by an admin).
     coverartarchive_url: str = "https://coverartarchive.org"
+    lrclib_url: str = "https://lrclib.net"
     itunes_api_url: str = "https://itunes.apple.com"
     deezer_api_url: str = "https://api.deezer.com"
     tidal_api_url: str = "https://openapi.tidal.com/v2"

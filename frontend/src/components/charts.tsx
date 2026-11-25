@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { formatCompact, formatCount } from '../format'
+import { formatCompact, formatCount, formatShare } from '../format'
 
 export type ColumnPoint = {
   /** Full label for the tooltip and table, e.g. "Mon 16 Nov". */
@@ -336,6 +336,226 @@ export function Heatmap({
           ))}
         </tbody>
       </table>
+      </div>
+    </div>
+  )
+}
+
+export type DonutSlice = {
+  key: string
+  label: string
+  value: number
+  /** A colour token, e.g. var(--color-series-1). */
+  color: string
+  /** More about it in the legend, e.g. which types "Other" holds. */
+  note?: string
+}
+
+/** A ring slice from angle a to b (radians, 0 = 12 o'clock, clockwise). */
+function arc(cx: number, cy: number, outer: number, inner: number, a: number, b: number): string {
+  const point = (r: number, t: number) => `${cx + r * Math.sin(t)},${cy - r * Math.cos(t)}`
+  const large = b - a > Math.PI ? 1 : 0
+  return `M${point(outer, a)}A${outer},${outer} 0 ${large} 1 ${point(outer, b)}L${point(inner, b)}A${inner},${inner} 0 ${large} 0 ${point(inner, a)}Z`
+}
+
+/**
+ * One whole split into a few parts, as a ring: slices in their given order, a 2px gap in
+ * the surface colour between them, and a legend with each part's share and count (which
+ * also carries identity, so colour is never alone). Hover a slice or a legend row to bring
+ * it forward. A table view is there for screen readers.
+ */
+export function Donut({
+  slices,
+  caption,
+  unit,
+  center,
+}: {
+  slices: DonutSlice[]
+  caption: string
+  unit: (n: number) => string
+  center?: { value: string; label: string }
+}) {
+  const [hover, setHover] = useState<string | null>(null)
+  const total = slices.reduce((n, s) => n + s.value, 0)
+  const share = (n: number) => formatShare(n, total)
+  const size = 168
+  const c = size / 2
+  const outer = c - 2
+  const inner = outer * 0.64
+  const shown = slices.filter((s) => s.value > 0)
+  const paths: { slice: DonutSlice; a: number; b: number }[] = []
+  for (const slice of shown) {
+    const a = paths.at(-1)?.b ?? 0
+    paths.push({ slice, a, b: a + (slice.value / total) * Math.PI * 2 })
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <div className="relative shrink-0" style={{ width: size, height: size }} onMouseLeave={() => setHover(null)}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={caption}>
+          {total === 0 ? (
+            <circle cx={c} cy={c} r={(outer + inner) / 2} fill="none" stroke="var(--color-surface-2)" strokeWidth={outer - inner} />
+          ) : shown.length === 1 ? (
+            <circle cx={c} cy={c} r={(outer + inner) / 2} fill="none" stroke={shown[0].color} strokeWidth={outer - inner} />
+          ) : (
+            paths.map(({ slice, a, b }) => (
+              <path
+                key={slice.key}
+                d={arc(c, c, outer, inner, a, b)}
+                fill={slice.color}
+                stroke="var(--color-surface)"
+                strokeWidth={2}
+                opacity={hover === null || hover === slice.key ? 1 : 0.4}
+                onMouseEnter={() => setHover(slice.key)}
+                onTouchStart={() => setHover(slice.key)}
+              />
+            ))
+          )}
+        </svg>
+        {center && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+            <span className="font-display text-2xl font-bold tabular-nums">{center.value}</span>
+            <span className="max-w-20 text-[11px] leading-tight text-muted">{center.label}</span>
+          </div>
+        )}
+      </div>
+      <ul className="min-w-0 flex-1 basis-48 space-y-1.5 text-sm" aria-hidden onMouseLeave={() => setHover(null)}>
+        {slices.map((s) => (
+          <li
+            key={s.key}
+            className={`flex items-baseline gap-2 ${hover !== null && hover !== s.key ? 'opacity-50' : ''}`}
+            onMouseEnter={() => setHover(s.key)}
+          >
+            <span className="size-3 shrink-0 translate-y-0.5 self-start rounded-[3px]" style={{ background: s.color }} />
+            <span className="min-w-0 flex-1">
+              <span className="font-medium">{s.label}</span>
+              {s.note && <span className="block truncate text-xs text-muted">{s.note}</span>}
+            </span>
+            <span className="tabular-nums">{share(s.value)}</span>
+            <span className="w-24 shrink-0 text-right text-xs text-muted tabular-nums">{unit(s.value)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <tbody>
+            {slices.map((s) => (
+              <tr key={s.key}>
+                <th scope="row">{s.label}</th>
+                <td>{unit(s.value)}</td>
+                <td>{share(s.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+export type ShareRow = { name: string; shares: number[] }
+
+/**
+ * Rows (genres, decades) by columns (years), one hue from faint to full: each square is
+ * that row's share of the column. Hover or touch a square for its value.
+ */
+export function ShareGrid({
+  rows,
+  columns,
+  caption,
+  rowHeader,
+  note,
+}: {
+  rows: ShareRow[]
+  columns: string[]
+  caption: string
+  /** What the rows are, for the table view ("Genre"). */
+  rowHeader: string
+  /** More about a column for the readout, e.g. "of 1,204 listens with a genre". */
+  note?: (column: number) => string
+}) {
+  const [hover, setHover] = useState<[number, number] | null>(null)
+  const max = Math.max(0, ...rows.flatMap((r) => r.shares))
+  const percent = (share: number) => `${Math.round(share * 100)}%`
+  // About six year labels, always including the latest.
+  const every = Math.max(1, Math.ceil(columns.length / 6))
+  const labelled = (i: number) => (columns.length - 1 - i) % every === 0
+  const readout = hover
+    ? `${rows[hover[0]].name} · ${columns[hover[1]]}: ${percent(rows[hover[0]].shares[hover[1]])}${note ? ` ${note(hover[1])}` : ''}`
+    : 'Hover a square for details.'
+  return (
+    <div>
+      <div
+        className="grid gap-[2px]"
+        style={{ gridTemplateColumns: `minmax(4.5rem, 9rem) repeat(${columns.length}, minmax(0, 1fr))` }}
+        role="img"
+        aria-label={caption}
+        onMouseLeave={() => setHover(null)}
+      >
+        {rows.map((row, r) => (
+          <div key={row.name} className="contents">
+            <span className="truncate self-center pr-2 text-[11px] text-muted" title={row.name}>
+              {row.name}
+            </span>
+            {row.shares.map((share, c) => (
+              <span
+                key={c}
+                className="h-6 rounded-[3px] sm:h-7"
+                style={{
+                  background: cellColor(share, max),
+                  outline: hover?.[0] === r && hover?.[1] === c ? '2px solid var(--color-text)' : undefined,
+                }}
+                onMouseEnter={() => setHover([r, c])}
+                onTouchStart={() => setHover([r, c])}
+              />
+            ))}
+          </div>
+        ))}
+        <span />
+        {columns.map((label, c) => (
+          <span key={c} className="text-center text-[10px] whitespace-nowrap text-muted">
+            {labelled(c) ? label : ''}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+        <span aria-live="polite">{readout}</span>
+        <span className="flex items-center gap-1" aria-hidden>
+          Less
+          {[-1, ...LEVELS.keys()].map((level) => (
+            <span
+              key={level}
+              className="size-3 rounded-[3px]"
+              style={{ background: level < 0 ? 'var(--color-surface-2)' : levelColor(level) }}
+            />
+          ))}
+          More
+        </span>
+      </div>
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{rowHeader}</th>
+              {columns.map((label, c) => (
+                <th key={c} scope="col">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.name}>
+                <th scope="row">{row.name}</th>
+                {row.shares.map((share, c) => (
+                  <td key={c}>{percent(share)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )

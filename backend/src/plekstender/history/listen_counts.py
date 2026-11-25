@@ -1,7 +1,8 @@
 """Per-item listen counts: a user's history (Plex plays + imports) matched to the library.
 
-Stored on `user_item_state.listens`, so rating queues, sorting and playlists can use the
-whole history, not only the plays Plex has recorded. Matching is by normalised names:
+Stored on `user_item_state.listens` (and, for tracks, the latest as `last_listened_at`), so
+rating queues, sorting and playlists can use the whole history, not only the plays Plex has
+recorded. Matching is by normalised names:
 tracks by title and track or album artist; albums by album title too; artists by name.
 Remasters and other releases of a song share its listens.
 """
@@ -13,21 +14,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 _GROUPED = """
     la AS (
-        SELECT artist_key, album_key, track_key, count(*) AS n
+        SELECT artist_key, album_key, track_key, count(*) AS n, max(listened_at) AS last_at
         FROM listens
         WHERE user_id = :user_id AND duplicate_of IS NULL
         GROUP BY artist_key, album_key, track_key
     )
 """
 
-_RESET = text("UPDATE user_item_state SET listens = 0 WHERE user_id = :user_id AND listens <> 0")
+_RESET = text(
+    "UPDATE user_item_state SET listens = 0, last_listened_at = NULL "
+    "WHERE user_id = :user_id AND (listens <> 0 OR last_listened_at IS NOT NULL)"
+)
 
 _TRACKS = text(
     f"""
     WITH {_GROUPED},
-    lt AS (SELECT artist_key, track_key, sum(n) AS n FROM la GROUP BY artist_key, track_key),
+    lt AS (
+        SELECT artist_key, track_key, sum(n) AS n, max(last_at) AS last_at
+        FROM la GROUP BY artist_key, track_key
+    ),
     counts AS (
-        SELECT t.server_id, t.rating_key, sum(lt.n) AS n
+        SELECT t.server_id, t.rating_key, sum(lt.n) AS n, max(lt.last_at) AS last_at
         FROM user_item_state s
         JOIN tracks t ON t.server_id = s.server_id AND t.rating_key = s.rating_key
         LEFT JOIN artists ar
@@ -36,7 +43,7 @@ _TRACKS = text(
         WHERE s.user_id = :user_id AND s.item_type = 'track'
         GROUP BY t.server_id, t.rating_key
     )
-    UPDATE user_item_state s SET listens = counts.n
+    UPDATE user_item_state s SET listens = counts.n, last_listened_at = counts.last_at
     FROM counts
     WHERE s.user_id = :user_id AND s.server_id = counts.server_id
       AND s.rating_key = counts.rating_key

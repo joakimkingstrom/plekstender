@@ -9,6 +9,7 @@ import {
   useCountryArtists,
   useLibraryStats,
   useReleased,
+  useFileTypes,
   useSeenLive,
   useWords,
   type WordKind,
@@ -16,7 +17,7 @@ import {
 import type { MapArea } from '../api/stats'
 import { ListensMap } from '../components/ListensMap'
 import { CONTINENTS, countryName } from '../places'
-import { AreaChart, ColumnChart } from '../components/charts'
+import { AreaChart, ColumnChart, Donut, type DonutSlice } from '../components/charts'
 import { Artwork } from '../components/library'
 import { Segmented } from '../components/Segmented'
 import { WordCloud } from '../components/WordCloud'
@@ -68,12 +69,43 @@ function Stats({ serverId }: { serverId: number }) {
         ))}
       </div>
       <SeenLive serverId={serverId} />
+      <FileTypes serverId={serverId} />
       <Countries serverId={serverId} />
       <Growth growth={s.growth} />
       <Decades serverId={serverId} decades={s.decades} undated={s.undated_albums} />
       <Colours serverId={serverId} />
       <Words serverId={serverId} />
     </div>
+  )
+}
+
+const SLOTS = ['var(--color-series-1)', 'var(--color-series-2)', 'var(--color-series-3)', 'var(--color-series-4)']
+
+function songs(n: number) {
+  return `${formatCount(n)} ${n === 1 ? 'song' : 'songs'}`
+}
+
+/** The library's songs by type of file: the four most common each their own colour, the
+ * rest together as "Other" (named in the legend). */
+function FileTypes({ serverId }: { serverId: number }) {
+  const types = useFileTypes(serverId)
+  if (!types.data?.length) return null
+  const name = (format: string) => (format ? format.toUpperCase() : 'Unknown')
+  const named = types.data.filter((t) => t.format).slice(0, SLOTS.length)
+  const rest = types.data.filter((t) => !named.includes(t))
+  const slices: DonutSlice[] = named.map((t, i) => ({ key: t.format, label: name(t.format), value: t.tracks, color: SLOTS[i] }))
+  if (rest.length)
+    slices.push({
+      key: 'other',
+      label: rest.length === 1 ? name(rest[0].format) : 'Other',
+      value: rest.reduce((n, t) => n + t.tracks, 0),
+      color: 'var(--color-series-other)',
+      note: rest.length > 1 ? rest.map((t) => `${name(t.format)} ${formatCount(t.tracks)}`).join(', ') : undefined,
+    })
+  return (
+    <Card title="Types of file">
+      <Donut slices={slices} caption="Songs by type of file" unit={songs} />
+    </Card>
   )
 }
 

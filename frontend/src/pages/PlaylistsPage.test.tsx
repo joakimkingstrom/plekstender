@@ -38,6 +38,10 @@ beforeEach(() => {
       return json({ similar: [portishead], sonic_artists: [], sonic_tracks: [] })
     if (path === '/api/servers/1/playlists/preview') {
       const body = await input.clone().json()
+      if (body.forgotten && body.artists.length === 0) {
+        const songs = [{ ...song(304, 'Glory Box'), artist: 'Portishead', artist_key: 101 }]
+        return json({ matched: 1, count: 1, duration_ms: 240_000, artists: 1, top_artists: ['Portishead'], songs })
+      }
       const songs = [song(301, 'Karma Police'), song(300, 'Paranoid Android')]
       if (body.artists.includes(101)) songs.push({ ...song(304, 'Glory Box'), artist: 'Portishead', artist_key: 101 })
       return json({ matched: songs.length, count: songs.length, duration_ms: songs.length * 240_000, artists: 1, top_artists: ['Radiohead'], songs })
@@ -109,6 +113,7 @@ describe('Playlists', () => {
           definition: {
             artists: [100, 101],
             tracks: [],
+            forgotten: false,
             rules: { min_rating: null, include_unrated: true, top_percent: null, op: 'AND', tags: [] },
             limit: 100,
             order: 'random',
@@ -117,5 +122,21 @@ describe('Playlists', () => {
         },
       ]),
     )
+  })
+
+  it('starts a forgotten favourites playlist from History → Rediscover', async () => {
+    renderAt('/playlists/new?forgotten=1')
+    expect(await screen.findByDisplayValue('Forgotten favourites')).toBeInTheDocument()
+    const forgotten = screen.getByRole('checkbox', { name: /Your forgotten favourites/ })
+    expect(forgotten).toBeChecked()
+    expect(await screen.findByText('Glory Box')).toBeInTheDocument() // the preview
+    // Without it, and nothing else chosen, there's nothing to save.
+    fireEvent.click(forgotten)
+    expect(screen.getByRole('button', { name: 'Create in Plex' })).toBeDisabled()
+    fireEvent.click(forgotten)
+    fireEvent.click(screen.getByRole('button', { name: 'Create in Plex' }))
+    await vi.waitFor(async () => expect(await posted('/api/servers/1/playlists')).toHaveLength(1))
+    const [saved] = await posted('/api/servers/1/playlists')
+    expect(saved).toMatchObject({ name: 'Forgotten favourites', schedule: 'weekly', definition: { forgotten: true, artists: [], tracks: [] } })
   })
 })

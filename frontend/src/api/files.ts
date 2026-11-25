@@ -504,10 +504,117 @@ export const bulk = {
         params: { path: { server_id: serverId, job_id: jobId } },
       }),
     ),
+  /** `write`: write lyrics as they're found (to these places), instead of after the lookup. */
+  lookUpLyrics: (
+    serverId: number,
+    albums: number[],
+    again: boolean,
+    write: (LyricsDestinations & { overwrite: boolean }) | null = null,
+  ) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/lyrics', {
+        params: { path: { server_id: serverId } },
+        body: { albums, again, write },
+      }),
+    ),
+  /** Stop a lyrics lookup (keeping what it found), or cancel it (throwing that away, and with
+   * `undo` taking out what it wrote). */
+  stopLyrics: (serverId: number, jobId: number, cancel: boolean, undo: boolean) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/lyrics/{job_id}/stop', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+        body: { cancel, undo },
+      }),
+    ),
+  findDuplicates: (serverId: number) =>
+    unwrap(api.POST('/api/servers/{server_id}/files/duplicates', { params: { path: { server_id: serverId } } })),
+  removeDuplicates: (serverId: number, jobId: number, remove: number[]) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/duplicates/{job_id}/apply', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+        body: { remove },
+      }),
+    ),
+  writeLyrics: (serverId: number, jobId: number, to: LyricsDestinations, overwrite: boolean) =>
+    unwrap(
+      api.POST('/api/servers/{server_id}/files/lyrics/{job_id}/apply', {
+        params: { path: { server_id: serverId, job_id: jobId } },
+        body: { ...to, overwrite },
+      }),
+    ),
+}
+
+/** Where lyrics are written: next to each song (.lrc / .txt, and/or a Lyricsfile), and/or
+ * in its tags. */
+export type LyricsDestinations = { sidecar: boolean; lyricsfile: boolean; embedded: boolean }
+
+/** A lyrics lookup: found so far, and what writing would change (polled while it runs). */
+export function useLyricsPlan(serverId: number, jobId: number | null, to: LyricsDestinations, overwrite: boolean) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'lyrics', jobId, to, overwrite],
+    enabled: jobId !== null,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/lyrics/{job_id}', {
+          params: { path: { server_id: serverId, job_id: jobId! }, query: { ...to, overwrite } },
+        }),
+      ),
+    refetchInterval: (query) => {
+      const status = query.state.data?.job.status
+      return status === 'queued' || status === 'running' ? 1500 : false
+    },
+    placeholderData: keepPreviousData,
+  })
 }
 
 /** After bulk writes: the lists, album pages and history show what changed. */
 export function useRefreshFiles(serverId: number) {
   const qc = useQueryClient()
   return () => qc.invalidateQueries({ queryKey: filesKeys.all(serverId) })
+}
+
+export type Duplicates = Schemas['DuplicatesOut']
+
+/** The last duplicates check (polled while it runs). */
+export function useDuplicates(serverId: number) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'duplicates'],
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/files/duplicates/latest', { params: { path: { server_id: serverId } } })),
+    refetchInterval: (query) => {
+      const status = query.state.data?.job.status
+      return status === 'queued' || status === 'running' ? 1500 : false
+    },
+  })
+}
+
+/** How many of the music folder's songs have which kind of lyrics. */
+export function useLyricsCoverage(serverId: number) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'lyrics', 'coverage'],
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/files/lyrics/coverage', { params: { path: { server_id: serverId } } })),
+  })
+}
+
+/** The last lyrics lookup for the whole library (to come back to its results), or of any
+ * kind (`any`: the bell, which polls it: often while it runs, else every minute). */
+export function useLatestLyricsLookup(serverId: number, scope: 'library' | 'any' = 'library', enabled = true) {
+  return useQuery({
+    queryKey: [...filesKeys.all(serverId), 'lyrics', 'latest', scope],
+    enabled,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/files/lyrics/latest', {
+          params: { path: { server_id: serverId }, query: { scope } },
+        }),
+      ),
+    refetchInterval:
+      scope === 'any'
+        ? (query) => {
+            const status = query.state.data?.status
+            return status === 'queued' || status === 'running' ? 5000 : 60_000
+          }
+        : false,
+  })
 }

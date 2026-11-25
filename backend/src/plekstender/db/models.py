@@ -6,12 +6,14 @@ import datetime as dt
 from typing import Any, ClassVar
 
 from sqlalchemy import (
+    ARRAY,
     BigInteger,
     Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
+    Integer,
     MetaData,
     PrimaryKeyConstraint,
     SmallInteger,
@@ -359,6 +361,8 @@ class UserItemState(Base):
     seen_at: Mapped[dt.datetime]
     # The user's listens from Plekstender's history (Plex plays + imports), matched by name.
     listens: Mapped[int] = mapped_column(default=0, server_default="0")
+    # Tracks: the user's latest listen in that history, matched the same way.
+    last_listened_at: Mapped[dt.datetime | None]
 
 
 class SyncRun(Base):
@@ -731,6 +735,66 @@ class HiddenSuggestion(Base):
     hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 
+class ReleaseGroup(Base):
+    """An artist's release group on MusicBrainz (album, EP, single...), for Library -> Releases.
+    Shared by every server, by the artist's MBID; the worker refreshes them (`releases`)."""
+
+    __tablename__ = "release_groups"
+    __table_args__ = (
+        PrimaryKeyConstraint("artist_mbid", "mbid"),
+        Index("ix_release_groups_mbid", "mbid"),
+        Index("ix_release_groups_released", "released"),
+    )
+
+    artist_mbid: Mapped[str] = mapped_column(String(36))
+    mbid: Mapped[str] = mapped_column(String(36))
+    title: Mapped[str] = mapped_column(Text)
+    # normalise_title(title), to match library albums named the same.
+    title_norm: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(16))  # album|ep|single|live|compilation|other
+    primary_type: Mapped[str | None] = mapped_column(String(32))
+    secondary_types: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    # As MusicBrainz gives it: "2019", "2019-05" or "2019-05-21".
+    first_release_date: Mapped[str | None] = mapped_column(String(10))
+    # The same as a date (the 1st of the month / year when only those are known).
+    released: Mapped[dt.date | None] = mapped_column(Date)
+
+
+class ArtistReleaseCheck(Base):
+    """When an artist's release groups were last read from MusicBrainz."""
+
+    __tablename__ = "artist_release_checks"
+
+    artist_mbid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    checked_at: Mapped[dt.datetime]
+    # False: MusicBrainz doesn't know the MBID (merged or deleted there).
+    found: Mapped[bool] = mapped_column(default=True)
+
+
+class HiddenSong(Base):
+    """A song someone doesn't want in History -> Rediscover (or its forgotten favourites
+    playlist). Any release of the song hides it."""
+
+    __tablename__ = "hidden_songs"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "server_id", "rating_key"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    rating_key: Mapped[int] = mapped_column(BigInteger)
+    hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class HiddenRelease(Base):
+    """A release group someone doesn't want to see in Library -> Releases."""
+
+    __tablename__ = "hidden_releases"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "mbid"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    mbid: Mapped[str] = mapped_column(String(36))
+    hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
 class UserAchievement(Base):
     """An achievement a person unlocked (see plekstender.achievements), and when they saw
     its celebration."""
@@ -818,6 +882,10 @@ class MediaFile(Base):
     # The Plex track this file is (matched by its path), if any.
     rating_key: Mapped[int | None] = mapped_column(BigInteger)
     error: Mapped[str | None] = mapped_column(Text)
+    # Lyrics in its tags, and the best it has anywhere (a .lrc, .txt or .lyricsfile.yaml next
+    # to it too): word | synced | plain | instrumental, None: none (see tags/lyrics_kinds.py).
+    embedded_lyrics: Mapped[str | None] = mapped_column(String(12))
+    lyrics: Mapped[str | None] = mapped_column(String(12))
 
 
 class NfoFile(Base):
@@ -866,7 +934,7 @@ class FileScan(Base):
     server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(
         String(8), default="scan", server_default="scan"
-    )  # | identify
+    )  # | identify | rename | lyrics | dupes
     # What an identify job covers: {"file_ids": [...], "again": bool}.
     params: Mapped[dict[str, Any]] = mapped_column(default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(
@@ -879,6 +947,49 @@ class FileScan(Base):
     started_at: Mapped[dt.datetime | None]
     finished_at: Mapped[dt.datetime | None]
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class TrackLyrics(Base):
+    """Lyrics found for a music file (LRCLIB, looked up by the worker), and the lyrics the file
+    already had when it was looked at: a `.lrc` or `.txt` next to it, or in its tags."""
+
+    __tablename__ = "track_lyrics"
+    __table_args__ = (Index("ix_track_lyrics_server", "server_id"),)
+
+    media_file_id: Mapped[int] = mapped_column(
+        ForeignKey("media_files.id", ondelete="CASCADE"), primary_key=True
+    )
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    # synced | plain | instrumental | none (not found) | untagged (no artist or title) | error
+    status: Mapped[str] = mapped_column(String(16))
+    synced: Mapped[str | None] = mapped_column(Text)  # LRC, with [mm:ss.xx] times
+    plain: Mapped[str | None] = mapped_column(Text)
+    # LRCLIB's Lyricsfile (YAML), and whether it times each word.
+    lyricsfile: Mapped[str | None] = mapped_column(Text)
+    word_synced: Mapped[bool] = mapped_column(default=False, server_default="false")
+    lrclib_id: Mapped[int | None] = mapped_column(BigInteger)
+    existing_lrc: Mapped[str | None] = mapped_column(Text)
+    existing_txt: Mapped[str | None] = mapped_column(Text)
+    existing_lyricsfile: Mapped[str | None] = mapped_column(Text)
+    existing_embedded: Mapped[str | None] = mapped_column(Text)
+    # Whether lyrics can be written into this file's tags (MP3, FLAC, Ogg, MP4 / M4A).
+    embeddable: Mapped[bool] = mapped_column(default=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    looked_up_at: Mapped[dt.datetime]
+
+
+class FileFingerprint(Base):
+    """A music file's raw Chromaprint fingerprint (first two minutes), to find files that are
+    the same recording. `file_key` is the file's size and modification time when it was made:
+    a changed file is fingerprinted again. Numbers are stored signed (Postgres integers)."""
+
+    __tablename__ = "file_fingerprints"
+
+    media_file_id: Mapped[int] = mapped_column(
+        ForeignKey("media_files.id", ondelete="CASCADE"), primary_key=True
+    )
+    file_key: Mapped[str] = mapped_column(String(64))
+    values: Mapped[list[int]] = mapped_column(ARRAY(Integer))
 
 
 class TagChangeSet(Base):
@@ -1093,6 +1204,24 @@ class Gig(Base):
     url: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now(), onupdate=utcnow)
+
+
+class GigPlaylist(Base):
+    """A playlist made for a gig: before a starred one ("before", `ref` the Live gig's
+    source:id), or after one the user went to ("after", `ref` the gig's id). Kept when the
+    playlist is deleted, so it isn't made again."""
+
+    __tablename__ = "gig_playlists"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "kind", "ref"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(8))  # before | after
+    ref: Mapped[str] = mapped_column(String(128))
+    playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id", ondelete="SET NULL"))
+    gig_date: Mapped[dt.date] = mapped_column(Date)
+    songs: Mapped[int] = mapped_column(default=0)  # matched in the library, last time
+    made_at: Mapped[dt.datetime]
+    refreshed_at: Mapped[dt.datetime]
 
 
 class GigPlace(Base):

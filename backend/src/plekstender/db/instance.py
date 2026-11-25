@@ -199,6 +199,28 @@ async def set_fanart_api_key(db: AsyncSession, settings: Settings, api_key: str 
     await _put(db, FANART_KEY, value)
 
 
+# --- MusicBrainz contact (in the User-Agent) ------------------------------------------------
+
+MUSICBRAINZ_KEY = "musicbrainz"
+
+
+async def get_musicbrainz_contact(
+    db: AsyncSession, settings: Settings
+) -> tuple[str | None, Literal["settings", "environment"] | None]:
+    """The contact sent to MusicBrainz and where it came from: Settings page first, then
+    MUSICBRAINZ_CONTACT. Not a secret: it's what MusicBrainz is told."""
+    stored = await _get(db, MUSICBRAINZ_KEY) or {}
+    if contact := (stored.get("contact") or "").strip():
+        return contact, "settings"
+    if env := (settings.musicbrainz_contact or "").strip():
+        return env, "environment"
+    return None, None
+
+
+async def set_musicbrainz_contact(db: AsyncSession, contact: str | None) -> None:
+    await _put(db, MUSICBRAINZ_KEY, {"contact": contact} if contact else {})
+
+
 # --- AcoustID application key --------------------------------------------------------------
 
 ACOUSTID_KEY = "acoustid"

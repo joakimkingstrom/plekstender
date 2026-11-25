@@ -204,12 +204,18 @@ async def setlistfm_search(
     year: int | None = None,
     city: str | None = None,
     page: int = 1,
+    mbid: str | None = None,
+    date: dt.date | None = None,
 ) -> tuple[list[Found], int]:
-    """Setlists matching an artist, year and town (any of them), newest first, 20 a page;
-    and how many there are in all."""
+    """Setlists matching an artist (by name, or MusicBrainz ID), year, date and town (any of
+    them), newest first, 20 a page; and how many there are in all."""
     params: dict[str, Any] = {"p": page}
-    if artist:
+    if mbid:
+        params["artistMbid"] = mbid
+    elif artist:
         params["artistName"] = artist
+    if date:
+        params["date"] = date.strftime("%d-%m-%Y")
     if year:
         params["year"] = year
     if city:

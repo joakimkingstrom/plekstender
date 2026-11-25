@@ -27,7 +27,7 @@ TEXT_FIELDS = (
 )  # fmt: skip
 LIST_FIELDS = ("genre",)
 # Bumped when more fields are read: the next scan re-reads every file once.
-READER = 5
+READER = 6
 # The reader version that started describing embedded covers.
 COVERS_READER = 4
 # The fields each reader version added: a file read by an older reader may have them without
@@ -37,7 +37,10 @@ ADDED = {
     3: frozenset({"rating"}),
     4: frozenset(),  # embedded covers described (not a tag)
     5: frozenset({"label", "catalognumber", "barcode"}),  # and MP4 composers
+    6: frozenset(),  # the kind of lyrics in the tags (not a tag field)
 }
+# The reader version that started noting the kind of lyrics in the tags.
+LYRICS_READER = 6
 
 
 def unread_fields(reader: int) -> frozenset[str]:

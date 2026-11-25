@@ -16,12 +16,22 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.config import get_settings
 from plekstender.db.models import FileScan, FolderImage, MediaFile, NfoFile, PlexServer, Track
+from plekstender.tags import embedded_lyrics
+from plekstender.tags.lyrics_kinds import (
+    LYRICSFILE,
+    SIDECARS,
+    Kind,
+    best,
+    of_sidecar,
+    of_text,
+    sidecar_path,
+)
 from plekstender.tags.nfo import NfoError, kind_of
 from plekstender.tags.nfo import parse as parse_nfo
 from plekstender.tags.pictures import cover_of, image_kind, thumbnail
@@ -49,15 +59,24 @@ def walk(root: Path) -> list[Found]:
     return walk_all(root)[0]
 
 
-def walk_all(root: Path) -> tuple[list[Found], list[Found], list[Found]]:
+def _is_lyrics(name: str) -> bool:
+    lower = name.lower()
+    return lower.endswith(LYRICSFILE) or Path(lower).suffix in (".lrc", ".txt")
+
+
+def walk_all(root: Path) -> tuple[list[Found], list[Found], list[Found], set[str]]:
     """Every audio file, artist.nfo / album.nfo, and folder image (cover.jpg, artist.jpg...)
-    under `root` (no symlinks)."""
+    under `root` (no symlinks), and the paths of lyrics files (.lrc, .txt, .lyricsfile.yaml)."""
     audio: list[Found] = []
     nfos: list[Found] = []
     images: list[Found] = []
+    lyrics: set[str] = set()
     for folder, dirs, files in os.walk(root, followlinks=False):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
         for name in sorted(files):
+            if not name.startswith(".") and _is_lyrics(name):
+                lyrics.add((Path(folder) / name).relative_to(root).as_posix())
+                continue
             is_nfo = kind_of(name) is not None
             is_image = image_kind(name) is not None
             if name.startswith(".") or not (
@@ -73,7 +92,7 @@ def walk_all(root: Path) -> tuple[list[Found], list[Found], list[Found]]:
                 continue
             item = Found(full.relative_to(root).as_posix(), st.st_size, st.st_mtime)
             (nfos if is_nfo else images if is_image else audio).append(item)
-    return audio, nfos, images
+    return audio, nfos, images, lyrics
 
 
 def _read_nfos(root: Path, items: list[Found]) -> list[dict[str, Any]]:
@@ -147,10 +166,29 @@ def _read(root: Path, item: Found, data_dir: Path) -> dict[str, Any]:
             "tags": {},
             "has_cover": False,
             "cover": None,
+            "embedded_lyrics": None,
             "error": str(exc),
         }
     cover = cover_of(root / item.path, data_dir) if info["has_cover"] else None
-    return {**info, "cover": cover, "error": None}
+    try:
+        lyrics = of_text(embedded_lyrics.read(root / item.path))
+    except embedded_lyrics.LyricsError:
+        lyrics = None
+    return {**info, "cover": cover, "embedded_lyrics": lyrics, "error": None}
+
+
+def lyrics_beside(root: Path, songs: list[str], lyrics: set[str]) -> dict[str, Kind]:
+    """The best kind of lyrics in files next to each song (songs without any are left out)."""
+    out: dict[str, Kind] = {}
+    for song in songs:
+        found = [
+            of_sidecar(root / sidecar_path(song, suffix))
+            for suffix in SIDECARS
+            if sidecar_path(song, suffix) in lyrics
+        ]
+        if (kind := best(*found)) is not None:
+            out[song] = kind
+    return out
 
 
 def _read_all(root: Path, batch: list[Found], data_dir: Path) -> list[dict[str, Any]]:
@@ -239,6 +277,33 @@ async def _scan_images(
     return len(images)
 
 
+async def _scan_lyrics(
+    db: AsyncSession, server: PlexServer, root: Path, songs: list[str], lyrics: set[str]
+) -> int:
+    """Each song's kind of lyrics: the best of its tags' and the files next to it (read on
+    every scan: a .lrc added next to a song doesn't change the song). Returns how many have
+    lyrics."""
+    beside = await asyncio.to_thread(lyrics_beside, root, songs, lyrics)
+    rows = (
+        await db.execute(
+            select(MediaFile.id, MediaFile.path, MediaFile.embedded_lyrics, MediaFile.lyrics).where(
+                MediaFile.server_id == server.id
+            )
+        )
+    ).all()
+    changed = []
+    with_lyrics = 0
+    for file_id, path, embedded, current in rows:
+        kind = best(beside.get(path), embedded)  # type: ignore[arg-type]
+        with_lyrics += kind is not None
+        if kind != current:
+            changed.append({"id": file_id, "lyrics": kind})
+    for start in range(0, len(changed), 1000):
+        await db.execute(update(MediaFile), changed[start : start + 1000])
+    await db.commit()
+    return with_lyrics
+
+
 def plex_path(server: PlexServer, relative: str) -> str:
     assert server.plex_path_prefix is not None
     return str(PurePosixPath(server.plex_path_prefix) / relative)
@@ -286,7 +351,7 @@ async def run_scan(db: AsyncSession, scan_id: int) -> None:
 
 
 async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path) -> dict[str, int]:
-    files, nfos, images = await asyncio.to_thread(walk_all, root)
+    files, nfos, images, lyrics = await asyncio.to_thread(walk_all, root)
     known = {
         path: (size, mtime, reader)
         for path, size, mtime, reader in (
@@ -328,6 +393,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
                 "tags": info["tags"],
                 "has_cover": info["has_cover"],
                 "cover": info["cover"],
+                "embedded_lyrics": info["embedded_lyrics"],
                 "reader": READER,
                 "error": info["error"],
                 "rating_key": tracks.get(plex_path(server, f.path)),
@@ -357,6 +423,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
             )
         )
     stats["removed"] = len(gone)
+    stats["lyrics"] = await _scan_lyrics(db, server, root, [f.path for f in files], lyrics)
     stats["nfo"] = await _scan_nfos(db, server, root, nfos)
     stats["images"] = await _scan_images(db, server, root, images)
     unmatched = await db.scalars(

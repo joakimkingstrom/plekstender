@@ -31,12 +31,18 @@ class Definition(BaseModel):
     tracks: list[int] = Field(
         default_factory=list, max_length=2000, description="Always included, rules or not."
     )
+    forgotten: bool = Field(
+        default=False,
+        description="Also your forgotten favourites: songs rated 4½ stars or more that you "
+        "haven't played for a year (picked again at each refresh; the rules still apply).",
+    )
     rules: Rules = Field(default_factory=Rules)
     limit: int | None = Field(default=500, ge=1, le=5000)
-    order: Literal["random", "popular"] = "random"
+    # random | most popular first | as listed in `tracks` (gig playlists: setlist order).
+    order: Literal["random", "popular", "listed"] = "random"
 
     @model_validator(mode="after")
     def _something(self) -> Definition:
-        if not self.artists and not self.tracks:
-            raise ValueError("choose at least one artist or song")
+        if not self.artists and not self.tracks and not self.forgotten:
+            raise ValueError("choose at least one artist or song, or your forgotten favourites")
         return self

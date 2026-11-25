@@ -50,10 +50,12 @@ from plekstender.history.scrobblers import submit_targets
 from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
 from plekstender.playlists.service import build as build_playlist_in_plex
 from plekstender.previews import trim_cache as trim_preview_cache
+from plekstender.releases import look_up as look_up_releases
 from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
 from plekstender.tags.apply import run_change_set as run_tag_change_set
+from plekstender.tags.lyrics import close_edit as close_lyrics_edit
 from plekstender.tags.scan import run_scan as run_file_scan
 
 log = logging.getLogger(__name__)
@@ -564,6 +566,45 @@ async def enqueue_rename_plan(job: FileScan) -> None:
 
 
 @app.task(queue="files")
+async def find_duplicates(job_id: int) -> None:
+    from plekstender.tags.duplicates import run_duplicates
+
+    async with get_sessionmaker()() as db:
+        await run_duplicates(db, get_settings(), job_id)
+
+
+async def enqueue_duplicates(job: FileScan) -> None:
+    """Finding duplicate files (fingerprints the candidates; waits for scans and edits)."""
+    try:
+        await find_duplicates.configure(
+            lock=f"folders-{job.server_id}", queueing_lock=f"dupes-{job.id}"
+        ).defer_async(job_id=job.id)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.task(queue="files")
+async def look_up_lyrics(job_id: int) -> None:
+    from plekstender.tags.lyrics import run_lookup
+
+    async with (
+        httpx.AsyncClient() as http,
+        get_sessionmaker()() as db,
+    ):
+        await run_lookup(db, http, get_settings(), job_id)
+
+
+async def enqueue_lyrics_lookup(job: FileScan) -> None:
+    """Looking up lyrics (mostly waiting on LRCLIB: its own lock, so scans aren't held up)."""
+    try:
+        await look_up_lyrics.configure(
+            lock=f"lyrics-{job.server_id}", queueing_lock=f"lyrics-{job.id}"
+        ).defer_async(job_id=job.id)
+    except AlreadyEnqueued:
+        pass
+
+
+@app.task(queue="files")
 async def apply_tag_changes(set_id: int) -> None:
     async with (
         httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
@@ -733,6 +774,20 @@ async def find_artist_countries(timestamp: int) -> None:
         log.info("Looked up %d artists' countries on MusicBrainz", done)
 
 
+@app.periodic(cron="55 * * * *", periodic_id="artist-releases")
+@app.task(queue="maintenance", queueing_lock="artist-releases")
+async def find_artist_releases(timestamp: int) -> None:
+    """Hourly: library artists' releases on MusicBrainz (Library -> Releases), a few hundred
+    artists an hour; followed artists daily, the rest every two weeks."""
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        done = await look_up_releases(db, http)
+    if done:
+        log.info("Read %d artists' releases from MusicBrainz", done)
+
+
 @app.periodic(cron="*/15 * * * *", periodic_id="cover-colours")
 @app.task(queue="maintenance", queueing_lock="cover-colours")
 async def find_cover_colours(timestamp: int) -> None:
@@ -810,6 +865,105 @@ async def heartbeat(timestamp: int) -> None:
         await db.commit()
 
 
+# A worker that stopped (a restart, a new image) leaves its running jobs "doing", holding
+# their locks: no other job with the same lock (a lyrics lookup, a scan) could ever start.
+# Its heartbeats stop, so after this long its jobs are closed as failed. The app's own
+# records of them (scans, syncs...) are marked interrupted by cleanup_sessions.
+STALLED_WORKER_SECONDS = 300
+
+
+@app.periodic(cron="*/5 * * * *", periodic_id="close-stalled-jobs")
+@app.task(queue="maintenance", queueing_lock="close-stalled-jobs")
+async def close_stalled_jobs(timestamp: int) -> None:
+    from procrastinate.jobs import Status
+
+    stalled = list(
+        await app.job_manager.get_stalled_jobs(seconds_since_heartbeat=STALLED_WORKER_SECONDS)
+    )
+    for job in stalled:
+        await app.job_manager.finish_job(job, status=Status.FAILED, delete_job=False)
+    if stalled:
+        log.warning(
+            "closed %d jobs left running by a stopped worker: %s",
+            len(stalled),
+            ", ".join(f"{j.task_name}[{j.id}]" for j in stalled),
+        )
+
+
+@app.periodic(cron="45 * * * *", periodic_id="gig-playlists")
+@app.task(queue="maintenance", queueing_lock="gig-playlists", lock="gig-playlists")
+async def make_gig_playlists_periodically(timestamp: int) -> None:
+    """Hourly: playlists for gigs, for people who turned them on (before a starred gig, and
+    after one they went to)."""
+    from sqlalchemy import text as sql
+
+    async with get_sessionmaker()() as db:
+        user_ids = list(
+            await db.scalars(
+                sql(
+                    "SELECT id FROM users"
+                    " WHERE preferences #>> '{gig_playlists,before}' = 'true'"
+                    " OR preferences #>> '{gig_playlists,after}' = 'true'"
+                    " ORDER BY id"
+                )
+            )
+        )
+    for user_id in user_ids:
+        await _gig_playlists(user_id)
+
+
+@app.task(queue="maintenance", lock="gig-playlists")
+async def make_gig_playlists_now(user_id: int) -> None:
+    """One person's gig playlists, straight away (they've just turned them on)."""
+    await _gig_playlists(user_id)
+
+
+async def enqueue_gig_playlists(user_id: int) -> None:
+    try:
+        await make_gig_playlists_now.configure(
+            queueing_lock=f"gig-playlists-{user_id}"
+        ).defer_async(user_id=user_id)
+    except AlreadyEnqueued:
+        pass
+
+
+async def _gig_playlists(user_id: int) -> None:
+    from plekstender.db.models import User
+    from plekstender.gigs.playlists import make_gig_playlists
+
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        user = await db.get(User, user_id)
+        if user is None:
+            return
+        made = await make_gig_playlists(db, http, get_settings(), user)
+        for playlist_id in made.to_build:
+            playlist = await db.get(Playlist, playlist_id)
+            if playlist is not None:
+                await enqueue_playlist_build(playlist)
+    if made.made or made.refreshed:
+        log.info(
+            "gig playlists for user %s: %d made, %d refreshed", user_id, made.made, made.refreshed
+        )
+
+
+@app.periodic(cron="40 3 * * *", periodic_id="prune-history")
+@app.task(queue="maintenance", queueing_lock="prune-history")
+async def prune_history(timestamp: int) -> None:
+    """Daily: finished jobs out of the queue (a week; failed ones a month), and finished
+    task records older than 90 days (keeping the latest few of each kind)."""
+    from plekstender.maintenance import prune_jobs, prune_records
+
+    await prune_jobs(app)
+    async with get_sessionmaker()() as db:
+        removed = await prune_records(db)
+        await db.commit()
+    if any(removed.values()):
+        log.info("pruned old task records: %s", removed)
+
+
 @app.periodic(cron="17 * * * *", periodic_id="cleanup-sessions")
 @app.task(queue="maintenance", queueing_lock="cleanup-sessions")
 async def cleanup_sessions(timestamp: int) -> None:
@@ -830,6 +984,16 @@ async def cleanup_sessions(timestamp: int) -> None:
                 ListenImport.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
             )
             .values(status="failed", error="Interrupted (the worker stopped). Resume to continue.")
+        )
+        # Lyrics lookups that wrote as they went: their edits are closed too (below).
+        stale_lyrics = list(
+            await db.scalars(
+                select(FileScan).where(
+                    FileScan.status == "running",
+                    FileScan.kind == "lyrics",
+                    FileScan.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
+                )
+            )
         )
         await db.execute(
             update(FileScan)
@@ -856,6 +1020,9 @@ async def cleanup_sessions(timestamp: int) -> None:
             .values(status="failed", error="Interrupted (the worker stopped). Start it again.")
         )
         await db.commit()
+        for job in stale_lyrics:
+            if set_id := job.params.get("applied_set_id"):
+                await close_lyrics_edit(db, job, set_id)
     remove_old_uploads(get_settings(), dt.timedelta(days=1))
     trim_preview_cache(get_settings())
     remove_old_files(get_settings(), dt.timedelta(days=7))  # artwork exports and imports

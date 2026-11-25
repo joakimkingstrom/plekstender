@@ -388,6 +388,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/stats/file-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * File Types
+         * @description The library's songs by type of file (their extension, as Plex has the files), most
+         *     first.
+         */
+        get: operations["file_types_api_servers__server_id__library_stats_file_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/stats/seen-live": {
         parameters: {
             query?: never;
@@ -927,6 +948,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stats/on-this-day": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * On This Day
+         * @description What you played on today's date in earlier years (artists linked to `server_id`).
+         */
+        get: operations["on_this_day_api_stats_on_this_day_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/taste": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taste
+         * @description Your genres (or styles, or moods: the artists' in Plex) and the decades your music is
+         *     from, per year you listened. The `genres` fields hold whichever kind was asked for.
+         */
+        get: operations["taste_api_stats_taste_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/rediscover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rediscover
+         * @description Songs whose ratings and plays disagree: loved but forgotten or hardly played, and
+         *     played a lot but rated low. Songs you've hidden only with `include_hidden`.
+         */
+        get: operations["rediscover_api_stats_rediscover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/rediscover/hidden/{rating_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Hide Song
+         * @description Hide a song from Rediscover (and the forgotten favourites playlist).
+         */
+        put: operations["hide_song_api_stats_rediscover_hidden__rating_key__put"];
+        post?: never;
+        /**
+         * Show Song
+         * @description Show a hidden song in Rediscover again (whichever release of it was hidden).
+         */
+        delete: operations["show_song_api_stats_rediscover_hidden__rating_key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rewind": {
         parameters: {
             query?: never;
@@ -1067,6 +1174,69 @@ export interface paths {
          */
         post: operations["undo_item_api_servers__server_id__ratings__rating_key__undo_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/releases/new": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * New Releases
+         * @description The last 90 days' releases, and those coming up, by artists you follow (by default
+         *     rated 4 stars or more, or among your 50 most played: see your release settings).
+         */
+        get: operations["new_releases_api_servers__server_id__releases_new_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/releases/missing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Missing Releases
+         * @description Released albums (or other kinds) of your library's artists that it doesn't have, by
+         *     artist, most played first.
+         */
+        get: operations["missing_releases_api_servers__server_id__releases_missing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/releases/hidden/{mbid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Hide Release
+         * @description Don't show this release (on any server).
+         */
+        put: operations["hide_release_api_servers__server_id__releases_hidden__mbid__put"];
+        post?: never;
+        /** Show Release */
+        delete: operations["show_release_api_servers__server_id__releases_hidden__mbid__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1532,6 +1702,47 @@ export interface paths {
         get: operations["find_places_api_gigs_places_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gig Playlists
+         * @description The playlists made for your gigs (before and after them), newest gig first.
+         */
+        get: operations["gig_playlists_api_gigs_playlists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/playlists/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Gig Playlists
+         * @description Make the gig playlists that are due now, rather than within the hour (after turning
+         *     them on).
+         */
+        post: operations["check_gig_playlists_api_gigs_playlists_check_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2406,6 +2617,208 @@ export interface paths {
          * @description Make the dry run's moves, as one edit (undo it from the history to move them back).
          */
         post: operations["apply_renames_api_servers__server_id__files_renames__job_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lyrics Coverage
+         * @description How many of the music folder's songs have which kind of lyrics (as of the last scan
+         *     or lyrics edit).
+         */
+        get: operations["lyrics_coverage_api_servers__server_id__files_lyrics_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Look Up Lyrics
+         * @description Look up lyrics (in the worker) for the library or some albums. Nothing is written,
+         *     unless `write` says where: then lyrics are written as they're found.
+         */
+        post: operations["look_up_lyrics_api_servers__server_id__files_lyrics_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest Lookup
+         * @description The last lyrics lookup for the whole library (or for anything: `scope=any`), if
+         *     there's been one.
+         */
+        get: operations["latest_lookup_api_servers__server_id__files_lyrics_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lyrics Plan
+         * @description What's been found so far, and what writing it (to these places) would change.
+         */
+        get: operations["lyrics_plan_api_servers__server_id__files_lyrics__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics/{job_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Lookup
+         * @description Stop a lookup (what it found and wrote is kept), or cancel it: what it found is thrown
+         *     away, and with `undo` what it wrote is taken out again (an undo edit).
+         */
+        post: operations["stop_lookup_api_servers__server_id__files_lyrics__job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/lyrics/{job_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write Lyrics
+         * @description Write the lyrics found, as one edit.
+         */
+        post: operations["write_lyrics_api_servers__server_id__files_lyrics__job_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find Duplicates
+         * @description Look for duplicate files (in the worker). Nothing moves.
+         */
+        post: operations["find_duplicates_api_servers__server_id__files_duplicates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/duplicates/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest Duplicates
+         * @description The last check, if there's been one.
+         */
+        get: operations["latest_duplicates_api_servers__server_id__files_duplicates_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/duplicates/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Duplicates */
+        get: operations["duplicates_api_servers__server_id__files_duplicates__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/duplicates/{job_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Duplicates
+         * @description Move the chosen copies (and their lyrics files) out of the library, into a hidden
+         *     folder in the music folder, as one edit.
+         */
+        post: operations["remove_duplicates_api_servers__server_id__files_duplicates__job_id__apply_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3640,6 +4053,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/musicbrainz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Musicbrainz */
+        get: operations["get_musicbrainz_api_admin_musicbrainz_get"];
+        /**
+         * Put Musicbrainz
+         * @description Set or clear the contact sent to MusicBrainz in the User-Agent (an email address or a
+         *     web page). The worker picks it up within a minute.
+         */
+        put: operations["put_musicbrainz_api_admin_musicbrainz_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/acoustid": {
         parameters: {
             query?: never;
@@ -3952,6 +4387,27 @@ export interface paths {
          *     starts), or one of an album's or artist's most popular songs without a silent intro.
          */
         get: operations["rate_sample_api_servers__server_id__rate_sample_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/releases/{mbid}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Release Cover
+         * @description A release group's front cover from the Cover Art Archive, small, fetched by the server
+         *     (the page only loads images from here).
+         */
+        get: operations["release_cover_api_releases__mbid__cover_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4883,6 +5339,55 @@ export interface components {
             /** Refresh Token */
             refresh_token: string;
         };
+        /** DayArtistOut */
+        DayArtistOut: {
+            /** Name */
+            name: string;
+            /** Listens */
+            listens: number;
+            /**
+             * Rating Key
+             * @description The library artist, when one matches.
+             */
+            rating_key: number | null;
+            /** Thumb */
+            thumb: string | null;
+        };
+        /** DayTrackOut */
+        DayTrackOut: {
+            /** Name */
+            name: string;
+            /** Artist */
+            artist: string;
+            /** Listens */
+            listens: number;
+        };
+        /** DayYearOut */
+        DayYearOut: {
+            /** Year */
+            year: number;
+            /** Listens */
+            listens: number;
+            /**
+             * Artists
+             * @description The day's top 3.
+             */
+            artists: components["schemas"]["DayArtistOut"][];
+            /**
+             * Tracks
+             * @description The day's top 5.
+             */
+            tracks: components["schemas"]["DayTrackOut"][];
+            /**
+             * Album
+             * @description The day's most played album.
+             */
+            album: string | null;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Album Thumb */
+            album_thumb: string | null;
+        };
         /** DecadeCount */
         DecadeCount: {
             /**
@@ -4902,6 +5407,12 @@ export interface components {
              * @description Always included, rules or not.
              */
             tracks?: number[];
+            /**
+             * Forgotten
+             * @description Also your forgotten favourites: songs rated 4½ stars or more that you haven't played for a year (picked again at each refresh; the rules still apply).
+             * @default false
+             */
+            forgotten: boolean;
             rules?: components["schemas"]["Rules"];
             /**
              * Limit
@@ -4913,12 +5424,94 @@ export interface components {
              * @default random
              * @enum {string}
              */
-            order: "random" | "popular";
+            order: "random" | "popular" | "listed";
         };
         /** DeletedOut */
         DeletedOut: {
             /** Deleted */
             deleted: number;
+        };
+        /** DupeFileOut */
+        DupeFileOut: {
+            /** File Id */
+            file_id: number;
+            /** Path */
+            path: string;
+            /** Format */
+            format: string | null;
+            /** Size */
+            size: number;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /**
+             * Kbps
+             * @description Average bitrate.
+             */
+            kbps: number | null;
+            /**
+             * Rating Key
+             * @description The Plex track, if Plex has it.
+             */
+            rating_key: number | null;
+            /** Title */
+            title: string | null;
+            /** Artist */
+            artist: string | null;
+            /** Album */
+            album: string | null;
+            /**
+             * Sidecars
+             * @description Lyrics files next to it (moved with it).
+             */
+            sidecars: string[];
+            /**
+             * Keep
+             * @description The suggested copy to keep.
+             */
+            keep: boolean;
+        };
+        /** DupeGroupOut */
+        DupeGroupOut: {
+            /**
+             * Confirmed
+             * @description Compared by sound: they're the same recording.
+             */
+            confirmed: boolean;
+            /**
+             * Similarity
+             * @description How alike the least alike pair sounds (0-1).
+             */
+            similarity: number | null;
+            /** Files */
+            files: components["schemas"]["DupeFileOut"][];
+        };
+        /** DuplicatesApplyIn */
+        DuplicatesApplyIn: {
+            /**
+             * Remove
+             * @description Files to take out.
+             */
+            remove: number[];
+        };
+        /** DuplicatesOut */
+        DuplicatesOut: {
+            job: components["schemas"]["FileScanOut"];
+            /** Groups */
+            groups: components["schemas"]["DupeGroupOut"][];
+            /** Total Groups */
+            total_groups: number;
+            /**
+             * Files
+             * @description Files checked.
+             */
+            files: number;
+            /**
+             * Fingerprint Error
+             * @description Why files couldn't be compared by sound.
+             */
+            fingerprint_error: string | null;
+            /** Applied Set Id */
+            applied_set_id: number | null;
         };
         /** EmbedCoverIn */
         EmbedCoverIn: {
@@ -5011,6 +5604,16 @@ export interface components {
             created_at: string;
             /** Finished At */
             finished_at: string | null;
+        };
+        /** FileTypeCount */
+        FileTypeCount: {
+            /**
+             * Format
+             * @description The file extension, lower case ("flac"); "" when unknown.
+             */
+            format: string;
+            /** Tracks */
+            tracks: number;
         };
         /** FilesSummaryOut */
         FilesSummaryOut: {
@@ -5464,6 +6067,69 @@ export interface components {
             latitude: number;
             /** Longitude */
             longitude: number;
+        };
+        /** GigPlaylistOut */
+        GigPlaylistOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "before" | "after";
+            /**
+             * Gig Date
+             * Format: date
+             */
+            gig_date: string;
+            /**
+             * Songs
+             * @description Songs found in the library (0: none, so no playlist).
+             */
+            songs: number;
+            /**
+             * Playlist Id
+             * @description None: none made, or deleted since.
+             */
+            playlist_id: number | null;
+            /** Name */
+            name: string | null;
+            /**
+             * Server Id
+             * @description The server (your connection) it's on.
+             */
+            server_id: number | null;
+            /** Status */
+            status: string | null;
+        };
+        /**
+         * GigPlaylistSettings
+         * @description Playlists made for gigs (in Plex), per account.
+         */
+        GigPlaylistSettings: {
+            /**
+             * Before
+             * @description Before a starred gig: the songs the artists have been playing lately.
+             * @default false
+             */
+            before: boolean;
+            /**
+             * After
+             * @description After a gig you went to: its setlist.
+             * @default false
+             */
+            after: boolean;
+        };
+        /** GigPlaylistsOut */
+        GigPlaylistsOut: {
+            /**
+             * Setlistfm
+             * @description setlist.fm is set up (an admin's key): needed.
+             */
+            setlistfm: boolean;
+            /**
+             * Items
+             * @description The latest, newest gig first.
+             */
+            items: components["schemas"]["GigPlaylistOut"][];
         };
         /** GigSameVenueOut */
         GigSameVenueOut: {
@@ -6427,6 +7093,215 @@ export interface components {
             /** Shows */
             shows: number;
         };
+        /** LyricsApplyIn */
+        LyricsApplyIn: {
+            /**
+             * Sidecar
+             * @description A .lrc (synced) or .txt next to each song.
+             * @default true
+             */
+            sidecar: boolean;
+            /**
+             * Lyricsfile
+             * @description A .lyricsfile.yaml next to each song.
+             * @default false
+             */
+            lyricsfile: boolean;
+            /**
+             * Embedded
+             * @description The plain lyrics in each song's tags.
+             * @default false
+             */
+            embedded: boolean;
+            /**
+             * Overwrite
+             * @description Replace lyrics the files already have.
+             * @default false
+             */
+            overwrite: boolean;
+        };
+        /** LyricsCoverageOut */
+        LyricsCoverageOut: {
+            /**
+             * Files
+             * @description Music files in the folder.
+             */
+            files: number;
+            /**
+             * Word
+             * @description With lyrics timed word by word.
+             */
+            word: number;
+            /**
+             * Synced
+             * @description With lyrics timed line by line.
+             */
+            synced: number;
+            /**
+             * Plain
+             * @description With lyrics without times.
+             */
+            plain: number;
+            /**
+             * Instrumental
+             * @description Marked as instrumental (a Lyricsfile says so).
+             */
+            instrumental: number;
+            /**
+             * None
+             * @description Without lyrics.
+             */
+            none: number;
+            /**
+             * Unchecked
+             * @description Not looked at since lyrics were counted (scan again).
+             */
+            unchecked: number;
+        };
+        /** LyricsLookupIn */
+        LyricsLookupIn: {
+            /**
+             * Albums
+             * @description These albums; none: the library.
+             */
+            albums?: number[];
+            /**
+             * Again
+             * @description Look up songs looked up before as well.
+             * @default false
+             */
+            again: boolean;
+            /** @description Write lyrics as they're found (one edit), instead of after the lookup. */
+            write?: components["schemas"]["LyricsApplyIn"] | null;
+        };
+        /** LyricsPlanOut */
+        LyricsPlanOut: {
+            job: components["schemas"]["FileScanOut"];
+            /**
+             * Files
+             * @description Files the job covers.
+             */
+            files: number;
+            /** Looked Up */
+            looked_up: number;
+            /** Synced */
+            synced: number;
+            /**
+             * Word Synced
+             * @description Of the synced ones, those timed word by word.
+             */
+            word_synced: number;
+            /**
+             * Plain
+             * @description Found without times.
+             */
+            plain: number;
+            /** Instrumental */
+            instrumental: number;
+            /**
+             * None
+             * @description LRCLIB has nothing for them.
+             */
+            none: number;
+            /**
+             * Untagged
+             * @description No artist or title to look up.
+             */
+            untagged: number;
+            /** Errors */
+            errors: number;
+            /**
+             * Had Lyrics
+             * @description Files that already had lyrics somewhere.
+             */
+            had_lyrics: number;
+            /**
+             * Lrc
+             * @description .lrc files that writing would make or replace.
+             */
+            lrc: number;
+            /** Txt */
+            txt: number;
+            /**
+             * Lyricsfile
+             * @description .lyricsfile.yaml files writing would make or replace.
+             */
+            lyricsfile: number;
+            /**
+             * Lyrics
+             * @description Files whose tags would get lyrics.
+             */
+            lyrics: number;
+            /**
+             * Songs
+             * @description Files that writing would change.
+             */
+            songs: number;
+            /**
+             * Sample
+             * @description The first 100 of them.
+             */
+            sample: components["schemas"]["LyricsSampleOut"][];
+            /** Applied Set Id */
+            applied_set_id: number | null;
+        };
+        /** LyricsSampleOut */
+        LyricsSampleOut: {
+            /** Path */
+            path: string;
+            /** Status */
+            status: string;
+            /**
+             * Lrc
+             * @description A .lrc (synced lyrics) is written next to it.
+             */
+            lrc: boolean;
+            /**
+             * Txt
+             * @description A .txt (plain lyrics) is written next to it.
+             */
+            txt: boolean;
+            /**
+             * Lyricsfile
+             * @description A .lyricsfile.yaml is written next to it.
+             */
+            lyricsfile: boolean;
+            /**
+             * Word Synced
+             * @description The lyrics found time each word.
+             */
+            word_synced: boolean;
+            /**
+             * Lyrics
+             * @description The lyrics are written into its tags.
+             */
+            lyrics: boolean;
+            /**
+             * Had Lyrics
+             * @description It had lyrics already (replaced when overwriting).
+             */
+            had_lyrics: boolean;
+            /**
+             * Preview
+             * @description The start of the lyrics.
+             */
+            preview: string | null;
+        };
+        /** LyricsStopIn */
+        LyricsStopIn: {
+            /**
+             * Cancel
+             * @description Throw away the lyrics it found (else they're kept).
+             * @default false
+             */
+            cancel: boolean;
+            /**
+             * Undo
+             * @description When cancelling: take out the lyrics it wrote too.
+             * @default true
+             */
+            undo: boolean;
+        };
         /** MbApplyIn */
         MbApplyIn: {
             /** Release Id */
@@ -6577,6 +7452,103 @@ export interface components {
             /** Length Ms */
             length_ms: number | null;
         };
+        /** MissingArtistOut */
+        MissingArtistOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Name */
+            name: string;
+            /** Thumb */
+            thumb: string | null;
+            /** Releases */
+            releases: components["schemas"]["ReleaseOut"][];
+        };
+        /** MissingReleasesOut */
+        MissingReleasesOut: {
+            /** Artists */
+            artists: components["schemas"]["MissingArtistOut"][];
+            /**
+             * Total Artists
+             * @description Artists with anything missing (all pages).
+             */
+            total_artists: number;
+            coverage: components["schemas"]["ReleaseCoverageOut"];
+        };
+        /** MusicBrainzContactIn */
+        MusicBrainzContactIn: {
+            /** Contact */
+            contact?: string | null;
+        };
+        /** MusicBrainzContactOut */
+        MusicBrainzContactOut: {
+            /**
+             * Contact
+             * @description What MusicBrainz is told (none: no contact).
+             */
+            contact: string | null;
+            /** Source */
+            source: ("settings" | "environment") | null;
+        };
+        /** NewReleaseOut */
+        NewReleaseOut: {
+            /**
+             * Mbid
+             * @description MusicBrainz release group ID.
+             */
+            mbid: string;
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "album" | "ep" | "single" | "live" | "compilation" | "other";
+            /**
+             * First Release Date
+             * @description "2019", "2019-05" or "2019-05-21".
+             */
+            first_release_date: string | null;
+            /** In Library */
+            in_library: boolean;
+            /** Hidden */
+            hidden: boolean;
+            artist: components["schemas"]["ReleaseArtistOut"];
+            /**
+             * Upcoming
+             * @description Not out yet.
+             */
+            upcoming: boolean;
+        };
+        /** NewReleasesOut */
+        NewReleasesOut: {
+            /**
+             * Items
+             * @description Newest first; coming ones first of all.
+             */
+            items: components["schemas"]["NewReleaseOut"][];
+            /**
+             * Following
+             * @description How many of your artists count as followed.
+             */
+            following: number;
+            /**
+             * Following With Mbid
+             * @description Of those, the ones Plex has a MusicBrainz ID for (only they can be read).
+             */
+            following_with_mbid: number;
+            /**
+             * Following Read
+             * @description Of those, the ones whose releases have been read from MusicBrainz so far.
+             */
+            following_read: number;
+            /** @description Your settings these were found with. */
+            settings: components["schemas"]["ReleaseSettings"];
+            /**
+             * New Days
+             * @description Releases from this many days back count as new.
+             */
+            new_days: number;
+        };
         /** NfoOut */
         NfoOut: {
             /** Path */
@@ -6659,6 +7631,20 @@ export interface components {
              * @description Left out: all of them.
              */
             ids?: number[] | null;
+        };
+        /** OnThisDayOut */
+        OnThisDayOut: {
+            /**
+             * Date
+             * Format: date
+             * @description Today, in the time zone asked for.
+             */
+            date: string;
+            /**
+             * Years
+             * @description Earlier years with listens on this date.
+             */
+            years: components["schemas"]["DayYearOut"][];
         };
         /** PinCheckOut */
         PinCheckOut: {
@@ -7085,6 +8071,8 @@ export interface components {
              */
             phone_start: "rate" | "home";
             game?: components["schemas"]["GameSettings"];
+            releases?: components["schemas"]["ReleaseSettings"];
+            gig_playlists?: components["schemas"]["GigPlaylistSettings"];
             /**
              * Theme
              * @description Light or dark on every device; None: each browser's own choice.
@@ -7349,6 +8337,144 @@ export interface components {
             thumb: string | null;
             /** Added At */
             added_at: string | null;
+        };
+        /** RediscoverListOut */
+        RediscoverListOut: {
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["RediscoverSongOut"][];
+        };
+        /** RediscoverOut */
+        RediscoverOut: {
+            /** @description Loved, but not played for a year. */
+            forgotten: components["schemas"]["RediscoverListOut"];
+            /** @description Loved, but hardly ever played. */
+            unplayed: components["schemas"]["RediscoverListOut"];
+            /** @description Played a lot, but rated low. */
+            disliked: components["schemas"]["RediscoverListOut"];
+            /**
+             * Loved
+             * @description Ratings from this (0-10) count as loved.
+             */
+            loved: number;
+            /**
+             * Disliked Below
+             * @description Ratings up to this (0-10) count as low.
+             */
+            disliked_below: number;
+            /** Forgotten Days */
+            forgotten_days: number;
+            /**
+             * Hardly Played
+             * @description At most this many plays is hardly played.
+             */
+            hardly_played: number;
+            /**
+             * Played A Lot
+             * @description At least this many plays is a lot.
+             */
+            played_a_lot: number;
+        };
+        /** RediscoverSongOut */
+        RediscoverSongOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string | null;
+            /** Album */
+            album: string | null;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Rating */
+            rating: number | null;
+            /** Plays */
+            plays: number;
+            /** Last Played At */
+            last_played_at: string | null;
+            /**
+             * Hidden
+             * @description Hidden from Rediscover (only listed when asked for).
+             */
+            hidden: boolean;
+        };
+        /** ReleaseArtistOut */
+        ReleaseArtistOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Name */
+            name: string;
+            /** Thumb */
+            thumb: string | null;
+        };
+        /** ReleaseCoverageOut */
+        ReleaseCoverageOut: {
+            /**
+             * Artists
+             * @description Your library's artists.
+             */
+            artists: number;
+            /**
+             * With Mbid
+             * @description Those Plex has a MusicBrainz ID for.
+             */
+            with_mbid: number;
+            /**
+             * Checked
+             * @description Those whose releases have been read from MusicBrainz.
+             */
+            checked: number;
+        };
+        /** ReleaseOut */
+        ReleaseOut: {
+            /**
+             * Mbid
+             * @description MusicBrainz release group ID.
+             */
+            mbid: string;
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "album" | "ep" | "single" | "live" | "compilation" | "other";
+            /**
+             * First Release Date
+             * @description "2019", "2019-05" or "2019-05-21".
+             */
+            first_release_date: string | null;
+            /** In Library */
+            in_library: boolean;
+            /** Hidden */
+            hidden: boolean;
+        };
+        /**
+         * ReleaseSettings
+         * @description Library -> Releases, per account.
+         */
+        ReleaseSettings: {
+            /**
+             * Kinds
+             * @description Kinds shown.
+             */
+            kinds?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[];
+            /**
+             * Follow Rating
+             * @description Follow artists rated this or more (0-10, half stars = 1); 0: not by rating.
+             * @default 8
+             */
+            follow_rating: number;
+            /**
+             * Follow Top
+             * @description Follow your N most played artists; 0: none.
+             * @default 50
+             */
+            follow_top: number;
         };
         /** ReleasedAlbum */
         ReleasedAlbum: {
@@ -7907,6 +9033,16 @@ export interface components {
              */
             claimed: boolean;
         };
+        /** ShareOut */
+        ShareOut: {
+            /** Name */
+            name: string;
+            /**
+             * Shares
+             * @description Per year in `years`: the share of matched listens.
+             */
+            shares: number[];
+        };
         /** ShrinkCoversIn */
         ShrinkCoversIn: {
             /**
@@ -8367,6 +9503,41 @@ export interface components {
              * @description Undo all of an edit (any size).
              */
             set_id?: number | null;
+        };
+        /** TasteOut */
+        TasteOut: {
+            /** Years */
+            years: number[];
+            /**
+             * Listens
+             * @description All listens per year.
+             */
+            listens: number[];
+            /**
+             * Genres
+             * @description The most played genres (or styles, or moods: see `kind`) overall.
+             */
+            genres: components["schemas"]["ShareOut"][];
+            /**
+             * Genre Matched
+             * @description Listens per year whose artist has a genre (or style, or mood).
+             */
+            genre_matched: number[];
+            /**
+             * Decades
+             * @description When the music played was released.
+             */
+            decades: components["schemas"]["ShareOut"][];
+            /**
+             * Decade Matched
+             * @description Listens per year with a known release year.
+             */
+            decade_matched: number[];
+            /**
+             * Median Release
+             * @description Median release year per year.
+             */
+            median_release: (number | null)[];
         };
         /** TextLogo */
         TextLogo: {
@@ -9320,6 +10491,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumColourOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    file_types_api_servers__server_id__library_stats_file_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTypeCount"][];
                 };
             };
             /** @description Validation Error */
@@ -10335,6 +11537,167 @@ export interface operations {
             };
         };
     };
+    on_this_day_api_stats_on_this_day_get: {
+        parameters: {
+            query?: {
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+                server_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnThisDayOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taste_api_stats_taste_get: {
+        parameters: {
+            query: {
+                server_id: number;
+                /** @description IANA time zone, e.g. Europe/London */
+                tz?: string;
+                kind?: "genre" | "style" | "mood";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rediscover_api_stats_rediscover_get: {
+        parameters: {
+            query: {
+                server_id: number;
+                include_hidden?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RediscoverOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hide_song_api_stats_rediscover_hidden__rating_key__put: {
+        parameters: {
+            query: {
+                server_id: number;
+            };
+            header?: never;
+            path: {
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    show_song_api_stats_rediscover_hidden__rating_key__delete: {
+        parameters: {
+            query: {
+                server_id: number;
+            };
+            header?: never;
+            path: {
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_rewind_api_rewind_get: {
         parameters: {
             query: {
@@ -10580,6 +11943,140 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RatingOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_releases_api_servers__server_id__releases_new_get: {
+        parameters: {
+            query?: {
+                /** @description Kinds of release to show; none: your settings. */
+                kind?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[] | null;
+                include_hidden?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewReleasesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    missing_releases_api_servers__server_id__releases_missing_get: {
+        parameters: {
+            query?: {
+                /** @description Kinds of release to show; none: your settings. */
+                kind?: ("album" | "ep" | "single" | "live" | "compilation" | "other")[] | null;
+                /** @description Artist name contains */
+                q?: string | null;
+                include_hidden?: boolean;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissingReleasesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hide_release_api_servers__server_id__releases_hidden__mbid__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                mbid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    show_release_api_servers__server_id__releases_hidden__mbid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                mbid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -11535,6 +13032,44 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    gig_playlists_api_gigs_playlists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigPlaylistsOut"];
+                };
+            };
+        };
+    };
+    check_gig_playlists_api_gigs_playlists_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -12926,6 +14461,344 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lyrics_coverage_api_servers__server_id__files_lyrics_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LyricsCoverageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    look_up_lyrics_api_servers__server_id__files_lyrics_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LyricsLookupIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_lookup_api_servers__server_id__files_lyrics_latest_get: {
+        parameters: {
+            query?: {
+                scope?: "library" | "any";
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lyrics_plan_api_servers__server_id__files_lyrics__job_id__get: {
+        parameters: {
+            query?: {
+                sidecar?: boolean;
+                lyricsfile?: boolean;
+                embedded?: boolean;
+                overwrite?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LyricsPlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_lookup_api_servers__server_id__files_lyrics__job_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LyricsStopIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_lyrics_api_servers__server_id__files_lyrics__job_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LyricsApplyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_duplicates_api_servers__server_id__files_duplicates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_duplicates_api_servers__server_id__files_duplicates_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatesOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicates_api_servers__server_id__files_duplicates__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_duplicates_api_servers__server_id__files_duplicates__job_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DuplicatesApplyIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             201: {
@@ -15178,6 +17051,59 @@ export interface operations {
             };
         };
     };
+    get_musicbrainz_api_admin_musicbrainz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicBrainzContactOut"];
+                };
+            };
+        };
+    };
+    put_musicbrainz_api_admin_musicbrainz_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MusicBrainzContactIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicBrainzContactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_acoustid_api_admin_acoustid_get: {
         parameters: {
             query?: never;
@@ -15804,6 +17730,45 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GameRoundOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_cover_api_releases__mbid__cover_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mbid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

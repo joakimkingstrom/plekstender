@@ -8,7 +8,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from plekstender import acoustid, tidal
+from plekstender import acoustid, musicbrainz, tidal
 from plekstender.api.deps import AdminDep, DbDep, HttpDep, SettingsDep
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
@@ -33,6 +33,8 @@ from plekstender.api.schemas import (
     JamBaseKeyOut,
     LastFmKeyIn,
     LastFmKeyOut,
+    MusicBrainzContactIn,
+    MusicBrainzContactOut,
     PopularityPreviewItem,
     SetlistFmKeyIn,
     SetlistFmKeyOut,
@@ -61,6 +63,7 @@ from plekstender.db.instance import (
     get_lastfm_api_key,
     get_lastfm_shared_secret,
     get_library_settings,
+    get_musicbrainz_contact,
     get_setlistfm_api_key,
     get_spotify_app,
     get_ticketmaster_api_key,
@@ -76,6 +79,7 @@ from plekstender.db.instance import (
     set_jambase_api_key,
     set_lastfm_api_key,
     set_library_settings,
+    set_musicbrainz_contact,
     set_setlistfm_api_key,
     set_spotify_app,
     set_ticketmaster_api_key,
@@ -340,6 +344,24 @@ async def put_tidal(
     await set_tidal_client(db, settings, client)
     await db.commit()
     return await get_tidal(db, admin, settings)
+
+
+@router.get("/musicbrainz", response_model=MusicBrainzContactOut)
+async def get_musicbrainz(db: DbDep, _: AdminDep, settings: SettingsDep) -> MusicBrainzContactOut:
+    contact, source = await get_musicbrainz_contact(db, settings)
+    return MusicBrainzContactOut(contact=contact, source=source)
+
+
+@router.put("/musicbrainz", response_model=MusicBrainzContactOut)
+async def put_musicbrainz(
+    body: MusicBrainzContactIn, db: DbDep, admin: AdminDep, settings: SettingsDep
+) -> MusicBrainzContactOut:
+    """Set or clear the contact sent to MusicBrainz in the User-Agent (an email address or a
+    web page). The worker picks it up within a minute."""
+    await set_musicbrainz_contact(db, body.contact)
+    await db.commit()
+    musicbrainz.forget_contact()
+    return await get_musicbrainz(db, admin, settings)
 
 
 @router.get("/acoustid", response_model=AcoustIdKeyOut)

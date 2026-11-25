@@ -38,6 +38,9 @@ const MORE_LABELS: Record<string, string> = {
   path: 'File',
   picture: 'Cover',
   image: 'Folder picture',
+  lrc: 'Lyrics (.lrc)',
+  txt: 'Lyrics (.txt)',
+  lyrics: 'Lyrics',
 }
 
 export function fieldLabel(field: string): string {

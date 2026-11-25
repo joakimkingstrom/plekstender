@@ -13,6 +13,8 @@ import {
   type RenamePlan,
 } from '../api/files'
 import { Dialog } from '../components/Dialog'
+import { DuplicatesDialog } from '../components/DuplicatesDialog'
+import { LyricsDialog } from '../components/LyricsDialog'
 import { Artwork } from '../components/library'
 import { Select } from '../components/Select'
 import { Badge, Button, Notice, Spinner } from '../components/ui'
@@ -43,7 +45,7 @@ const FIELD_NAMES: Record<string, string> = {
   genre: 'genre',
 }
 
-type Action = 'musicbrainz' | 'plex' | 'rename'
+type Action = 'musicbrainz' | 'plex' | 'rename' | 'lyrics' | 'duplicates'
 
 /** Library → Tag editing (server owners): albums whose files need a look, fixed in bulk. */
 export function TagEditingPage() {
@@ -101,9 +103,20 @@ function TagEditing({ serverId }: { serverId: number }) {
     <div className="space-y-4">
       <p className="text-sm text-muted">
         Albums whose files don't match Plex, have no MusicBrainz release ID or are missing tags. Pick a few and look them
-        up on MusicBrainz, write Plex's metadata into them or rename their files: each album becomes its own edit, which
-        you can undo on its album page.
+        up on MusicBrainz, write Plex's metadata into them, rename their files or add lyrics: each album becomes its own
+        edit, which you can undo on its album page.
       </p>
+      <div className="flex flex-wrap gap-2">
+        <Link
+          to="/library/lyrics"
+          className="inline-flex items-center rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-semibold hover:bg-border"
+        >
+          Lyrics for the whole library
+        </Link>
+        <Button size="sm" onClick={() => setAction('duplicates')}>
+          Duplicate files
+        </Button>
+      </div>
       {!canWrite && (
         <Notice tone="warn">
           Writing to the files is off, so you can look but not fix. Turn on tag editing on{' '}
@@ -194,6 +207,7 @@ function TagEditing({ serverId }: { serverId: number }) {
           </Button>
           <Button onClick={() => setAction('plex')}>Write Plex's metadata</Button>
           <Button onClick={() => setAction('rename')}>Rename files</Button>
+          <Button onClick={() => setAction('lyrics')}>Lyrics</Button>
           <Button variant="ghost" onClick={() => setSelected(new Map())}>
             Clear
           </Button>
@@ -202,6 +216,10 @@ function TagEditing({ serverId }: { serverId: number }) {
       {action === 'musicbrainz' && <BulkMusicBrainz serverId={serverId} albums={chosen} canWrite={canWrite} onClose={() => setAction(null)} />}
       {action === 'plex' && <BulkPlex serverId={serverId} albums={chosen} canWrite={canWrite} onClose={() => setAction(null)} />}
       {action === 'rename' && <BulkRename serverId={serverId} albums={chosen} canWrite={canWrite} onClose={() => setAction(null)} />}
+      {action === 'lyrics' && (
+        <LyricsDialog serverId={serverId} albums={chosen.map((a) => a.rating_key)} canWrite={canWrite} onClose={() => setAction(null)} />
+      )}
+      {action === 'duplicates' && <DuplicatesDialog serverId={serverId} canWrite={canWrite} onClose={() => setAction(null)} />}
     </div>
   )
 }

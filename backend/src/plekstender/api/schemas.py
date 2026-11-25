@@ -34,6 +34,55 @@ BestCoverSource = Literal["deezer", "itunes", "tidal", "coverartarchive"]
 BEST_COVER_SOURCES: tuple[BestCoverSource, ...] = ("deezer", "itunes", "tidal", "coverartarchive")
 
 
+ReleaseKind = Literal["album", "ep", "single", "live", "compilation", "other"]
+
+
+def _default_release_kinds() -> list[ReleaseKind]:
+    return ["album", "ep"]
+
+
+class ReleaseSettings(BaseModel):
+    """Library -> Releases, per account."""
+
+    kinds: list[ReleaseKind] = Field(
+        default_factory=_default_release_kinds, max_length=6, description="Kinds shown."
+    )
+    follow_rating: int = Field(
+        default=8,
+        ge=0,
+        le=10,
+        description="Follow artists rated this or more (0-10, half stars = 1); 0: not by rating.",
+    )
+    follow_top: int = Field(
+        default=50, ge=0, le=5000, description="Follow your N most played artists; 0: none."
+    )
+
+
+class GigPlaylistSettings(BaseModel):
+    """Playlists made for gigs (in Plex), per account."""
+
+    before: bool = Field(
+        default=False,
+        description="Before a starred gig: the songs the artists have been playing lately.",
+    )
+    after: bool = Field(default=False, description="After a gig you went to: its setlist.")
+
+
+class GigPlaylistOut(BaseModel):
+    kind: Literal["before", "after"]
+    gig_date: dt.date
+    songs: int = Field(description="Songs found in the library (0: none, so no playlist).")
+    playlist_id: int | None = Field(description="None: none made, or deleted since.")
+    name: str | None
+    server_id: int | None = Field(description="The server (your connection) it's on.")
+    status: str | None
+
+
+class GigPlaylistsOut(BaseModel):
+    setlistfm: bool = Field(description="setlist.fm is set up (an admin's key): needed.")
+    items: list[GigPlaylistOut] = Field(description="The latest, newest gig first.")
+
+
 class Preferences(BaseModel):
     """Per-user settings, stored on the account so they follow the user across devices."""
 
@@ -55,6 +104,8 @@ class Preferences(BaseModel):
         default="rate", description="The page the app opens on, on a phone."
     )
     game: GameSettings = Field(default_factory=GameSettings)
+    releases: ReleaseSettings = Field(default_factory=ReleaseSettings)
+    gig_playlists: GigPlaylistSettings = Field(default_factory=GigPlaylistSettings)
     theme: Literal["dark", "light"] | None = Field(
         default=None, description="Light or dark on every device; None: each browser's own choice."
     )
@@ -776,6 +827,20 @@ class TidalIn(BaseModel):
     client_secret: str | None = Field(default=None, min_length=8, max_length=200)
 
 
+class MusicBrainzContactOut(BaseModel):
+    contact: str | None = Field(description="What MusicBrainz is told (none: no contact).")
+    source: Literal["settings", "environment"] | None
+
+
+class MusicBrainzContactIn(BaseModel):
+    # An email address or a web page; nothing that could break out of a header.
+    contact: str | None = Field(
+        default=None,
+        max_length=200,
+        pattern=r"^(?:[^\s@()]+@[^\s@()]+\.[^\s@()]+|https?://[^\s()]+)$",
+    )
+
+
 class AcoustIdKeyIn(BaseModel):
     api_key: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{6,64}$")
 
@@ -889,6 +954,137 @@ class SkipRateOut(BaseModel):
     plays: int = Field(description="Plex plays seen live by the session watcher in the period.")
     min_plays: int = Field(description="Plays an artist needs to be in `artists`.")
     artists: list[SkippedItemOut] = Field(description="Highest share of plays skipped first.")
+
+
+# --- looking back (on this day, taste over time, rediscover) -----------------------------
+
+
+class DayArtistOut(BaseModel):
+    name: str
+    listens: int
+    rating_key: int | None = Field(description="The library artist, when one matches.")
+    thumb: str | None
+
+
+class DayTrackOut(BaseModel):
+    name: str
+    artist: str
+    listens: int
+
+
+class DayYearOut(BaseModel):
+    year: int
+    listens: int
+    artists: list[DayArtistOut] = Field(description="The day's top 3.")
+    tracks: list[DayTrackOut] = Field(description="The day's top 5.")
+    album: str | None = Field(description="The day's most played album.")
+    album_rating_key: int | None
+    album_thumb: str | None
+
+
+class OnThisDayOut(BaseModel):
+    date: dt.date = Field(description="Today, in the time zone asked for.")
+    years: list[DayYearOut] = Field(description="Earlier years with listens on this date.")
+
+
+class ShareOut(BaseModel):
+    name: str
+    shares: list[float] = Field(description="Per year in `years`: the share of matched listens.")
+
+
+class TasteOut(BaseModel):
+    years: list[int]
+    listens: list[int] = Field(description="All listens per year.")
+    genres: list[ShareOut] = Field(
+        description="The most played genres (or styles, or moods: see `kind`) overall."
+    )
+    genre_matched: list[int] = Field(
+        description="Listens per year whose artist has a genre (or style, or mood)."
+    )
+    decades: list[ShareOut] = Field(description="When the music played was released.")
+    decade_matched: list[int] = Field(description="Listens per year with a known release year.")
+    median_release: list[int | None] = Field(description="Median release year per year.")
+
+
+class RediscoverSongOut(BaseModel):
+    rating_key: int
+    title: str
+    artist: str | None
+    album: str | None
+    album_rating_key: int | None
+    thumb: str | None
+    rating: float | None
+    plays: int
+    last_played_at: dt.datetime | None
+    hidden: bool = Field(description="Hidden from Rediscover (only listed when asked for).")
+
+
+class RediscoverListOut(BaseModel):
+    total: int
+    items: list[RediscoverSongOut]
+
+
+class RediscoverOut(BaseModel):
+    forgotten: RediscoverListOut = Field(description="Loved, but not played for a year.")
+    unplayed: RediscoverListOut = Field(description="Loved, but hardly ever played.")
+    disliked: RediscoverListOut = Field(description="Played a lot, but rated low.")
+    loved: int = Field(description="Ratings from this (0-10) count as loved.")
+    disliked_below: int = Field(description="Ratings up to this (0-10) count as low.")
+    forgotten_days: int
+    hardly_played: int = Field(description="At most this many plays is hardly played.")
+    played_a_lot: int = Field(description="At least this many plays is a lot.")
+
+
+# --- releases (MusicBrainz) ----------------------------------------------------------------
+
+
+class ReleaseOut(BaseModel):
+    mbid: str = Field(description="MusicBrainz release group ID.")
+    title: str
+    kind: ReleaseKind
+    first_release_date: str | None = Field(description='"2019", "2019-05" or "2019-05-21".')
+    in_library: bool
+    hidden: bool
+
+
+class ReleaseArtistOut(BaseModel):
+    rating_key: int
+    name: str
+    thumb: str | None
+
+
+class NewReleaseOut(ReleaseOut):
+    artist: ReleaseArtistOut
+    upcoming: bool = Field(description="Not out yet.")
+
+
+class NewReleasesOut(BaseModel):
+    items: list[NewReleaseOut] = Field(description="Newest first; coming ones first of all.")
+    following: int = Field(description="How many of your artists count as followed.")
+    following_with_mbid: int = Field(
+        description="Of those, the ones Plex has a MusicBrainz ID for (only they can be read)."
+    )
+    following_read: int = Field(
+        description="Of those, the ones whose releases have been read from MusicBrainz so far."
+    )
+    settings: ReleaseSettings = Field(description="Your settings these were found with.")
+    new_days: int = Field(description="Releases from this many days back count as new.")
+
+
+class MissingArtistOut(ReleaseArtistOut):
+    releases: list[ReleaseOut]
+
+
+class ReleaseCoverageOut(BaseModel):
+    artists: int = Field(description="Your library's artists.")
+    with_mbid: int = Field(description="Those Plex has a MusicBrainz ID for.")
+    checked: int = Field(description="Those whose releases have been read from MusicBrainz.")
+
+
+class MissingReleasesOut(BaseModel):
+    artists: list[MissingArtistOut]
+    total_artists: int = Field(description="Artists with anything missing (all pages).")
+    coverage: ReleaseCoverageOut
 
 
 # --- smart playlists ---------------------------------------------------------------------
@@ -1186,6 +1382,110 @@ class TagChangeOut(BaseModel):
     error: str | None
     undoes_id: int | None
     undone: bool = Field(description="An applied undo put this change back.")
+
+
+class DupeFileOut(BaseModel):
+    file_id: int
+    path: str
+    format: str | None
+    size: int
+    duration_ms: int | None
+    kbps: int | None = Field(description="Average bitrate.")
+    rating_key: int | None = Field(description="The Plex track, if Plex has it.")
+    title: str | None
+    artist: str | None
+    album: str | None
+    sidecars: list[str] = Field(description="Lyrics files next to it (moved with it).")
+    keep: bool = Field(description="The suggested copy to keep.")
+
+
+class DupeGroupOut(BaseModel):
+    confirmed: bool = Field(description="Compared by sound: they're the same recording.")
+    similarity: float | None = Field(description="How alike the least alike pair sounds (0-1).")
+    files: list[DupeFileOut]
+
+
+class DuplicatesOut(BaseModel):
+    job: FileScanOut
+    groups: list[DupeGroupOut]
+    total_groups: int
+    files: int = Field(description="Files checked.")
+    fingerprint_error: str | None = Field(description="Why files couldn't be compared by sound.")
+    applied_set_id: int | None
+
+
+class DuplicatesApplyIn(BaseModel):
+    remove: list[int] = Field(min_length=1, max_length=5000, description="Files to take out.")
+
+
+class LyricsApplyIn(BaseModel):
+    sidecar: bool = Field(default=True, description="A .lrc (synced) or .txt next to each song.")
+    lyricsfile: bool = Field(default=False, description="A .lyricsfile.yaml next to each song.")
+    embedded: bool = Field(default=False, description="The plain lyrics in each song's tags.")
+    overwrite: bool = Field(default=False, description="Replace lyrics the files already have.")
+
+
+class LyricsLookupIn(BaseModel):
+    albums: list[int] = Field(
+        default_factory=list, max_length=1000, description="These albums; none: the library."
+    )
+    again: bool = Field(default=False, description="Look up songs looked up before as well.")
+    write: LyricsApplyIn | None = Field(
+        default=None,
+        description="Write lyrics as they're found (one edit), instead of after the lookup.",
+    )
+
+
+class LyricsSampleOut(BaseModel):
+    path: str
+    status: str
+    lrc: bool = Field(description="A .lrc (synced lyrics) is written next to it.")
+    txt: bool = Field(description="A .txt (plain lyrics) is written next to it.")
+    lyricsfile: bool = Field(description="A .lyricsfile.yaml is written next to it.")
+    word_synced: bool = Field(description="The lyrics found time each word.")
+    lyrics: bool = Field(description="The lyrics are written into its tags.")
+    had_lyrics: bool = Field(description="It had lyrics already (replaced when overwriting).")
+    preview: str | None = Field(description="The start of the lyrics.")
+
+
+class LyricsPlanOut(BaseModel):
+    job: FileScanOut
+    files: int = Field(description="Files the job covers.")
+    looked_up: int
+    synced: int
+    word_synced: int = Field(description="Of the synced ones, those timed word by word.")
+    plain: int = Field(description="Found without times.")
+    instrumental: int
+    none: int = Field(description="LRCLIB has nothing for them.")
+    untagged: int = Field(description="No artist or title to look up.")
+    errors: int
+    had_lyrics: int = Field(description="Files that already had lyrics somewhere.")
+    lrc: int = Field(description=".lrc files that writing would make or replace.")
+    txt: int
+    lyricsfile: int = Field(description=".lyricsfile.yaml files writing would make or replace.")
+    lyrics: int = Field(description="Files whose tags would get lyrics.")
+    songs: int = Field(description="Files that writing would change.")
+    sample: list[LyricsSampleOut] = Field(description="The first 100 of them.")
+    applied_set_id: int | None
+
+
+class LyricsStopIn(BaseModel):
+    cancel: bool = Field(
+        default=False, description="Throw away the lyrics it found (else they're kept)."
+    )
+    undo: bool = Field(
+        default=True, description="When cancelling: take out the lyrics it wrote too."
+    )
+
+
+class LyricsCoverageOut(BaseModel):
+    files: int = Field(description="Music files in the folder.")
+    word: int = Field(description="With lyrics timed word by word.")
+    synced: int = Field(description="With lyrics timed line by line.")
+    plain: int = Field(description="With lyrics without times.")
+    instrumental: int = Field(description="Marked as instrumental (a Lyricsfile says so).")
+    none: int = Field(description="Without lyrics.")
+    unchecked: int = Field(description="Not looked at since lyrics were counted (scan again).")
 
 
 class TagChangeSetOut(BaseModel):
@@ -2036,6 +2336,11 @@ class GrowthPoint(BaseModel):
 class DecadeCount(BaseModel):
     decade: int = Field(description="The decade's first year (or the year, or the month 0-12).")
     albums: int
+
+
+class FileTypeCount(BaseModel):
+    format: str = Field(description='The file extension, lower case ("flac"); "" when unknown.')
+    tracks: int
 
 
 class LibraryStatsOut(BaseModel):

@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from './client'
 
 /** The viewer's IANA time zone, so days and hours in stats are local. */
@@ -55,6 +55,60 @@ export function useSkipRate(serverId: number | null, range: string) {
     enabled: serverId !== null,
     queryFn: () => unwrap(api.GET('/api/stats/skip-rate', { params: { query: { server_id: serverId!, range, tz } } })),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** What you played on today's date in earlier years. */
+export function useOnThisDay(serverId: number | null) {
+  const tz = localTimeZone()
+  return useQuery({
+    queryKey: ['listens', 'stats', 'on-this-day', serverId, tz],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/stats/on-this-day', {
+          params: { query: { tz, ...(serverId !== null ? { server_id: serverId } : {}) } },
+        }),
+      ),
+  })
+}
+
+export type TasteKind = 'genre' | 'style' | 'mood'
+
+/** Genres (or styles, or moods) and release decades per year you listened. */
+export function useTaste(serverId: number | null, kind: TasteKind = 'genre') {
+  const tz = localTimeZone()
+  return useQuery({
+    queryKey: ['listens', 'stats', 'taste', serverId, tz, kind],
+    enabled: serverId !== null,
+    queryFn: () => unwrap(api.GET('/api/stats/taste', { params: { query: { server_id: serverId!, tz, kind } } })),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Songs whose ratings and plays disagree. Under the library key (libraryKeys.library, not
+ * imported: library.ts imports this file), so rating one refreshes it. */
+export function useRediscover(serverId: number, includeHidden = false) {
+  return useQuery({
+    queryKey: ['servers', serverId, 'library', 'rediscover', includeHidden],
+    queryFn: () =>
+      unwrap(api.GET('/api/stats/rediscover', { params: { query: { server_id: serverId, include_hidden: includeHidden } } })),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Hide a song from Rediscover (and the forgotten favourites playlist), or show it again. */
+export function useHideSong(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ratingKey, hide }: { ratingKey: number; hide: boolean }) => {
+      const params = { path: { rating_key: ratingKey }, query: { server_id: serverId } }
+      return unwrap(
+        hide
+          ? api.PUT('/api/stats/rediscover/hidden/{rating_key}', { params })
+          : api.DELETE('/api/stats/rediscover/hidden/{rating_key}', { params }),
+      )
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['servers', serverId, 'library', 'rediscover'] }),
   })
 }
 

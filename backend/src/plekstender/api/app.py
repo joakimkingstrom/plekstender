@@ -20,6 +20,7 @@ from plekstender.api.routes import (
     artwork,
     auth,
     discover,
+    duplicates,
     export,
     file_artwork,
     files,
@@ -27,14 +28,17 @@ from plekstender.api.routes import (
     gigs,
     health,
     identify,
+    insights,
     library,
     library_stats,
     listens,
     live,
+    lyrics,
     notifications,
     playlists,
     previews,
     ratings,
+    releases,
     renames,
     rewind,
     scrobblers,
@@ -102,9 +106,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         library,
         listens,
         stats,
+        insights,
         rewind,
         statuses,
         ratings,
+        releases,
         playlists,
         previews,
         game,
@@ -114,6 +120,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         identify,
         tag_editing,
         renames,
+        lyrics,
+        duplicates,
         scrobblers,
         album_covers,  # before artwork: /artwork/albums isn't an artist
         artwork,
@@ -127,6 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(artwork.fonts_router)
     app.include_router(game.stats_router)
     app.include_router(game.sample_router)
+    app.include_router(releases.covers_router)
 
     if settings.static_dir:
         _mount_spa(app, settings.static_dir)

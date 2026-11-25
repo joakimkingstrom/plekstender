@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plekstender.history.insights import forgotten_keys
 from plekstender.playlists.definition import Definition
 from plekstender.sync.parse import normalise_artist
 
@@ -33,7 +34,8 @@ _SONGS = """
         LEFT JOIN albums al ON al.server_id = t.server_id AND al.rating_key = t.album_rating_key
         LEFT JOIN artists ar ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
         WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
-          AND (t.artist_rating_key = ANY(:artists) OR t.rating_key = ANY(:tracks))
+          AND (t.artist_rating_key = ANY(:artists) OR t.rating_key = ANY(:tracks)
+               OR t.rating_key = ANY(:found))
         WINDOW song AS (PARTITION BY t.artist_rating_key, t.title_norm)
     ),
     ranked AS (
@@ -83,6 +85,8 @@ async def matching_songs(
     db: AsyncSession, *, user_id: int, server_id: int, sections: list[str], d: Definition
 ) -> list[Song]:
     """Every song the definition selects (before the limit), most popular first."""
+    # Songs found by a rule rather than chosen (the rules still apply to them).
+    found = await forgotten_keys(db, user_id, server_id, sections) if d.forgotten else []
     rows = await db.execute(
         text(_SONGS),
         {
@@ -91,6 +95,7 @@ async def matching_songs(
             "sections": sections,
             "artists": d.artists,
             "tracks": d.tracks,
+            "found": found,
             "tags": d.rules.tags,
         },
     )
@@ -109,13 +114,18 @@ async def matching_songs(
         for r in rows.all()
         if _passes(r, d)
     ]
-    songs.sort(key=lambda s: (-s.popularity, s.rating_key))
+    if d.order == "listed":  # as the tracks are listed (the rest after them)
+        place = {key: i for i, key in enumerate(d.tracks)}
+        songs.sort(key=lambda s: (place.get(s.rating_key, len(place)), -s.popularity))
+    else:
+        songs.sort(key=lambda s: (-s.popularity, s.rating_key))
     return songs
 
 
 def pick(songs: list[Song], d: Definition, rng: Any) -> list[Song]:
-    """Apply the order and the limit: the most popular N, or a random N in random order."""
-    if d.order == "popular":
+    """Apply the order and the limit: the first N (most popular, or as listed), or a random N
+    in random order."""
+    if d.order in ("popular", "listed"):
         return songs[: d.limit] if d.limit else songs
     chosen = rng.sample(songs, min(len(songs), d.limit)) if d.limit else list(songs)
     rng.shuffle(chosen)
