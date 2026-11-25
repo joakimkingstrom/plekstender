@@ -4,6 +4,11 @@ export const SERVICE_KINDS = [
   { slug: 'playlists', title: 'Playlists', about: 'Importing playlists from Spotify and Tidal links.' },
   { slug: 'artwork', title: 'Artwork', about: 'Artist logos and album covers for Library → Artwork.' },
   { slug: 'files', title: 'Identifying files', about: 'Recognising music files by how they sound (Settings → Music files → Unknown files).' },
+  {
+    slug: 'musicbrainz',
+    title: 'MusicBrainz',
+    about: 'Releases, where artists are from, album covers and the tag editor all look things up on MusicBrainz.',
+  },
 ] as const
 
 export type ServiceKind = (typeof SERVICE_KINDS)[number]['slug']

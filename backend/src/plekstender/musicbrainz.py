@@ -49,6 +49,7 @@ class NotFound(MusicBrainzError):
 
 def clear_cache() -> None:
     _cache.clear()
+    forget_contact()
 
 
 async def _get(
@@ -61,6 +62,7 @@ async def _get(
         _cache.move_to_end(key)
         return hit[1]
     # Waits hold the lock: while MusicBrainz says it's busy, nothing else here asks it.
+    agent = user_agent(await contact())
     async with _lock:
         for attempt in range(len(BUSY_WAITS) + 1):
             wait = _last + INTERVAL - time.monotonic()
@@ -70,7 +72,7 @@ async def _get(
                 resp = await http.get(
                     f"{URL}{path}",
                     params={**params, "fmt": "json"},
-                    headers={"User-Agent": user_agent(), "Accept": "application/json"},
+                    headers={"User-Agent": agent, "Accept": "application/json"},
                     timeout=20,
                 )
             except httpx.HTTPError as exc:
@@ -97,11 +99,38 @@ async def _get(
     return data
 
 
-def user_agent() -> str:
-    """Plekstender's User-Agent for MusicBrainz, with the admin's contact if one is set."""
-    from plekstender.config import get_settings
+# The contact for the User-Agent: an admin sets it on Settings -> Services -> MusicBrainz (or
+# MUSICBRAINZ_CONTACT). Read from the database at most once a minute, in each process.
+CONTACT_FOR = 60.0
+_contact: tuple[float, str | None] | None = None
 
-    contact = (get_settings().musicbrainz_contact or "").strip()
+
+async def contact() -> str | None:
+    global _contact
+    if _contact is not None and time.monotonic() - _contact[0] < CONTACT_FOR:
+        return _contact[1]
+    from plekstender.config import get_settings
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.instance import get_musicbrainz_contact
+
+    settings = get_settings()
+    try:
+        async with get_sessionmaker()() as db:
+            value, _ = await get_musicbrainz_contact(db, settings)
+    except Exception:  # the database is unreachable: the environment's, if any
+        value = (settings.musicbrainz_contact or "").strip() or None
+    _contact = (time.monotonic(), value)
+    return value
+
+
+def forget_contact() -> None:
+    """Read the contact again on the next request (it was just changed)."""
+    global _contact
+    _contact = None
+
+
+def user_agent(contact: str | None = None) -> str:
+    """Plekstender's User-Agent for MusicBrainz, with the admin's contact if one is set."""
     if not contact:
         return USER_AGENT
     return f"Plekstender/{__version__} ( {contact} )"

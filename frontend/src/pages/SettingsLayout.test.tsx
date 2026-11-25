@@ -49,6 +49,7 @@ describe('Settings', () => {
     // Services opens its kinds underneath; the one shown is marked.
     expect(within(nav).getByRole('link', { name: 'Gigs' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByRole('link', { name: 'Identifying files' })).toHaveAttribute('href', '/settings/services/files')
+    expect(within(nav).getByRole('link', { name: 'MusicBrainz' })).toHaveAttribute('href', '/settings/services/musicbrainz')
     // Text logo fonts' parts only open when it's the section shown.
     expect(within(nav).queryByRole('link', { name: 'Add from Google Fonts' })).not.toBeInTheDocument()
     expect([...nav.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['You', 'Library', 'Admin'])

@@ -4012,6 +4012,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/musicbrainz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Musicbrainz */
+        get: operations["get_musicbrainz_api_admin_musicbrainz_get"];
+        /**
+         * Put Musicbrainz
+         * @description Set or clear the contact sent to MusicBrainz in the User-Agent (an email address or a
+         *     web page). The worker picks it up within a minute.
+         */
+        put: operations["put_musicbrainz_api_admin_musicbrainz_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/acoustid": {
         parameters: {
             query?: never;
@@ -7347,6 +7369,21 @@ export interface components {
              */
             total_artists: number;
             coverage: components["schemas"]["ReleaseCoverageOut"];
+        };
+        /** MusicBrainzContactIn */
+        MusicBrainzContactIn: {
+            /** Contact */
+            contact?: string | null;
+        };
+        /** MusicBrainzContactOut */
+        MusicBrainzContactOut: {
+            /**
+             * Contact
+             * @description What MusicBrainz is told (none: no contact).
+             */
+            contact: string | null;
+            /** Source */
+            source: ("settings" | "environment") | null;
         };
         /** NewReleaseOut */
         NewReleaseOut: {
@@ -16858,6 +16895,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TidalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_musicbrainz_api_admin_musicbrainz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicBrainzContactOut"];
+                };
+            };
+        };
+    };
+    put_musicbrainz_api_admin_musicbrainz_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MusicBrainzContactIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicBrainzContactOut"];
                 };
             };
             /** @description Validation Error */

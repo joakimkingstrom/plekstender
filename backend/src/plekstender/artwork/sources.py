@@ -93,6 +93,7 @@ async def musicbrainz_search(
 ) -> dict[str, Any]:
     """A MusicBrainz search, at most one request a second (as it asks)."""
     global _mb_last
+    agent = musicbrainz.user_agent(await musicbrainz.contact())
     async with _mb_lock:
         wait = MB_INTERVAL - (time.monotonic() - _mb_last)
         if wait > 0:
@@ -101,7 +102,7 @@ async def musicbrainz_search(
             resp = await http.get(
                 f"{base_url.rstrip('/')}/{entity}",
                 params={"query": query, "fmt": "json", "limit": limit},
-                headers={"User-Agent": musicbrainz.user_agent(), "Accept": "application/json"},
+                headers={"User-Agent": agent, "Accept": "application/json"},
                 timeout=20,
             )
         except httpx.HTTPError as exc:

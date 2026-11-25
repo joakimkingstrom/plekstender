@@ -321,6 +321,7 @@ async def test_musicbrainz_busy_waits_and_tries_again(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(musicbrainz, "INTERVAL", 0.0)
     monkeypatch.setattr(musicbrainz.asyncio, "sleep", sleep)
+    musicbrainz.forget_contact()
     url = "https://musicbrainz.org/ws/2/release-group"
     page = {"release-group-count": 1, "release-groups": [rg(1, "Kid A", "Album", "2000")]}
     with respx.mock() as web:
@@ -341,8 +342,45 @@ async def test_musicbrainz_busy_waits_and_tries_again(monkeypatch: pytest.Monkey
         waits.clear()
         route.side_effect = [httpx.Response(503)] * 4
         monkeypatch.setattr(get_settings(), "musicbrainz_contact", "me@example.org")
+        musicbrainz.forget_contact()
         async with httpx.AsyncClient() as http:
             with pytest.raises(musicbrainz.MusicBrainzError, match="busy"):
                 await musicbrainz.release_groups(http, RADIOHEAD)
         assert waits == [3.0, 10.0, 30.0]  # then it gives up
         assert route.calls.last.request.headers["user-agent"].endswith("( me@example.org )")
+
+
+@pytest.mark.db
+async def test_the_musicbrainz_contact_is_set_on_the_settings_page(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from plekstender.config import get_settings
+    from tests.fakes import sign_in
+
+    owner, _ = await owner_with_library(app, plex)  # the first account: an admin
+    monkeypatch.setattr(get_settings(), "musicbrainz_contact", "env@example.org")
+    assert (await owner.get("/api/admin/musicbrainz")).json() == {
+        "contact": "env@example.org",
+        "source": "environment",
+    }
+    for bad in ("not a contact", "me@example.org\r\nX-Evil: 1", "ftp://example.org", "x" * 201):
+        resp = await owner.put("/api/admin/musicbrainz", json={"contact": bad}, headers=CSRF)
+        assert resp.status_code == 422, bad
+    page = "https://example.org/about"
+    saved = await owner.put("/api/admin/musicbrainz", json={"contact": page}, headers=CSRF)
+    assert saved.json() == {"contact": page, "source": "settings"}  # the page's wins
+
+    # MusicBrainz is told it.
+    monkeypatch.setattr(musicbrainz, "INTERVAL", 0.0)
+    route = plex.router.get("https://musicbrainz.org/ws/2/release-group").mock(
+        return_value=httpx.Response(200, json={"release-group-count": 0, "release-groups": []})
+    )
+    async with httpx.AsyncClient() as http:
+        await musicbrainz.release_groups(http, RADIOHEAD)
+    assert route.calls.last.request.headers["user-agent"].endswith(f"( {page} )")
+
+    cleared = await owner.put("/api/admin/musicbrainz", json={"contact": None}, headers=CSRF)
+    assert cleared.json()["source"] == "environment"
+    friend, _ = await sign_in(app, plex, "friend-token")
+    assert (await friend.get("/api/admin/musicbrainz")).status_code == 403
+    musicbrainz.forget_contact()

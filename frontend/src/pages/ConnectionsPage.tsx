@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router'
 import { useMe } from '../api/hooks'
 import { AcoustIdKeyCard } from '../components/AcoustIdKeyCard'
+import { MusicBrainzContactCard } from '../components/MusicBrainzContactCard'
 import { DataThistleCard } from '../components/DataThistleCard'
 import { JamBaseKeyCard } from '../components/JamBaseKeyCard'
 import { ScrobbleServicesCard } from '../components/ScrobbleServicesCard'
@@ -65,6 +66,7 @@ const CARDS: Record<ServiceKind, () => ReactNode> = {
     </>
   ),
   files: () => <AcoustIdKeyCard />,
+  musicbrainz: () => <MusicBrainzContactCard />,
 }
 
 /** Settings → Services → one kind (admins): the keys and apps for it. */

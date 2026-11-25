@@ -801,6 +801,20 @@ class TidalIn(BaseModel):
     client_secret: str | None = Field(default=None, min_length=8, max_length=200)
 
 
+class MusicBrainzContactOut(BaseModel):
+    contact: str | None = Field(description="What MusicBrainz is told (none: no contact).")
+    source: Literal["settings", "environment"] | None
+
+
+class MusicBrainzContactIn(BaseModel):
+    # An email address or a web page; nothing that could break out of a header.
+    contact: str | None = Field(
+        default=None,
+        max_length=200,
+        pattern=r"^(?:[^\s@()]+@[^\s@()]+\.[^\s@()]+|https?://[^\s()]+)$",
+    )
+
+
 class AcoustIdKeyIn(BaseModel):
     api_key: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{6,64}$")
 
