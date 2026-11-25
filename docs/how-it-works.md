@@ -454,6 +454,13 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **The bell** shows a lyrics lookup like an artwork job (`/files/lyrics/latest?scope=any`, polled every 5 s while one runs, else every minute): progress, files written so far, then how it ended.
 - The lyrics panel shows the write-afterwards step only when "Write lyrics as they're found" is off.
 
+## Gig playlists (25 Nov)
+- Opt-in on the profile (`preferences.gig_playlists.before` / `.after`, off by default); needs the admin's setlist.fm key. An hourly worker job (`gig-playlists`, `gigs/playlists.py`) runs for the people who turned either on; turning one on also asks for a run straight away (`POST /api/gigs/playlists/check`).
+- **Before:** starred Live gigs (merged across sources) in the next 30 days. For each of the user's artists on the bill (up to 4, headliners last), their recent setlists on setlist.fm (by MBID when the library has one, else name; past shows with songs, the last 10): songs played at a quarter of them or more (fewer than 8: the 15 most played), ordered by their average place in the set. Refreshed weekly until the gig.
+- **After:** gigs in Gigs → Been to from the last two weeks. With no setlists yet, each artist's setlist that day is looked up on setlist.fm and kept on the gig (so it counts as seen live too); not found: tried again next hour. In the order played (support acts first).
+- Songs played from tape are left out; a song is matched by normalised title among the artist's tracks (the best-rated, else earliest release), and a cover not in the artist's own songs as the original artist's. The server whose library has the most is used.
+- Saved as a smart playlist with the songs in a new order, `listed` (as given; also offered in the builder as "As listed"), built into Plex by the worker. `gig_playlists` remembers each (`before` by the Live gig's source:id, `after` by the gig's id): one per gig; a deleted playlist isn't made again; when nothing matched, before-gig playlists are tried again weekly.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

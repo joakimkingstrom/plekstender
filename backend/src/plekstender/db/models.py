@@ -1206,6 +1206,24 @@ class Gig(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now(), onupdate=utcnow)
 
 
+class GigPlaylist(Base):
+    """A playlist made for a gig: before a starred one ("before", `ref` the Live gig's
+    source:id), or after one the user went to ("after", `ref` the gig's id). Kept when the
+    playlist is deleted, so it isn't made again."""
+
+    __tablename__ = "gig_playlists"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "kind", "ref"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(8))  # before | after
+    ref: Mapped[str] = mapped_column(String(128))
+    playlist_id: Mapped[int | None] = mapped_column(ForeignKey("playlists.id", ondelete="SET NULL"))
+    gig_date: Mapped[dt.date] = mapped_column(Date)
+    songs: Mapped[int] = mapped_column(default=0)  # matched in the library, last time
+    made_at: Mapped[dt.datetime]
+    refreshed_at: Mapped[dt.datetime]
+
+
 class GigPlace(Base):
     """Where a venue is (looked up once, shared by everyone's gigs)."""
 

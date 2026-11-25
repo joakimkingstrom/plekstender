@@ -38,7 +38,8 @@ class Definition(BaseModel):
     )
     rules: Rules = Field(default_factory=Rules)
     limit: int | None = Field(default=500, ge=1, le=5000)
-    order: Literal["random", "popular"] = "random"
+    # random | most popular first | as listed in `tracks` (gig playlists: setlist order).
+    order: Literal["random", "popular", "listed"] = "random"
 
     @model_validator(mode="after")
     def _something(self) -> Definition:

@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { api, errorMessage, unwrap } from '../api/client'
 import { useMe, useSetPreferences } from '../api/hooks'
 import { AchievementList } from '../components/Achievements'
+import { GigPlaylistsCard } from '../components/GigPlaylistsCard'
 import { Segmented } from '../components/Segmented'
 import { Avatar, Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCount, formatDate } from '../format'
@@ -92,6 +93,7 @@ export function ProfilePage() {
             </p>
           </div>
         </Card>
+        <GigPlaylistsCard />
       </div>
 
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">Appearance</h2>

@@ -114,13 +114,18 @@ async def matching_songs(
         for r in rows.all()
         if _passes(r, d)
     ]
-    songs.sort(key=lambda s: (-s.popularity, s.rating_key))
+    if d.order == "listed":  # as the tracks are listed (the rest after them)
+        place = {key: i for i, key in enumerate(d.tracks)}
+        songs.sort(key=lambda s: (place.get(s.rating_key, len(place)), -s.popularity))
+    else:
+        songs.sort(key=lambda s: (-s.popularity, s.rating_key))
     return songs
 
 
 def pick(songs: list[Song], d: Definition, rng: Any) -> list[Song]:
-    """Apply the order and the limit: the most popular N, or a random N in random order."""
-    if d.order == "popular":
+    """Apply the order and the limit: the first N (most popular, or as listed), or a random N
+    in random order."""
+    if d.order in ("popular", "listed"):
         return songs[: d.limit] if d.limit else songs
     chosen = rng.sample(songs, min(len(songs), d.limit)) if d.limit else list(songs)
     rng.shuffle(chosen)

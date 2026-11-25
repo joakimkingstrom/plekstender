@@ -851,6 +851,7 @@ function Rules({ draft, set, serverId }: { draft: Draft; set: (patch: Partial<Dr
           options={[
             ['random', 'Shuffled'],
             ['popular', 'Most popular'],
+            ['listed', 'As listed'],
           ]}
         />
       </div>

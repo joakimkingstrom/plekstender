@@ -21,6 +21,8 @@ from plekstender.api.schemas import (
     GigOut,
     GigPlace,
     GigPlaceFound,
+    GigPlaylistOut,
+    GigPlaylistsOut,
     GigSameVenueOut,
     GigsOut,
     GigStatsOut,
@@ -33,7 +35,7 @@ from plekstender.api.schemas import (
     SetlistSearchOut,
 )
 from plekstender.db.instance import get_setlistfm_api_key
-from plekstender.db.models import Artist, Gig, LiveShow
+from plekstender.db.models import Artist, Gig, GigPlaylist, LiveShow, Playlist
 from plekstender.gigs import imports
 from plekstender.gigs.places import PlaceError, search_places
 from plekstender.gigs.service import (
@@ -332,6 +334,45 @@ async def _past_live(db: DbDep, user_id: int) -> list[list[LiveShow]]:
         await db.scalars(select(Gig.source_ref).where(Gig.user_id == user_id, Gig.source == "live"))
     )
     return [g for g in merge(rows) if not (live_refs(g) & known)]
+
+
+@router.get("/playlists", response_model=GigPlaylistsOut)
+async def gig_playlists(db: DbDep, user: UserDep, settings: SettingsDep) -> GigPlaylistsOut:
+    """The playlists made for your gigs (before and after them), newest gig first."""
+    key, _ = await get_setlistfm_api_key(db, settings)
+    rows = (
+        await db.execute(
+            select(GigPlaylist, Playlist)
+            .outerjoin(Playlist, Playlist.id == GigPlaylist.playlist_id)
+            .where(GigPlaylist.user_id == user.id)
+            .order_by(GigPlaylist.gig_date.desc(), GigPlaylist.kind)
+            .limit(20)
+        )
+    ).all()
+    return GigPlaylistsOut(
+        setlistfm=key is not None,
+        items=[
+            GigPlaylistOut(
+                kind=record.kind,
+                gig_date=record.gig_date,
+                songs=record.songs,
+                playlist_id=playlist.id if playlist else None,
+                name=playlist.name if playlist else None,
+                server_id=playlist.user_server_id if playlist else None,
+                status=playlist.status if playlist else None,
+            )
+            for record, playlist in rows
+        ],
+    )
+
+
+@router.post("/playlists/check", status_code=status.HTTP_204_NO_CONTENT)
+async def check_gig_playlists(user: UserDep) -> None:
+    """Make the gig playlists that are due now, rather than within the hour (after turning
+    them on)."""
+    from plekstender.worker import enqueue_gig_playlists
+
+    await enqueue_gig_playlists(user.id)
 
 
 @router.get("/suggestions", response_model=list[LiveShowOut])

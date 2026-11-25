@@ -58,6 +58,31 @@ class ReleaseSettings(BaseModel):
     )
 
 
+class GigPlaylistSettings(BaseModel):
+    """Playlists made for gigs (in Plex), per account."""
+
+    before: bool = Field(
+        default=False,
+        description="Before a starred gig: the songs the artists have been playing lately.",
+    )
+    after: bool = Field(default=False, description="After a gig you went to: its setlist.")
+
+
+class GigPlaylistOut(BaseModel):
+    kind: Literal["before", "after"]
+    gig_date: dt.date
+    songs: int = Field(description="Songs found in the library (0: none, so no playlist).")
+    playlist_id: int | None = Field(description="None: none made, or deleted since.")
+    name: str | None
+    server_id: int | None = Field(description="The server (your connection) it's on.")
+    status: str | None
+
+
+class GigPlaylistsOut(BaseModel):
+    setlistfm: bool = Field(description="setlist.fm is set up (an admin's key): needed.")
+    items: list[GigPlaylistOut] = Field(description="The latest, newest gig first.")
+
+
 class Preferences(BaseModel):
     """Per-user settings, stored on the account so they follow the user across devices."""
 
@@ -80,6 +105,7 @@ class Preferences(BaseModel):
     )
     game: GameSettings = Field(default_factory=GameSettings)
     releases: ReleaseSettings = Field(default_factory=ReleaseSettings)
+    gig_playlists: GigPlaylistSettings = Field(default_factory=GigPlaylistSettings)
     theme: Literal["dark", "light"] | None = Field(
         default=None, description="Light or dark on every device; None: each browser's own choice."
     )

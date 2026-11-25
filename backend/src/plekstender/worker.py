@@ -890,6 +890,65 @@ async def close_stalled_jobs(timestamp: int) -> None:
         )
 
 
+@app.periodic(cron="45 * * * *", periodic_id="gig-playlists")
+@app.task(queue="maintenance", queueing_lock="gig-playlists", lock="gig-playlists")
+async def make_gig_playlists_periodically(timestamp: int) -> None:
+    """Hourly: playlists for gigs, for people who turned them on (before a starred gig, and
+    after one they went to)."""
+    from sqlalchemy import text as sql
+
+    async with get_sessionmaker()() as db:
+        user_ids = list(
+            await db.scalars(
+                sql(
+                    "SELECT id FROM users"
+                    " WHERE preferences #>> '{gig_playlists,before}' = 'true'"
+                    " OR preferences #>> '{gig_playlists,after}' = 'true'"
+                    " ORDER BY id"
+                )
+            )
+        )
+    for user_id in user_ids:
+        await _gig_playlists(user_id)
+
+
+@app.task(queue="maintenance", lock="gig-playlists")
+async def make_gig_playlists_now(user_id: int) -> None:
+    """One person's gig playlists, straight away (they've just turned them on)."""
+    await _gig_playlists(user_id)
+
+
+async def enqueue_gig_playlists(user_id: int) -> None:
+    try:
+        await make_gig_playlists_now.configure(
+            queueing_lock=f"gig-playlists-{user_id}"
+        ).defer_async(user_id=user_id)
+    except AlreadyEnqueued:
+        pass
+
+
+async def _gig_playlists(user_id: int) -> None:
+    from plekstender.db.models import User
+    from plekstender.gigs.playlists import make_gig_playlists
+
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        user = await db.get(User, user_id)
+        if user is None:
+            return
+        made = await make_gig_playlists(db, http, get_settings(), user)
+        for playlist_id in made.to_build:
+            playlist = await db.get(Playlist, playlist_id)
+            if playlist is not None:
+                await enqueue_playlist_build(playlist)
+    if made.made or made.refreshed:
+        log.info(
+            "gig playlists for user %s: %d made, %d refreshed", user_id, made.made, made.refreshed
+        )
+
+
 @app.periodic(cron="40 3 * * *", periodic_id="prune-history")
 @app.task(queue="maintenance", queueing_lock="prune-history")
 async def prune_history(timestamp: int) -> None:

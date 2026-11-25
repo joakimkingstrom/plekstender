@@ -1708,6 +1708,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gigs/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gig Playlists
+         * @description The playlists made for your gigs (before and after them), newest gig first.
+         */
+        get: operations["gig_playlists_api_gigs_playlists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gigs/playlists/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Gig Playlists
+         * @description Make the gig playlists that are due now, rather than within the hour (after turning
+         *     them on).
+         */
+        post: operations["check_gig_playlists_api_gigs_playlists_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gigs/suggestions": {
         parameters: {
             query?: never;
@@ -5383,7 +5424,7 @@ export interface components {
              * @default random
              * @enum {string}
              */
-            order: "random" | "popular";
+            order: "random" | "popular" | "listed";
         };
         /** DeletedOut */
         DeletedOut: {
@@ -6026,6 +6067,69 @@ export interface components {
             latitude: number;
             /** Longitude */
             longitude: number;
+        };
+        /** GigPlaylistOut */
+        GigPlaylistOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "before" | "after";
+            /**
+             * Gig Date
+             * Format: date
+             */
+            gig_date: string;
+            /**
+             * Songs
+             * @description Songs found in the library (0: none, so no playlist).
+             */
+            songs: number;
+            /**
+             * Playlist Id
+             * @description None: none made, or deleted since.
+             */
+            playlist_id: number | null;
+            /** Name */
+            name: string | null;
+            /**
+             * Server Id
+             * @description The server (your connection) it's on.
+             */
+            server_id: number | null;
+            /** Status */
+            status: string | null;
+        };
+        /**
+         * GigPlaylistSettings
+         * @description Playlists made for gigs (in Plex), per account.
+         */
+        GigPlaylistSettings: {
+            /**
+             * Before
+             * @description Before a starred gig: the songs the artists have been playing lately.
+             * @default false
+             */
+            before: boolean;
+            /**
+             * After
+             * @description After a gig you went to: its setlist.
+             * @default false
+             */
+            after: boolean;
+        };
+        /** GigPlaylistsOut */
+        GigPlaylistsOut: {
+            /**
+             * Setlistfm
+             * @description setlist.fm is set up (an admin's key): needed.
+             */
+            setlistfm: boolean;
+            /**
+             * Items
+             * @description The latest, newest gig first.
+             */
+            items: components["schemas"]["GigPlaylistOut"][];
         };
         /** GigSameVenueOut */
         GigSameVenueOut: {
@@ -7968,6 +8072,7 @@ export interface components {
             phone_start: "rate" | "home";
             game?: components["schemas"]["GameSettings"];
             releases?: components["schemas"]["ReleaseSettings"];
+            gig_playlists?: components["schemas"]["GigPlaylistSettings"];
             /**
              * Theme
              * @description Light or dark on every device; None: each browser's own choice.
@@ -12927,6 +13032,44 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    gig_playlists_api_gigs_playlists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigPlaylistsOut"];
+                };
+            };
+        };
+    };
+    check_gig_playlists_api_gigs_playlists_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
