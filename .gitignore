@@ -13,3 +13,8 @@ backend/**/*report*.json
 .todo.md
 # Local data directory (fonts, uploads, exports) when running outside Docker
 backend/data/
+private/
+.DS_Store
+._.DS_Store
+**/.DS_Store
+**/._.DS_Store
