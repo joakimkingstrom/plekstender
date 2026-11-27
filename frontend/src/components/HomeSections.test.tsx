@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { UpcomingGigs } from './HomeSections'
+import { LatestRatings, UpcomingGigs } from './HomeSections'
 
 const gig = (id: number, artist: string, extra: { starred?: boolean; got_ticket?: boolean } = {}) => ({
   id,
@@ -62,6 +62,7 @@ const wrap = () =>
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('UpcomingGigs', () => {
@@ -83,3 +84,36 @@ describe('UpcomingGigs', () => {
     expect(await screen.findByText('Portishead')).toBeInTheDocument()
   })
 })
+
+describe('LatestRatings', () => {
+  const ratings = Array.from({ length: 20 }, (_, i) => ({
+    rating_key: 300 + i, kind: 'track', title: `Song ${i}`, subtitle: 'Radiohead · OK Computer', thumb: null,
+    user_rating: 8, rated_at: null, link_key: 200, undo_to: null, undoable: false,
+  }))
+  const show = () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: ratings, total: 20 }), { headers: { 'content-type': 'application/json' } })))
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <LatestRatings serverId={1} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('shows six when there is no more room', async () => {
+    show()
+    expect(await screen.findByText('Song 5')).toBeInTheDocument()
+    expect(screen.queryByText('Song 6')).not.toBeInTheDocument()
+  })
+
+  it('fills a taller card with as many as fit whole', async () => {
+    // The card's list area is 500 px tall (beside a longer card); a row is 44 px, 8 px apart.
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(500)
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(44)
+    show()
+    expect(await screen.findByText('Song 8')).toBeInTheDocument() // 9 fit: 9 × 44 + 8 × 8 = 460
+    expect(screen.queryByText('Song 9')).not.toBeInTheDocument()
+  })
+})
+
