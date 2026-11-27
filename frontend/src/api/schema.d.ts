@@ -8257,6 +8257,11 @@ export interface components {
              * @description Artist, for songs and albums.
              */
             subtitle: string | null;
+            /**
+             * Artist Key
+             * @description The artist's rating key (songs and albums; artists: itself).
+             */
+            artist_key?: number | null;
             /** Album Title */
             album_title: string | null;
             /** Album Rating Key */

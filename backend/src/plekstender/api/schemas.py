@@ -645,6 +645,9 @@ class RateItemOut(BaseModel):
     kind: RateKind
     title: str
     subtitle: str | None = Field(description="Artist, for songs and albums.")
+    artist_key: int | None = Field(
+        default=None, description="The artist's rating key (songs and albums; artists: itself)."
+    )
     album_title: str | None
     album_rating_key: int | None
     thumb: str | None = Field(description="Album cover for songs.")
