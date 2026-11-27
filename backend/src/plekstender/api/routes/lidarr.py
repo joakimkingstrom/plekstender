@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from plekstender import lidarr
 from plekstender.api.deps import AdminDep, DbDep, HttpDep, SettingsDep, UserDep
@@ -15,6 +15,9 @@ from plekstender.api.schemas import (
     LidarrAlbumIn,
     LidarrAlbumOut,
     LidarrAlbumState,
+    LidarrArtistAddedOut,
+    LidarrArtistIn,
+    LidarrArtistOut,
     LidarrCheckIn,
     LidarrFolderOut,
     LidarrGrabIn,
@@ -250,3 +253,63 @@ async def grab_release(body: LidarrGrabIn, found: LidarrDep) -> Response:
     except lidarr.LidarrError as exc:
         raise _bad_gateway(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+LOOKUP_SHOWN = 6
+OVERVIEW = 300  # characters of the biography shown
+
+
+def _artist_out(a: dict[str, Any]) -> LidarrArtistOut:
+    overview = " ".join(str(a.get("overview") or "").split())
+    if len(overview) > OVERVIEW:
+        overview = overview[:OVERVIEW].rsplit(" ", 1)[0] + "…"
+    return LidarrArtistOut(
+        mbid=str(a["foreignArtistId"]),
+        name=str(a.get("artistName") or ""),
+        disambiguation=a.get("disambiguation") or None,
+        kind=a.get("artistType") or None,
+        overview=overview or None,
+        in_lidarr=bool(a.get("id")),
+    )
+
+
+@router.get(
+    "/artists/lookup",
+    response_model=list[LidarrArtistOut],
+    dependencies=[rate_limit("lidarr-lookup", limit=30, window=60)],
+)
+async def lookup_artists(
+    found: LidarrDep, name: Annotated[str, Query(min_length=1, max_length=200)]
+) -> list[LidarrArtistOut]:
+    """Artists by this name as Lidarr's metadata knows them (to pick the right one), the
+    closest first; those already in Lidarr are said so."""
+    try:
+        results = await found.client.lookup_artists(name.strip())
+    except lidarr.LidarrError as exc:
+        raise _bad_gateway(exc) from exc
+    return [_artist_out(a) for a in results if a.get("foreignArtistId")][:LOOKUP_SHOWN]
+
+
+@router.post(
+    "/artists",
+    response_model=LidarrArtistAddedOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[rate_limit("lidarr-add", limit=60, window=60)],
+)
+async def add_artist(body: LidarrArtistIn, found: LidarrDep) -> LidarrArtistAddedOut:
+    """Add an artist to Lidarr (in the admin's root folder and profiles), monitoring the
+    albums asked for, and with `search`, looking for them now."""
+    client = found.client
+    try:
+        if await client.artist(body.mbid) is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "That artist is in Lidarr already.")
+        results = await client.lookup_artists(f"lidarr:{body.mbid}")
+        looked_up = next((a for a in results if a.get("foreignArtistId") == body.mbid), None)
+        if looked_up is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Lidarr's metadata doesn't know them.")
+        added = await client.add_artist(
+            looked_up, found.settings, monitor=body.monitor, search=body.search
+        )
+    except lidarr.LidarrError as exc:
+        raise _bad_gateway(exc) from exc
+    return LidarrArtistAddedOut(id=int(added["id"]), name=str(added.get("artistName") or ""))

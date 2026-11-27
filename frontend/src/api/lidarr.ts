@@ -92,3 +92,24 @@ export function useGrabRelease() {
     mutationFn: (body: { guid: string; indexer_id: number }) => unwrap(api.POST('/api/lidarr/releases', { body })),
   })
 }
+
+export type LidarrArtist = Schemas['LidarrArtistOut']
+export type ArtistMonitor = Schemas['LidarrArtistIn']['monitor']
+
+/** Artists by this name as Lidarr's metadata knows them. */
+export function useLidarrArtistLookup(name: string) {
+  return useQuery({
+    queryKey: ['lidarr', 'artists', name],
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: () => unwrap(api.GET('/api/lidarr/artists/lookup', { params: { query: { name } } })),
+  })
+}
+
+export function useAddLidarrArtist() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { mbid: string; monitor: ArtistMonitor; search: boolean }) => unwrap(api.POST('/api/lidarr/artists', { body })),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['lidarr', 'artists'] }),
+  })
+}

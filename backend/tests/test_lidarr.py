@@ -30,6 +30,15 @@ METADATA = {
         "artist": {"foreignArtistId": RADIOHEAD, "artistName": "Radiohead"},
     },
 }  # fmt: skip
+MUSE = "9c9f1380-2516-4fc9-a3e6-f9f61941d090"
+MUSE_TOO = "11112222-3333-4444-8555-666677778888"
+ARTISTS = [
+    {
+        "foreignArtistId": MUSE, "artistName": "Muse", "artistType": "Group",
+        "disambiguation": "UK rock band", "overview": "Muse are an English rock band " * 30,
+    },
+    {"foreignArtistId": MUSE_TOO, "artistName": "Muse", "disambiguation": "Japanese idol"},
+]  # fmt: skip
 RELEASES = [
     {
         "guid": "small", "indexerId": 3, "indexer": "Indexer",
@@ -101,6 +110,35 @@ class FakeLidarr:
         if path == "/release" and method == "GET":
             assert int(params["albumId"]) in self.albums
             return httpx.Response(200, json=RELEASES)
+        if path == "/artist/lookup":
+            term = params["term"]
+            found = [
+                {
+                    **a,
+                    "id": next(
+                        (
+                            k
+                            for k, x in self.artists.items()
+                            if x["foreignArtistId"] == a["foreignArtistId"]
+                        ),
+                        0,
+                    ),
+                }
+                for a in ARTISTS
+                if term.removeprefix("lidarr:") == a["foreignArtistId"]
+                or term.lower() in a["artistName"].lower()
+            ]
+            return httpx.Response(200, json=found)
+        if path == "/artist" and method == "GET":
+            mbid = params.get("mbId")
+            return httpx.Response(
+                200, json=[a for a in self.artists.values() if a["foreignArtistId"] == mbid]
+            )
+        if path == "/artist" and method == "POST":
+            self.added.append(body)
+            artist_id = len(self.artists) + 1
+            self.artists[artist_id] = {**body, "id": artist_id}
+            return httpx.Response(201, json=self.artists[artist_id])
         if path == "/release" and method == "POST":
             self.grabbed.append(body)
             return httpx.Response(200, json={})
@@ -258,3 +296,34 @@ async def test_monitoring_an_album_coming_up(
     again = await owner.post("/api/lidarr/albums", json={"mbid": NEW_ALBUM}, headers=CSRF)
     assert again.json()["state"] == "monitored" and fake_lidarr.albums[1]["monitored"] is True
     assert len(fake_lidarr.added) == 1
+
+
+@pytest.mark.db
+async def test_adding_an_artist(app: FastAPI, plex: FakePlex, fake_lidarr: FakeLidarr) -> None:
+    owner, _ = await connected(app, plex)
+    # By name: the matches, to pick the right one (the biography shortened).
+    found = (await owner.get("/api/lidarr/artists/lookup", params={"name": "Muse"})).json()
+    assert [(a["mbid"], a["disambiguation"], a["in_lidarr"]) for a in found] == [
+        (MUSE, "UK rock band", False),
+        (MUSE_TOO, "Japanese idol", False),
+    ]
+    assert found[0]["kind"] == "Group" and len(found[0]["overview"]) <= 301
+    assert found[0]["overview"].endswith("…")
+
+    added = await owner.post(
+        "/api/lidarr/artists",
+        json={"mbid": MUSE, "monitor": "latest", "search": True},
+        headers=CSRF,
+    )
+    assert added.status_code == 201, added.text
+    assert added.json() == {"id": 1, "name": "Muse"}
+    [body] = fake_lidarr.added
+    assert body["addOptions"] == {"monitor": "latest", "searchForMissingAlbums": True}
+    assert body["monitored"] is True and body["monitorNewItems"] == "all"
+    assert (body["rootFolderPath"], body["qualityProfileId"]) == ("/music", 2)
+
+    # Once in Lidarr: said so, and not added again.
+    found = (await owner.get("/api/lidarr/artists/lookup", params={"name": "Muse"})).json()
+    assert found[0]["in_lidarr"] is True
+    twice = await owner.post("/api/lidarr/artists", json={"mbid": MUSE}, headers=CSRF)
+    assert twice.status_code == 409

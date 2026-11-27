@@ -2732,3 +2732,27 @@ class LidarrReleaseOut(BaseModel):
 class LidarrGrabIn(BaseModel):
     guid: str = Field(min_length=1, max_length=2000)
     indexer_id: int
+
+
+class LidarrArtistOut(BaseModel):
+    mbid: str
+    name: str
+    disambiguation: str | None
+    kind: str | None = Field(description="Group, Person, ... as MusicBrainz says.")
+    overview: str | None = Field(description="The start of Lidarr's biography.")
+    in_lidarr: bool
+
+
+class LidarrArtistIn(BaseModel):
+    mbid: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    monitor: Literal["none", "future", "latest", "all"] = Field(
+        default="future",
+        description="Which albums Lidarr gets: none yet, new ones, the latest and new ones, "
+        "or all.",
+    )
+    search: bool = Field(default=False, description="Look for the monitored albums now.")
+
+
+class LidarrArtistAddedOut(BaseModel):
+    id: int
+    name: str
