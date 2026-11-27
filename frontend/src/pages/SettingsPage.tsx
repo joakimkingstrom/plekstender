@@ -59,6 +59,7 @@ function settingsGroups(owner: boolean, admin: boolean): Group[] {
           label: 'Music files',
           children: FILES_PARTS.map((p) => ({ to: p.slug ? `/settings/files/${p.slug}` : '/settings/files', label: p.title, end: !p.slug })),
         },
+        { to: '/settings/new-music', label: 'New music' },
       ],
     })
   if (admin)

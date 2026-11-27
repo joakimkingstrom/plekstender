@@ -35,6 +35,7 @@ import { TastePage } from './pages/TastePage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { JobsPage } from './pages/JobsPage'
+import { NewMusicSettingsPage } from './pages/NewMusicSettingsPage'
 import { FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
 import { DiscoverPage } from './pages/DiscoverPage'
@@ -131,6 +132,7 @@ const router = createBrowserRouter([
           { path: 'fonts/:part', element: <FontsSettingsPage /> },
           { path: 'files', element: <FilesSettingsPage /> },
           { path: 'files/:part', element: <FilesSettingsPage /> },
+          { path: 'new-music', element: <NewMusicSettingsPage /> },
           { path: 'game', element: <GameSettingsPage /> },
           { path: 'jobs', element: <JobsPage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
