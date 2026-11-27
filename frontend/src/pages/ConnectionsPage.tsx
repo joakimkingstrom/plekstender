@@ -3,6 +3,7 @@ import { Navigate, useParams, useSearchParams } from 'react-router'
 import { useMe } from '../api/hooks'
 import { AcoustIdKeyCard } from '../components/AcoustIdKeyCard'
 import { CoverSourcesCard } from '../components/CoverSourcesCard'
+import { LidarrCard } from '../components/LidarrCard'
 import { MusicBrainzContactCard } from '../components/MusicBrainzContactCard'
 import { DataThistleCard } from '../components/DataThistleCard'
 import { JamBaseKeyCard } from '../components/JamBaseKeyCard'
@@ -67,6 +68,7 @@ const CARDS: Record<ServiceKind, () => ReactNode> = {
       <TidalCard />
     </>
   ),
+  lidarr: () => <LidarrCard />,
   files: () => <AcoustIdKeyCard />,
   musicbrainz: () => <MusicBrainzContactCard />,
 }

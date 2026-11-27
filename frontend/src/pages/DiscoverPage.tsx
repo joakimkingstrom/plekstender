@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useArtistSuggestions, useHideSuggestion, type ArtistSuggestion } from '../api/discover'
+import { useLidarrAvailable } from '../api/lidarr'
+import { LidarrArtistDialog } from '../components/LidarrArtist'
 import { Segmented } from '../components/Segmented'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { Button, Card, Notice, Spinner } from '../components/ui'
@@ -127,6 +129,8 @@ function Suggestion({
   onToggle: () => void
 }) {
   const more = artist.similar_to - artist.sources.length
+  const lidarr = useLidarrAvailable()
+  const [adding, setAdding] = useState(false)
   return (
     <li className="flex items-start gap-3 py-3 text-sm">
       <span className="w-7 shrink-0 pt-0.5 text-right text-xs tabular-nums text-muted">{rank}</span>
@@ -160,10 +164,16 @@ function Suggestion({
         >
           Last.fm
         </a>
+        {lidarr && (
+          <Button variant="ghost" size="xs" onClick={() => setAdding(true)} aria-label={`Add ${artist.name} to Lidarr`}>
+            + Lidarr
+          </Button>
+        )}
         <Button variant="ghost" busy={busy} onClick={onToggle} size="xs" aria-label={`${hidden ? 'Bring back' : 'Hide'} ${artist.name}`}>
           {hidden ? 'Bring back' : 'Hide'}
         </Button>
       </div>
+      {adding && <LidarrArtistDialog name={artist.name} onClose={() => setAdding(false)} />}
     </li>
   )
 }

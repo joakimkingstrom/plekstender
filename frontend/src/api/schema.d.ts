@@ -4463,6 +4463,197 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lidarr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lidarr Status
+         * @description Whether Lidarr's buttons show for you (connected, and admins let you).
+         */
+        get: operations["lidarr_status_api_lidarr_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/albums/states": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Album States
+         * @description Whether each album (release group MBID) is in Lidarr: absent, monitored, not
+         *     monitored, or downloaded.
+         */
+        post: operations["album_states_api_lidarr_albums_states_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Album
+         * @description Add the album to Lidarr, monitored (its artist too if new, not monitored for anything
+         *     else); already there, it's monitored. With `search`, Lidarr looks for it right away.
+         */
+        post: operations["add_album_api_lidarr_albums_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/albums/{album_id}/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Album Releases
+         * @description What Lidarr's indexers have for an album in Lidarr, the ones it would take first,
+         *     then by seeders (slow: Lidarr asks them all).
+         */
+        get: operations["album_releases_api_lidarr_albums__album_id__releases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grab Release
+         * @description Have Lidarr download one of the releases found.
+         */
+        post: operations["grab_release_api_lidarr_releases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/artists/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lookup Artists
+         * @description Artists by this name as Lidarr's metadata knows them (to pick the right one), the
+         *     closest first; those already in Lidarr are said so.
+         */
+        get: operations["lookup_artists_api_lidarr_artists_lookup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/artists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Artist
+         * @description Add an artist to Lidarr (in the admin's root folder and profiles), monitoring the
+         *     albums asked for, and with `search`, looking for them now.
+         */
+        post: operations["add_artist_api_lidarr_artists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/lidarr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lidarr */
+        get: operations["get_lidarr_api_admin_lidarr_get"];
+        /**
+         * Put Lidarr
+         * @description Connect Lidarr (checked first: the folder and profiles must be ones it has).
+         */
+        put: operations["put_lidarr_api_admin_lidarr_put"];
+        post?: never;
+        /**
+         * Delete Lidarr
+         * @description Disconnect Lidarr (the API key is forgotten).
+         */
+        delete: operations["delete_lidarr_api_admin_lidarr_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/lidarr/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Lidarr
+         * @description Try the address and API key (the saved key when none is given), and say what that
+         *     Lidarr offers: its root folders and quality and metadata profiles.
+         */
+        post: operations["check_lidarr_api_admin_lidarr_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6778,6 +6969,213 @@ export interface components {
             decades: components["schemas"]["DecadeCount"][];
             /** Undated Albums */
             undated_albums: number;
+        };
+        /** LidarrAdminOut */
+        LidarrAdminOut: {
+            /** Configured */
+            configured: boolean;
+            /** Url */
+            url?: string | null;
+            /** Root Folder */
+            root_folder?: string | null;
+            /** Quality Profile Id */
+            quality_profile_id?: number | null;
+            /** Metadata Profile Id */
+            metadata_profile_id?: number | null;
+            /**
+             * Access
+             * @default admins
+             * @enum {string}
+             */
+            access: "admins" | "everyone";
+        };
+        /** LidarrAlbumIn */
+        LidarrAlbumIn: {
+            /**
+             * Mbid
+             * @description The release group's MBID.
+             */
+            mbid: string;
+            /**
+             * Search
+             * @description Have Lidarr search its indexers and download the best now (else it's only monitored: grabbed when it turns up, or chosen by hand).
+             * @default false
+             */
+            search: boolean;
+        };
+        /** LidarrAlbumOut */
+        LidarrAlbumOut: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "absent" | "monitored" | "unmonitored" | "downloaded";
+        };
+        /** LidarrArtistAddedOut */
+        LidarrArtistAddedOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /** LidarrArtistIn */
+        LidarrArtistIn: {
+            /** Mbid */
+            mbid: string;
+            /**
+             * Monitor
+             * @description Which albums Lidarr gets: none yet, new ones, the latest and new ones, or all.
+             * @default future
+             * @enum {string}
+             */
+            monitor: "none" | "future" | "latest" | "all";
+            /**
+             * Search
+             * @description Look for the monitored albums now.
+             * @default false
+             */
+            search: boolean;
+        };
+        /** LidarrArtistOut */
+        LidarrArtistOut: {
+            /** Mbid */
+            mbid: string;
+            /** Name */
+            name: string;
+            /** Disambiguation */
+            disambiguation: string | null;
+            /**
+             * Kind
+             * @description Group, Person, ... as MusicBrainz says.
+             */
+            kind: string | null;
+            /**
+             * Overview
+             * @description The start of Lidarr's biography.
+             */
+            overview: string | null;
+            /** In Lidarr */
+            in_lidarr: boolean;
+        };
+        /** LidarrCheckIn */
+        LidarrCheckIn: {
+            /** Url */
+            url: string;
+            /**
+             * Api Key
+             * @description Left out: the saved one.
+             */
+            api_key?: string | null;
+        };
+        /** LidarrFolderOut */
+        LidarrFolderOut: {
+            /** Path */
+            path: string;
+            /** Free Space */
+            free_space?: number | null;
+        };
+        /** LidarrGrabIn */
+        LidarrGrabIn: {
+            /** Guid */
+            guid: string;
+            /** Indexer Id */
+            indexer_id: number;
+        };
+        /** LidarrIn */
+        LidarrIn: {
+            /** Url */
+            url: string;
+            /**
+             * Api Key
+             * @description Left out: the saved one.
+             */
+            api_key?: string | null;
+            /** Root Folder */
+            root_folder: string;
+            /** Quality Profile Id */
+            quality_profile_id: number;
+            /** Metadata Profile Id */
+            metadata_profile_id: number;
+            /**
+             * Access
+             * @default admins
+             * @enum {string}
+             */
+            access: "admins" | "everyone";
+        };
+        /**
+         * LidarrOptionsOut
+         * @description What the Lidarr at that address offers, to choose from.
+         */
+        LidarrOptionsOut: {
+            /** Version */
+            version: string;
+            /** Root Folders */
+            root_folders: components["schemas"]["LidarrFolderOut"][];
+            /** Quality Profiles */
+            quality_profiles: components["schemas"]["LidarrProfileOut"][];
+            /** Metadata Profiles */
+            metadata_profiles: components["schemas"]["LidarrProfileOut"][];
+        };
+        /** LidarrProfileOut */
+        LidarrProfileOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /** LidarrReleaseOut */
+        LidarrReleaseOut: {
+            /** Guid */
+            guid: string;
+            /** Indexer Id */
+            indexer_id: number;
+            /** Indexer */
+            indexer: string | null;
+            /** Title */
+            title: string;
+            /** Size */
+            size: number | null;
+            /** Quality */
+            quality: string | null;
+            /**
+             * Protocol
+             * @description torrent or usenet.
+             */
+            protocol: string | null;
+            /** Seeders */
+            seeders: number | null;
+            /** Leechers */
+            leechers: number | null;
+            /** Age Days */
+            age_days: number | null;
+            /**
+             * Approved
+             * @description Lidarr would take it (its profile allows it).
+             */
+            approved: boolean;
+            /** Rejections */
+            rejections: string[];
+        };
+        /** LidarrStatesIn */
+        LidarrStatesIn: {
+            /**
+             * Mbids
+             * @description Release group MBIDs.
+             */
+            mbids: string[];
+        };
+        /** LidarrStatusOut */
+        LidarrStatusOut: {
+            /**
+             * Available
+             * @description Lidarr is connected and you may use it.
+             */
+            available: boolean;
         };
         /** ListenBrainzImportIn */
         ListenBrainzImportIn: {
@@ -18003,6 +18401,324 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lidarr_status_api_lidarr_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrStatusOut"];
+                };
+            };
+        };
+    };
+    album_states_api_lidarr_albums_states_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrStatesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: "absent" | "monitored" | "unmonitored" | "downloaded";
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_album_api_lidarr_albums_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrAlbumIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrAlbumOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    album_releases_api_lidarr_albums__album_id__releases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrReleaseOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grab_release_api_lidarr_releases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrGrabIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lookup_artists_api_lidarr_artists_lookup_get: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrArtistOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_artist_api_lidarr_artists_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrArtistIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrArtistAddedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lidarr_api_admin_lidarr_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrAdminOut"];
+                };
+            };
+        };
+    };
+    put_lidarr_api_admin_lidarr_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_lidarr_api_admin_lidarr_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    check_lidarr_api_admin_lidarr_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrOptionsOut"];
+                };
             };
             /** @description Validation Error */
             422: {
