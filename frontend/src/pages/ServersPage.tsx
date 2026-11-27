@@ -69,7 +69,8 @@ function ConnectedServer({ server }: { server: Schemas['ServerOut'] }) {
         </span>
       }
       action={
-        <div className="flex gap-1">
+        // Stacked: side by side they squeeze the server's name and badges.
+        <div className="flex flex-col items-end gap-1">
           <Tooltip content="Find the best address for this server again">
             <Button variant="ghost" busy={connect.isPending} onClick={() => connect.mutate(server.machine_identifier)}>
               Reconnect
