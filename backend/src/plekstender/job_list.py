@@ -3,6 +3,9 @@ folder jobs (scans, identifying, renames, lyrics, duplicates), edits being writt
 history imports and sends. Each says what it is, how far it got, and, when it's waiting,
 what for: the job queue (procrastinate) runs one job at a time per lock (one music folder
 job per server, for instance), so a queued job can be behind another.
+
+Jobs a worker left "running" when it stopped (a restart, a new image) are closed here too
+(`close_abandoned`), so they don't show as running, or stopping, for ever.
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ import datetime as dt
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.db.models import (
@@ -23,6 +26,9 @@ from plekstender.db.models import (
     TagChangeSet,
     UserServer,
 )
+from plekstender.jobs import NO_WORKER_AFTER
+from plekstender.tags import apply
+from plekstender.tags.lyrics import close_edit as close_lyrics_edit
 
 FINISHED_LISTED = 50
 ACTIVE = ("queued", "running")
@@ -286,3 +292,88 @@ async def add_waiting(db: AsyncSession, active: list[Job]) -> None:
             )
         else:
             job.waiting_for = Waiting("The worker to pick it up (is it running?)", None)
+
+
+# --- jobs whose worker stopped ----------------------------------------------------------------
+
+INTERRUPTED = {
+    "sync": "Interrupted (the worker stopped during the sync).",
+    "imports": "Interrupted (the worker stopped). Resume to continue.",
+    "files": "Interrupted (the worker stopped). Start it again.",
+    "artwork": "Interrupted (the worker stopped). Start it again.",
+}
+MODELS: dict[str, Any] = {
+    "sync": SyncRun,
+    "imports": ListenImport,
+    "files": FileScan,
+    "artwork": ArtworkJob,
+    "edits": TagChangeSet,
+}
+
+
+async def in_worker(db: AsyncSession) -> set[tuple[str, int]]:
+    """The jobs a worker is running now, as (kind, id)."""
+    rows = await db.execute(
+        text("SELECT task_name, args FROM procrastinate_jobs WHERE status = 'doing'")
+    )
+    found = set()
+    for task, args in rows.all():
+        kind, arg = TASKS.get(task, ("", ""))
+        if kind and isinstance((args or {}).get(arg), int):
+            found.add((kind, args[arg]))
+    return found
+
+
+async def close_abandoned(db: AsyncSession, now: dt.datetime | None = None) -> list[str]:
+    """Close the jobs left "running" that no worker runs any more (and that haven't moved on
+    for a while): failed, saying they were interrupted. An edit's unwritten changes are marked
+    as such (it's partial if some were written), and so is a lyrics lookup's edit. Returns
+    the jobs closed, as "kind id"."""
+    now = now or dt.datetime.now(dt.UTC)
+    running = await in_worker(db)
+    closed: list[str] = []
+    for kind, model in MODELS.items():
+        left = [
+            job
+            for job in await db.scalars(
+                select(model).where(
+                    model.status == "running", model.updated_at < now - NO_WORKER_AFTER
+                )
+            )
+            if (kind, job.id) not in running
+        ]
+        if kind == "edits":
+            # A lyrics lookup writes its own edit as it goes: that one ends with the lookup.
+            lookups = await db.scalars(
+                select(FileScan.params).where(
+                    FileScan.kind == "lyrics", FileScan.status.in_(ACTIVE)
+                )
+            )
+            owned = {p.get("applied_set_id") for p in lookups}
+            left = [s for s in left if s.id not in owned]
+        for job in left:
+            await _close(db, kind, job, now)
+            closed.append(f"{kind} {job.id}")
+    return closed
+
+
+async def _close(db: AsyncSession, kind: str, job: Any, now: dt.datetime) -> None:
+    if kind == "edits":
+        unwritten = await db.execute(
+            update(TagChange)
+            .where(TagChange.change_set_id == job.id, TagChange.status == "pending")
+            .values(status="failed", error="Not written: the worker stopped first.")
+        )
+        n = int(getattr(unwritten, "rowcount", 0) or 0)
+        job.error = (
+            f"Interrupted (the worker stopped): {n} "
+            f"{'change was' if n == 1 else 'changes were'} not written."
+        )
+        await apply.finish(db, job, job.id)  # failed, or partial if some were written
+        return
+    job.status = "failed"
+    job.error = INTERRUPTED[kind]
+    job.finished_at = job.updated_at = now
+    await db.commit()
+    if kind == "files" and job.kind == "lyrics" and (set_id := job.params.get("applied_set_id")):
+        await close_lyrics_edit(db, job, set_id)
