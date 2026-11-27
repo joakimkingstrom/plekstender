@@ -24,6 +24,7 @@ from plekstender.api.schemas import (
     TagChangeSetOut,
 )
 from plekstender.db.models import FileScan, MediaFile, PlexServer, TagChangeSet
+from plekstender.jobs import abandoned
 from plekstender.tags import lyrics
 from plekstender.tags.read import LYRICS_READER
 from plekstender.worker import enqueue_lyrics_lookup, enqueue_tag_changes
@@ -139,11 +140,6 @@ async def lyrics_plan(
     )
 
 
-# A running lookup saves its progress at least every couple of minutes; one that hasn't for
-# this long has no worker (it stopped): stopping it is done here instead.
-NO_WORKER_AFTER = dt.timedelta(minutes=5)
-
-
 @router.post("/{job_id}/stop", response_model=FileScanOut)
 async def stop_lookup(
     server_id: int, job_id: int, body: LyricsStopIn, db: DbDep, user: UserDep
@@ -155,10 +151,9 @@ async def stop_lookup(
     if job.status not in ("queued", "running"):
         raise HTTPException(status.HTTP_409_CONFLICT, "It isn't running.")
     request = "undo" if body.cancel and body.undo else "cancel" if body.cancel else "stop"
-    abandoned = job.status == "running" and (
-        dt.datetime.now(dt.UTC) - job.updated_at > NO_WORKER_AFTER
-    )
-    if job.status == "running" and not abandoned:
+    # A running lookup saves its progress at least every couple of minutes; one that hasn't
+    # for a while has no worker (it stopped): stopping it is done here instead.
+    if job.status == "running" and not abandoned(job):
         job.params = {**job.params, "stop": request}  # the worker stops before the next song
         await db.commit()
     else:

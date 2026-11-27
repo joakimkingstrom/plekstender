@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAlbumFiles, useFilesSummary, useSetTagEditing, useStartScan, type TrackFile } from '../api/files'
 import { MusicBrainzLookup } from './MusicBrainzLookup'
 import { AlbumArtworkCard } from './FileArtwork'
+import { JobStop } from './JobStop'
 import { AlbumNfo } from './NfoCards'
 import { PlexSync } from './PlexSync'
 import { RenameFiles } from './RenameFiles'
@@ -47,6 +48,13 @@ export function ScanCard({ serverId }: { serverId: number }) {
                 style={total ? { width: `${(done / total) * 100}%` } : undefined}
               />
             </div>
+            <JobStop
+              kind="files"
+              jobId={active.id}
+              requested={active.stop_requested}
+              what="the scan"
+              keeps="Stop keeps the files read so far; the next scan reads the rest."
+            />
           </div>
         ) : (
           <>
@@ -56,7 +64,12 @@ export function ScanCard({ serverId }: { serverId: number }) {
                 {s.errors > 0 && <span className="text-danger">; {formatCount(s.errors)} couldn't be read</span>}.
               </p>
             )}
-            {s.last?.status === 'failed' && <Notice tone="error">The last scan stopped: {s.last.error}</Notice>}
+            {s.last?.status === 'failed' &&
+              (s.last.stop_requested ? (
+                <p className="text-xs text-muted">{s.last.error}</p>
+              ) : (
+                <Notice tone="error">The last scan stopped: {s.last.error}</Notice>
+              ))}
             {s.last?.status === 'succeeded' && s.last.finished_at && (
               <p className="text-xs text-muted">Last scanned {formatRelative(s.last.finished_at)}.</p>
             )}

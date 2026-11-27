@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { bulk, useDuplicates, useRefreshFiles, type Duplicates } from '../api/files'
 import { formatCount, formatDuration } from '../format'
+import { JobStop } from './JobStop'
 import { Dialog } from './Dialog'
 import { Badge, Button, Notice, Spinner } from './ui'
 
@@ -74,6 +75,15 @@ export function DuplicatesDialog({ serverId, canWrite, onClose }: { serverId: nu
                 style={{ width: `${progress?.total ? ((progress.done ?? 0) / progress.total) * 100 : 5}%` }}
               />
             </div>
+            <div className="mt-3">
+              <JobStop
+                kind="files"
+                jobId={d!.job.id}
+                requested={d!.job.stop_requested}
+                what="the check"
+                keeps="Nothing is moved until you choose: a stopped check just doesn't list the duplicates."
+              />
+            </div>
           </div>
         ) : !d || stale || d.applied_set_id ? (
           <div className="space-y-2">
@@ -84,7 +94,7 @@ export function DuplicatesDialog({ serverId, canWrite, onClose }: { serverId: nu
           </div>
         ) : d.job.status === 'failed' ? (
           <>
-            <Notice tone="error">{d.job.error ?? 'The check failed.'}</Notice>
+            <Notice tone={d.job.stop_requested ? 'info' : 'error'}>{d.job.error ?? 'The check failed.'}</Notice>
             <Button busy={starting} onClick={() => void start()}>
               Try again
             </Button>

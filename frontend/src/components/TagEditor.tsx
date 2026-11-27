@@ -21,6 +21,7 @@ import {
   type TagField,
 } from '../tags'
 import { Dialog } from './Dialog'
+import { JobStop } from './JobStop'
 import { Badge, Button, Card, Notice, Spinner, UndoIcon } from './ui'
 
 const input = 'w-full rounded-md border border-border bg-surface-2 px-2 py-1 text-sm'
@@ -456,6 +457,26 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
                     )}
                   </div>
                 </details>
+                {set.error && !(set.status === 'queued' || set.status === 'running') && (
+                  <p className="border-t border-border px-3 py-2 text-xs text-muted">{set.error}</p>
+                )}
+                {(set.status === 'queued' || set.status === 'running') && (
+                  <div className="border-t border-border px-3 py-2">
+                    <JobStop
+                      kind="edits"
+                      jobId={set.id}
+                      requested={set.stop_requested}
+                      what="the edit"
+                      keeps="Stop keeps what's written; the rest isn't."
+                      cancel={
+                        <p>
+                          The rest isn't written, and what it has written so far is undone (as an undo edit, in the
+                          history).
+                        </p>
+                      }
+                    />
+                  </div>
+                )}
               </li>
             )
           })}

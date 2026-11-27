@@ -18,6 +18,7 @@ import {
   type ListenSource,
 } from '../api/listens'
 import { Stepper } from '../components/controls'
+import { JobStop } from '../components/JobStop'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatRelative } from '../format'
 
@@ -103,6 +104,19 @@ function ImportProgress({ job }: { job: Schemas['ListenImportOut'] }) {
           style={pct === null ? undefined : { width: `${pct}%` }}
         />
       </div>
+      <JobStop
+        kind="imports"
+        jobId={job.id}
+        requested={job.stop_requested}
+        what="the import"
+        keeps={`Stop keeps the ${noun} imported so far; resuming carries on.`}
+        cancel={
+          <p>
+            The {noun} this import has added so far are removed from your history again (ones that were here
+            already stay). Importing again starts from the beginning.
+          </p>
+        }
+      />
     </div>
   )
 }
@@ -114,16 +128,19 @@ function LastImport({ job }: { job: Schemas['ListenImportOut'] }) {
   const read = Number((job.progress as { done?: number }).done ?? 0)
   const when = job.finished_at ? formatRelative(job.finished_at) : ''
   if (job.status === 'failed') {
+    const cancelled = job.stop_requested === 'cancel'
     return (
       <div className="space-y-3">
-        <Notice tone="error">
-          The import of {job.username}'s {noun} stopped {when}: {job.error ?? 'unknown error'}
+        <Notice tone={job.stop_requested ? 'info' : 'error'}>
+          The import of {job.username}'s {noun} {cancelled ? 'was cancelled' : 'stopped'} {when}: {job.error ?? 'unknown error'}
         </Notice>
-        <p className="text-sm text-muted">
-          {formatCount(added)} listens were saved before it stopped. Resuming continues where it left off.
-        </p>
+        {!cancelled && (
+          <p className="text-sm text-muted">
+            {formatCount(added)} listens were saved before it stopped. Resuming continues where it left off.
+          </p>
+        )}
         <Button busy={resume.isPending} onClick={() => resume.mutate(job.id)}>
-          Resume import
+          {cancelled ? 'Import again' : 'Resume import'}
         </Button>
         {resume.isError && <Notice tone="error">{errorMessage(resume.error)}</Notice>}
       </div>
@@ -384,7 +401,7 @@ function SendHistory() {
             </p>
           )}
           {last?.status === 'failed' && (
-            <Notice tone="error">
+            <Notice tone={last.stop_requested ? 'info' : 'error'}>
               It stopped {last.finished_at && formatRelative(last.finished_at)}: {last.error ?? 'unknown error'}
             </Notice>
           )}
@@ -425,6 +442,13 @@ function SendProgress({ job }: { job: Schemas['ListenImportOut'] }) {
           style={pct === null ? undefined : { width: `${pct}%` }}
         />
       </div>
+      <JobStop
+        kind="imports"
+        jobId={job.id}
+        requested={job.stop_requested}
+        what="sending"
+        keeps="What's sent stays on ListenBrainz; resuming carries on."
+      />
     </div>
   )
 }

@@ -461,6 +461,19 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - Songs played from tape are left out; a song is matched by normalised title among the artist's tracks (the best-rated, else earliest release), and a cover not in the artist's own songs as the original artist's. The server whose library has the most is used.
 - Saved as a smart playlist with the songs in a new order, `listed` (as given; also offered in the builder as "As listed"), built into Plex by the worker. `gig_playlists` remembers each (`before` by the Live gig's source:id, `after` by the gig's id): one per gig; a deleted playlist isn't made again; when nothing matched, before-gig playlists are tried again weekly.
 
+## Stopping long jobs (27 Nov)
+- Every long job can be stopped: artwork jobs (best covers, fanart.tv logos, logo pack export and import), music folder scans, identifying files by sound, checking for duplicates, edits being written, and Last.fm / ListenBrainz imports and sends. `POST /api/jobs/{artwork|files|edits|imports}/{id}/stop` (body `{cancel}`), allowed for the server's owner (imports: their own). A lyrics lookup keeps its own endpoint (above).
+- A running job gets `stop_requested` ("stop" or "cancel", shown in its `…Out`) and checks it before each item or batch (`jobs.check_stop` raises `JobStopped`), so it stops within one item. A queued job, or one with no progress for 5 minutes (its worker gone), is wound up by the app itself, the same way.
+- What Stop keeps and Cancel takes back:
+  - **Covers, logos, logo import:** before an album's cover or an artist's picture is replaced, the job notes the poster Plex had selected and Plekstender's record of it (`artwork_jobs.undo`). Stop keeps what's applied; Cancel selects the old posters again (`PUT /library/metadata/{rk}/poster?url=…`: Plex keeps every poster an item has had) and restores the records. An artist.jpg already saved in a folder stays.
+  - **Logo export:** the unfinished zip is deleted (stop and cancel alike).
+  - **Scan, duplicates:** stop only. A stopped scan keeps the files read; the next scan reads the rest.
+  - **Identify:** Stop keeps the matches; Cancel forgets those found since it started.
+  - **Edits:** the changes not written yet fail ("The edit was stopped first."); the edit ends applied, partial or failed. Cancel also undoes what was written: an undo edit made in one `INSERT … SELECT`, as for lyrics.
+  - **Imports:** Stop keeps the plays (resuming carries on); Cancel deletes the plays this import added (by `import_id`) and resets its progress, so importing again starts over.
+  - **ListenBrainz send:** stop only: what's sent stays on ListenBrainz.
+- In the app: Stop and Cancel… (with a confirmation saying what Cancel takes back) next to each job's progress, the bell's too; a stopped job's message shows in place of the error.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

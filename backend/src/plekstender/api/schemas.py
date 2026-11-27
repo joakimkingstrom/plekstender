@@ -504,6 +504,9 @@ class ListenImportOut(BaseModel):
     progress: dict[str, Any]
     stats: dict[str, Any]
     error: str | None
+    stop_requested: Literal["stop", "cancel"] | None = Field(
+        default=None, description="Asked to stop (or cancel): it does so at its next item."
+    )
 
 
 class ImportStatusOut(BaseModel):
@@ -855,6 +858,9 @@ class ArtworkJobOut(BaseModel):
     created_at: dt.datetime
     finished_at: dt.datetime | None
     download: str | None = Field(default=None, description="Export: where to download it.")
+    stop_requested: Literal["stop", "cancel"] | None = Field(
+        default=None, description="Asked to stop (or cancel): it does so at its next item."
+    )
 
 
 class BestCoversJobIn(BaseModel):
@@ -1319,6 +1325,9 @@ class FileScanOut(BaseModel):
     error: str | None
     created_at: dt.datetime
     finished_at: dt.datetime | None
+    stop_requested: Literal["stop", "cancel"] | None = Field(
+        default=None, description="Asked to stop (or cancel): it does so at its next item."
+    )
 
 
 class FilesSummaryOut(BaseModel):
@@ -1469,6 +1478,19 @@ class LyricsPlanOut(BaseModel):
     applied_set_id: int | None
 
 
+class JobStopIn(BaseModel):
+    cancel: bool = Field(
+        default=False,
+        description="Also take back what it did, where that's possible (else it's kept).",
+    )
+
+
+class JobStopOut(BaseModel):
+    status: str
+    error: str | None
+    stop_requested: Literal["stop", "cancel"] | None
+
+
 class LyricsStopIn(BaseModel):
     cancel: bool = Field(
         default=False, description="Throw away the lyrics it found (else they're kept)."
@@ -1503,6 +1525,9 @@ class TagChangeSetOut(BaseModel):
     )
     undoable: int = Field(default=0, description="Written changes not undone yet.")
     changes: list[TagChangeOut] = Field(description="The first 200 (big edits are listed in part).")
+    stop_requested: Literal["stop", "cancel"] | None = Field(
+        default=None, description="Asked to stop (or cancel): it does so at its next item."
+    )
 
 
 class TagUndoIn(BaseModel):

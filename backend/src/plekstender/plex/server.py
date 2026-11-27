@@ -203,6 +203,12 @@ class PlexServerClient:
             request_timeout=httpx.Timeout(60.0, connect=10.0),
         )
 
+    async def select_poster(self, rating_key: int, poster: str) -> None:
+        """Select one of the item's posters again (its ratingKey from `posters`)."""
+        await self._request(
+            f"/library/metadata/{rating_key}/poster", params={"url": poster}, method="PUT"
+        )
+
     async def rate(self, rating_key: int, rating: float | None) -> None:
         """Set the token owner's rating (0-10, half stars = 1), or clear it with None."""
         await self._request(

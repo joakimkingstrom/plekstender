@@ -26,6 +26,7 @@ import {
 import { errorMessage, type Schemas } from '../api/client'
 import { useMe } from '../api/hooks'
 import { Artwork } from '../components/library'
+import { ArtworkJobStop } from '../components/ArtworkJobStatus'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { TabNav } from '../components/TabNav'
@@ -600,6 +601,7 @@ function BulkFanart({ serverId, todo }: { serverId: number; todo: number }) {
           <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
             <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 5}%` }} />
           </div>
+          <ArtworkJobStop job={latest} />
         </div>
       ) : confirming ? (
         <div className="space-y-2">
@@ -633,7 +635,11 @@ function BulkFanart({ serverId, todo }: { serverId: number; todo: number }) {
               {stats.failed ? `, ${stats.failed} failed` : ''}.
             </p>
           )}
-          {latest?.status === 'failed' && <p className="text-xs text-danger">Last run failed: {latest.error}</p>}
+          {latest?.status === 'failed' && (
+            <p className={`text-xs ${latest.stop_requested ? 'text-muted' : 'text-danger'}`}>
+              {latest.stop_requested ? `Last run: ${latest.error}` : `Last run failed: ${latest.error}`}
+            </p>
+          )}
         </div>
       )}
       {start.isError && <div className="mt-2"><Notice tone="error">{errorMessage(start.error)}</Notice></div>}

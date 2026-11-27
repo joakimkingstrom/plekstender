@@ -41,6 +41,7 @@ from plekstender.history.listenbrainz_import import (
     ListenBrainzImportError,
     lb_get,
 )
+from plekstender.jobs import JobStopped, check_stop
 from plekstender.security.crypto import token_cipher
 from plekstender.sync.parse import normalise_title
 
@@ -201,6 +202,7 @@ async def run_listenbrainz_send(
         stats = {"sent": 0, "existing": 0, "refused": 0, **job.stats}
         progress = dict(job.progress)
         while True:
+            await check_stop(db, ListenImport, job.id)
             where = list(_candidates(job.user_id, job.window_to))
             if "cursor_ts" in progress:
                 cursor = (
@@ -241,6 +243,12 @@ async def run_listenbrainz_send(
             await db.commit()
             await sleep(REQUEST_INTERVAL)
         job.status = "succeeded"
+    except JobStopped:
+        # Nothing to take back: what was sent is on ListenBrainz now.
+        await db.rollback()
+        job = await db.get(ListenImport, job_id, populate_existing=True) or job
+        job.status = "failed"
+        job.error = "Stopped. What it sent stays on ListenBrainz; resuming carries on from there."
     except Exception as exc:
         if not isinstance(exc, SendError):
             log.exception("sending listens to ListenBrainz (job %s) failed", job_id)

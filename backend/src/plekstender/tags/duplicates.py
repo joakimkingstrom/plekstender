@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from plekstender import acoustid
 from plekstender.config import Settings
 from plekstender.db.models import FileFingerprint, FileScan, MediaFile, PlexServer
+from plekstender.jobs import JobStopped, check_stop
 from plekstender.sync.parse import normalise_artist, normalise_title
 from plekstender.tags.lyrics_kinds import SIDECARS, sidecar_path
 
@@ -268,6 +269,7 @@ async def run_duplicates(db: AsyncSession, settings: Settings, job_id: int) -> N
         prints: dict[int, list[int]] = {}
         problem: str | None = None
         for start in range(0, len(todo), 25):
+            await check_stop(db, FileScan, job.id)
             batch = todo[start : start + 25]
             found, problem = await _fingerprints(db, settings, root, batch)
             prints.update(found)
@@ -319,6 +321,11 @@ async def run_duplicates(db: AsyncSession, settings: Settings, job_id: int) -> N
             "fingerprint_error": problem,
         }
         job.status = "succeeded"
+    except JobStopped:
+        await db.rollback()
+        job = await db.get(FileScan, job_id, populate_existing=True) or job
+        job.status = "failed"
+        job.error = "Stopped before it finished: check again for the duplicates."
     except Exception as exc:
         if not isinstance(exc, DuplicatesError):
             log.exception("duplicates job %s failed", job_id)

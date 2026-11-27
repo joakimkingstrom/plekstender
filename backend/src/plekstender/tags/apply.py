@@ -23,9 +23,10 @@ from plekstender.db.models import (
     Track,
     UserServer,
 )
+from plekstender.jobs import JobStopped, check_stop
 from plekstender.plex.tv import PlexError
 from plekstender.tags.lyrics import FIELDS as LYRICS_FIELDS
-from plekstender.tags.lyrics import apply_lyrics
+from plekstender.tags.lyrics import apply_lyrics, undo_edit
 from plekstender.tags.picture_changes import apply_pictures
 from plekstender.tags.pictures import cover_of
 from plekstender.tags.read import READER, TagReadError, read_file, unread_fields
@@ -74,11 +75,44 @@ async def run_change_set(
         await db.commit()
         return
     root = await asyncio.to_thread(lambda: Path(server.local_path_prefix or "").resolve())
-    moved = await _apply_moves(db, root, server, set_id)
     touched: set[tuple[int | None, str]] = set()  # (Plex track, folder) for Plex rescans
-    await apply_pictures(db, http, settings, root, server, set_id, touched)
-    await apply_lyrics(db, root, server, set_id, touched)
-    # File by file, a batch of files at a time (a library-wide edit can be very big).
+    moved: set[int] = set()
+    stopped: JobStopped | None = None
+    try:
+        moved = await _apply_moves(db, root, server, set_id)
+        await apply_pictures(db, http, settings, root, server, set_id, touched)
+        await apply_lyrics(db, root, server, set_id, touched)
+        await _apply_files(db, root, set_id, change_set, touched)
+    except JobStopped as exc:
+        stopped = exc
+        await db.rollback()
+        change_set = await db.get(TagChangeSet, set_id, populate_existing=True) or change_set
+        await db.refresh(server)  # expired by the rollback
+        left = await db.execute(
+            update(TagChange)
+            .where(TagChange.change_set_id == set_id, TagChange.status == "pending")
+            .values(status="failed", error="The edit was stopped first.")
+        )
+        unwritten = int(getattr(left, "rowcount", 0) or 0)
+        change_set.error = (
+            f"Stopped: {unwritten} {'change was' if unwritten == 1 else 'changes were'} "
+            "not written." + (" What was written is being undone." if stopped.cancel else "")
+        )
+    await finish(db, change_set, set_id)
+    await _tell_plex(db, http, settings, server, touched, moved)
+    if stopped is not None and stopped.cancel:
+        await undo_edit(db, set_id, change_set.user_id, why="a cancelled edit")
+
+
+async def _apply_files(
+    db: AsyncSession,
+    root: Path,
+    set_id: int,
+    change_set: TagChangeSet,
+    touched: set[tuple[int | None, str]],
+) -> None:
+    """The tag changes, file by file, a batch of files at a time (a library-wide edit can be
+    very big)."""
     file_ids = list(
         await db.scalars(
             select(TagChange.media_file_id)
@@ -92,6 +126,7 @@ async def run_change_set(
         )
     )
     for start in range(0, len(file_ids), FILE_BATCH):
+        await check_stop(db, TagChangeSet, set_id)
         batch = file_ids[start : start + FILE_BATCH]
         ids = [f for f in batch if f is not None]
         in_batch: ColumnElement[bool] = TagChange.media_file_id.in_(ids)
@@ -117,6 +152,9 @@ async def run_change_set(
         change_set.updated_at = dt.datetime.now(dt.UTC)
         await db.commit()
 
+
+async def finish(db: AsyncSession, change_set: TagChangeSet, set_id: int) -> None:
+    """The edit's status from its changes'."""
     counts = dict(
         (
             await db.execute(
@@ -136,7 +174,6 @@ async def run_change_set(
     )
     change_set.applied_at = change_set.updated_at = dt.datetime.now(dt.UTC)
     await db.commit()
-    await _tell_plex(db, http, settings, server, touched, moved)
 
 
 async def _apply_moves(db: AsyncSession, root: Path, server: PlexServer, set_id: int) -> set[int]:
@@ -156,6 +193,7 @@ async def _apply_moves(db: AsyncSession, root: Path, server: PlexServer, set_id:
     moved: set[int] = set()
     left: set[str] = set()
     for change in changes:
+        await check_stop(db, TagChangeSet, set_id)
         source, target = str(change.old_value), str(change.new_value)
         try:
             await asyncio.to_thread(move, root, source, target)

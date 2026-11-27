@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import type { ArtworkJob } from '../api/artwork'
 import { isRunning } from '../api/artworkJobStatus'
+import { JobStop } from './JobStop'
 
 type Kind = ArtworkJob['kind']
 
@@ -9,6 +10,37 @@ const KINDS: Record<Kind, { running: string; done: string; page: string }> = {
   fanart: { running: 'Applying fanart.tv logos', done: 'fanart.tv logos applied', page: '/library/artwork' },
   export: { running: 'Exporting artist logos', done: 'Artist logos exported', page: '/settings/export/logos' },
   import: { running: 'Importing artist logos', done: 'Artist logos imported', page: '/settings/export/logos' },
+}
+
+const PUT_BACK =
+  "Plex selects the picture each artist had before again. An artist.jpg already saved in an artist's folder stays."
+
+/** Stop and Cancel… for a running artwork job, saying what each keeps or takes back. */
+export function ArtworkJobStop({ job, compact = false }: { job: ArtworkJob; compact?: boolean }) {
+  const props = { kind: 'artwork' as const, jobId: job.id, requested: job.stop_requested, compact }
+  if (job.kind === 'export')
+    return <JobStop {...props} what="the export" keeps="Stop throws the unfinished zip away." />
+  const things = job.kind === 'covers' ? 'covers' : 'logos'
+  return (
+    <JobStop
+      {...props}
+      what={job.kind === 'covers' ? 'the covers job' : job.kind === 'fanart' ? 'the logos job' : 'the import'}
+      keeps={`Stop keeps the ${things} saved so far.`}
+      cancel={
+        <>
+          <p>The {things} it has saved to Plex so far are put back.</p>
+          <p className="text-muted">{job.kind === 'covers' ? 'Plex selects the cover each album had before again.' : PUT_BACK}</p>
+        </>
+      }
+    />
+  )
+}
+
+/** A stopped job's heading: stopped, cancelled or failed. */
+function ended(job: ArtworkJob, running: string): string {
+  if (job.stop_requested === 'cancel') return `${running}: cancelled`
+  if (job.stop_requested === 'stop') return `${running}: stopped`
+  return `${running} failed`
 }
 
 /** What a finished job did, in a line. */
@@ -54,10 +86,11 @@ export function ArtworkJobItem({ job, onClose, onNavigate }: { job: ArtworkJob; 
             >
               <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 5}%` }} />
             </div>
+            <ArtworkJobStop job={job} compact />
           </>
         ) : job.status === 'failed' ? (
           <>
-            <p className="font-medium">{kind.running} failed</p>
+            <p className="font-medium">{ended(job, kind.running)}</p>
             {job.error && <p className="text-xs text-muted">{job.error}</p>}
           </>
         ) : (

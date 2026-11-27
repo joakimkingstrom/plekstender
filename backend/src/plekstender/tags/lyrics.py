@@ -38,6 +38,7 @@ from plekstender.db.models import (
     Track,
     TrackLyrics,
 )
+from plekstender.jobs import JobStopped, check_stop
 from plekstender.tags import embedded_lyrics, lrclib
 from plekstender.tags.lyrics_kinds import LYRICSFILE, SIDECARS, best, of_sidecar, of_text
 from plekstender.tags.lyrics_kinds import sidecar_path as sidecar
@@ -266,6 +267,8 @@ async def run_lookup(
             await db.commit()
         job.status = "succeeded"
     except Exception as exc:
+        if isinstance(exc, JobStopped):  # its edit was stopped from the edit history
+            exc = LookupStopped("Stopped from the edit history. What it found is kept.")
         if not isinstance(exc, LookupStopped):
             log.exception("lyrics lookup %s failed", job_id)
         try:
@@ -405,7 +408,9 @@ async def discard(db: AsyncSession, job: FileScan) -> int:
     return int(getattr(result, "rowcount", 0) or 0)
 
 
-async def undo_edit(db: AsyncSession, set_id: int, user_id: int | None) -> int | None:
+async def undo_edit(
+    db: AsyncSession, set_id: int, user_id: int | None, *, why: str = "a cancelled lyrics lookup"
+) -> int | None:
     """Take out what an edit wrote: a new edit putting back what was there before (like
     undo in the history, but in one statement however big). Returns its id, if anything
     was written."""
@@ -423,8 +428,7 @@ async def undo_edit(db: AsyncSession, set_id: int, user_id: int | None) -> int |
         server_id=original.server_id,
         user_id=user_id,
         kind="undo",
-        description=f"Undid {applied} {'change' if applied == 1 else 'changes'} "
-        "(a cancelled lyrics lookup)",
+        description=f"Undid {applied} {'change' if applied == 1 else 'changes'} ({why})",
     )
     db.add(undo)
     await db.flush()
@@ -690,6 +694,7 @@ async def apply_lyrics(
         )
     )
     for n, change in enumerate(changes, 1):
+        await check_stop(db, TagChangeSet, set_id)
         try:
             if change.field == "lyrics":
                 media = (

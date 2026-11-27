@@ -27,6 +27,7 @@ from plekstender.artwork import service as art
 from plekstender.artwork.images import ImageError, Transform
 from plekstender.config import Settings
 from plekstender.db.models import Artist, ArtistArtwork, ArtworkJob, UserItemState, UserServer
+from plekstender.jobs import check_stop
 from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import normalise_artist
 
@@ -97,8 +98,10 @@ async def run_export(
     skipped = 0
     job.progress = {"done": 0, "total": len(rows)}
     await db.commit()
+    job.result_path = str(path)  # removed if it's stopped
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as pack:
         for n, (artist, work) in enumerate(rows, start=1):
+            await check_stop(db, ArtworkJob, job.id)
             try:
                 data, _ = await client.photo(artist.thumb or "", 1000)
                 jpeg = images.to_jpeg(images.open_image(data))
@@ -241,6 +244,7 @@ async def run_import(
     db: AsyncSession, http: httpx.AsyncClient, settings: Settings, job: ArtworkJob, us: UserServer
 ) -> None:
     """Apply the chosen pack images to their artists."""
+    from plekstender.artwork import undo
     from plekstender.artwork.jobs import utcnow
     from plekstender.plex.server import client_for
 
@@ -256,6 +260,7 @@ async def run_import(
     job.progress = {"done": done, "total": len(items)}
     await db.commit()
     for item in items[done:]:
+        await check_stop(db, ArtworkJob, job.id)
         entry = entries.get(int(item["index"]))
         artist = await db.get(Artist, (us.server_id, int(item["rating_key"])))
         if entry is None or artist is None:
@@ -265,9 +270,11 @@ async def run_import(
                 data = await asyncio.to_thread(read_image, path, entry.file)
                 upload_id = art.save_upload(settings, data)
                 spec = art.SourceSpec(kind="upload", upload_id=upload_id)
+                before = await undo.remember(db, client, job, "artists", artist.rating_key)
                 applied = await art.apply(
                     db, http, settings, client, artist, spec, AS_IS, us.user_id
                 )
+                undo.keep(job, "artists", artist.rating_key, before)
                 applied.artwork.source = "import"
                 await db.commit()
                 stats["applied"] += 1

@@ -48,6 +48,7 @@ from plekstender.api.routes import (
     sync,
     tag_editing,
 )
+from plekstender.api.routes import jobs as job_stops
 from plekstender.auth import setup
 from plekstender.config import Settings, get_settings
 from plekstender.db import get_engine, get_sessionmaker
@@ -128,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         export,
         live,
         notifications,
+        job_stops,
         achievements,
         admin,
     ):

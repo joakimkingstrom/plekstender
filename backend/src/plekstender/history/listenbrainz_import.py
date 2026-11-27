@@ -17,7 +17,8 @@ from plekstender.db.models import ListenImport
 from plekstender.history.duplicates import mark_duplicates
 from plekstender.history.lastfm import Scrobble, clean_mbid
 from plekstender.history.lastfm_import import Sleep, utcnow
-from plekstender.history.store import insert_listens, scrobble_row
+from plekstender.history.store import insert_listens, scrobble_row, stopped_import
+from plekstender.jobs import JobStopped, check_stop
 
 log = logging.getLogger(__name__)
 
@@ -143,6 +144,7 @@ async def run_listenbrainz_import(
         stats = {"added": 0, "existing": 0, **job.stats}
         cursor = int(progress.get("cursor") or int(job.window_to.timestamp()) + 1)
         while True:
+            await check_stop(db, ListenImport, job.id)
             listens = await _fetch(http, settings, job.username, cursor, sleep)
             parsed = [p for p in (parse_listen(i) for i in listens) if p]
             rows = []
@@ -184,6 +186,11 @@ async def run_listenbrainz_import(
             await sleep(REQUEST_INTERVAL)
         await mark_duplicates(db, job.user_id)
         job.status = "succeeded"
+    except JobStopped as stopped:
+        await db.rollback()
+        job = await db.get(ListenImport, import_id, populate_existing=True) or job
+        job.status = "failed"
+        job.error = await stopped_import(db, job, stopped.cancel)
     except Exception as exc:
         if not isinstance(exc, ListenBrainzImportError):
             log.exception("listen import %s failed", import_id)

@@ -27,7 +27,15 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.config import Settings
-from plekstender.db.models import FolderImage, MediaFile, PlexServer, TagChange, UserServer
+from plekstender.db.models import (
+    FolderImage,
+    MediaFile,
+    PlexServer,
+    TagChange,
+    TagChangeSet,
+    UserServer,
+)
+from plekstender.jobs import check_stop
 from plekstender.plex.tv import PlexError
 from plekstender.tags.pictures import (
     MAX_PX,
@@ -221,6 +229,7 @@ async def apply_pictures(
                         c.status, c.error = exc.status, str(exc)
     data_dir = settings.data_dir
     for change in changes:
+        await check_stop(db, TagChangeSet, set_id)
         if change.status != "pending":
             continue
         try:

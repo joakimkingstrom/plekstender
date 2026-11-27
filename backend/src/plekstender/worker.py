@@ -222,7 +222,7 @@ async def send_listenbrainz_history(import_id: int) -> None:
 async def _after_import(import_id: int) -> None:
     async with get_sessionmaker()() as db:
         job = await db.get(ListenImport, import_id)
-    if job is not None and job.status == "succeeded":
+    if job is not None and job.status in ("succeeded", "failed"):  # stopped ones too
         await enqueue_listen_counts([job.user_id])
 
 

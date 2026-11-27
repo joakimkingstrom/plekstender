@@ -24,11 +24,13 @@ export function NotificationBell({ isAdmin }: { isAdmin: boolean }) {
   // Close on a click elsewhere or Escape.
   useEffect(() => {
     if (!open) return
+    // (Not while a dialog opened from it is up, like confirming a job's cancel: that's its own.)
+    const dialogUp = () => document.querySelector('[aria-modal="true"]') !== null
     const onClick = (e: MouseEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false)
+      if (!root.current?.contains(e.target as Node) && !dialogUp()) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape' && !dialogUp()) setOpen(false)
     }
     document.addEventListener('mousedown', onClick)
     document.addEventListener('keydown', onKey)

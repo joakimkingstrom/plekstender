@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import logging
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.artwork import service as art
-from plekstender.artwork import sources
+from plekstender.artwork import sources, undo
 from plekstender.artwork.images import Transform
 from plekstender.config import Settings
 from plekstender.db.instance import get_fanart_api_key
 from plekstender.db.models import Artist, ArtistArtwork, ArtworkJob, UserItemState, UserServer
+from plekstender.jobs import JobStopped, check_stop
 from plekstender.plex.server import client_for
 
 log = logging.getLogger(__name__)
@@ -74,6 +77,7 @@ async def run_fanart(
     job.progress = {"done": done, "total": len(keys)}
     await db.commit()
     for key in keys[done:]:
+        await check_stop(db, ArtworkJob, job.id)
         artist = await db.get(Artist, (us.server_id, key))
         if artist is not None:
             try:
@@ -91,9 +95,11 @@ async def run_fanart(
                     spec = art.SourceSpec(
                         kind="candidate", token=art.sign_ref(settings, logos[0].url)
                     )
+                    before = await undo.remember(db, client, job, "artists", key)
                     applied = await art.apply(
                         db, http, settings, client, artist, spec, transform, us.user_id
                     )
+                    undo.keep(job, "artists", key, before)
                     stats["applied"] += 1
                     if applied.folder_error:
                         stats["folder_errors"] += 1
@@ -105,6 +111,32 @@ async def run_fanart(
         job.stats = dict(stats)
         job.updated_at = utcnow()
         await db.commit()
+
+
+async def wind_up(
+    db: AsyncSession,
+    http: httpx.AsyncClient,
+    settings: Settings,
+    job: ArtworkJob,
+    us: UserServer | None,
+    stopped: JobStopped,
+) -> str:
+    """Wind a stopped job up (the worker's, or the API's when no worker has it); what to
+    tell the user."""
+    if job.kind == "export":
+        if job.result_path:
+            await asyncio.to_thread(Path(job.result_path).unlink, missing_ok=True)
+        job.result_path = None
+        return "Stopped: nothing was exported."
+    if not stopped.cancel or us is None:
+        return "Stopped. What it changed so far stays." if job.undo else "Stopped."
+    put = await undo.put_back(db, client_for(settings, http, us), job)
+    job.undo = {}
+    if not put:
+        return "Cancelled. It hadn't changed anything yet."
+    return (
+        f"Cancelled: {put} {'picture was' if put == 1 else 'pictures were'} put back as they were."
+    )
 
 
 def _runners() -> dict[str, Runner]:
@@ -136,6 +168,12 @@ async def run_job(
     try:
         await _runners()[job.kind](db, http, settings, job, us)
         job.status = "succeeded"
+    except JobStopped as stopped:
+        await db.rollback()
+        job = await db.get(ArtworkJob, job_id, populate_existing=True) or job
+        job.status = "failed"
+        owner = await db.get(UserServer, job.user_server_id, populate_existing=True)
+        job.error = await wind_up(db, http, settings, job, owner, stopped)
     except Exception as exc:
         if not isinstance(exc, art.ArtworkError):
             log.exception("artwork job %s failed", job_id)

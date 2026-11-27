@@ -3804,6 +3804,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{kind}/{job_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Job
+         * @description Stop a job (keeping what it did), or cancel it (taking that back where possible).
+         */
+        post: operations["stop_job_api_jobs__kind___job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/achievements": {
         parameters: {
             query?: never;
@@ -5048,6 +5068,11 @@ export interface components {
              * @description Export: where to download it.
              */
             download?: string | null;
+            /**
+             * Stop Requested
+             * @description Asked to stop (or cancel): it does so at its next item.
+             */
+            stop_requested?: ("stop" | "cancel") | null;
         };
         /** ArtworkStatusIn */
         ArtworkStatusIn: {
@@ -5604,6 +5629,11 @@ export interface components {
             created_at: string;
             /** Finished At */
             finished_at: string | null;
+            /**
+             * Stop Requested
+             * @description Asked to stop (or cancel): it does so at its next item.
+             */
+            stop_requested?: ("stop" | "cancel") | null;
         };
         /** FileTypeCount */
         FileTypeCount: {
@@ -6540,6 +6570,24 @@ export interface components {
             /** Quota Checked At */
             quota_checked_at: string | null;
         };
+        /** JobStopIn */
+        JobStopIn: {
+            /**
+             * Cancel
+             * @description Also take back what it did, where that's possible (else it's kept).
+             * @default false
+             */
+            cancel: boolean;
+        };
+        /** JobStopOut */
+        JobStopOut: {
+            /** Status */
+            status: string;
+            /** Error */
+            error: string | null;
+            /** Stop Requested */
+            stop_requested: ("stop" | "cancel") | null;
+        };
         /** LastFmImportIn */
         LastFmImportIn: {
             /** Username */
@@ -6746,6 +6794,11 @@ export interface components {
             };
             /** Error */
             error: string | null;
+            /**
+             * Stop Requested
+             * @description Asked to stop (or cancel): it does so at its next item.
+             */
+            stop_requested?: ("stop" | "cancel") | null;
         };
         /** ListenOut */
         ListenOut: {
@@ -9427,6 +9480,11 @@ export interface components {
              * @description The first 200 (big edits are listed in part).
              */
             changes: components["schemas"]["TagChangeOut"][];
+            /**
+             * Stop Requested
+             * @description Asked to stop (or cancel): it does so at its next item.
+             */
+            stop_requested?: ("stop" | "cancel") | null;
         };
         /**
          * TagDetail
@@ -16485,6 +16543,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_job_api_jobs__kind___job_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "artwork" | "files" | "edits" | "imports";
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobStopIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobStopOut"];
+                };
             };
             /** @description Validation Error */
             422: {

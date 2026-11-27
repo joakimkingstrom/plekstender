@@ -31,6 +31,7 @@ from plekstender.artwork.images import ImageError
 from plekstender.artwork.sources import Candidate, SourceError
 from plekstender.config import Settings
 from plekstender.db.models import Album, AlbumCover, UserServer
+from plekstender.jobs import check_stop
 from plekstender.plex.server import PlexServerClient, client_for
 from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import normalise_artist, normalise_title
@@ -712,8 +713,9 @@ async def run_best_covers(
     db: AsyncSession, http: httpx.AsyncClient, settings: Settings, job: Any, us: UserServer
 ) -> None:
     """An artwork job: the best match for each of the albums listed, saved to Plex."""
+    from plekstender.artwork import undo
     from plekstender.db.instance import get_tidal_client
-    from plekstender.db.models import Artist
+    from plekstender.db.models import Artist, ArtworkJob
 
     keys = [int(k) for k in job.params.get("rating_keys") or []]
     use = [s for s in job.params.get("sources") or BEST_SOURCES if s in BEST_SOURCES]
@@ -724,6 +726,7 @@ async def run_best_covers(
     job.progress = {"done": done, "total": len(keys)}
     await db.commit()
     for key in keys[done:]:
+        await check_stop(db, ArtworkJob, job.id)
         started = time.monotonic()
         album = await db.get(Album, (us.server_id, key))
         if album is not None:
@@ -733,11 +736,14 @@ async def run_best_covers(
                 else None
             )
             try:
+                before = await undo.remember(db, client, job, "albums", key)
                 result = await apply_best(
                     db, http, settings, client, tidal_client, album,
                     artist.title if artist else None, us.user_id, use,
                 )  # fmt: skip
                 stats[result.outcome] += 1
+                if result.outcome == "applied":
+                    undo.keep(job, "albums", key, before)
             except (CoverError, SourceError, FetchError) as exc:
                 log.info("best cover for %s failed: %s", album.title, exc)
                 await db.rollback()

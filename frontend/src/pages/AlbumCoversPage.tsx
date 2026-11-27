@@ -22,6 +22,7 @@ import { imageUrl } from '../api/library'
 import { FilePicker } from '../components/controls'
 import { Artwork } from '../components/library'
 import { Zoomable } from '../components/Lightbox'
+import { ArtworkJobStop } from '../components/ArtworkJobStatus'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatRelative } from '../format'
 
@@ -433,6 +434,7 @@ function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exc
           <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
             <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 5}%` }} />
           </div>
+          <ArtworkJobStop job={latest} />
         </div>
       ) : confirming ? (
         <div className="space-y-2">
@@ -489,7 +491,11 @@ function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exc
               {stats.failed ? `, ${stats.failed} failed` : ''}.
             </p>
           )}
-          {latest?.status === 'failed' && <p className="text-xs text-danger">Last run failed: {latest.error}</p>}
+          {latest?.status === 'failed' && (
+            <p className={`text-xs ${latest.stop_requested ? 'text-muted' : 'text-danger'}`}>
+              {latest.stop_requested ? `Last run: ${latest.error}` : `Last run failed: ${latest.error}`}
+            </p>
+          )}
         </>
       )}
       {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}

@@ -383,6 +383,7 @@ async def _sets_out(db: DbDep, sets: list[TagChangeSet]) -> list[TagChangeSetOut
                 counts=set_counts,
                 undoable=set_counts.get("applied", 0) - undone_per_set.get(s.id, 0),
                 changes=by_set.get(s.id, []),
+                stop_requested=s.stop_requested,
             )
         )
     return out
