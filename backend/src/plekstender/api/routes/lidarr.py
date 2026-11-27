@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response, status
+import asyncio
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from plekstender import lidarr
 from plekstender.api.deps import AdminDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.schemas import (
     LidarrAdminOut,
+    LidarrAlbumIn,
+    LidarrAlbumOut,
+    LidarrAlbumState,
     LidarrCheckIn,
     LidarrFolderOut,
+    LidarrGrabIn,
     LidarrIn,
     LidarrOptionsOut,
     LidarrProfileOut,
+    LidarrReleaseOut,
+    LidarrStatesIn,
     LidarrStatusOut,
 )
 
@@ -127,3 +136,117 @@ async def lidarr_status(db: DbDep, user: UserDep, settings: SettingsDep) -> Lida
     """Whether Lidarr's buttons show for you (connected, and admins let you)."""
     found = await lidarr.load(db, settings)
     return LidarrStatusOut(available=found is not None and lidarr.may_use(found[0], user.is_admin))
+
+
+async def _user_lidarr(
+    db: DbDep, user: UserDep, settings: SettingsDep, http: HttpDep
+) -> lidarr.Lidarr:
+    """The connected Lidarr, for someone who may use it."""
+    found = await lidarr.connected(db, settings, http)
+    if found is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lidarr isn't connected.")
+    if not lidarr.may_use(found.settings, user.is_admin):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only admins can add to Lidarr here.")
+    return found
+
+
+LidarrDep = Annotated[lidarr.Lidarr, Depends(_user_lidarr)]
+AT_ONCE = 8  # albums asked about at a time
+
+
+@router.post("/albums/states", response_model=dict[str, LidarrAlbumState])
+async def album_states(body: LidarrStatesIn, found: LidarrDep) -> dict[str, LidarrAlbumState]:
+    """Whether each album (release group MBID) is in Lidarr: absent, monitored, not
+    monitored, or downloaded."""
+    gate = asyncio.Semaphore(AT_ONCE)
+
+    async def one(mbid: str) -> LidarrAlbumState:
+        async with gate:
+            return lidarr.album_state(await found.client.album(mbid))
+
+    mbids = list(dict.fromkeys(body.mbids))
+    try:
+        states = await asyncio.gather(*(one(m) for m in mbids))
+    except lidarr.LidarrError as exc:
+        raise _bad_gateway(exc) from exc
+    return dict(zip(mbids, states, strict=True))
+
+
+@router.post(
+    "/albums",
+    response_model=LidarrAlbumOut,
+    dependencies=[rate_limit("lidarr-add", limit=60, window=60)],
+)
+async def add_album(body: LidarrAlbumIn, found: LidarrDep) -> LidarrAlbumOut:
+    """Add the album to Lidarr, monitored (its artist too if new, not monitored for anything
+    else); already there, it's monitored. With `search`, Lidarr looks for it right away."""
+    client = found.client
+    try:
+        album = await client.album(body.mbid)
+        if album is None:
+            looked_up = await client.lookup_album(body.mbid)
+            if looked_up is None:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, "Lidarr's metadata doesn't know this album yet."
+                )
+            album = await client.add_album(looked_up, found.settings, search=body.search)
+        else:
+            if not album.get("monitored"):
+                await client.monitor(int(album["id"]))
+                album = {**album, "monitored": True}
+            if body.search:
+                await client.search(int(album["id"]))
+    except lidarr.LidarrError as exc:
+        raise _bad_gateway(exc) from exc
+    return LidarrAlbumOut(
+        id=int(album["id"]), title=str(album.get("title") or ""), state=lidarr.album_state(album)
+    )
+
+
+def _release_out(r: dict[str, Any]) -> LidarrReleaseOut:
+    quality = ((r.get("quality") or {}).get("quality") or {}).get("name")
+    return LidarrReleaseOut(
+        guid=str(r.get("guid")),
+        indexer_id=int(r.get("indexerId") or 0),
+        indexer=r.get("indexer"),
+        title=str(r.get("title") or ""),
+        size=r.get("size"),
+        quality=quality,
+        protocol=r.get("protocol"),
+        seeders=r.get("seeders"),
+        leechers=r.get("leechers"),
+        age_days=lidarr.release_age_days(r),
+        approved=bool(r.get("approved", not r.get("rejected"))),
+        rejections=[str(x) for x in r.get("rejections") or []][:5],
+    )
+
+
+@router.get(
+    "/albums/{album_id}/releases",
+    response_model=list[LidarrReleaseOut],
+    dependencies=[rate_limit("lidarr-releases", limit=20, window=60)],
+)
+async def album_releases(album_id: int, found: LidarrDep) -> list[LidarrReleaseOut]:
+    """What Lidarr's indexers have for an album in Lidarr, the ones it would take first,
+    then by seeders (slow: Lidarr asks them all)."""
+    try:
+        found_releases = await found.client.releases(album_id)
+    except lidarr.LidarrError as exc:
+        raise _bad_gateway(exc) from exc
+    out = [_release_out(r) for r in found_releases if r.get("guid")]
+    out.sort(key=lambda r: (not r.approved, -(r.seeders or 0), -(r.size or 0)))
+    return out
+
+
+@router.post(
+    "/releases",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[rate_limit("lidarr-grab", limit=30, window=60)],
+)
+async def grab_release(body: LidarrGrabIn, found: LidarrDep) -> Response:
+    """Have Lidarr download one of the releases found."""
+    try:
+        await found.client.grab(body.guid, body.indexer_id)
+    except lidarr.LidarrError as exc:
+        raise _bad_gateway(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

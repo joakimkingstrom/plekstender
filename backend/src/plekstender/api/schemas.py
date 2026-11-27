@@ -2690,3 +2690,45 @@ class LidarrIn(LidarrCheckIn):
 
 class LidarrStatusOut(BaseModel):
     available: bool = Field(description="Lidarr is connected and you may use it.")
+
+
+LidarrAlbumState = Literal["absent", "monitored", "unmonitored", "downloaded"]
+
+
+class LidarrStatesIn(BaseModel):
+    mbids: list[str] = Field(max_length=300, description="Release group MBIDs.")
+
+
+class LidarrAlbumIn(BaseModel):
+    mbid: str = Field(pattern=r"^[0-9a-f-]{36}$", description="The release group's MBID.")
+    search: bool = Field(
+        default=False,
+        description="Have Lidarr search its indexers and download the best now (else it's "
+        "only monitored: grabbed when it turns up, or chosen by hand).",
+    )
+
+
+class LidarrAlbumOut(BaseModel):
+    id: int
+    title: str
+    state: LidarrAlbumState
+
+
+class LidarrReleaseOut(BaseModel):
+    guid: str
+    indexer_id: int
+    indexer: str | None
+    title: str
+    size: int | None
+    quality: str | None
+    protocol: str | None = Field(description="torrent or usenet.")
+    seeders: int | None
+    leechers: int | None
+    age_days: int | None
+    approved: bool = Field(description="Lidarr would take it (its profile allows it).")
+    rejections: list[str]
+
+
+class LidarrGrabIn(BaseModel):
+    guid: str = Field(min_length=1, max_length=2000)
+    indexer_id: int

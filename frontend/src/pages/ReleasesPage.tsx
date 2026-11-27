@@ -1,6 +1,7 @@
 import { createContext, useContext, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
+import { useLidarrAvailable, useLidarrStates, type LidarrAlbumState } from '../api/lidarr'
 import { useMe, useSetPreferences } from '../api/hooks'
 import {
   formatReleaseDate,
@@ -12,9 +13,11 @@ import {
   type ReleaseKind,
 } from '../api/releases'
 import { Artwork } from '../components/library'
+import { DownloadIcon, LidarrBadge, LidarrDownloadDialog } from '../components/LidarrDownload'
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
 import { Badge, Button, Card, Notice, Spinner } from '../components/ui'
+import { Tooltip } from '../components/Tooltip'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { formatCount } from '../format'
 
@@ -75,8 +78,15 @@ function Cover({ release }: { release: Release }) {
   )
 }
 
+/** Each album's state in Lidarr (when it's available), for the cards in a grid. */
+const LidarrStates = createContext<Record<string, LidarrAlbumState> | null>(null)
+
 function ReleaseCard({ release, serverId, artist }: { release: Release; serverId: number; artist?: NewRelease['artist'] }) {
   const hide = useHideRelease(serverId)
+  const lidarr = useContext(LidarrStates)
+  const state = lidarr?.[release.mbid]
+  const out = !('upcoming' in release && release.upcoming)
+  const [downloading, setDownloading] = useState(false)
   return (
     <li className={`min-w-0 ${release.hidden ? 'opacity-50' : ''}`}>
       <a
@@ -99,6 +109,14 @@ function ReleaseCard({ release, serverId, artist }: { release: Release; serverId
       </p>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {release.in_library && <Badge tone="ok">In your library</Badge>}
+        <LidarrBadge state={state} />
+        {lidarr && out && !release.in_library && state !== 'downloaded' && (
+          <Tooltip content="Download with Lidarr">
+            <Button variant="ghost" size="xs" onClick={() => setDownloading(true)} aria-label={`Download ${release.title} with Lidarr`}>
+              <DownloadIcon />
+            </Button>
+          </Tooltip>
+        )}
         <Button
           variant="ghost"
           size="xs"
@@ -109,6 +127,9 @@ function ReleaseCard({ release, serverId, artist }: { release: Release; serverId
           {release.hidden ? 'Show again' : 'Hide'}
         </Button>
       </div>
+      {downloading && (
+        <LidarrDownloadDialog mbid={release.mbid} title={release.title} artist={artist?.name} onClose={() => setDownloading(false)} />
+      )}
     </li>
   )
 }
@@ -263,6 +284,8 @@ function NewReleases({
 }) {
   const found = useNewReleases(serverId, kinds, includeHidden, settings)
   const grid = useGrid()
+  const lidarrOn = useLidarrAvailable()
+  const lidarr = useLidarrStates((found.data?.items ?? []).map((r) => r.mbid), lidarrOn)
   const followingControls = <Following settings={settings} onSettings={onSettings} />
   if (found.isPending) return <Spinner />
   if (found.isError) return <Notice tone="error">{errorMessage(found.error)}</Notice>
@@ -293,11 +316,13 @@ function NewReleases({
       )}
       {upcoming.length > 0 && (
         <Card title="Coming up">
-          <ul className={grid}>
-            {upcoming.map((r) => (
-              <ReleaseCard key={r.mbid} release={r} artist={r.artist} serverId={serverId} />
-            ))}
-          </ul>
+          <LidarrStates value={lidarrOn ? (lidarr.data ?? {}) : null}>
+            <ul className={grid}>
+              {upcoming.map((r) => (
+                <ReleaseCard key={r.mbid} release={r} artist={r.artist} serverId={serverId} />
+              ))}
+            </ul>
+          </LidarrStates>
         </Card>
       )}
       <Card title={`Out in the last ${new_days} days`}>
@@ -310,11 +335,13 @@ function NewReleases({
                 : `Nothing in the last ${new_days} days from the ${formatCount(following)} artists you follow.`}
           </p>
         ) : (
-          <ul className={grid}>
-            {out.map((r) => (
-              <ReleaseCard key={r.mbid} release={r} artist={r.artist} serverId={serverId} />
-            ))}
-          </ul>
+          <LidarrStates value={lidarrOn ? (lidarr.data ?? {}) : null}>
+            <ul className={grid}>
+              {out.map((r) => (
+                <ReleaseCard key={r.mbid} release={r} artist={r.artist} serverId={serverId} />
+              ))}
+            </ul>
+          </LidarrStates>
         )}
         <p className="mt-4 text-xs text-muted">
           Everything the {formatCount(following)} artists you follow have put out (of the kinds chosen above), including what
@@ -360,6 +387,8 @@ function MissingArtistCard({
 }) {
   const panel = `missing-${artist.rating_key}`
   const grid = useGrid()
+  const lidarrOn = useLidarrAvailable()
+  const lidarr = useLidarrStates(open ? artist.releases.map((r) => r.mbid) : [], lidarrOn)
   return (
     <section className="rounded-2xl border border-border bg-surface">
       <div className="flex items-center gap-3 p-4 sm:px-5">
@@ -392,11 +421,13 @@ function MissingArtistCard({
         </button>
       </div>
       {open && (
-        <ul id={panel} className={`${grid} px-4 pb-4 sm:px-5 sm:pb-5`}>
-          {artist.releases.map((r) => (
-            <ReleaseCard key={r.mbid} release={r} serverId={serverId} />
-          ))}
-        </ul>
+        <LidarrStates value={lidarrOn ? (lidarr.data ?? {}) : null}>
+          <ul id={panel} className={`${grid} px-4 pb-4 sm:px-5 sm:pb-5`}>
+            {artist.releases.map((r) => (
+              <ReleaseCard key={r.mbid} release={r} serverId={serverId} />
+            ))}
+          </ul>
+        </LidarrStates>
       )}
     </section>
   )

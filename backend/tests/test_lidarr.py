@@ -20,6 +20,33 @@ NEW_ALBUM = "11111111-2222-4333-8444-555555555555"
 RADIOHEAD = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
 
 
+METADATA = {
+    OK_COMPUTER: {
+        "foreignAlbumId": OK_COMPUTER, "title": "OK Computer", "releaseDate": "1997-05-21",
+        "artist": {"foreignArtistId": RADIOHEAD, "artistName": "Radiohead"},
+    },
+    NEW_ALBUM: {
+        "foreignAlbumId": NEW_ALBUM, "title": "Coming Soon", "releaseDate": "2026-12-12",
+        "artist": {"foreignArtistId": RADIOHEAD, "artistName": "Radiohead"},
+    },
+}  # fmt: skip
+RELEASES = [
+    {
+        "guid": "small", "indexerId": 3, "indexer": "Indexer",
+        "title": "Radiohead - OK Computer (MP3)",
+        "size": 100_000_000, "quality": {"quality": {"name": "MP3-320"}}, "protocol": "torrent",
+        "seeders": 50, "leechers": 2, "age": 400, "approved": False,
+        "rejections": ["Not wanted in profile"],
+    },
+    {
+        "guid": "flac", "indexerId": 3, "indexer": "Indexer",
+        "title": "Radiohead - OK Computer (FLAC)",
+        "size": 450_000_000, "quality": {"quality": {"name": "FLAC"}}, "protocol": "torrent",
+        "seeders": 12, "leechers": 1, "age": 30, "approved": True, "rejections": [],
+    },
+]  # fmt: skip
+
+
 class FakeLidarr:
     """Enough of Lidarr's v1 API: set-up, albums, artists, releases and commands."""
 
@@ -50,6 +77,33 @@ class FakeLidarr:
             )
         if path == "/metadataprofile":
             return httpx.Response(200, json=[{"id": 1, "name": "Standard"}])
+        if path == "/album" and method == "GET":
+            mbid = params.get("foreignAlbumId")
+            return httpx.Response(
+                200, json=[a for a in self.albums.values() if a["foreignAlbumId"] == mbid]
+            )
+        if path == "/album/lookup":
+            mbid = params["term"].removeprefix("lidarr:")
+            return httpx.Response(200, json=[METADATA[mbid]] if mbid in METADATA else [])
+        if path == "/album" and method == "POST":
+            self.added.append(body)
+            album_id = len(self.albums) + 1
+            stats = {"trackFileCount": 0, "totalTrackCount": 12, "percentOfTracks": 0}
+            self.albums[album_id] = {**body, "id": album_id, "statistics": stats}
+            return httpx.Response(201, json=self.albums[album_id])
+        if path == "/album/monitor":
+            for album_id in body["albumIds"]:
+                self.albums[album_id]["monitored"] = body["monitored"]
+            return httpx.Response(202)
+        if path == "/command":
+            self.commands.append(body)
+            return httpx.Response(201, json={"id": len(self.commands), **body})
+        if path == "/release" and method == "GET":
+            assert int(params["albumId"]) in self.albums
+            return httpx.Response(200, json=RELEASES)
+        if path == "/release" and method == "POST":
+            self.grabbed.append(body)
+            return httpx.Response(200, json={})
         return httpx.Response(404, json={"message": f"no fake for {method} {path} {params} {body}"})
 
 
@@ -116,3 +170,69 @@ async def test_connecting_lidarr(app: FastAPI, plex: FakePlex, fake_lidarr: Fake
 
     assert (await owner.delete("/api/admin/lidarr", headers=CSRF)).status_code == 204
     assert (await friend.get("/api/lidarr")).json() == {"available": False}
+
+
+async def connected(app: FastAPI, plex: FakePlex, access: str = "admins") -> tuple[Any, Any]:
+    owner, _ = await owner_with_library(app, plex)
+    resp = await owner.put("/api/admin/lidarr", json={**SETUP, "access": access}, headers=CSRF)
+    assert resp.status_code == 200, resp.text
+    friend, _ = await sign_in(app, plex, "friend-token")
+    return owner, friend
+
+
+@pytest.mark.db
+async def test_downloading_an_album(app: FastAPI, plex: FakePlex, fake_lidarr: FakeLidarr) -> None:
+    owner, friend = await connected(app, plex)
+    states = await owner.post(
+        "/api/lidarr/albums/states", json={"mbids": [OK_COMPUTER, NEW_ALBUM]}, headers=CSRF
+    )
+    assert states.json() == {OK_COMPUTER: "absent", NEW_ALBUM: "absent"}
+    # Admins only (as set up): others can't, until everyone may.
+    refused = await friend.post("/api/lidarr/albums", json={"mbid": OK_COMPUTER}, headers=CSRF)
+    assert refused.status_code == 403
+
+    # Let Lidarr search: added monitored (its artist only for this album) and searched.
+    added = await owner.post(
+        "/api/lidarr/albums", json={"mbid": OK_COMPUTER, "search": True}, headers=CSRF
+    )
+    assert added.json() == {"id": 1, "title": "OK Computer", "state": "monitored"}
+    [body] = fake_lidarr.added
+    assert body["monitored"] is True and body["addOptions"] == {"searchForNewAlbum": True}
+    assert body["artist"]["rootFolderPath"] == "/music"
+    assert body["artist"]["qualityProfileId"] == 2 and body["artist"]["metadataProfileId"] == 1
+    assert body["artist"]["addOptions"] == {"monitor": "none", "searchForMissingAlbums": False}
+    assert body["artist"]["monitorNewItems"] == "none"
+
+    # Already there: searched again, not added twice.
+    again = await owner.post(
+        "/api/lidarr/albums", json={"mbid": OK_COMPUTER, "search": True}, headers=CSRF
+    )
+    assert again.json()["id"] == 1 and len(fake_lidarr.added) == 1
+    assert fake_lidarr.commands == [{"name": "AlbumSearch", "albumIds": [1]}]
+
+    # Choosing by hand: what the indexers have, the ones Lidarr would take first.
+    releases = (await owner.get("/api/lidarr/albums/1/releases")).json()
+    assert [(r["guid"], r["quality"], r["approved"]) for r in releases] == [
+        ("flac", "FLAC", True),
+        ("small", "MP3-320", False),
+    ]
+    assert releases[1]["rejections"] == ["Not wanted in profile"]
+    assert releases[0]["age_days"] == 30
+    grabbed = await owner.post(
+        "/api/lidarr/releases", json={"guid": "flac", "indexer_id": 3}, headers=CSRF
+    )
+    assert grabbed.status_code == 204
+    assert fake_lidarr.grabbed == [{"guid": "flac", "indexerId": 3}]
+
+    # Albums Lidarr's metadata doesn't know.
+    unknown = await owner.post(
+        "/api/lidarr/albums", json={"mbid": "99999999-9999-4999-8999-999999999999"}, headers=CSRF
+    )
+    assert unknown.status_code == 404
+
+    # Downloaded, as the Releases page shows it.
+    fake_lidarr.albums[1]["statistics"] = {"trackFileCount": 12, "totalTrackCount": 12}
+    states = await owner.post(
+        "/api/lidarr/albums/states", json={"mbids": [OK_COMPUTER]}, headers=CSRF
+    )
+    assert states.json() == {OK_COMPUTER: "downloaded"}
