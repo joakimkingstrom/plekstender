@@ -59,3 +59,30 @@ it('turns gig playlists on and off, and lists the ones made', async () => {
   )
   expect(await screen.findByText(/playlists show up in a minute or two/)).toBeInTheDocument()
 })
+
+it('deletes them some time after the gig, if asked', async () => {
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <GigPlaylistsCard />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+  await vi.waitFor(() => expect(screen.getByRole('checkbox', { name: /After a gig/ })).toBeChecked())
+  const remove = screen.getByRole('checkbox', { name: 'Delete them afterwards' })
+  expect(remove).not.toBeChecked()
+  expect(screen.getByText('Kept until you delete them.')).toBeInTheDocument()
+
+  // On: two weeks after the gig, to start with; the other choices are kept.
+  fireEvent.click(remove)
+  await vi.waitFor(() =>
+    expect(preferences).toMatchObject({ gig_playlists: { after: true, delete_after: 2, delete_unit: 'weeks' } }),
+  )
+  fireEvent.click(await screen.findByRole('button', { name: /Days, weeks or months/ }))
+  fireEvent.click(await screen.findByRole('option', { name: 'months' }))
+  await vi.waitFor(() => expect(preferences).toMatchObject({ gig_playlists: { delete_after: 2, delete_unit: 'months' } }))
+
+  // Off again: kept.
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete them afterwards' }))
+  await vi.waitFor(() => expect(preferences).toMatchObject({ gig_playlists: { delete_after: 0 } }))
+})

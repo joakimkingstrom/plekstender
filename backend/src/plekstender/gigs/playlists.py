@@ -11,11 +11,15 @@
 Songs are matched to the library by title (a cover, if the artist's own version isn't
 there, as the original artist's), and saved as a smart playlist of those songs in that
 order, which the worker builds in Plex. A playlist that's deleted isn't made again.
+
+People can also have them deleted (in Plex and here) some days, weeks or months after the
+gig, by a daily job; they aren't made again either.
 """
 
 from __future__ import annotations
 
 import asyncio
+import calendar
 import datetime as dt
 import logging
 import time
@@ -33,6 +37,7 @@ from plekstender.db.models import Artist, Gig, GigPlaylist, LiveShow, Playlist, 
 from plekstender.gigs.imports import ImportError_, setlistfm_search
 from plekstender.live.merge import merge
 from plekstender.playlists.definition import Definition
+from plekstender.playlists.service import PlaylistError, remove_from_plex
 from plekstender.sync.parse import normalise_artist, normalise_title
 
 log = logging.getLogger(__name__)
@@ -79,6 +84,34 @@ def wants(user: User) -> tuple[bool, bool]:
     """(before, after): which gig playlists the user has turned on."""
     chosen = (user.preferences or {}).get("gig_playlists") or {}
     return chosen.get("before") is True, chosen.get("after") is True
+
+
+def delete_after(user: User) -> tuple[int, str]:
+    """(how many, "days" | "weeks" | "months") after the gig the user's gig playlists are
+    deleted; (0, ...): kept."""
+    chosen = (user.preferences or {}).get("gig_playlists") or {}
+    n, unit = chosen.get("delete_after"), chosen.get("delete_unit")
+    if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
+        n = 0
+    return n, unit if unit in ("days", "weeks", "months") else "weeks"
+
+
+def deleted_on(gig_date: dt.date, n: int, unit: str) -> dt.date:
+    """The day a gig's playlist is deleted, n units after the gig (a month on, from 31
+    January, is the last day of February)."""
+    if unit == "days":
+        return gig_date + dt.timedelta(days=n)
+    if unit == "weeks":
+        return gig_date + dt.timedelta(weeks=n)
+    months = gig_date.month - 1 + n
+    year, month = gig_date.year + months // 12, months % 12 + 1
+    return dt.date(year, month, min(gig_date.day, calendar.monthrange(year, month)[1]))
+
+
+def _due(user: User, gig_date: dt.date, today: dt.date) -> bool:
+    """The user's playlist for this gig is old enough to be deleted."""
+    n, unit = delete_after(user)
+    return n > 0 and deleted_on(gig_date, n, unit) <= today
 
 
 def nice_date(day: dt.date) -> str:
@@ -568,7 +601,7 @@ async def _after(
         )
     )
     for gig in gigs:
-        if str(gig.id) in done or not gig.artists:
+        if str(gig.id) in done or not gig.artists or _due(user, gig.date, today):
             continue
         if not gig.setlists:
             mbids = await _mbids(db, servers, [str(a.get("name") or "") for a in gig.artists])
@@ -623,3 +656,47 @@ def _rating_key(gig: Gig, artist: str) -> int | None:
         if normalise_artist(str(a.get("name") or "")) == wanted and a.get("rating_key"):
             return int(a["rating_key"])
     return None
+
+
+# --- deleting old ones ----------------------------------------------------------------------
+
+
+async def delete_old_gig_playlists(
+    db: AsyncSession,
+    http: httpx.AsyncClient,
+    settings: Settings,
+    user: User,
+    now: dt.datetime | None = None,
+) -> int:
+    """Delete the user's gig playlists that are old enough (their setting), in Plex and here.
+    Their records stay, so they aren't made again. One that Plex can't delete now is left
+    for the next run. Returns how many went. Commits as it goes."""
+    if delete_after(user)[0] == 0:
+        return 0
+    today = (now or dt.datetime.now(dt.UTC)).date()
+    records = list(
+        await db.scalars(
+            select(GigPlaylist).where(
+                GigPlaylist.user_id == user.id,
+                GigPlaylist.playlist_id.is_not(None),
+                GigPlaylist.gig_date < today,
+            )
+        )
+    )
+    deleted = 0
+    for record in records:
+        if not _due(user, record.gig_date, today):
+            continue
+        playlist = await db.get(Playlist, record.playlist_id)
+        if playlist is not None:
+            try:
+                await remove_from_plex(db, http, settings, playlist)
+            except PlaylistError as exc:
+                log.info("old gig playlist %s not deleted yet: %s", playlist.id, exc)
+                continue
+            await db.delete(playlist)
+            deleted += 1
+        record.playlist_id = None
+        record.songs = max(record.songs, 1)  # counts as deleted: not made again
+        await db.commit()
+    return deleted

@@ -6602,6 +6602,19 @@ export interface components {
              * @default false
              */
             after: boolean;
+            /**
+             * Delete After
+             * @description Delete gig playlists this many units after the gig; 0: keep them.
+             * @default 0
+             */
+            delete_after: number;
+            /**
+             * Delete Unit
+             * @description The unit of delete_after.
+             * @default weeks
+             * @enum {string}
+             */
+            delete_unit: "days" | "weeks" | "months";
         };
         /** GigPlaylistsOut */
         GigPlaylistsOut: {

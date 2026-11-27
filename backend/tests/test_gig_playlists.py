@@ -13,10 +13,12 @@ from fastapi import FastAPI
 from sqlalchemy import select, update
 
 from plekstender.db import get_sessionmaker
-from plekstender.db.models import Gig, GigPlaylist, LiveShow, Playlist, User
+from plekstender.db.models import Gig, GigPlaylist, LiveShow, Playlist, User, UserServer
 from plekstender.gigs import playlists as gig_playlists
-from plekstender.gigs.playlists import SetSong, usual_setlist
+from plekstender.gigs.playlists import SetSong, delete_after, deleted_on, usual_setlist
+from plekstender.playlists.definition import Definition
 from tests.fakes import CSRF, FakePlex
+from tests.test_playlists import run_queued_builds
 from tests.test_sync import owner_with_library
 
 TODAY = dt.datetime.now(dt.UTC).date()
@@ -204,3 +206,110 @@ async def test_gig_playlists(app: FastAPI, plex: FakePlex, monkeypatch: pytest.M
     rebuilt = (await owner.post(f"/api/live/shows/{show['id']}/playlist", headers=CSRF)).json()
     assert rebuilt["playlist_id"] == made_again["playlist_id"]
     assert (await owner.post("/api/live/shows/999999/playlist", headers=CSRF)).status_code == 404
+
+
+def test_when_old_gig_playlists_go() -> None:
+    assert deleted_on(dt.date(2026, 11, 15), 10, "days") == dt.date(2026, 11, 25)
+    assert deleted_on(dt.date(2026, 11, 15), 2, "weeks") == dt.date(2026, 11, 29)
+    assert deleted_on(dt.date(2026, 11, 15), 3, "months") == dt.date(2027, 2, 15)
+    assert deleted_on(dt.date(2026, 1, 31), 1, "months") == dt.date(2026, 2, 28)
+    assert deleted_on(dt.date(2027, 12, 31), 2, "months") == dt.date(2028, 2, 29)
+    on = User(preferences={"gig_playlists": {"delete_after": 2, "delete_unit": "months"}})
+    assert delete_after(on) == (2, "months")
+    assert delete_after(User(preferences={})) == (0, "weeks")
+    odd = User(preferences={"gig_playlists": {"delete_after": True, "delete_unit": "years"}})
+    assert delete_after(odd) == (0, "weeks")
+
+
+@pytest.mark.db
+async def test_deleting_old_gig_playlists(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from plekstender.worker import delete_old_gig_playlists_periodically, make_gig_playlists_now
+
+    monkeypatch.setattr(gig_playlists, "SETLISTFM_INTERVAL", 0.0)
+    asked: list[str] = []
+
+    def search(request: httpx.Request) -> httpx.Response:
+        if not request.url.path.endswith("/search/artists"):  # not just checking the key
+            asked.append(str(request.url))
+        return httpx.Response(200, json={"artist": [], "total": 0, "setlist": []})
+
+    plex.router.route(host="api.setlist.fm").mock(side_effect=search)
+    owner, sid = await owner_with_library(app, plex)
+    await owner.put("/api/admin/setlistfm", json={"api_key": "k" * 36}, headers=CSRF)
+    now = dt.datetime.now(dt.UTC)
+    async with get_sessionmaker()() as db:
+        user_id = await db.scalar(select(User.id).where(User.username == "owner"))
+        us = await db.scalar(select(UserServer).where(UserServer.user_id == user_id))
+        assert user_id is not None and us is not None
+        ids = {}
+        for name, days_ago in (("old", 20), ("recent", 5), ("mine", None)):
+            playlist = Playlist(
+                user_server_id=us.id,
+                schedule="manual",
+                name=name,
+                definition=Definition(tracks=[300], order="listed", limit=None).model_dump(),
+                status="queued",
+            )
+            db.add(playlist)
+            await db.flush()
+            ids[name] = playlist.id
+            if days_ago is not None:
+                db.add(
+                    GigPlaylist(
+                        user_id=user_id, kind="after", ref=name, playlist_id=playlist.id,
+                        gig_date=TODAY - dt.timedelta(days=days_ago), songs=1,
+                        made_at=now, refreshed_at=now,
+                    )
+                )  # fmt: skip
+        # A gig a few days ago, its playlist not made yet.
+        db.add(
+            Gig(
+                user_id=user_id, date=TODAY - dt.timedelta(days=4), venue="Royal Albert Hall",
+                city="London", artists=[{"name": "Portishead", "server_id": sid, "rating_key": 101}],
+            )
+        )  # fmt: skip
+        await db.commit()
+    built = await run_queued_builds()
+    assert all(p.plex_playlist_key for p in built)
+    in_plex = {p.name: p.plex_playlist_key for p in built}
+    assert all(k in plex.library.playlists for k in in_plex.values())
+
+    # Kept (the default): nothing goes.
+    await delete_old_gig_playlists_periodically.func(timestamp=0)
+    async with get_sessionmaker()() as db:
+        assert len(list(await db.scalars(select(Playlist)))) == 3
+
+    prefs = {
+        "gig_playlists": {"before": False, "after": True, "delete_after": 2, "delete_unit": "weeks"}
+    }
+    resp = await owner.put("/api/auth/me/preferences", json=prefs, headers=CSRF)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["preferences"]["gig_playlists"] == prefs["gig_playlists"]
+    await delete_old_gig_playlists_periodically.func(timestamp=0)
+
+    # The one from 20 days ago went, in Plex and here; its record stays, so it isn't made
+    # again. The recent one and the user's own playlist stay.
+    async with get_sessionmaker()() as db:
+        left = {p.name for p in await db.scalars(select(Playlist))}
+        records = {r.ref: r.playlist_id for r in await db.scalars(select(GigPlaylist))}
+    assert left == {"recent", "mine"}
+    assert records == {"old": None, "recent": ids["recent"]}
+    assert in_plex["old"] not in plex.library.playlists
+    assert in_plex["recent"] in plex.library.playlists and in_plex["mine"] in plex.library.playlists
+    items = (await owner.get("/api/gigs/playlists")).json()["items"]
+    assert [(p["gig_date"], p["playlist_id"]) for p in items] == [
+        ((TODAY - dt.timedelta(days=5)).isoformat(), ids["recent"]),
+        ((TODAY - dt.timedelta(days=20)).isoformat(), None),
+    ]
+
+    # A gig older than the setting isn't looked up for a playlist only to delete it.
+    prefs["gig_playlists"].update(delete_after=3, delete_unit="days")
+    await owner.put("/api/auth/me/preferences", json=prefs, headers=CSRF)
+    await make_gig_playlists_now.func(user_id=user_id)
+    assert asked == []
+    prefs["gig_playlists"].update(delete_after=1, delete_unit="weeks")
+    await owner.put("/api/auth/me/preferences", json=prefs, headers=CSRF)
+    await make_gig_playlists_now.func(user_id=user_id)
+    assert len(asked) == 1  # Portishead, that day
