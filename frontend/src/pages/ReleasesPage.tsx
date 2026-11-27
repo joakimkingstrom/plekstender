@@ -170,6 +170,28 @@ function useCoverSize(): [CoverSize, (size: CoverSize) => void] {
   return [size, change]
 }
 
+const OUT_FILTER_KEY = 'releases-out-filter'
+
+/** Out lately: all, or only what's not in the library (remembered in this browser). */
+function useOutFilter(): ['all' | 'missing', (show: 'all' | 'missing') => void] {
+  const [show, setShow] = useState<'all' | 'missing'>(() => {
+    try {
+      return localStorage.getItem(OUT_FILTER_KEY) === 'missing' ? 'missing' : 'all'
+    } catch {
+      return 'all'
+    }
+  })
+  const change = (next: 'all' | 'missing') => {
+    setShow(next)
+    try {
+      localStorage.setItem(OUT_FILTER_KEY, next)
+    } catch {
+      // private browsing: just for now
+    }
+  }
+  return [show, change]
+}
+
 function useGrid(): string {
   return GRIDS[useContext(CoverSizeContext)]
 }
@@ -285,6 +307,7 @@ function NewReleases({
 }) {
   const found = useNewReleases(serverId, kinds, includeHidden, settings)
   const grid = useGrid()
+  const [show, setShow] = useOutFilter()
   const lidarrOn = useLidarrAvailable()
   const lidarr = useLidarrStates((found.data?.items ?? []).map((r) => r.mbid), lidarrOn)
   const followingControls = <Following settings={settings} onSettings={onSettings} />
@@ -295,6 +318,7 @@ function NewReleases({
   const reading = read < withMbid
   const upcoming = items.filter((r) => r.upcoming).reverse() // soonest first
   const out = items.filter((r) => !r.upcoming)
+  const shown = show === 'missing' ? out.filter((r) => !r.in_library) : out
   if (following === 0) {
     return (
       <Card>
@@ -326,8 +350,23 @@ function NewReleases({
           </LidarrStates>
         </Card>
       )}
-      <Card title={`Out in the last ${new_days} days`}>
-        {out.length === 0 ? (
+      <Card
+        title={`Out in the last ${new_days} days`}
+        action={
+          <Segmented
+            label="Which albums"
+            value={show}
+            onChange={setShow}
+            options={[
+              ['all', 'All'],
+              ['missing', 'Not in your library'],
+            ]}
+          />
+        }
+      >
+        {out.length > 0 && shown.length === 0 ? (
+          <p className="text-sm text-muted">You have everything that's out lately.</p>
+        ) : out.length === 0 ? (
           <p className="text-sm text-muted">
             {read === 0
               ? 'Nothing yet: none of the artists you follow have had their releases read.'
@@ -338,7 +377,7 @@ function NewReleases({
         ) : (
           <LidarrStates value={lidarrOn ? (lidarr.data ?? {}) : null}>
             <ul className={grid}>
-              {out.map((r) => (
+              {shown.map((r) => (
                 <ReleaseCard key={r.mbid} release={r} artist={r.artist} serverId={serverId} />
               ))}
             </ul>

@@ -144,6 +144,17 @@ it('downloads an album with Lidarr: chosen from what the indexers have', async (
   expect(await posted('/api/lidarr/releases')[0].clone().json()).toEqual({ guid: 'flac', indexer_id: 3 })
 })
 
+it('shows only the albums out lately that are not in the library, if asked', async () => {
+  localStorage.removeItem('releases-out-filter')
+  renderAt('/library/releases')
+  const out = (await screen.findByRole('heading', { name: 'Out in the last 90 days' })).closest('section')!
+  expect(within(out).getByText('A Fresh One')).toBeInTheDocument()
+  fireEvent.click(within(out).getByRole('button', { name: 'Not in your library' }))
+  expect(within(out).queryByText('A Fresh One')).not.toBeInTheDocument()
+  expect(within(out).getByText("You have everything that's out lately.")).toBeInTheDocument()
+  expect(localStorage.getItem('releases-out-filter')).toBe('missing')
+})
+
 it('has Lidarr monitor an album coming up', async () => {
   lidarrOn = true
   renderAt('/library/releases')
