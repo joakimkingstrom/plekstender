@@ -69,6 +69,15 @@ class GigPlaylistSettings(BaseModel):
         description="Before a starred gig: the songs the artists have been playing lately.",
     )
     after: bool = Field(default=False, description="After a gig you went to: its setlist.")
+    delete_after: int = Field(
+        default=0,
+        ge=0,
+        le=365,
+        description="Delete gig playlists this many units after the gig; 0: keep them.",
+    )
+    delete_unit: Literal["days", "weeks", "months"] = Field(
+        default="weeks", description="The unit of delete_after."
+    )
 
 
 class GigPlaylistOut(BaseModel):

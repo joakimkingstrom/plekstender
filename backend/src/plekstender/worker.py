@@ -1002,6 +1002,39 @@ async def _gig_playlists(user_id: int) -> None:
         )
 
 
+@app.periodic(cron="30 4 * * *", periodic_id="delete-old-gig-playlists")
+@app.task(queue="maintenance", queueing_lock="old-gig-playlists", lock="gig-playlists")
+async def delete_old_gig_playlists_periodically(timestamp: int) -> None:
+    """Daily: gig playlists deleted (in Plex and here) for people who want them gone some
+    time after the gig."""
+    from sqlalchemy import text as sql
+
+    from plekstender.db.models import User
+    from plekstender.gigs.playlists import delete_old_gig_playlists
+
+    async with get_sessionmaker()() as db:
+        user_ids = list(
+            await db.scalars(
+                sql(
+                    "SELECT id FROM users"
+                    " WHERE preferences #>> '{gig_playlists,delete_after}' NOT IN ('0')"
+                    " ORDER BY id"
+                )
+            )
+        )
+    for user_id in user_ids:
+        async with (
+            get_sessionmaker()() as db,
+            httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        ):
+            user = await db.get(User, user_id)
+            if user is None:
+                continue
+            deleted = await delete_old_gig_playlists(db, http, get_settings(), user)
+        if deleted:
+            log.info("old gig playlists for user %s: %d deleted", user_id, deleted)
+
+
 @app.periodic(cron="40 3 * * *", periodic_id="prune-history")
 @app.task(queue="maintenance", queueing_lock="prune-history")
 async def prune_history(timestamp: int) -> None:
