@@ -1531,3 +1531,57 @@ async def test_album_artwork_in_files_and_folders(
 
     assert info(embedded(music / "300.flac")[0]).width == 800  # type: ignore[index]
     assert (await owner.post(f"{base}/artwork/shrink", json={}, headers=CSRF)).status_code == 400
+
+
+def _wav(path: Path) -> None:
+    import wave
+
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(44100)
+        w.writeframes(b"\0\0" * 4410)
+
+
+def _aiff(path: Path) -> None:
+    import struct
+
+    frames = 4410
+    rate = bytes.fromhex("400EAC44000000000000")  # 44,100 as an 80-bit float
+    comm = struct.pack(">hLh", 1, frames, 16) + rate
+    ssnd = struct.pack(">LL", 0, 0) + b"\0\0" * frames
+    body = b"AIFF" + b"COMM" + struct.pack(">L", len(comm)) + comm
+    body += b"SSND" + struct.pack(">L", len(ssnd)) + ssnd
+    path.write_bytes(b"FORM" + struct.pack(">L", len(body)) + body)
+
+
+@pytest.mark.parametrize("make", [_wav, _aiff], ids=["wav", "aiff"])
+def test_id3_tags_in_wav_and_aiff_files(tmp_path: Path, make: Any) -> None:
+    """mutagen only gives MP3s' ID3 tags the easy names: in WAV and AIFF files they came as
+    raw frames, so they read as missing and a MusicBrainz ID (UFID) broke the snapshot."""
+    import mutagen
+    from mutagen.id3 import TIT2, TPE1, UFID
+
+    from plekstender.tags.read import read_file
+    from plekstender.tags.write import Planned, apply, snapshot
+
+    path = tmp_path / ("song.wav" if make is _wav else "song.aiff")
+    make(path)
+    audio = mutagen.File(path)
+    audio.add_tags()
+    audio.tags.add(TIT2(encoding=3, text=["Old title"]))
+    audio.tags.add(TPE1(encoding=3, text=["Radiohead"]))
+    audio.tags.add(
+        UFID(owner="http://musicbrainz.org", data=b"10000000-0000-4000-8000-000000000001")
+    )
+    audio.save()
+
+    assert read_file(path)["tags"]["title"] == "Old title"
+    before = snapshot(path)
+    assert before["title"] == ["Old title"] and before["artist"] == ["Radiohead"]
+    [outcome] = apply(path, [Planned(1, "title", "Old title", "New title")])
+    assert outcome.status == "applied", outcome.error
+    again = mutagen.File(path)
+    assert str(again.tags["TIT2"]) == "New title"
+    assert again.tags["UFID:http://musicbrainz.org"].data.startswith(b"10000000")  # kept
+    assert read_file(path)["tags"]["title"] == "New title"
