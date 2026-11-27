@@ -34,12 +34,22 @@ def cmd_web(_: argparse.Namespace) -> int:
     return 0
 
 
+# When the worker is stopped (a restart, a new image), it lets running jobs finish for this
+# long, then aborts the rest: they give up their place in the queue (their locks) at once,
+# instead of holding them until the worker counts as gone. Docker waits 10 s before it kills.
+SHUTDOWN_GRACE_SECONDS = 5
+
+
 def cmd_worker(args: argparse.Namespace) -> int:
     from plekstender.worker import app
 
     async def run() -> None:
         async with app.open_async():
-            await app.run_worker_async(concurrency=args.concurrency, install_signal_handlers=True)
+            await app.run_worker_async(
+                concurrency=args.concurrency,
+                install_signal_handlers=True,
+                shutdown_graceful_timeout=SHUTDOWN_GRACE_SECONDS,
+            )
 
     asyncio.run(run())
     return 0
