@@ -56,8 +56,6 @@ class Connection(BaseModel):
 class Resource(BaseModel):
     name: str
     product: str | None = None
-    platform: str | None = None
-    device: str | None = None
     product_version: str | None = Field(default=None, alias="productVersion")
     client_identifier: str = Field(alias="clientIdentifier")
     provides: str = ""
@@ -70,10 +68,6 @@ class Resource(BaseModel):
     @property
     def is_server(self) -> bool:
         return "server" in self.provides.split(",")
-
-    @property
-    def is_player(self) -> bool:
-        return "player" in self.provides.split(",")
 
 
 def plex_headers(settings: Settings, token: str | None = None) -> dict[str, str]:
@@ -143,8 +137,7 @@ class PlexTvClient:
         )
         return PlexAccount.model_validate(_check(resp))
 
-    async def get_resources(self, token: str) -> list[Resource]:
-        """The account's devices: servers, and players (Plexamp, the Plex apps)."""
+    async def get_servers(self, token: str) -> list[Resource]:
         resp = await self._http.get(
             f"{self._settings.plex_clients_url}/api/v2/resources",
             params={"includeHttps": "1", "includeRelay": "1", "includeIPv6": "1"},
@@ -154,7 +147,5 @@ class PlexTvClient:
         data = _check(resp)
         if not isinstance(data, list):
             raise PlexError("unexpected resources response")
-        return [Resource.model_validate(item) for item in data]
-
-    async def get_servers(self, token: str) -> list[Resource]:
-        return [r for r in await self.get_resources(token) if r.is_server]
+        resources = [Resource.model_validate(item) for item in data]
+        return [r for r in resources if r.is_server]

@@ -35,7 +35,6 @@ import { TastePage } from './pages/TastePage'
 import { LoginCallbackPage, LoginPage } from './pages/LoginPage'
 import { ServersPage } from './pages/ServersPage'
 import { JobsPage } from './pages/JobsPage'
-import { PlayersPage } from './pages/PlayersPage'
 import { FilesSettingsPage, FontsSettingsPage, LibrarySettingsPage, SettingsLayout } from './pages/SettingsPage'
 import { StatsPage } from './pages/StatsPage'
 import { DiscoverPage } from './pages/DiscoverPage'
@@ -134,7 +133,6 @@ const router = createBrowserRouter([
           { path: 'files/:part', element: <FilesSettingsPage /> },
           { path: 'game', element: <GameSettingsPage /> },
           { path: 'jobs', element: <JobsPage /> },
-          { path: 'players', element: <PlayersPage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
           { path: 'admin', element: <Navigate to="/settings" replace /> },
         ],

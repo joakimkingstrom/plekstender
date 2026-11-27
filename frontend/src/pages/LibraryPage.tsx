@@ -21,7 +21,6 @@ import {
 } from '../api/library'
 import { ColumnChart } from '../components/charts'
 import { Artwork } from '../components/library'
-import { PlayOnButton } from '../components/PlayOnButton'
 import { RateStars } from '../components/RateStars'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { AlbumFiles, ArtistFiles } from '../components/MusicFiles'
@@ -278,7 +277,6 @@ function TrackList({
           )}
           <RateStars serverId={serverId} ratingKey={t.rating_key} value={t.user_rating} label={`Rate ${t.title}`} size="size-4" />
           <span className="w-10 text-right text-xs text-muted tabular-nums">{formatDuration(t.duration_ms)}</span>
-          <PlayOnButton serverId={serverId} ratingKey={t.rating_key} title={t.title} />
         </li>
       ))}
     </ol>
@@ -721,7 +719,6 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             <RateStars serverId={serverId} ratingKey={al.rating_key} value={al.user_rating} label={`Rate the album ${al.title}`} size="size-5" />
-            <PlayOnButton serverId={serverId} ratingKey={al.rating_key} title={al.title} size="size-8" />
             {al.critic_rating !== null && <span>Critics {al.critic_rating.toFixed(1)}/10</span>}
             <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(al.plays)} plays</span></Tooltip>
           </div>
