@@ -34,7 +34,16 @@ const STATUS_LABEL: Record<string, string> = {
   movedOnline: 'Moved online',
 }
 
-export function GigRow({ show, serverId }: { show: LiveShow; serverId: number | null }) {
+export function GigRow({
+  show,
+  serverId,
+  ticketPill = true,
+}: {
+  show: LiveShow
+  serverId: number | null
+  /** The "Got a ticket" pill (not in a list of gigs you've got tickets for). */
+  ticketPill?: boolean
+}) {
   const day = localDate(show.start_date)
   const yours = new Set(show.artists.map((a) => a.name))
   const others = show.performers.filter((p) => !yours.has(p.name))
@@ -71,7 +80,7 @@ export function GigRow({ show, serverId }: { show: LiveShow; serverId: number | 
             </span>
           ))}
           {status && <span className="ml-2 rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">{status}</span>}
-          {gotTicket && <span className="ml-2 rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok">🎟 Got a ticket</span>}
+          {gotTicket && ticketPill && <span className="ml-2 rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok">🎟 Got a ticket</span>}
           {show.is_new && (
             <span
               className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent"

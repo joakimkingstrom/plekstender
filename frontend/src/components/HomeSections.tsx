@@ -211,7 +211,7 @@ export function UpcomingGigs({ serverId }: { serverId: number | null }) {
       <Card title="Gigs you've got tickets for" action={allGigs}>
         <ul className="-mx-3 divide-y divide-border">
           {ticketed.slice(0, 4).map((show) => (
-            <GigRow key={show.id} show={show} serverId={serverId} />
+            <GigRow key={show.id} show={show} serverId={serverId} ticketPill={false} />
           ))}
         </ul>
         {ticketed.length > 4 && (
