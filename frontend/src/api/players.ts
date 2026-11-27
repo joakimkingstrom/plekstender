@@ -9,7 +9,7 @@ export type PlayerSent = Schemas['PlayerSentOut']
 export type QueueItem = Schemas['QueueItemOut']
 
 /** Your Plex players (Plexamp, the Plex apps), with what each is playing. */
-export function usePlayers(serverId: number | null, every = 10_000) {
+export function usePlayers(serverId: number | null, every: number | false = 10_000) {
   return useQuery({
     queryKey: ['players', serverId],
     queryFn: () => unwrap(api.GET('/api/servers/{server_id}/players', { params: { path: { server_id: serverId! } } })),
