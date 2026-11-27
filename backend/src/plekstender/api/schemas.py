@@ -710,6 +710,7 @@ class ArtworkArtistOut(BaseModel):
     folder_queued: bool = Field(
         default=False, description="Apply: artist.jpg is being written by the worker."
     )
+    added_at: dt.datetime | None = Field(default=None, description="Added to Plex.")
 
 
 class ArtworkArtistPage(BaseModel):
@@ -806,6 +807,11 @@ class AcoustIdKeyOut(BaseModel):
 
 AlbumCoverState = Literal["missing", "low", "ok", "unchecked"]
 AlbumCoverFilter = Literal["needs", "missing", "low", "all"]
+# Under how many pixels (on its shorter side) a cover counts as low resolution.
+LOW_RESOLUTIONS = (600, 1000, 1500)
+# name: by artist then album; added: newest in Plex first; smallest: no cover first, then
+# the smallest covers (the default, except for "all", which is by name).
+AlbumCoverSort = Literal["name", "added", "smallest"]
 
 
 class AlbumCoverOut(BaseModel):
@@ -817,12 +823,14 @@ class AlbumCoverOut(BaseModel):
     width: int | None = Field(description="The cover's size in Plex, once measured.")
     height: int | None
     state: AlbumCoverState = Field(
-        description="missing: no cover (or one that can't be read); low: under 600 px on its "
+        description="missing: no cover (or one that can't be read); low: under low_px (600 by "
+        "default) on its "
         "shorter side; unchecked: not measured yet."
     )
     kept: bool = Field(description="Marked as fine as it is: left out of the lists to improve.")
     source: str | None
     applied_at: dt.datetime | None
+    added_at: dt.datetime | None = Field(default=None, description="Added to Plex.")
 
 
 class AlbumCoverPage(BaseModel):
@@ -899,6 +907,9 @@ class BestCoversJobIn(BaseModel):
         default="needs", description="The albums listed with this filter (and search)."
     )
     q: str | None = Field(default=None, max_length=200)
+    low_px: int = Field(
+        default=600, description="Low resolution: under this many pixels (600, 1000 or 1500)."
+    )
     sources: list[BestCoverSource] | None = Field(
         default=None,
         min_length=1,
