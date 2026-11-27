@@ -1,0 +1,60 @@
+name: Clean up old images
+
+# Weekly (and by hand): old versions of ghcr.io/<owner>/plekstender out of the registry.
+# Every build adds versions (each multi-architecture image is an index plus one untagged image
+# per platform), so they pile up. Kept, always:
+# - `latest`, `stable` and `staging`, and the image of every GitHub release (its version);
+# - the 30 newest tagged images (main's versions and sha-…, staging-…);
+# - anything from the last week;
+# - the platform images a kept image is made of (the action knows multi-architecture
+#   images: it never deletes an untagged image something kept still points at).
+# Deleted: older tagged images past those, untagged images nothing points at, and broken
+# multi-architecture images (some or all of their platform images missing).
+# Run by hand, it only lists what it would delete unless "dry run" is unticked.
+on:
+  schedule:
+    - cron: "30 4 * * 0" # Sundays 04:30 UTC
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Only list what would be deleted"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read # the releases, for the versions to keep
+  packages: write # deleting image versions
+
+concurrency:
+  group: cleanup-images
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      # The image tags to keep: the moving ones, and every release's version (v0.1.214 and
+      # hand-made 0.1.244 releases alike: image tags have no v).
+      - id: keep
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          releases=$(gh release list --repo "$REPO" --limit 200 --json tagName \
+            --jq '[.[].tagName | sub("^v"; "")] | join(",")')
+          tags="latest,stable,staging${releases:+,$releases}"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "Keeping the tags: $tags" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: dataaxiom/ghcr-cleanup-action@ac45a8c04b1eb4b27974ca79a0a74f344c93664b # v1.3.0
+        with:
+          token: ${{ github.token }}
+          package: plekstender
+          exclude-tags: ${{ steps.keep.outputs.tags }}
+          keep-n-tagged: 30
+          delete-untagged: true
+          delete-ghost-images: true
+          delete-partial-images: true
+          older-than: 7 days
+          validate: true
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
