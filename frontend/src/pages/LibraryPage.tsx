@@ -13,6 +13,7 @@ import {
   imageUrl,
   useAlbum,
   useArtist,
+  useArtistNeighbours,
   useArtists,
   useTags,
   type ArtistSort,
@@ -519,6 +520,33 @@ export function ArtistPage() {
   )
 }
 
+/** Previous and next artist (by name), as subtle arrows in the margins either side of the
+ * page, halfway down the window; hidden when the window is too narrow to have margins. */
+function ArtistSteps({ serverId, artistKey }: { serverId: number; artistKey: number }) {
+  const found = useArtistNeighbours(serverId, artistKey)
+  const arrow =
+    'fixed top-1/2 z-20 hidden -translate-y-1/2 items-center justify-center rounded-full p-2 text-muted/60 transition-colors hover:bg-surface-2 hover:text-text min-[1290px]:flex'
+  const step = (to: { rating_key: number; title: string } | null | undefined, side: 'previous' | 'next') =>
+    to ? (
+      <Link
+        to={`/library/artists/${to.rating_key}`}
+        aria-label={`${side === 'previous' ? 'Previous' : 'Next'} artist: ${to.title}`}
+        title={to.title}
+        className={`${arrow} ${side === 'previous' ? 'left-[calc(50%-36rem-3.75rem)]' : 'right-[calc(50%-36rem-3.75rem)]'}`}
+      >
+        <svg viewBox="0 0 24 24" className="size-8" aria-hidden>
+          <path d={side === 'previous' ? 'M15 4l-8 8 8 8' : 'M9 4l8 8-8 8'} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </Link>
+    ) : null
+  return (
+    <nav aria-label="Other artists">
+      {step(found.data?.previous, 'previous')}
+      {step(found.data?.next, 'next')}
+    </nav>
+  )
+}
+
 function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: number }) {
   const artist = useArtist(serverId, artistKey)
   const gigs = useArtistGigs(serverId, artistKey)
@@ -529,6 +557,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
   return (
     <>
       <BackLink to="/library" label="Library" />
+      <ArtistSteps serverId={serverId} artistKey={artistKey} />
       <div className="mb-8 flex flex-col gap-6 sm:flex-row">
         <div className="relative w-40 shrink-0 self-center sm:self-start">
           <Zoomable image={a.thumb ? { src: imageUrl(serverId, a.thumb, 1000)!, alt: a.title } : null} className="w-full">

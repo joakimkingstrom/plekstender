@@ -24,6 +24,13 @@ beforeEach(() => {
       const url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost')
       const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
       const m = url.pathname.match(/^\/api\/servers\/1\/library\/artists\/(\d+)$/)
+      const n = url.pathname.match(/^\/api\/servers\/1\/library\/artists\/(\d+)\/neighbours$/)
+      if (n) {
+        const order = [99, 100, 101]
+        const i = order.indexOf(Number(n[1]))
+        const at = (k: number | undefined) => (k ? { rating_key: k, title: { 99: 'Portishead', 100: 'Radiohead', 101: 'Sigur Rós' }[k]! } : null)
+        return json({ previous: at(order[i - 1]), next: at(order[i + 1]) })
+      }
       if (m) return json(artist(Number(m[1]), { 99: 'Portishead', 100: 'Radiohead', 101: 'Sigur Rós' }[Number(m[1])] ?? '?'))
       if (url.pathname === '/api/servers') return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: false, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
       if (url.pathname === '/api/servers/1/sync') return json({ active: null, last: null, last_sync_at: null, counts: { artists: 3, albums: 2, tracks: 4, rated_tracks: 0, plays: 0 }, incremental_minutes: 30, full_days: 7 })
@@ -57,5 +64,16 @@ describe('Artist page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'L' }))
     expect(await cover()).toContain('size=512')
     expect(localStorage.getItem('artist-cover-size')).toBe('large')
+  })
+
+  it('steps to the previous and next artist by name', async () => {
+    renderArtist()
+    const next = await screen.findByRole('link', { name: 'Next artist: Sigur Rós' })
+    expect(screen.getByRole('link', { name: 'Previous artist: Portishead' })).toHaveAttribute('href', '/library/artists/99')
+    fireEvent.click(next)
+    expect(await screen.findByRole('heading', { name: 'Sigur Rós' })).toBeInTheDocument()
+    // The last one: no next.
+    expect(await screen.findByRole('link', { name: 'Previous artist: Radiohead' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Next artist/ })).not.toBeInTheDocument()
   })
 })

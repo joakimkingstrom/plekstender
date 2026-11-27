@@ -149,6 +149,20 @@ export function useTags(serverId: number, kind: TagKind) {
   })
 }
 
+/** The artists before and after one, by name (stepping through artist pages). */
+export function useArtistNeighbours(serverId: number, key: number) {
+  return useQuery({
+    queryKey: [...libraryKeys.artist(serverId, key), 'neighbours'],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/artists/{rating_key}/neighbours', {
+          params: { path: { server_id: serverId, rating_key: key } },
+        }),
+      ),
+  })
+}
+
 export function useArtist(serverId: number, key: number) {
   return useQuery({
     queryKey: libraryKeys.artist(serverId, key),

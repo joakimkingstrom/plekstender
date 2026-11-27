@@ -498,6 +498,7 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **Gig rows**: the "Got a ticket" pill asks before taking the ticket back; a starred gig without one has a dashed "Got a ticket?" pill. On the right, in order: add to calendar (an icon, starred gigs), make or rebuild the before-the-gig playlist (an icon), Tickets / Details, and the star. The playlist button makes it now (`POST /api/live/shows/{id}/playlist`, setlist.fm's recent setlists as for the automatic ones), also when it was deleted before and whether or not gig playlists are turned on; gigs carry `playlist_id` when they have one.
 - **Servers**: Reconnect and Disconnect stay stacked, but hang into the space below the title row instead of making it taller.
 - **Cover sizes** (S / M / L) on the library's artists and on an artist's albums too, as on Releases: each page remembers its own in the browser; large covers are asked of Plex at 512 px.
+- **Artist pages** have previous / next arrows (the artists before and after, by name as the library lists them: `GET …/library/artists/{key}/neighbours`), subtle, in the margins halfway down the window; hidden when the window is too narrow for them (under 1290 px).
 
 ## The original design
 

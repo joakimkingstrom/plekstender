@@ -572,6 +572,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/artists/{rating_key}/neighbours": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Artist Neighbours
+         * @description The artists just before and after this one, by name as the library lists them (to
+         *     step through artist pages).
+         */
+        get: operations["artist_neighbours_api_servers__server_id__library_artists__rating_key__neighbours_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/artists/{rating_key}": {
         parameters: {
             query?: never;
@@ -5141,6 +5162,21 @@ export interface components {
             /** Top Tracks */
             top_tracks: components["schemas"]["TrackOut"][];
             your_listens: components["schemas"]["ItemListensOut"];
+        };
+        /** ArtistNeighbourOut */
+        ArtistNeighbourOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ArtistNeighboursOut
+         * @description The artists before and after one, in the library's order by name.
+         */
+        ArtistNeighboursOut: {
+            previous: components["schemas"]["ArtistNeighbourOut"] | null;
+            next: components["schemas"]["ArtistNeighbourOut"] | null;
         };
         /** ArtistPage */
         ArtistPage: {
@@ -11371,6 +11407,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artist_neighbours_api_servers__server_id__library_artists__rating_key__neighbours_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistNeighboursOut"];
                 };
             };
             /** @description Validation Error */

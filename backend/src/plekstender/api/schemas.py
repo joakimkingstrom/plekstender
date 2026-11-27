@@ -2765,3 +2765,15 @@ class GigShowPlaylistOut(BaseModel):
     playlist_id: int | None = Field(description="None: none of the setlists' songs were found.")
     songs: int
     missing: int = Field(description="Setlist songs not in the library.")
+
+
+class ArtistNeighbourOut(BaseModel):
+    rating_key: int
+    title: str
+
+
+class ArtistNeighboursOut(BaseModel):
+    """The artists before and after one, in the library's order by name."""
+
+    previous: ArtistNeighbourOut | None
+    next: ArtistNeighbourOut | None
