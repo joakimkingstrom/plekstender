@@ -191,7 +191,10 @@ function CoverEditor({
   // Only sources that are set up: the default (or the first) when the one picked isn't.
   const tab: Tab = tabs.some(([k]) => k === picked) ? picked : tabs.some(([k]) => k === opensOn) ? opensOn : tabs[0][0]
   const [source, setSource] = useState<SourceSpec | null>(null)
-  const [square, setSquare] = useState(false)
+  // Cropped to a square unless unticked, for people who chose that (Crop to a square → Always).
+  const squarePref = me.data?.preferences?.square_covers ?? false
+  const [squareChoice, setSquare] = useState<boolean | null>(null)
+  const square = squareChoice ?? squarePref
   const [notice, setNotice] = useState<string | null>(null)
   const preview = useCoverPreview(serverId, album.rating_key, source, square)
   const apply = useApplyCover(serverId)
@@ -346,10 +349,25 @@ function CoverEditor({
             </div>
           )}
           {(wide || square) && (
-            <label className="mt-3 flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)} className="accent-[var(--color-accent)]" />
-              Crop to a square
-            </label>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)} className="accent-[var(--color-accent)]" />
+                Crop to a square
+              </label>
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={squarePref}
+                  disabled={savePreferences.isPending}
+                  onChange={(e) => {
+                    savePreferences.mutate({ square_covers: e.target.checked })
+                    setSquare(null) // follow the new default
+                  }}
+                  className="accent-[var(--color-accent)]"
+                />
+                Always (for every album)
+              </label>
+            </div>
           )}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button

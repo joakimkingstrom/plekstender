@@ -8176,6 +8176,12 @@ export interface components {
              * @description Album covers: where a best match may come from.
              */
             best_cover_sources?: ("deezer" | "itunes" | "tidal" | "coverartarchive")[];
+            /**
+             * Square Covers
+             * @description Album covers: crop a cover chosen by hand to a square, unless unticked (best matches always are).
+             * @default false
+             */
+            square_covers: boolean;
         };
         /** PreviewOut */
         PreviewOut: {

@@ -122,6 +122,11 @@ class Preferences(BaseModel):
         max_length=4,
         description="Album covers: where a best match may come from.",
     )
+    square_covers: bool = Field(
+        default=False,
+        description="Album covers: crop a cover chosen by hand to a square, unless unticked "
+        "(best matches always are).",
+    )
 
 
 class UserOut(BaseModel):
