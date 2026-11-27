@@ -192,8 +192,8 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
       ) : !scanned ? (
         <p className="text-sm text-muted">
           Scan your music folder (
-          <Link to="/settings/files" className="text-accent underline">
-            Settings → Music files
+          <Link to="/settings/files/scan" className="text-accent underline">
+            Settings → Music files → Tags in your files
           </Link>
           ) to see the tags in these songs' files.
         </p>
@@ -256,8 +256,8 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
               <>
                 {' '}
                 To edit tags, allow it in{' '}
-                <Link to="/settings/files" className="underline">
-                  Settings → Music files
+                <Link to="/settings/files/scan" className="underline">
+                  Settings → Music files → Tags in your files
                 </Link>
                 .
               </>

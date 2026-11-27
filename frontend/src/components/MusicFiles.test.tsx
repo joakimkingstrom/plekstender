@@ -80,6 +80,6 @@ describe('Music files', () => {
     renderWith(<AlbumFiles serverId={1} albumKey={200} />, {
       'GET /api/servers/1/files/albums/200': { scanned: false, tracks: [] },
     })
-    expect(await screen.findByRole('link', { name: 'Settings → Music files' })).toHaveAttribute('href', '/settings/files')
+    expect(await screen.findByRole('link', { name: 'Settings → Music files → Tags in your files' })).toHaveAttribute('href', '/settings/files/scan')
   })
 })

@@ -14,7 +14,7 @@ export function AcoustIdKeyCard() {
     <Card title="AcoustID application key">
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          Used to identify music files by how they sound (Settings → Music files). Register a free application at{' '}
+          Used to identify music files by how they sound (Settings → Music files → Unknown files). Register a free application at{' '}
           <a href="https://acoustid.org/new-application" target="_blank" rel="noreferrer" className="text-accent underline">
             acoustid.org/new-application
           </a>

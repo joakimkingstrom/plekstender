@@ -156,8 +156,8 @@ function TagEditing({ serverId }: { serverId: number }) {
       {!canWrite && (
         <Notice tone="warn">
           Writing to the files is off, so you can look but not fix. Turn on tag editing on{' '}
-          <Link to="/settings/files" className="underline">
-            Settings → Music files
+          <Link to="/settings/files/scan" className="underline">
+            Settings → Music files → Tags in your files
           </Link>
           .
         </Notice>
@@ -203,8 +203,8 @@ function TagEditing({ serverId }: { serverId: number }) {
         <p className="text-xs text-muted">
           {formatCount(page.data!.not_in_plex)} {page.data!.not_in_plex === 1 ? "file isn't" : "files aren't"} in Plex at
           all: identify them by sound on{' '}
-          <Link to="/settings/files" className="text-accent hover:underline">
-            Settings → Music files
+          <Link to="/settings/files/unknown" className="text-accent hover:underline">
+            Settings → Music files → Unknown files
           </Link>
           .
         </p>

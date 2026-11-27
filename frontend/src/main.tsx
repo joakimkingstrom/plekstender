@@ -129,6 +129,7 @@ const router = createBrowserRouter([
           { path: 'fonts', element: <FontsSettingsPage /> },
           { path: 'fonts/:part', element: <FontsSettingsPage /> },
           { path: 'files', element: <FilesSettingsPage /> },
+          { path: 'files/:part', element: <FilesSettingsPage /> },
           { path: 'game', element: <GameSettingsPage /> },
           { path: 'library', element: <LibrarySettingsPage /> },
           { path: 'admin', element: <Navigate to="/settings" replace /> },
