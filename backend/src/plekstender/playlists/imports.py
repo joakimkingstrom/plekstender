@@ -126,7 +126,9 @@ def parse_csv(text: str) -> tuple[str | None, list[Entry]]:
 
 # --- M3U ------------------------------------------------------------------------------------------
 
-_EXTINF = re.compile(r"^#EXTINF:\s*(-?\d+)[^,]*,(.*)$", re.I)
+# The length, any attributes (not starting with a digit, so the two can't share digits: a
+# long line without a comma would otherwise take quadratic time), then the label.
+_EXTINF = re.compile(r"^#EXTINF:\s*(-?\d+)(?:[^,\d][^,]*)?,(.*)$", re.I)
 _NUMBER = re.compile(r"^\d{1,3}(?:[-.]\d{1,3})?[\s.\-_]+")
 
 

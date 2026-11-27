@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 from fastapi import FastAPI
@@ -40,6 +41,13 @@ def test_reading_playlist_files() -> None:
     assert [(s.title, s.artists[0], s.album) for s in songs] == [
         ("Paranoid Android", "Radiohead", None), ("Glory Box", "Portishead", "Dummy"), ("Lucky", "Radiohead", None),
     ]  # fmt: skip
+    # Attributes after the length (IPTV-style) are fine; a long line without a comma (no
+    # song) takes no time.
+    _, songs = parse("a.m3u", '#EXTINF:-1 tvg-id="7" group="x",Portishead - Roads\n/m/roads.flac\n')
+    assert (songs[0].title, songs[0].artists[0]) == ("Roads", "Portishead")
+    started = time.perf_counter()
+    parse("slow.m3u", "#EXTM3U\n#EXTINF:9" + "0" * 50_000 + "\n/m/x.flac\n")
+    assert time.perf_counter() - started < 0.5
     name, songs = parse("x.jspf", JSPF)
     assert (name, songs[0].title, songs[0].duration_ms) == (
         "From ListenBrainz",
