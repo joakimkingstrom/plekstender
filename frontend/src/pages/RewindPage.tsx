@@ -376,8 +376,8 @@ function Records({ serverId, items, noun }: { serverId: number | null; items: It
       />
       {item && (
         <p className="mt-1 text-center text-sm text-white/85 sm:text-base" aria-live="polite">
-          <span className="font-display font-bold text-white">#{top + 1}</span> <span className="font-semibold text-white">{item.name}</span>
-          {item.artist && <> · {item.artist}</>} · {formatCount(item.listens)} {item.listens === 1 ? 'listen' : 'listens'}
+          <span className="font-display font-bold text-white">#{top + 1}</span> {item.artist && <>{item.artist} · </>}
+          <span className="font-semibold text-white">{item.name}</span> · {formatCount(item.listens)} {item.listens === 1 ? 'listen' : 'listens'}
         </p>
       )}
     </div>
@@ -622,7 +622,7 @@ function buildSlides(r: Rewind, range: Range, serverId: number | null): Slide[] 
             {r.repeats.map((s) => (
               <li key={`${s.name}-${s.artist}`} className="flex justify-between gap-3">
                 <span className="min-w-0 truncate">
-                  <span className="font-semibold">{s.name}</span> <span className="text-white/75">· {s.artist}</span>
+                  <span className="text-white/75">{s.artist} ·</span> <span className="font-semibold">{s.name}</span>
                 </span>
                 <span className="shrink-0 text-sm text-white/80">{onRepeat(s)}</span>
               </li>
