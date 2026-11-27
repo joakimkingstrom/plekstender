@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { Link } from 'react-router'
 import { api, unwrap, type Schemas } from '../api/client'
 import { useLiveSettings, useLiveShows } from '../api/live'
@@ -256,12 +256,44 @@ export function UpcomingGigs({ serverId }: { serverId: number | null }) {
 }
 
 /** What you rated last. */
+/** At least this many latest ratings; more when the card is taller (next to a longer one). */
+const MIN_RATINGS = 6
+const RATING_GAP = 8 // px between rows (space-y-2)
+const RATING_ROW = 44 // px a row takes before it's measured (a 36 px cover and two lines)
+
+/** How many rows fit in `area` (at least MIN_RATINGS), measured as it changes size. */
+function useRowsThatFit(area: RefObject<HTMLDivElement | null>, list: RefObject<HTMLUListElement | null>, ready: boolean) {
+  const [rows, setRows] = useState(MIN_RATINGS)
+  const [rowHeight, setRowHeight] = useState(RATING_ROW)
+  useLayoutEffect(() => {
+    const box = area.current
+    if (!box || !ready) return
+    const measure = () => {
+      const first = list.current?.firstElementChild as HTMLElement | null | undefined
+      const height = first?.offsetHeight || RATING_ROW
+      setRowHeight(height)
+      setRows(Math.max(MIN_RATINGS, Math.floor((box.clientHeight + RATING_GAP) / (height + RATING_GAP))))
+    }
+    measure()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(box)
+    return () => observer?.disconnect()
+  }, [area, list, ready])
+  return { rows, minHeight: MIN_RATINGS * (rowHeight + RATING_GAP) - RATING_GAP }
+}
+
 export function LatestRatings({ serverId }: { serverId: number }) {
   const rated = useRated(serverId, null)
   const items = rated.data?.pages?.[0]?.items ?? []
+  const area = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLUListElement>(null)
+  // As many as fit: the card is as tall as the one beside it; the list takes no room of its
+  // own beyond six rows (it's laid over its area), so it can't make the row taller itself.
+  const { rows, minHeight } = useRowsThatFit(area, list, items.length > 0)
   if (rated.isPending || items.length === 0) return null
   return (
     <Card
+      className="flex flex-col"
       title="Latest ratings"
       action={
         <Link to="/history/ratings" className={more}>
@@ -269,27 +301,29 @@ export function LatestRatings({ serverId }: { serverId: number }) {
         </Link>
       }
     >
-      <ul className="space-y-2">
-        {items.slice(0, 6).map((item) => {
-          const to = item.link_key ? `/library/${item.kind === 'artist' ? 'artists' : 'albums'}/${item.link_key}` : null
-          return (
-            <li key={`${item.kind}-${item.rating_key}`} className="flex items-center gap-2">
-              <Artwork serverId={serverId} path={item.thumb} title={item.title} size={64} round={item.kind === 'artist'} className="size-9 shrink-0" />
-              <span className="min-w-0 flex-1">
-                {to ? (
-                  <Link to={to} className="block truncate text-sm font-medium hover:underline">
-                    {item.title}
-                  </Link>
-                ) : (
-                  <span className="block truncate text-sm font-medium">{item.title}</span>
-                )}
-                {item.subtitle && <span className="block truncate text-xs text-muted">{item.subtitle}</span>}
-              </span>
-              <Stars rating={item.user_rating} className="shrink-0" />
-            </li>
-          )
-        })}
-      </ul>
+      <div ref={area} className="relative flex-1" style={{ minHeight }}>
+        <ul ref={list} className="absolute inset-x-0 top-0 space-y-2">
+          {items.slice(0, rows).map((item) => {
+            const to = item.link_key ? `/library/${item.kind === 'artist' ? 'artists' : 'albums'}/${item.link_key}` : null
+            return (
+              <li key={`${item.kind}-${item.rating_key}`} className="flex items-center gap-2">
+                <Artwork serverId={serverId} path={item.thumb} title={item.title} size={64} round={item.kind === 'artist'} className="size-9 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  {to ? (
+                    <Link to={to} className="block truncate text-sm font-medium hover:underline">
+                      {item.title}
+                    </Link>
+                  ) : (
+                    <span className="block truncate text-sm font-medium">{item.title}</span>
+                  )}
+                  {item.subtitle && <span className="block truncate text-xs text-muted">{item.subtitle}</span>}
+                </span>
+                <Stars rating={item.user_rating} className="shrink-0" />
+              </li>
+            )
+          })}
+        </ul>
+      </div>
     </Card>
   )
 }
