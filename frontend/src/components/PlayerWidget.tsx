@@ -132,8 +132,8 @@ function Queue({ serverId, playerId, state, onSkip }: { serverId: number; player
             className={`flex w-full items-baseline gap-2 px-4 py-1.5 text-left hover:bg-surface-2 ${item.item_id === current ? 'text-accent' : ''}`}
           >
             <span className="min-w-0 flex-1 truncate">
+              {item.artist && <span className="text-muted">{item.artist} · </span>}
               {item.title}
-              {item.artist && <span className="text-muted"> · {item.artist}</span>}
             </span>
             <span className="shrink-0 text-xs tabular-nums text-muted">{formatTime(item.duration_ms)}</span>
           </button>
