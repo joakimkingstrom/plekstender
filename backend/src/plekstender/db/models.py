@@ -748,6 +748,23 @@ class HiddenSuggestion(Base):
     hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 
+class DiscoverArt(Base):
+    """fanart.tv artwork of an artist suggested on Library → Discover (the top few): the
+    artist found on MusicBrainz by name, and which of its images are saved under
+    DATA_DIR/discover-art (see plekstender.discover_art)."""
+
+    __tablename__ = "discover_art"
+
+    artist_key: Mapped[str] = mapped_column(Text, primary_key=True)  # normalise_artist(name)
+    name: Mapped[str] = mapped_column(String(255))
+    mbid: Mapped[str | None] = mapped_column(String(36))
+    background: Mapped[bool] = mapped_column(default=False)
+    banner: Mapped[bool] = mapped_column(default=False)
+    logo: Mapped[bool] = mapped_column(default=False)
+    checked_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    error: Mapped[str | None] = mapped_column(Text)
+
+
 class ReleaseGroup(Base):
     """An artist's release group on MusicBrainz (album, EP, single...), for Library -> Releases.
     Shared by every server, by the artist's MBID; the worker refreshes them (`releases`)."""

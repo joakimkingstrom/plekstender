@@ -4559,6 +4559,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/discover-art/{mbid}/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover Artwork
+         * @description A suggested artist's fanart.tv background, banner or logo, as kept by Plekstender.
+         */
+        get: operations["discover_artwork_api_discover_art__mbid___kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/artwork/fonts": {
         parameters: {
             query?: never;
@@ -5421,6 +5441,8 @@ export interface components {
              * @description Your listens to it (scrobbles count too).
              */
             listens: number;
+            /** @description The top suggestions' artwork, once looked up (if any). */
+            art?: components["schemas"]["SuggestionArtOut"] | null;
         };
         /** ArtistSuggestionsOut */
         ArtistSuggestionsOut: {
@@ -10361,6 +10383,18 @@ export interface components {
             artists: number;
             /** Tracks */
             tracks: number;
+        };
+        /**
+         * SuggestionArtOut
+         * @description fanart.tv artwork of a top suggestion (kept by Plekstender): where to load each.
+         */
+        SuggestionArtOut: {
+            /** Background */
+            background: string | null;
+            /** Banner */
+            banner: string | null;
+            /** Logo */
+            logo: string | null;
         };
         /** SuggestionSourceOut */
         SuggestionSourceOut: {
@@ -19147,6 +19181,46 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PlayerAccessOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discover_artwork_api_discover_art__mbid___kind__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mbid: string;
+                kind: "background" | "banner" | "logo";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

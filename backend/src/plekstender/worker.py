@@ -788,6 +788,29 @@ async def find_artist_releases(timestamp: int) -> None:
         log.info("Read %d artists' releases from MusicBrainz", done)
 
 
+@app.periodic(cron="5 * * * *", periodic_id="discover-art")
+@app.task(queue="maintenance", queueing_lock="discover-art", lock="discover-art")
+async def find_discover_art(timestamp: int | None = None) -> None:
+    """Hourly (and when Discover shows artists not looked up yet): fanart.tv artwork for the
+    top suggested artists (see plekstender.discover_art)."""
+    from plekstender import discover_art
+
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        done = await discover_art.fill(db, http, get_settings())
+    if done:
+        log.info("Looked up artwork for %d suggested artists", done)
+
+
+async def enqueue_discover_art() -> None:
+    try:
+        await find_discover_art.configure(queueing_lock="discover-art").defer_async()
+    except AlreadyEnqueued:
+        pass
+
+
 @app.periodic(cron="*/15 * * * *", periodic_id="cover-colours")
 @app.task(queue="maintenance", queueing_lock="cover-colours")
 async def find_cover_colours(timestamp: int) -> None:
