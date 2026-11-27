@@ -5099,6 +5099,8 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
+            lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
             /** Summary */
             summary: string | null;
             /** Released */
@@ -5209,6 +5211,19 @@ export interface components {
              */
             skipped_hidden: number;
         };
+        /** AlbumLyricsOut */
+        AlbumLyricsOut: {
+            /**
+             * Songs
+             * @description Songs on the album.
+             */
+            songs: number;
+            /**
+             * With Lyrics
+             * @description Of those, songs whose files have lyrics (or are marked instrumental).
+             */
+            with_lyrics: number;
+        };
         /** AlbumSummary */
         AlbumSummary: {
             /** Rating Key */
@@ -5235,6 +5250,8 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
+            lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
         };
         /** AppTimeIn */
         AppTimeIn: {
@@ -8993,6 +9010,12 @@ export interface components {
              */
             achievements: boolean;
             /**
+             * Lyrics Icons
+             * @description Small icons on song and album rows: what lyrics their files have.
+             * @default false
+             */
+            lyrics_icons: boolean;
+            /**
              * Instance Notifications
              * @description Admins: notifications about this Plekstender's services.
              * @default true
@@ -10281,6 +10304,8 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
+            lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
             /** Artist Rating Key */
             artist_rating_key: number | null;
             /** Artist Title */
@@ -10659,6 +10684,11 @@ export interface components {
              * @default 0
              */
             seen_live: number;
+            /**
+             * Lyrics
+             * @description The best lyrics its files have (word-synced, synced, plain, instrumental or none); None: the lyrics icons preference is off, or its files haven't been read.
+             */
+            lyrics?: ("word" | "synced" | "plain" | "instrumental" | "none") | null;
         };
         /**
          * Transform

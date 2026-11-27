@@ -238,11 +238,17 @@ const DEFAULT_PREFERENCES: Schemas["Preferences"] = {
   phone_start: "rate",
   theme: null,
   achievements: true,
+  lyrics_icons: false,
   instance_notifications: true,
   cover_source: "deezer",
   cover_tabs: [],
   square_covers: false,
 };
+
+/** Whether the person wants the lyrics icons on song and album rows (their profile). */
+export function useLyricsIcons(): boolean {
+  return useMe().data?.preferences?.lyrics_icons === true;
+}
 
 /** Change some preferences (the rest stay as saved). */
 export function useSetPreferences() {

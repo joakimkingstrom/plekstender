@@ -113,6 +113,10 @@ class Preferences(BaseModel):
         default=None, description="Light or dark on every device; None: each browser's own choice."
     )
     achievements: bool = Field(default=True, description="Achievements and their pop-ups.")
+    lyrics_icons: bool = Field(
+        default=False,
+        description="Small icons on song and album rows: what lyrics their files have.",
+    )
     instance_notifications: bool = Field(
         default=True, description="Admins: notifications about this Plekstender's services."
     )
@@ -361,6 +365,16 @@ class ArtistPage(BaseModel):
     limit: int
 
 
+class AlbumLyricsOut(BaseModel):
+    songs: int = Field(description="Songs on the album.")
+    with_lyrics: int = Field(
+        description="Of those, songs whose files have lyrics (or are marked instrumental)."
+    )
+
+
+LyricsKind = Literal["word", "synced", "plain", "instrumental", "none"]
+
+
 class AlbumSummary(BaseModel):
     rating_key: int
     title: str
@@ -374,6 +388,11 @@ class AlbumSummary(BaseModel):
     release_type: str = Field(
         default="Album",
         description="Album, EP, Single, Compilation, Live, Soundtrack… (from Plex's tags).",
+    )
+    lyrics: AlbumLyricsOut | None = Field(
+        default=None,
+        description="How many of its songs have lyrics in their files; None: the lyrics icons "
+        "preference is off, or none of its files have been read.",
     )
 
 
@@ -410,6 +429,11 @@ class TrackOut(BaseModel):
     album_thumb: str | None
     listens: int = Field(default=0, description="Your listens of this song (all sources).")
     seen_live: int = Field(default=0, description="Gigs you've been to where it was played.")
+    lyrics: LyricsKind | None = Field(
+        default=None,
+        description="The best lyrics its files have (word-synced, synced, plain, instrumental "
+        "or none); None: the lyrics icons preference is off, or its files haven't been read.",
+    )
 
 
 class SimilarArtistOut(BaseModel):
