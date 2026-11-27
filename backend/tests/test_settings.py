@@ -10,7 +10,7 @@ from sqlalchemy import select, text
 
 from plekstender.db import get_sessionmaker
 from plekstender.db.instance import LibrarySettings, get_library_settings
-from plekstender.db.models import SyncRun
+from plekstender.db.models import ArtistArea, SyncRun
 from plekstender.sync.schedule import due_sync
 from plekstender.worker import recompute_all_popularity, schedule_due_syncs
 from tests.fakes import CSRF, FakePlex, _album, _artist, _track, sign_in
@@ -83,6 +83,22 @@ async def test_admin_edits_library_settings(app: FastAPI, plex: FakePlex) -> Non
     await recompute_all_popularity.func()  # what the worker runs
     radiohead = (await owner.get(f"/api/servers/{sid}/library/artists/100")).json()
     assert radiohead["popularity"] == 2000
+    assert radiohead["country"] == "GB"  # Plex's "United Kingdom"
+    async with get_sessionmaker()() as db:  # areas are kept across servers: start clean
+        name_key = await db.scalar(text("SELECT name_key FROM artists WHERE rating_key = 101"))
+        await db.execute(text("DELETE FROM artist_areas WHERE key = :k"), {"k": f"name:{name_key}"})
+        await db.commit()
+    portishead = (await owner.get(f"/api/servers/{sid}/library/artists/101")).json()
+    assert portishead["country"] is None  # not looked up on MusicBrainz yet
+    async with get_sessionmaker()() as db:  # MusicBrainz says (by name: no MBID in Plex)
+        db.add(
+            ArtistArea(
+                key=f"name:{name_key}", country_code="GB", checked_at=dt.datetime.now(dt.UTC)
+            )
+        )
+        await db.commit()
+    portishead = (await owner.get(f"/api/servers/{sid}/library/artists/101")).json()
+    assert portishead["country"] == "GB"
     assert [a["popularity"] for a in radiohead["albums"]] == [2000, 2000]
 
     status = (await owner.get(f"/api/servers/{sid}/sync")).json()

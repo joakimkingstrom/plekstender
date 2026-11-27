@@ -430,6 +430,10 @@ class ItemListensOut(BaseModel):
 class ArtistDetail(ArtistSummary):
     summary: str | None
     art: str | None
+    country: str | None = Field(
+        default=None,
+        description="Where they're from: an ISO 3166 code (Plex's, else MusicBrainz's).",
+    )
     tags: list[TagOut]
     similar: list[SimilarArtistOut]
     albums: list[AlbumSummary]

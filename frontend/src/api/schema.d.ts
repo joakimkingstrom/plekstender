@@ -4889,6 +4889,11 @@ export interface components {
             summary: string | null;
             /** Art */
             art: string | null;
+            /**
+             * Country
+             * @description Where they're from: an ISO 3166 code (Plex's, else MusicBrainz's).
+             */
+            country?: string | null;
             /** Tags */
             tags: components["schemas"]["TagOut"][];
             /** Similar */
