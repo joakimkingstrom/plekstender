@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { wasUpdated } from './version'
+import { isStaging, wasUpdated } from './version'
 
 describe('wasUpdated', () => {
   it('is true when the server runs a newer build than the page', () => {
@@ -10,5 +10,13 @@ describe('wasUpdated', () => {
     expect(wasUpdated(null, '0.1.212')).toBe(false)
     expect(wasUpdated('0.1.212', '0.1.0-dev')).toBe(false)
     expect(wasUpdated('0.1.212', undefined)).toBe(false)
+  })
+})
+
+describe('isStaging', () => {
+  it('is true for staging builds only', () => {
+    expect(isStaging('0.1.240-staging')).toBe(true)
+    expect(isStaging('0.1.240')).toBe(false)
+    expect(isStaging(null)).toBe(false)
   })
 })
