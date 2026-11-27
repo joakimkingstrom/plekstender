@@ -55,8 +55,9 @@ function PlayerRow({ serverId, player, directAllowed, album }: { serverId: numbe
       </div>
       {player.playing && (
         <p className="text-sm">
-          <span className="text-muted">{player.playing.state === 'paused' ? 'Paused:' : 'Playing:'}</span> {player.playing.title}
-          {player.playing.artist && <span className="text-muted"> · {player.playing.artist}</span>}
+          <span className="text-muted">{player.playing.state === 'paused' ? 'Paused:' : 'Playing:'}</span>{' '}
+          {player.playing.artist && <span className="text-muted">{player.playing.artist} · </span>}
+          {player.playing.title}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">

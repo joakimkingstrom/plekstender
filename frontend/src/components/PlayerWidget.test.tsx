@@ -82,6 +82,7 @@ it('shows small while something plays, then opens on the chosen player with its 
   fireEvent.click(within(widget).getByRole('button', { name: 'Show the queue' }))
   const queue = await within(widget).findByRole('list', { name: 'Queue' })
   expect(within(queue).getByRole('button', { current: true })).toHaveTextContent('If')
+  expect(within(queue).getByRole('button', { name: /Geraldine/ })).toHaveTextContent('Glasvegas · Geraldine') // big to small
   fireEvent.click(within(queue).getByRole('button', { name: /Geraldine/ }))
   expect(await sent('/players/plexamp-1/command', 3)).toMatchObject({ command: 'skip_to', value: 901, key: '/library/metadata/300' })
 
