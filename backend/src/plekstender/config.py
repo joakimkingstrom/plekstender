@@ -57,7 +57,8 @@ class Settings(BaseSettings):
     plex_app_url: str = "https://app.plex.tv"
 
     # Last.fm API key for importing listening history. Can also be set on Settings by an
-    # admin (that value wins). From 1 Dec 2026 a key only works if its owner has Last.fm Pro.
+    # admin (that value wins). From 1 Dec 2026 imports (reading) need a key whose owner has
+    # Last.fm Pro; scrobbling doesn't.
     lastfm_api_key: SecretStr | None = None
     # Its shared secret: needed (with the key) for scrobbling to Last.fm.
     lastfm_shared_secret: SecretStr | None = None

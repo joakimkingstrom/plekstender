@@ -22,7 +22,8 @@ import { JobStop } from '../components/JobStop'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatRelative } from '../format'
 
-/** From 1 Dec 2026 Last.fm API keys only work for Last.fm Pro subscribers. */
+/** From 1 Dec 2026 Last.fm only lets Last.fm Pro subscribers' keys read scrobbles (imports);
+ * scrobbling to it works with any key. */
 const BEFORE_LASTFM_PRO = Date.now() < Date.UTC(2026, 11, 1)
 
 const inputClass = 'w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm'

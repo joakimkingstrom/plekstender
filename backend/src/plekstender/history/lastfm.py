@@ -16,9 +16,15 @@ LOGIN_REQUIRED = 17
 SUSPENDED_API_KEY = 26
 TRANSIENT = {8, 11, 16, 29}  # operation failed, offline, temporary error, rate limit
 
+# Since 1 December 2026, Last.fm answers everything but scrobbling (reading scrobbles, for
+# imports) only for keys whose owner has Last.fm Pro.
 KEY_REJECTED = (
-    "Last.fm rejected the API key. Since 1 December 2026, Last.fm API keys only work if "
-    "their owner has Last.fm Pro."
+    "Last.fm rejected the API key. Since 1 December 2026, reading from Last.fm (importing "
+    "scrobbles) needs a key whose owner has Last.fm Pro; scrobbling to Last.fm doesn't."
+)
+# Scrobbling: Pro doesn't come into it, so the key itself is wrong (or suspended).
+SCROBBLE_KEY_REJECTED = (
+    "Last.fm rejected the API key: an admin can check it on Settings → Scrobbling."
 )
 
 

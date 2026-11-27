@@ -279,7 +279,12 @@ async def test_lastfm_scrobbling(app: FastAPI, plex: FakePlex, lastfm: FakeLastF
 
     # The key alone is enough to import, not to scrobble.
     key = await owner.put("/api/admin/lastfm", json={"api_key": LASTFM_KEY}, headers=CSRF)
-    assert key.json() == {"configured": True, "source": "settings", "scrobbling": False}
+    assert key.json() == {
+        "configured": True,
+        "source": "settings",
+        "scrobbling": False,
+        "note": None,
+    }
     assert (await owner.get("/api/scrobblers/lastfm")).json() == {"available": False}
     assert _location(await owner.get("/api/scrobblers/lastfm/connect")).endswith(
         "?lastfm=unavailable"
@@ -288,7 +293,7 @@ async def test_lastfm_scrobbling(app: FastAPI, plex: FakePlex, lastfm: FakeLastF
     wrong = await owner.put("/api/admin/lastfm", json={"shared_secret": "0" * 32}, headers=CSRF)
     assert wrong.status_code == 400 and "shared secret" in wrong.json()["detail"]
     ok = await owner.put("/api/admin/lastfm", json={"shared_secret": LASTFM_SECRET}, headers=CSRF)
-    assert ok.json() == {"configured": True, "source": "settings", "scrobbling": True}
+    assert ok.json() == {"configured": True, "source": "settings", "scrobbling": True, "note": None}
     assert (await owner.get("/api/scrobblers/lastfm")).json() == {"available": True}
     nope = await owner.post("/api/scrobblers", json={"service": "lastfm"}, headers=CSRF)
     assert nope.status_code == 422
@@ -396,3 +401,28 @@ async def test_a_scrobble_server_that_later_points_here_isnt_reached(
     assert result.sent == 0 and result.error and servers.maloja == []
     [listed] = (await owner.get("/api/scrobblers")).json()
     assert listed["pending"] == 1  # kept, for when the address is right again
+
+
+@pytest.mark.db
+async def test_a_key_without_last_fm_pro_still_scrobbles(
+    app: FastAPI, plex: FakePlex, lastfm: FakeLastFm
+) -> None:
+    """Since 1 December 2026 Last.fm reads (imports) only for Last.fm Pro subscribers' keys,
+    but scrobbles for any: such a key is kept when its shared secret works, saying so."""
+    FakeLastFmWrite(plex)
+    lastfm.valid_keys.clear()  # reads refused: the key's owner hasn't got Pro
+    owner, _ = await owner_with_library(app, plex)
+
+    alone = await owner.put("/api/admin/lastfm", json={"api_key": LASTFM_KEY}, headers=CSRF)
+    assert alone.status_code == 400
+    assert "Last.fm Pro" in alone.json()["detail"] and "scrobbling" in alone.json()["detail"]
+
+    body = {"api_key": LASTFM_KEY, "shared_secret": LASTFM_SECRET}
+    saved = (await owner.put("/api/admin/lastfm", json=body, headers=CSRF)).json()
+    assert (saved["configured"], saved["scrobbling"]) == (True, True)
+    assert "Last.fm Pro" in saved["note"]
+    assert (await owner.get("/api/scrobblers/lastfm")).json() == {"available": True}
+
+    # A key Last.fm doesn't know at all is still refused (its signed call fails too).
+    fake = {"api_key": "f" * 32, "shared_secret": LASTFM_SECRET}
+    assert (await owner.put("/api/admin/lastfm", json=fake, headers=CSRF)).status_code == 400
