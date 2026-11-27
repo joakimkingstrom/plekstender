@@ -3163,7 +3163,8 @@ export interface paths {
         };
         /**
          * List Artists
-         * @description The artists and their artwork, by name, or the newest in Plex first (`added`).
+         * @description The artists and their artwork, by name, the newest in Plex first (`added`), or those
+         *     whose artwork was changed here most recently first (`changed`).
          */
         get: operations["list_artists_api_servers__server_id__artwork_artists_get"];
         put?: never;
@@ -16020,7 +16021,7 @@ export interface operations {
                 show?: "needs" | "missing" | "low" | "all";
                 q?: string | null;
                 low_px?: number;
-                sort?: ("name" | "added" | "smallest") | null;
+                sort?: ("name" | "added" | "changed" | "smallest") | null;
                 offset?: number;
                 limit?: number;
             };
@@ -16297,7 +16298,7 @@ export interface operations {
             query?: {
                 q?: string | null;
                 status?: ("none" | "custom" | "done") | null;
-                sort?: "name" | "added";
+                sort?: "name" | "added" | "changed";
                 offset?: number;
                 limit?: number;
             };

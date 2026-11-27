@@ -85,6 +85,7 @@ const LOW_LIMITS: LowPx[] = [600, 1000, 1500]
 const SORTS: [CoverSort, string][] = [
   ['smallest', 'Smallest cover first'],
   ['added', 'Recently added'],
+  ['changed', 'Recently changed'],
   ['name', 'Artist'],
 ]
 
@@ -110,7 +111,7 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
   const [show, setShow] = useState<CoverFilter>('needs')
   const [query, setQuery] = useState('')
   const [lowPx, setLowPx] = useKept<LowPx>('cover-low-px', 600, LOW_LIMITS)
-  const [chosenSort, setSort] = useKept<CoverSort | 'auto'>('cover-sort', 'auto', ['auto', 'smallest', 'added', 'name'])
+  const [chosenSort, setSort] = useKept<CoverSort | 'auto'>('cover-sort', 'auto', ['auto', 'smallest', 'added', 'changed', 'name'])
   const sort: CoverSort = chosenSort === 'auto' ? (show === 'all' ? 'name' : 'smallest') : chosenSort
   const [selected, setSelected] = useState<AlbumCover | null>(null)
   const q = useDeferredValue(query.trim())
@@ -205,7 +206,9 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
                     <span className="block truncate text-xs text-muted">
                       {sort === 'added' && a.added_at
                         ? [a.artist, `added ${formatRelative(a.added_at)}`].filter(Boolean).join(' · ')
-                        : [a.artist, a.year].filter(Boolean).join(' · ')}
+                        : sort === 'changed' && a.applied_at
+                          ? [a.artist, `changed ${formatRelative(a.applied_at)}`].filter(Boolean).join(' · ')
+                          : [a.artist, a.year].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                   <CoverBadge cover={a} />
@@ -402,28 +405,8 @@ function CoverEditor({
             <Notice tone="error">{preview.error}</Notice>
           </div>
         )}
-        {(wide || square) && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)} className="accent-[var(--color-accent)]" />
-              Crop to a square
-            </label>
-            <label className="flex items-center gap-2 text-xs text-muted">
-              <input
-                type="checkbox"
-                checked={squarePref}
-                disabled={savePreferences.isPending}
-                onChange={(e) => {
-                  savePreferences.mutate({ square_covers: e.target.checked })
-                  setSquare(null) // follow the new default
-                }}
-                className="accent-[var(--color-accent)]"
-              />
-              Always (for every album)
-            </label>
-          </div>
-        )}
-        <div className="mt-4 flex flex-wrap gap-2">
+        {/* Save, with how the cover is cropped beside it. */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <Button
             variant="primary"
             disabled={!source || Boolean(preview.error)}
@@ -444,6 +427,27 @@ function CoverEditor({
           >
             Save to Plex
           </Button>
+          {(wide || square) && (
+            <>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)} className="accent-[var(--color-accent)]" />
+                Crop to a square
+              </label>
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={squarePref}
+                  disabled={savePreferences.isPending}
+                  onChange={(e) => {
+                    savePreferences.mutate({ square_covers: e.target.checked })
+                    setSquare(null) // follow the new default
+                  }}
+                  className="accent-[var(--color-accent)]"
+                />
+                Always (for every album)
+              </label>
+            </>
+          )}
         </div>
         {apply.isError && (
           <div className="mt-3">

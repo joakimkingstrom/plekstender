@@ -210,4 +210,6 @@ it('counts covers as low resolution from 600, 1000 or 1500 px, and sorts the new
   await vi.waitFor(() => expect(last().get('sort')).toBe('added'))
   // Kept for the next visit.
   expect([localStorage.getItem('cover-low-px'), localStorage.getItem('cover-sort')]).toEqual(['1000', 'added'])
+  fireEvent.change(screen.getByRole('combobox', { name: 'Sort' }), { target: { value: 'changed' } })
+  await vi.waitFor(() => expect(last().get('sort')).toBe('changed'))
 })

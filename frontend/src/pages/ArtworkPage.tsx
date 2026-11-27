@@ -105,7 +105,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<ArtworkStatus | null>(null)
   const [selected, setSelected] = useState<Artist | null>(null)
-  const [sort, setSortState] = useState<ArtistSort>(() => (localStorage.getItem('artwork-sort') === 'added' ? 'added' : 'name'))
+  const [sort, setSortState] = useState<ArtistSort>(() => ((['added', 'changed'] as const).find((s) => s === localStorage.getItem('artwork-sort')) ?? 'name'))
   const setSort = (v: ArtistSort) => {
     localStorage.setItem('artwork-sort', v)
     setSortState(v)
@@ -166,6 +166,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
           >
             <option value="name">Name</option>
             <option value="added">Recently added</option>
+            <option value="changed">Recently changed</option>
           </select>
         </label>
         <BulkStatus serverId={serverId} todo={counts.none ?? 0} />
@@ -193,6 +194,9 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
                     <span className="block truncate">{a.title}</span>
                     {sort === 'added' && a.added_at && (
                       <span className="block truncate text-xs text-muted">Added {formatRelative(a.added_at)}</span>
+                    )}
+                    {sort === 'changed' && a.applied_at && (
+                      <span className="block truncate text-xs text-muted">Changed {formatRelative(a.applied_at)}</span>
                     )}
                   </span>
                 </button>

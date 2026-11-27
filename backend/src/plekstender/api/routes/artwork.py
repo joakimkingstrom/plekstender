@@ -169,11 +169,12 @@ async def list_artists(
     user: UserDep,
     q: Annotated[str | None, Query(max_length=200)] = None,
     status_filter: Annotated[ArtworkStatus | None, Query(alias="status")] = None,
-    sort: Literal["name", "added"] = "name",
+    sort: Literal["name", "added", "changed"] = "name",
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 60,
 ) -> ArtworkArtistPage:
-    """The artists and their artwork, by name, or the newest in Plex first (`added`)."""
+    """The artists and their artwork, by name, the newest in Plex first (`added`), or those
+    whose artwork was changed here most recently first (`changed`)."""
     us = await owner_server(db, user, server_id)
     state, cond, where = visible(Artist, user.id, us)
     work = ArtistArtwork
@@ -212,6 +213,11 @@ async def list_artists(
             *(
                 (Artist.added_at.desc().nulls_last(), Artist.rating_key.desc())
                 if sort == "added"
+                else (
+                    work.applied_at.desc().nulls_last(),
+                    func.lower(func.coalesce(Artist.title_sort, Artist.title)),
+                )
+                if sort == "changed"
                 else (func.lower(func.coalesce(Artist.title_sort, Artist.title)), Artist.rating_key)
             )
         )
