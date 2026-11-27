@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select, update
 
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
-from plekstender.api.schemas import JobStopIn, JobStopOut
+from plekstender.api.schemas import JobOut, JobsOut, JobStopIn, JobStopOut, JobWaitingOut
 from plekstender.artwork import jobs as artwork_jobs
 from plekstender.db.models import (
     ArtworkJob,
@@ -28,6 +28,7 @@ from plekstender.db.models import (
     UserServer,
 )
 from plekstender.history.store import stopped_import
+from plekstender.job_list import Job, jobs_for
 from plekstender.jobs import JobStopped, abandoned
 from plekstender.tags import apply, lyrics
 from plekstender.tags.identify import forget_run
@@ -64,6 +65,35 @@ async def _job(db: DbDep, user: User, kind: str, job_id: int) -> Any:
     if not allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
     return job
+
+
+def _job_out(job: Job) -> JobOut:
+    return JobOut(
+        kind=job.kind,
+        id=job.id,
+        what=job.what,
+        subkind=job.subkind,
+        status=job.status,
+        server_id=job.server_id,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        progress=job.progress,
+        error=job.error,
+        stop_requested=job.stop_requested,
+        stoppable=job.stoppable,
+        waiting_for=JobWaitingOut(what=job.waiting_for.what, since=job.waiting_for.since)
+        if job.waiting_for
+        else None,
+    )
+
+
+@router.get("", response_model=JobsOut)
+async def list_jobs(db: DbDep, user: UserDep) -> JobsOut:
+    """Your jobs (and those on servers you own): running and waiting ones, each waiting one
+    with what it waits for, then the latest finished."""
+    active, finished = await jobs_for(db, user.id)
+    return JobsOut(active=[_job_out(j) for j in active], finished=[_job_out(j) for j in finished])
 
 
 @router.post("/{kind}/{job_id}/stop", response_model=JobStopOut)

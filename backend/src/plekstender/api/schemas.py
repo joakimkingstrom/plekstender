@@ -2794,3 +2794,33 @@ class ArtistNeighboursOut(BaseModel):
 
 class SkipAlbumsIn(BaseModel):
     album_keys: list[int] = Field(min_length=1, max_length=500)
+
+
+# --- Jobs (Settings → Jobs) -----------------------------------------------------------------
+
+
+class JobWaitingOut(BaseModel):
+    what: str = Field(description="The job ahead of it, or why it hasn't started.")
+    since: dt.datetime | None = Field(description="When that job started.")
+
+
+class JobOut(BaseModel):
+    kind: Literal["sync", "artwork", "files", "edits", "imports"]
+    id: int
+    what: str
+    subkind: str | None = Field(description="scan, identify, lyrics, fanart, lastfm...")
+    status: str = Field(description="queued, running, succeeded, failed, applied, partial...")
+    server_id: int | None
+    created_at: dt.datetime
+    started_at: dt.datetime | None
+    finished_at: dt.datetime | None
+    progress: dict[str, Any]
+    error: str | None
+    stop_requested: str | None
+    stoppable: bool = Field(description="Can be stopped from the jobs page.")
+    waiting_for: JobWaitingOut | None
+
+
+class JobsOut(BaseModel):
+    active: list[JobOut] = Field(description="Running, then waiting (oldest first).")
+    finished: list[JobOut] = Field(description="The latest finished, newest first.")
