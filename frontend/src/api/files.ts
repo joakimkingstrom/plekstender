@@ -443,14 +443,17 @@ export type AlbumIssue = 'any' | 'differs' | 'no_mbid' | 'missing' | 'errors' | 
 export type AlbumIssues = Schemas['AlbumIssues']
 export type MbBest = Schemas['MbBestOut']
 
-export function useAlbumIssues(serverId: number, issue: AlbumIssue, q: string, offset: number, limit = 50) {
+/** Albums skipped in a MusicBrainz lookup this recently are left out (when asked). */
+export const SKIPPED_DAYS = 90
+
+export function useAlbumIssues(serverId: number, issue: AlbumIssue, q: string, offset: number, limit = 50, skippedWithin = 0) {
   return useQuery({
-    queryKey: [...filesKeys.all(serverId), 'album-issues', { issue, q, offset, limit }],
+    queryKey: [...filesKeys.all(serverId), 'album-issues', { issue, q, offset, limit, skippedWithin }],
     placeholderData: keepPreviousData,
     queryFn: () =>
       unwrap(
         api.GET('/api/servers/{server_id}/files/albums', {
-          params: { path: { server_id: serverId }, query: { issue, q: q || undefined, offset, limit } },
+          params: { path: { server_id: serverId }, query: { issue, q: q || undefined, offset, limit, skipped_within: skippedWithin } },
         }),
       ),
   })
@@ -461,10 +464,19 @@ export type LyricsLookupMode = NonNullable<Schemas['LyricsLookupIn']['mode']>
 
 /** Plain calls for the bulk actions, which go through albums one at a time. */
 export const bulk = {
-  albumIssues: (serverId: number, issue: AlbumIssue, q: string, offset: number, limit: number) =>
+  albumIssues: (serverId: number, issue: AlbumIssue, q: string, offset: number, limit: number, skippedWithin = 0) =>
     unwrap(
       api.GET('/api/servers/{server_id}/files/albums', {
-        params: { path: { server_id: serverId }, query: { issue, q: q || undefined, offset, limit } },
+        params: { path: { server_id: serverId }, query: { issue, q: q || undefined, offset, limit, skipped_within: skippedWithin } },
+      }),
+    ),
+  /** Remember that these albums were looked up and skipped (now). */
+  skipAlbums: (serverId: number, albumKeys: number[]) =>
+    unwrap(api.POST('/api/servers/{server_id}/files/albums/skipped', { params: { path: { server_id: serverId } }, body: { album_keys: albumKeys } })),
+  unskipAlbum: (serverId: number, albumKey: number) =>
+    unwrap(
+      api.DELETE('/api/servers/{server_id}/files/albums/skipped/{album_key}', {
+        params: { path: { server_id: serverId, album_key: albumKey } },
       }),
     ),
   best: (serverId: number, albumKey: number) =>

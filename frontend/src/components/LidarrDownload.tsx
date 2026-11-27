@@ -54,14 +54,21 @@ export function LidarrMonitorButton({ mbid, title }: { mbid: string; title: stri
     <>
       <Tooltip content="Lidarr downloads it once it's out">
         <Button variant="ghost" size="xs" busy={add.isPending} onClick={() => add.mutate({ mbid, search: false })} aria-label={`Monitor ${title} in Lidarr`}>
-          <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
-            <path d="M4.5 2.5h7v11l-3.5-2.5-3.5 2.5z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            <path d="M8 5v4M6 7h4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
+          <LidarrAddIcon />
         </Button>
       </Tooltip>
       {add.isError && <span className="text-xs text-danger">{errorMessage(add.error)}</span>}
     </>
+  )
+}
+
+/** A bookmark with a plus: add to Lidarr (monitor an album, add an artist). */
+export function LidarrAddIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+      <path d="M4.5 2.5h7v11l-3.5-2.5-3.5 2.5z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M8 5v4M6 7h4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
   )
 }
 

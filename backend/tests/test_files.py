@@ -650,6 +650,18 @@ async def test_tag_editing_tab(
     assert (await owner.get(f"{base}/albums", params={"q": "radio"})).json()["total"] == 1
     assert (await owner.get(f"{base}/albums", params={"q": "nothing"})).json()["total"] == 0
 
+    # Looked up and skipped: left out for a while if asked (the page asks for 90 days).
+    skipped = await owner.post(f"{base}/albums/skipped", json={"album_keys": [200]}, headers=CSRF)
+    assert skipped.status_code == 204
+    hiding = (await owner.get(f"{base}/albums", params={"skipped_within": 90})).json()
+    assert (hiding["items"], hiding["total"], hiding["skipped_hidden"]) == ([], 0, 1)
+    showing = (await owner.get(f"{base}/albums")).json()
+    assert showing["items"][0]["skipped_at"] is not None and showing["skipped_hidden"] == 0
+    unskipped = await owner.delete(f"{base}/albums/skipped/200", headers=CSRF)
+    assert unskipped.status_code == 204
+    hiding = (await owner.get(f"{base}/albums", params={"skipped_within": 90})).json()
+    assert hiding["total"] == 1 and hiding["items"][0]["skipped_at"] is None
+
     # Found by searching: both files match, but the release has 12 tracks, so it's
     # proposed, not a clear match.
     best = (await owner.post(f"{base}/albums/200/musicbrainz/best", headers=CSRF)).json()

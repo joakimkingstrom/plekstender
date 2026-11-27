@@ -1008,6 +1008,19 @@ class FileFingerprint(Base):
     values: Mapped[list[int]] = mapped_column(ARRAY(Integer))
 
 
+class SkippedAlbum(Base):
+    """An album someone looked up on MusicBrainz in Tag editing and skipped: hidden from the
+    list for a while (their choice), so the next batch is albums not yet looked at."""
+
+    __tablename__ = "skipped_albums"
+    __table_args__ = (PrimaryKeyConstraint("user_id", "server_id", "rating_key"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    rating_key: Mapped[int] = mapped_column(BigInteger)
+    skipped_at: Mapped[dt.datetime]
+
+
 class TagChangeSet(Base):
     """One edit of music files' tags (a user's edit, or an undo of earlier changes), applied
     by the worker. Its changes are recorded before anything is written."""

@@ -2361,6 +2361,9 @@ class AlbumIssues(BaseModel):
     no_mbid: int = Field(description="Files without a MusicBrainz release ID.")
     missing: int = Field(description="Files without a title, artist, album or track number.")
     errors: int = Field(description="Files whose tags couldn't be read.")
+    skipped_at: dt.datetime | None = Field(
+        default=None, description="When you last skipped it in a MusicBrainz lookup."
+    )
 
 
 class AlbumIssuesPage(BaseModel):
@@ -2371,6 +2374,9 @@ class AlbumIssuesPage(BaseModel):
     albums: int = Field(description="Albums with scanned files.")
     counts: dict[str, int] = Field(description="Albums with each kind of issue (and any).")
     not_in_plex: int = Field(description="Readable files that aren't a Plex track.")
+    skipped_hidden: int = Field(
+        default=0, description="Albums with this filter left out as skipped lately."
+    )
 
 
 class MbBestOut(BaseModel):
@@ -2777,3 +2783,7 @@ class ArtistNeighboursOut(BaseModel):
 
     previous: ArtistNeighbourOut | None
     next: ArtistNeighbourOut | None
+
+
+class SkipAlbumsIn(BaseModel):
+    album_keys: list[int] = Field(min_length=1, max_length=500)
