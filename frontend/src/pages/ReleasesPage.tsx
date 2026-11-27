@@ -13,7 +13,7 @@ import {
   type ReleaseKind,
 } from '../api/releases'
 import { Artwork } from '../components/library'
-import { DownloadIcon, LidarrBadge, LidarrDownloadDialog } from '../components/LidarrDownload'
+import { DownloadIcon, LidarrBadge, LidarrDownloadDialog, LidarrMonitorButton } from '../components/LidarrDownload'
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
 import { Badge, Button, Card, Notice, Spinner } from '../components/ui'
@@ -109,7 +109,8 @@ function ReleaseCard({ release, serverId, artist }: { release: Release; serverId
       </p>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {release.in_library && <Badge tone="ok">In your library</Badge>}
-        <LidarrBadge state={state} />
+        <LidarrBadge state={state} upcoming={!out} />
+        {lidarr && !out && (state === 'absent' || state === 'unmonitored') && <LidarrMonitorButton mbid={release.mbid} title={release.title} />}
         {lidarr && out && !release.in_library && state !== 'downloaded' && (
           <Tooltip content="Download with Lidarr">
             <Button variant="ghost" size="xs" onClick={() => setDownloading(true)} aria-label={`Download ${release.title} with Lidarr`}>

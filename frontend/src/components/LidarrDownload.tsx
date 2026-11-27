@@ -3,6 +3,7 @@ import { errorMessage } from '../api/client'
 import { useAddLidarrAlbum, useGrabRelease, useLidarrReleases, type LidarrAlbumState, type LidarrRelease } from '../api/lidarr'
 import { formatBytes, formatCount } from '../format'
 import { Dialog } from './Dialog'
+import { Tooltip } from './Tooltip'
 import { Badge, Button, Notice, Spinner } from './ui'
 
 const STATE_TEXT: Record<Exclude<LidarrAlbumState, 'absent'>, string> = {
@@ -12,9 +13,25 @@ const STATE_TEXT: Record<Exclude<LidarrAlbumState, 'absent'>, string> = {
 }
 
 /** How an album stands in Lidarr, as a small badge (nothing when it isn't there). */
-export function LidarrBadge({ state }: { state: LidarrAlbumState | undefined }) {
+export function LidarrBadge({ state, upcoming = false }: { state: LidarrAlbumState | undefined; upcoming?: boolean }) {
   if (!state || state === 'absent') return null
+  if (upcoming && state === 'monitored') return <Badge tone="accent">Monitored by Lidarr</Badge>
   return <Badge tone={state === 'downloaded' ? 'ok' : 'muted'}>{STATE_TEXT[state]}</Badge>
+}
+
+/** Coming up: have Lidarr monitor the album, so it grabs it once it's out. */
+export function LidarrMonitorButton({ mbid, title }: { mbid: string; title: string }) {
+  const add = useAddLidarrAlbum()
+  return (
+    <>
+      <Tooltip content="Lidarr downloads it once it's out">
+        <Button variant="ghost" size="xs" busy={add.isPending} onClick={() => add.mutate({ mbid, search: false })} aria-label={`Monitor ${title} in Lidarr`}>
+          Monitor
+        </Button>
+      </Tooltip>
+      {add.isError && <span className="text-xs text-danger">{errorMessage(add.error)}</span>}
+    </>
+  )
 }
 
 export function DownloadIcon() {

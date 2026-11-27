@@ -236,3 +236,25 @@ async def test_downloading_an_album(app: FastAPI, plex: FakePlex, fake_lidarr: F
         "/api/lidarr/albums/states", json={"mbids": [OK_COMPUTER]}, headers=CSRF
     )
     assert states.json() == {OK_COMPUTER: "downloaded"}
+
+
+@pytest.mark.db
+async def test_monitoring_an_album_coming_up(
+    app: FastAPI, plex: FakePlex, fake_lidarr: FakeLidarr
+) -> None:
+    owner, friend = await connected(app, plex, access="everyone")
+    # Anyone may (as set up): added monitored, not searched (it isn't out yet).
+    added = await friend.post("/api/lidarr/albums", json={"mbid": NEW_ALBUM}, headers=CSRF)
+    assert added.json() == {"id": 1, "title": "Coming Soon", "state": "monitored"}
+    assert fake_lidarr.added[0]["addOptions"] == {"searchForNewAlbum": False}
+    assert fake_lidarr.commands == []
+
+    # In Lidarr but not monitored: monitored now.
+    fake_lidarr.albums[1]["monitored"] = False
+    states = await owner.post(
+        "/api/lidarr/albums/states", json={"mbids": [NEW_ALBUM]}, headers=CSRF
+    )
+    assert states.json() == {NEW_ALBUM: "unmonitored"}
+    again = await owner.post("/api/lidarr/albums", json={"mbid": NEW_ALBUM}, headers=CSRF)
+    assert again.json()["state"] == "monitored" and fake_lidarr.albums[1]["monitored"] is True
+    assert len(fake_lidarr.added) == 1

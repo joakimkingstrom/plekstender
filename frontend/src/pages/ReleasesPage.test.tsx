@@ -144,6 +144,16 @@ it('downloads an album with Lidarr: chosen from what the indexers have', async (
   expect(await posted('/api/lidarr/releases')[0].clone().json()).toEqual({ guid: 'flac', indexer_id: 3 })
 })
 
+it('has Lidarr monitor an album coming up', async () => {
+  lidarrOn = true
+  renderAt('/library/releases')
+  fireEvent.click(await screen.findByRole('button', { name: 'Monitor Still to Come in Lidarr' }))
+  await vi.waitFor(async () => {
+    const [post] = fetchMock.mock.calls.filter(([r]) => new URL(r.url).pathname === '/api/lidarr/albums' && r.method === 'POST')
+    expect(await post[0].clone().json()).toEqual({ mbid: '00000007-0000-4000-8000-000000000000', search: false })
+  })
+})
+
 it('makes the covers smaller or bigger, and remembers it', async () => {
   localStorage.removeItem('releases-cover-size')
   const { container, unmount } = renderAt('/library/releases')
