@@ -84,9 +84,10 @@ async def add_target(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter the username and password."
                 )
             try:
-                secret, username = await scrobblers.AudioscrobblerClient(http, url).session(
-                    body.username.strip(), body.password
-                )
+                async with scrobblers.guarded_client() as guarded:
+                    secret, username = await scrobblers.AudioscrobblerClient(guarded, url).session(
+                        body.username.strip(), body.password
+                    )
             except ScrobbleServiceError as exc:
                 code = (
                     status.HTTP_400_BAD_REQUEST
@@ -103,7 +104,8 @@ async def add_target(
             url = scrobblers.listenbrainz_base(body.url)
             await scrobblers.check_server_address(url)
             secret = body.token.strip()
-            name = await scrobblers.check_listenbrainz(http, url, secret)
+            async with scrobblers.guarded_client() as guarded:
+                name = await scrobblers.check_listenbrainz(guarded, url, secret)
     except scrobblers.ScrobblerError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
