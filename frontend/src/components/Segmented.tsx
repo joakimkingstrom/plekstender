@@ -8,6 +8,7 @@ export function Segmented<T extends string>({
   onChange,
   label,
   className = '',
+  size = 'md',
 }: {
   value: T
   options: [T, string][]
@@ -15,6 +16,8 @@ export function Segmented<T extends string>({
   label: string
   /** e.g. "w-full" to stretch the buttons across a row. */
   className?: string
+  /** sm: compact, to sit beside a small dropdown in a narrow column. */
+  size?: 'sm' | 'md'
 }) {
   return (
     <div
@@ -28,7 +31,7 @@ export function Segmented<T extends string>({
           type="button"
           aria-pressed={key === value}
           onClick={() => onChange(key)}
-          className={`flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+          className={`flex-1 whitespace-nowrap rounded-md font-medium ${size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1.5 text-sm'} ${
             key === value ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'
           }`}
         >

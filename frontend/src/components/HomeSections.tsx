@@ -89,11 +89,14 @@ export function YourListening({ serverId }: { serverId: number | null }) {
   )
 }
 
+// Artist rows are one line, album rows two: six artists fill the card beside five albums.
+const TOP_ROWS = { artist: 6, album: 5 } as const
+
 function TopList({ serverId, items, kind }: { serverId: number | null; items: Schemas['TopItemOut'][]; kind: 'artist' | 'album' }) {
   const max = Math.max(1, ...items.map((i) => i.listens))
   return (
     <ol className="space-y-2">
-      {items.slice(0, 5).map((item, i) => {
+      {items.slice(0, TOP_ROWS[kind]).map((item, i) => {
         const to = item.rating_key ? `/library/${kind === 'artist' ? 'artists' : 'albums'}/${item.rating_key}` : null
         const body = (
           <>

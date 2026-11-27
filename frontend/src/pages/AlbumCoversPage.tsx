@@ -157,30 +157,34 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
             </button>
           ))}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-          <span aria-hidden>Low resolution: under</span>
-          <Segmented<string>
-            label="Low resolution: under"
-            value={String(lowPx)}
-            onChange={(v) => setLowPx(Number(v) as LowPx)}
-            options={LOW_LIMITS.map((px) => [String(px), `${px} px`])}
-            className="text-xs"
-          />
+        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 text-xs text-muted">
+          <div className="space-y-1">
+            <span className="block" aria-hidden>
+              Low resolution: under
+            </span>
+            <Segmented<string>
+              label="Low resolution: under"
+              value={String(lowPx)}
+              onChange={(v) => setLowPx(Number(v) as LowPx)}
+              options={LOW_LIMITS.map((px) => [String(px), `${px} px`])}
+              size="sm"
+            />
+          </div>
+          <label className="space-y-1">
+            <span className="block">Sort</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as CoverSort)}
+              className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs text-text"
+            >
+              {SORTS.map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <label className="flex items-center justify-between gap-2 text-xs text-muted">
-          Sort
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as CoverSort)}
-            className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs text-text"
-          >
-            {SORTS.map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
         {show !== 'all' && (albums.data?.pages[0]?.total ?? 0) > 0 && (
           <BestMatches serverId={serverId} show={show} q={q} lowPx={lowPx} count={albums.data?.pages[0]?.total ?? 0} />
         )}
