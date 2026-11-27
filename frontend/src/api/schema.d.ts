@@ -2588,6 +2588,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/albums/skipped": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Albums
+         * @description Remember that you looked these albums up and skipped them (now), so the list can
+         *     leave them out for a while.
+         */
+        post: operations["skip_albums_api_servers__server_id__files_albums_skipped_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/skipped/{album_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unskip Album
+         * @description Forget that you skipped an album: it's listed again.
+         */
+        delete: operations["unskip_album_api_servers__server_id__files_albums_skipped__album_key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/renames": {
         parameters: {
             query?: never;
@@ -5049,6 +5090,11 @@ export interface components {
              * @description Files whose tags couldn't be read.
              */
             errors: number;
+            /**
+             * Skipped At
+             * @description When you last skipped it in a MusicBrainz lookup.
+             */
+            skipped_at?: string | null;
         };
         /** AlbumIssuesPage */
         AlbumIssuesPage: {
@@ -5077,6 +5123,12 @@ export interface components {
              * @description Readable files that aren't a Plex track.
              */
             not_in_plex: number;
+            /**
+             * Skipped Hidden
+             * @description Albums with this filter left out as skipped lately.
+             * @default 0
+             */
+            skipped_hidden: number;
         };
         /** AlbumSummary */
         AlbumSummary: {
@@ -9669,6 +9721,11 @@ export interface components {
             name: string;
             /** Rating Key */
             rating_key: number | null;
+        };
+        /** SkipAlbumsIn */
+        SkipAlbumsIn: {
+            /** Album Keys */
+            album_keys: number[];
         };
         /** SkipRateOut */
         SkipRateOut: {
@@ -14971,6 +15028,8 @@ export interface operations {
                 q?: string | null;
                 offset?: number;
                 limit?: number;
+                /** @description Leave out albums you skipped in a MusicBrainz lookup this many days ago or less (0: show them). */
+                skipped_within?: number;
             };
             header?: never;
             path: {
@@ -15020,6 +15079,69 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MbBestOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_albums_api_servers__server_id__files_albums_skipped_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkipAlbumsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unskip_album_api_servers__server_id__files_albums_skipped__album_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -501,6 +501,7 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **Release cards** are icons below the title, each with a tooltip: in your library (a green record), how it stands in Lidarr (a green bookmark: monitored; a green tick: downloaded; an orange outlined bookmark: in Lidarr but not monitored, so not to be downloaded), and the buttons: monitor, download, hide / show again (an eye).
 - **Rediscover**: hide / show again is the same eye button (`HideToggle`, shared with Releases).
 - **Discover**: Last.fm (an external-link icon), add to Lidarr (the bookmark with a plus, as Monitor on Releases) and hide / show again (the eye) are icon buttons with tooltips.
+- **Tag editing → skipped albums**: *Skip* in the MusicBrainz dialog, and *Skip the rest* (every album not accepted or skipped yet), are remembered per person (`skipped_albums`, with when). The list leaves out albums skipped in the last 90 days (`skipped_within=90`; on unless turned off, remembered in the browser; it says how many it hid), so the next batch is albums not looked at yet. Shown, a skipped album says when, with a button to take the skip back. *Next 50 albums* also comes after *Skip the rest*.
 - **Artist pages** have previous / next arrows (the artists before and after, by name as the library lists them: `GET …/library/artists/{key}/neighbours`), subtle, in the margins halfway down the window; hidden when the window is too narrow for them (under 1290 px).
 
 ## The original design
