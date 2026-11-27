@@ -500,6 +500,7 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **Cover sizes** (S / M / L) on the library's artists and on an artist's albums too, as on Releases: each page remembers its own in the browser; large covers are asked of Plex at 512 px.
 - **Release cards** are icons below the title, each with a tooltip: in your library (a green record), how it stands in Lidarr (a green bookmark: monitored; a green tick: downloaded; an orange outlined bookmark: in Lidarr but not monitored, so not to be downloaded), and the buttons: monitor, download, hide / show again (an eye).
 - **Rediscover**: hide / show again is the same eye button (`HideToggle`, shared with Releases).
+- **Discover**: Last.fm (an external-link icon), add to Lidarr (the bookmark with a plus, as Monitor on Releases) and hide / show again (the eye) are icon buttons with tooltips.
 - **Artist pages** have previous / next arrows (the artists before and after, by name as the library lists them: `GET …/library/artists/{key}/neighbours`), subtle, in the margins halfway down the window; hidden when the window is too narrow for them (under 1290 px).
 
 ## The original design
