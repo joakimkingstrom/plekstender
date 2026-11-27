@@ -12,7 +12,7 @@ from procrastinate.exceptions import AlreadyEnqueued
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from plekstender import __version__
+from plekstender import __version__, release_covers
 from plekstender.artist_countries import look_up as look_up_artist_countries
 from plekstender.artwork.folders import check_server as check_folder_mapping
 from plekstender.artwork.folders import write_queued as write_queued_folder
@@ -784,8 +784,12 @@ async def find_artist_releases(timestamp: int) -> None:
         httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
     ):
         done = await look_up_releases(db, http)
+        # Their covers, kept on disk while they're recent or coming up.
+        saved = await release_covers.save_recent(db, http, get_settings())
     if done:
         log.info("Read %d artists' releases from MusicBrainz", done)
+    if saved:
+        log.info("Saved the covers of %d releases", saved)
 
 
 @app.periodic(cron="*/15 * * * *", periodic_id="cover-colours")
@@ -962,6 +966,9 @@ async def prune_history(timestamp: int) -> None:
 
     await prune_jobs(app)
     async with get_sessionmaker()() as db:
+        covers_gone = await release_covers.prune(db, get_settings())
+        if covers_gone:
+            log.info("deleted %d covers of releases out over 90 days ago", covers_gone)
         removed = await prune_records(db)
         await db.commit()
     if any(removed.values()):
