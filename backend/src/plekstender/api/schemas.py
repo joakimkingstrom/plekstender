@@ -2824,3 +2824,52 @@ class JobOut(BaseModel):
 class JobsOut(BaseModel):
     active: list[JobOut] = Field(description="Running, then waiting (oldest first).")
     finished: list[JobOut] = Field(description="The latest finished, newest first.")
+
+
+# --- players (remote control) -----------------------------------------------------------------
+
+
+class PlayerNowOut(BaseModel):
+    title: str | None
+    artist: str | None
+    album: str | None
+    state: str | None = Field(description="playing, paused or buffering")
+    rating_key: int | None
+
+
+class PlayerOut(BaseModel):
+    id: str
+    name: str
+    product: str | None
+    platform: str | None
+    version: str | None
+    on_account: bool = Field(description="plex.tv lists it among the account's devices.")
+    on_server: bool = Field(description="The server is in touch with it now (/clients).")
+    online: bool
+    direct: bool = Field(description="Plex lists an address to reach it at directly.")
+    playing: PlayerNowOut | None
+
+
+class PlayersOut(BaseModel):
+    players: list[PlayerOut]
+    direct_allowed: bool = Field(description="Sending straight to players (admins only).")
+
+
+PlayerCommand = Literal["play", "pause", "next", "previous", "stop"]
+PlayerRoute = Literal["server", "direct"]
+
+
+class PlayerCommandIn(BaseModel):
+    command: PlayerCommand
+    route: PlayerRoute = "server"
+
+
+class PlayerPlayIn(BaseModel):
+    rating_key: int = Field(description="A song or an album.")
+    route: PlayerRoute = "server"
+
+
+class PlayerSentOut(BaseModel):
+    ok: bool
+    route: PlayerRoute
+    detail: str

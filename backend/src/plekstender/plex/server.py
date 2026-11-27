@@ -66,6 +66,14 @@ class PlexServerClient:
         self._base = base_uri.rstrip("/")
         self._token = token
 
+    @property
+    def base_uri(self) -> str:
+        return self._base
+
+    @property
+    def token(self) -> str:
+        return self._token
+
     async def _request(
         self,
         path: str,
@@ -302,6 +310,56 @@ class PlexServerClient:
             timeout=httpx.Timeout(60.0, connect=10.0),
             follow_redirects=False,
         )
+
+    # --- players (remote control) --------------------------------------------------------
+
+    async def clients(self) -> list[dict[str, Any]]:
+        """The players the server is in touch with now (on its network, or connected to it)."""
+        data = await self._get("/clients")
+        items: list[dict[str, Any]] = data.get("MediaContainer", {}).get("Server", [])
+        return items
+
+    async def player_command(
+        self, player_id: str, command: str, params: dict[str, Any]
+    ) -> httpx.Response:
+        """A command for a player (`playback/pause`...), relayed by the server."""
+        headers = plex_headers(self._settings, self._token)
+        headers["X-Plex-Target-Client-Identifier"] = player_id
+        resp = await self._http.get(
+            f"{self._base}/player/{command}",
+            params=params,
+            headers=headers,
+            timeout=httpx.Timeout(15.0, connect=5.0),
+            follow_redirects=False,
+        )
+        if resp.status_code == 401:
+            raise PlexAuthError("server rejected the token", 401)
+        if resp.is_error or resp.is_redirect:
+            raise PlexError(f"server returned HTTP {resp.status_code}", resp.status_code)
+        return resp
+
+    async def create_play_queue(self, machine_id: str, rating_key: int) -> tuple[int, str]:
+        """A play queue of an item (a song, an album, a playlist's songs) for a player to
+        play: its id, and the key of the song it starts with."""
+        resp = await self._request(
+            "/playQueues",
+            method="POST",
+            params={
+                "type": "audio",
+                "uri": self.library_uri(machine_id, [rating_key]),
+                "shuffle": 0,
+                "repeat": 0,
+                "continuous": 0,
+            },
+        )
+        try:
+            container = resp.json()["MediaContainer"]
+            queue_id = int(container["playQueueID"])
+            selected = container.get("playQueueSelectedMetadataItemID")
+            first = container.get("Metadata", [{}])[0].get("ratingKey")
+            return queue_id, f"/library/metadata/{selected or first}"
+        except (ValueError, LookupError, TypeError) as exc:
+            raise PlexError("Plex didn't make a play queue") from exc
 
     # --- playlists (always under the token owner's account) ---------------------------
 

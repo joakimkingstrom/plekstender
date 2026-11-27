@@ -3987,6 +3987,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Players
+         * @description Your players (Plexamp, the Plex apps): those on your Plex account and those the server
+         *     is in touch with, with what each is playing.
+         */
+        get: operations["list_players_api_servers__server_id__players_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/players/{player_id}/command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Player Command
+         * @description Play, pause, skip: through the server, or (admins) straight to the player.
+         */
+        post: operations["player_command_api_servers__server_id__players__player_id__command_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/players/{player_id}/play": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Player Play
+         * @description Play a song or an album on a player (a play queue on the server, then playMedia).
+         */
+        post: operations["player_play_api_servers__server_id__players__player_id__play_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/access": {
         parameters: {
             query?: never;
@@ -8459,6 +8520,103 @@ export interface components {
             total: number;
             /** Attribution */
             attribution: string;
+        };
+        /** PlayerCommandIn */
+        PlayerCommandIn: {
+            /**
+             * Command
+             * @enum {string}
+             */
+            command: "play" | "pause" | "next" | "previous" | "stop";
+            /**
+             * Route
+             * @default server
+             * @enum {string}
+             */
+            route: "server" | "direct";
+        };
+        /** PlayerNowOut */
+        PlayerNowOut: {
+            /** Title */
+            title: string | null;
+            /** Artist */
+            artist: string | null;
+            /** Album */
+            album: string | null;
+            /**
+             * State
+             * @description playing, paused or buffering
+             */
+            state: string | null;
+            /** Rating Key */
+            rating_key: number | null;
+        };
+        /** PlayerOut */
+        PlayerOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Product */
+            product: string | null;
+            /** Platform */
+            platform: string | null;
+            /** Version */
+            version: string | null;
+            /**
+             * On Account
+             * @description plex.tv lists it among the account's devices.
+             */
+            on_account: boolean;
+            /**
+             * On Server
+             * @description The server is in touch with it now (/clients).
+             */
+            on_server: boolean;
+            /** Online */
+            online: boolean;
+            /**
+             * Direct
+             * @description Plex lists an address to reach it at directly.
+             */
+            direct: boolean;
+            playing: components["schemas"]["PlayerNowOut"] | null;
+        };
+        /** PlayerPlayIn */
+        PlayerPlayIn: {
+            /**
+             * Rating Key
+             * @description A song or an album.
+             */
+            rating_key: number;
+            /**
+             * Route
+             * @default server
+             * @enum {string}
+             */
+            route: "server" | "direct";
+        };
+        /** PlayerSentOut */
+        PlayerSentOut: {
+            /** Ok */
+            ok: boolean;
+            /**
+             * Route
+             * @enum {string}
+             */
+            route: "server" | "direct";
+            /** Detail */
+            detail: string;
+        };
+        /** PlayersOut */
+        PlayersOut: {
+            /** Players */
+            players: components["schemas"]["PlayerOut"][];
+            /**
+             * Direct Allowed
+             * @description Sending straight to players (admins only).
+             */
+            direct_allowed: boolean;
         };
         /** PlaylistDetail */
         PlaylistDetail: {
@@ -17559,6 +17717,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AchievementsSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_players_api_servers__server_id__players_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayersOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    player_command_api_servers__server_id__players__player_id__command_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                player_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerCommandIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerSentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    player_play_api_servers__server_id__players__player_id__play_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                player_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerPlayIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerSentOut"];
                 };
             };
             /** @description Validation Error */
