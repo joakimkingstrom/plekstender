@@ -748,6 +748,33 @@ class HiddenSuggestion(Base):
     hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 
+class SongCover(Base):
+    """Whether a song is a cover, and of whose song (SecondHandSongs): looked up once per
+    song, by its normalised artist and title, whichever releases and servers have it."""
+
+    __tablename__ = "song_covers"
+    __table_args__ = (
+        PrimaryKeyConstraint("artist_key", "title_norm"),
+        Index("ix_song_covers_checked", "checked_at"),
+    )
+
+    artist_key: Mapped[str] = mapped_column(Text)
+    title_norm: Mapped[str] = mapped_column(Text)
+    # cover | original (the artist's own song, or a re-recording of it) | unknown (not on
+    # SecondHandSongs) | error (tried again the next day)
+    status: Mapped[str] = mapped_column(String(12))
+    original_artist: Mapped[str | None] = mapped_column(Text)
+    original_title: Mapped[str | None] = mapped_column(Text)
+    # SecondHandSongs pages: this recording, and the original's.
+    performance_url: Mapped[str | None] = mapped_column(Text)
+    original_url: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(24), default="secondhandsongs")
+    # Requests the lookup took, counted against SecondHandSongs' limits.
+    requests: Mapped[int] = mapped_column(SmallInteger, default=1)
+    error: Mapped[str | None] = mapped_column(Text)
+    checked_at: Mapped[dt.datetime]
+
+
 class DiscoverArt(Base):
     """fanart.tv artwork of an artist suggested on Library → Discover (the top few): the
     artist found on MusicBrainz by name, and which of its images are saved under

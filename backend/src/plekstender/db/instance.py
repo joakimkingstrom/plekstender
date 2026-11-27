@@ -696,3 +696,38 @@ async def get_fonts(db: AsyncSession) -> dict[str, list[str]]:
 async def set_fonts(db: AsyncSession, groups: dict[str, list[str]] | None) -> None:
     """Save the font list (None restores the default)."""
     await _put(db, FONTS_KEY, {} if groups is None else {"groups": groups})
+
+
+# --- SecondHandSongs (cover songs) ---------------------------------------------------------
+
+SECONDHANDSONGS_KEY = "secondhandsongs"
+SECONDHANDSONGS_PURPOSE = "instance.secondhandsongs_api_key"
+
+
+class SecondHandSongsSettings(BaseModel):
+    enabled: bool = False
+    api_key: str | None = None
+
+
+async def get_secondhandsongs(db: AsyncSession, settings: Settings) -> SecondHandSongsSettings:
+    """Whether songs are looked up on SecondHandSongs (an admin turns it on), and the API key
+    if one was given (it raises the rate limits; none is needed)."""
+    stored = await _get(db, SECONDHANDSONGS_KEY) or {}
+    key = None
+    if encrypted := stored.get("api_key_enc"):
+        try:
+            key = _cipher(settings).decrypt(encrypted, purpose=SECONDHANDSONGS_PURPOSE)
+        except DecryptionError:
+            key = None
+    return SecondHandSongsSettings(enabled=stored.get("enabled") is True, api_key=key)
+
+
+async def set_secondhandsongs(
+    db: AsyncSession, settings: Settings, value: SecondHandSongsSettings
+) -> None:
+    stored: dict[str, Any] = {"enabled": value.enabled}
+    if value.api_key:
+        stored["api_key_enc"] = _cipher(settings).encrypt(
+            value.api_key, purpose=SECONDHANDSONGS_PURPOSE
+        )
+    await _put(db, SECONDHANDSONGS_KEY, stored)

@@ -423,6 +423,13 @@ class TagDetail(BaseModel):
     related: list[TagOut] = Field(description="Tags often on the same artists and albums.")
 
 
+class CoverOf(BaseModel):
+    artist: str | None
+    title: str | None
+    url: str | None = Field(description="The original on SecondHandSongs.")
+    cover_url: str | None = Field(description="This recording on SecondHandSongs.")
+
+
 class TrackOut(BaseModel):
     rating_key: int
     title: str
@@ -438,6 +445,9 @@ class TrackOut(BaseModel):
     album_thumb: str | None
     listens: int = Field(default=0, description="Your listens of this song (all sources).")
     seen_live: int = Field(default=0, description="Gigs you've been to where it was played.")
+    cover_of: CoverOf | None = Field(
+        default=None, description="Whose song it is, when it's a cover (SecondHandSongs)."
+    )
     lyrics: LyricsKind | None = Field(
         default=None,
         description="The best lyrics its files have (word-synced, synced, plain, instrumental "
@@ -2266,6 +2276,25 @@ class GigImportOut(BaseModel):
 
 class SetlistFmImportIn(BaseModel):
     username: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.\-]+$")
+
+
+class SecondHandSongsIn(BaseModel):
+    enabled: bool = Field(description="Look library songs up on SecondHandSongs.")
+    api_key: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9\-]{20,64}$",
+        description="A new API key (checked first); None keeps the one saved.",
+    )
+    remove_key: bool = Field(default=False, description="Forget the saved API key.")
+
+
+class SecondHandSongsOut(BaseModel):
+    enabled: bool
+    api_key: bool = Field(description="An API key is saved (higher rate limits).")
+    per_hour: int = Field(description="Requests an hour Plekstender allows itself.")
+    songs: int = Field(description="Different songs in the libraries.")
+    checked: int = Field(description="Of those, looked up.")
+    covers: int = Field(description="Of those, covers.")
 
 
 class SetlistFmKeyIn(BaseModel):

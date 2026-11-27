@@ -46,14 +46,20 @@ def fold(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip(" .!?'\"")
 
 
-def normalise_title(title: str) -> str:
-    """Key for grouping releases of the same song: case/accents/remaster suffixes ignored."""
+def without_suffixes(title: str) -> str:
+    """The title without "(2011 Remaster)"-style suffixes (repeated ones too: "Song (Mono)
+    [2009 Remaster]"), as written otherwise."""
     text = title.translate(_PUNCT)
     previous = None
-    while previous != text:  # strip repeated suffixes: "Song (Mono) [2009 Remaster]"
+    while previous != text:
         previous = text
         text = _SUFFIX.sub("", text)
-    return fold(text) or title.strip().lower()
+    return text.strip()
+
+
+def normalise_title(title: str) -> str:
+    """Key for grouping releases of the same song: case/accents/remaster suffixes ignored."""
+    return fold(without_suffixes(title)) or title.strip().lower()
 
 
 def normalise_artist(name: str) -> str:

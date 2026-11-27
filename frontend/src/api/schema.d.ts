@@ -4354,6 +4354,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/secondhandsongs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Secondhandsongs Settings */
+        get: operations["get_secondhandsongs_settings_api_admin_secondhandsongs_get"];
+        /**
+         * Put Secondhandsongs Settings
+         * @description Turn cover song lookups on or off, and set (after one small search) or forget the
+         *     optional API key.
+         */
+        put: operations["put_secondhandsongs_settings_api_admin_secondhandsongs_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/setlistfm": {
         parameters: {
             query?: never;
@@ -5746,6 +5768,23 @@ export interface components {
             listens: number;
             /** Listening Ms */
             listening_ms: number;
+        };
+        /** CoverOf */
+        CoverOf: {
+            /** Artist */
+            artist: string | null;
+            /** Title */
+            title: string | null;
+            /**
+             * Url
+             * @description The original on SecondHandSongs.
+             */
+            url: string | null;
+            /**
+             * Cover Url
+             * @description This recording on SecondHandSongs.
+             */
+            cover_url: string | null;
         };
         /** CoverRenderIn */
         CoverRenderIn: {
@@ -9791,6 +9830,55 @@ export interface components {
             /** Error */
             error: string | null;
         };
+        /** SecondHandSongsIn */
+        SecondHandSongsIn: {
+            /**
+             * Enabled
+             * @description Look library songs up on SecondHandSongs.
+             */
+            enabled: boolean;
+            /**
+             * Api Key
+             * @description A new API key (checked first); None keeps the one saved.
+             */
+            api_key?: string | null;
+            /**
+             * Remove Key
+             * @description Forget the saved API key.
+             * @default false
+             */
+            remove_key: boolean;
+        };
+        /** SecondHandSongsOut */
+        SecondHandSongsOut: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Api Key
+             * @description An API key is saved (higher rate limits).
+             */
+            api_key: boolean;
+            /**
+             * Per Hour
+             * @description Requests an hour Plekstender allows itself.
+             */
+            per_hour: number;
+            /**
+             * Songs
+             * @description Different songs in the libraries.
+             */
+            songs: number;
+            /**
+             * Checked
+             * @description Of those, looked up.
+             */
+            checked: number;
+            /**
+             * Covers
+             * @description Of those, covers.
+             */
+            covers: number;
+        };
         /** SectionOut */
         SectionOut: {
             /** Key */
@@ -10697,6 +10785,8 @@ export interface components {
              * @default 0
              */
             seen_live: number;
+            /** @description Whose song it is, when it's a cover (SecondHandSongs). */
+            cover_of?: components["schemas"]["CoverOf"] | null;
             /**
              * Lyrics
              * @description The best lyrics its files have (word-synced, synced, plain, instrumental or none); None: the lyrics icons preference is off, or its files haven't been read.
@@ -18640,6 +18730,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataThistleOut"];
+                };
+            };
+        };
+    };
+    get_secondhandsongs_settings_api_admin_secondhandsongs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondHandSongsOut"];
+                };
+            };
+        };
+    };
+    put_secondhandsongs_settings_api_admin_secondhandsongs_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecondHandSongsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondHandSongsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
