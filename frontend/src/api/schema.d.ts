@@ -1552,7 +1552,8 @@ export interface paths {
         /**
          * Game Search
          * @description Guess suggestions from the library: artists, albums or songs whose name contains
-         *     `q`. With `artist`, that artist's songs (their most popular ones when `q` is empty).
+         *     `q` (artists and albums: starts with it, for one or two letters: "U2"). With `artist`,
+         *     that artist's songs (their most popular ones when `q` is empty).
          */
         get: operations["game_search_api_servers__server_id__game_search_get"];
         put?: never;
@@ -6330,7 +6331,7 @@ export interface components {
             /** Choices */
             choices: components["schemas"]["IdentityChoice"][];
             /** Fields */
-            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
+            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "genre" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
         };
         /** IdentifyFileChanges */
         IdentifyFileChanges: {
@@ -7219,8 +7220,13 @@ export interface components {
              */
             albums?: number[];
             /**
+             * Mode
+             * @description new: songs not looked up before; missing: songs without lyrics; unsynced: songs without synced lyrics; all: every song. Left out: from `again`.
+             */
+            mode?: ("new" | "missing" | "unsynced" | "all") | null;
+            /**
              * Again
-             * @description Look up songs looked up before as well.
+             * @description Old form of mode=all (False: mode=new).
              * @default false
              */
             again: boolean;
@@ -7367,7 +7373,7 @@ export interface components {
                 [key: string]: string | null;
             } | null;
             /** Fields */
-            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
+            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "genre" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
         };
         /**
          * MbBestOut
@@ -8287,7 +8293,7 @@ export interface components {
              * @default weighted
              * @enum {string}
              */
-            order: "weighted" | "plays" | "popular" | "obscure";
+            order: "weighted" | "plays" | "popular" | "known" | "obscure";
             /** Exclude */
             exclude?: number[];
             /**

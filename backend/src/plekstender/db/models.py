@@ -301,6 +301,10 @@ class AlbumColour(Base):
     hue: Mapped[float | None] = mapped_column(Float)  # 0-360
     saturation: Mapped[float | None] = mapped_column(Float)  # 0-1
     lightness: Mapped[float | None] = mapped_column(Float)  # 0-1
+    # How light the whole cover is, 0-1 (relative luminance): light or dark backgrounds.
+    brightness: Mapped[float | None] = mapped_column(Float)
+    # cover_colours.METHOD it was worked out with (older: worked out again).
+    method: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
     checked_at: Mapped[dt.datetime]
 
 

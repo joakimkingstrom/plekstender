@@ -137,7 +137,10 @@ function PlaylistList({ serverId }: { serverId: number }) {
                         <h2 className="truncate font-semibold">{p.name}</h2>
                         {p.description && <p className="line-clamp-2 text-sm text-muted">{p.description}</p>}
                       </div>
-                      <StatusBadge playlist={p} />
+                      {/* Its own width: "In Plex" on one line, not squeezed by a long name. */}
+                      <div className="shrink-0 whitespace-nowrap">
+                        <StatusBadge playlist={p} />
+                      </div>
                     </div>
                     {result.count !== undefined && (
                       <p className="text-sm">

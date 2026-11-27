@@ -51,25 +51,30 @@ sample_router = APIRouter(prefix="/api/servers/{server_id}/rate", tags=["ratings
 
 # Titles shorter than this (letters and digits) are too easy to stumble on: not played.
 MIN_TITLE = 4
-# Album / artist rounds: one of their most popular songs.
+# Rating (Play songs): one of an album's or artist's most popular songs.
 TOP_SONGS = 3
+# The game's album / artist rounds with well-known songs: any of their top five (the top
+# three made the biggest hit come up too often).
+KNOWN_SONGS = 5
 # Songs tried for a round before giving up (each may need a clip made).
 MAX_TRIES = 3
 VARIOUS = ("various artists", "various", "va")
+# Artist and album guesses shorter than this match the start of names only.
+SHORT_QUERY = 3
 
 
 # Album / artist rounds by game setting: how deep into their songs to go.
-POPULARITY_POOLS = {"popular": (0, TOP_SONGS), "mixed": (0, 10), "deep": (10, 60)}
+POPULARITY_POOLS = {"popular": (0, KNOWN_SONGS), "mixed": (0, 10), "deep": (10, 60)}
 
 
 def by_popularity(songs: list[Track], popularity: str) -> list[Track]:
-    """The songs to choose from: the top 3, the top 10, or the rest (deep cuts; the
+    """The songs to choose from: the top 5, the top 10, or the rest (deep cuts; the
     least popular half when there are 10 or fewer)."""
     start, end = POPULARITY_POOLS.get(popularity, POPULARITY_POOLS["popular"])
     if popularity == "deep" and len(songs) <= start:
         # The less popular half (the middle song of an odd number counts as popular).
         return songs[(len(songs) + 1) // 2 :] or songs
-    return songs[start:end] or songs[:TOP_SONGS]
+    return songs[start:end] or songs[:KNOWN_SONGS]
 
 
 def title_ok(title: str) -> bool:
@@ -214,11 +219,13 @@ async def game_search(
     artist: Annotated[int | None, Query(description="Songs by this artist only.")] = None,
 ) -> list[GameSearchItem]:
     """Guess suggestions from the library: artists, albums or songs whose name contains
-    `q`. With `artist`, that artist's songs (their most popular ones when `q` is empty)."""
+    `q` (artists and albums: starts with it, for one or two letters: "U2"). With `artist`,
+    that artist's songs (their most popular ones when `q` is empty)."""
     us = await get_user_server(db, user, server_id)
     q = q.strip()
     if kind != "track" and len(q) < 1:
         return []
+    like = _like(q) if len(q) >= SHORT_QUERY else _like(q)[1:]  # "u2%": names starting so
     if kind == "artist":
         state, cond, where = visible(Artist, user.id, us)
         rows = await db.scalars(
@@ -226,7 +233,7 @@ async def game_search(
             .join(state, cond)
             .where(
                 *where,
-                Artist.title.ilike(_like(q), escape="\\"),
+                Artist.title.ilike(like, escape="\\"),
                 func.lower(func.btrim(Artist.title)).not_in(VARIOUS),
             )
             .order_by(
@@ -253,8 +260,12 @@ async def game_search(
                 (owner.server_id == Album.server_id)
                 & (owner.rating_key == Album.artist_rating_key),
             )
-            .where(*where, Album.title.ilike(_like(q), escape="\\"))
-            .order_by(Album.popularity.desc().nulls_last(), Album.title)
+            .where(*where, Album.title.ilike(like, escape="\\"))
+            .order_by(
+                (func.lower(Album.title) == q.lower()).desc(),
+                Album.popularity.desc().nulls_last(),
+                Album.title,
+            )
             .limit(8)
         )
         return [

@@ -497,6 +497,30 @@ def test_matching_files_to_release_tracks() -> None:
         "title": "Paranoid Android", "tracknumber": "2/3", "date": "1997",
     }  # fmt: skip
 
+    # Genres are Plex's, in any order; a release without dates gets Plex's year.
+    with_genres = wanted(release, tracks[1], ["Rock", "Alternative"], 1997)
+    assert plan_file({"genre": ["Alternative", "Rock"]}, with_genres, {"genre"}) == {}
+    assert plan_file({"genre": ["Pop"]}, with_genres, {"genre"}) == {
+        "genre": ["Rock", "Alternative"]
+    }
+    assert plan_file({}, wanted(release, tracks[1]), {"genre"}) == {}  # Plex has none
+    undated = Release(
+        "rel", "OK Computer", "Radiohead", "a", None, None, "GB", "g", 1, None, tracks
+    )  # type: ignore[arg-type]
+    assert wanted(undated, tracks[1], plex_year=1997)["date"] == "1997"
+    assert wanted(undated, tracks[1])["date"] is None
+
+
+def test_differences_accept_the_original_year() -> None:
+    from plekstender.api.routes.files import differences
+
+    plex = {"year": 1997, "genre": ["Rock"]}
+    # A remaster dated 2009 whose original date is Plex's year is the same album.
+    assert "year" not in differences(plex, {"date": "2009-03-24", "originaldate": "1997-05-21"})
+    assert "year" in differences(plex, {"date": "2009-03-24"})
+    assert "year" in differences(plex, {"date": "2009", "originaldate": "2008"})
+    assert "year" not in differences(plex, {"date": "1997"})
+
 
 @pytest.mark.db
 async def test_applying_a_musicbrainz_release(

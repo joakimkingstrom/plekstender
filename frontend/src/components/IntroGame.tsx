@@ -141,7 +141,8 @@ export function GuessBox({
   }, [open])
 
   const nameKind: GameMode = mode === 'album' ? 'album' : 'artist'
-  const names = useGameSearch(serverId, nameKind, text, null, text.length >= 3 && !(mode === 'track' && artist))
+  // From two letters ("U2"; the server matches the start of names until three).
+  const names = useGameSearch(serverId, nameKind, text, null, text.length >= 2 && !(mode === 'track' && artist))
   const songs = useGameSearch(
     serverId,
     'track',
@@ -166,7 +167,7 @@ export function GuessBox({
     }
   }
 
-  const nameResults = mode === 'track' && artist ? [] : text.length >= 3 ? (names.data ?? []) : []
+  const nameResults = mode === 'track' && artist ? [] : text.length >= 2 ? (names.data ?? []) : []
   const songResults = mode === 'track' && (artist !== null || text.length >= songsFrom) ? (songs.data ?? []) : []
   const placeholder =
     mode === 'artist' ? 'Which artist is it?' : mode === 'album' ? 'Which album is it?' : artist ? `A song by ${artist.title}…` : 'Artist or song…'
@@ -218,7 +219,7 @@ export function GuessBox({
       />
       <p role="status" className={`text-xs ${feedback ? (feedback.tone === 'good' ? 'text-ok' : 'text-danger') : 'text-muted'}`}>
         {feedback?.text ??
-          (mode === 'track' && !artist && text.length >= 3 && text.length < songsFrom
+          (mode === 'track' && !artist && text.length >= 2 && text.length < songsFrom
             ? "Pick the artist, or type more of the song's title."
             : '\u00a0')}
       </p>

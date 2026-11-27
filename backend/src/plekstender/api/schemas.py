@@ -630,7 +630,7 @@ RateKind = Literal["track", "album", "artist"]
 class RateQueueIn(BaseModel):
     kind: RateKind
     pool: Literal["listened", "unrated", "all"] = "listened"
-    order: Literal["weighted", "plays", "popular", "obscure"] = "weighted"
+    order: Literal["weighted", "plays", "popular", "known", "obscure"] = "weighted"
     exclude: list[int] = Field(default_factory=list, max_length=5000)
     limit: int = Field(default=20, ge=1, le=50)
     tag_id: int | None = Field(default=None, description="Only items with this genre (tag).")
@@ -1438,7 +1438,12 @@ class LyricsLookupIn(BaseModel):
     albums: list[int] = Field(
         default_factory=list, max_length=1000, description="These albums; none: the library."
     )
-    again: bool = Field(default=False, description="Look up songs looked up before as well.")
+    mode: Literal["new", "missing", "unsynced", "all"] | None = Field(
+        default=None,
+        description="new: songs not looked up before; missing: songs without lyrics; "
+        "unsynced: songs without synced lyrics; all: every song. Left out: from `again`.",
+    )
+    again: bool = Field(default=False, description="Old form of mode=all (False: mode=new).")
     write: LyricsApplyIn | None = Field(
         default=None,
         description="Write lyrics as they're found (one edit), instead of after the lookup.",
@@ -1571,7 +1576,7 @@ class PlexSyncPreviewOut(BaseModel):
 
 MbField = Literal[
     "title", "artist", "album", "albumartist", "tracknumber", "discnumber", "date",
-    "originaldate", "releasecountry", "musicbrainz_trackid", "musicbrainz_releasetrackid",
+    "originaldate", "genre", "releasecountry", "musicbrainz_trackid", "musicbrainz_releasetrackid",
     "musicbrainz_albumid", "musicbrainz_artistid", "musicbrainz_albumartistid",
     "musicbrainz_releasegroupid",
 ]  # fmt: skip

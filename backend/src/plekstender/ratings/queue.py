@@ -7,6 +7,9 @@ or *all*. Orders:
   items, what's more popular), so a queue isn't ten unknown songs in a row.
 - *plays* / *popular*: most played or most popular first, but artists are drawn at
   random (weighted by their best remaining item) so one artist doesn't fill the queue.
+- *known* (Guess the intro's well-known songs): any of each artist's KNOWN_TOP most popular,
+  drawn at random (the more popular a little likelier), so a round isn't always the hit.
+- *obscure* (the game's deep cuts): least popular first.
 
 Songs released several times (remasters, compilations) appear once, as the earliest
 release; a rating on any release counts as rated.
@@ -25,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 Kind = Literal["track", "album", "artist"]
 Pool = Literal["listened", "unrated", "all"]
-Order = Literal["weighted", "plays", "popular", "obscure"]
+Order = Literal["weighted", "plays", "popular", "known", "obscure"]
 
 # Weighted random: weight = (plays + 1)^ALPHA x (1 + ln(1 + popularity / 1000)).
 ALPHA = 0.7
@@ -35,6 +38,8 @@ BETA = 0.6
 CANDIDATES = 400
 # No artist twice within this many items (when there are enough artists).
 ARTIST_GAP = 5
+# The known order: each artist's this many most popular items.
+KNOWN_TOP = 5
 
 _POOLS = {
     "listened": "plays > 0",
@@ -48,6 +53,9 @@ _ORDER_SQL = {
     ),
     "plays": "plays DESC, coalesce(popularity, 0) DESC, rating_key",
     "popular": "coalesce(popularity, 0) DESC, plays DESC, rating_key",
+    # Weighted random (Efraimidis-Spirakis), weight sqrt(popularity): a hit five times as
+    # popular as the artist's fifth-best song is only about twice as likely.
+    "known": "-ln(random() + 1e-12) / sqrt(popularity)",
     # Deep cuts (the game): least popular first, but only items with known popularity.
     "obscure": "(coalesce(popularity, 0) = 0), popularity ASC NULLS LAST, rating_key",
 }
@@ -179,9 +187,18 @@ async def build_queue(
     """The next `limit` items to rate, leaving out `exclude` (already shown this session)."""
     rng = rng or random.Random()  # noqa: S311 - shuffling, not security
     fetch = limit if order == "weighted" else max(CANDIDATES, limit)
+    base = _BASE[kind]
+    known = ""
+    if order == "known":
+        # Ranked among all the artist's items, before the pool and what's been shown.
+        base = (
+            "SELECT b.*, row_number() OVER (PARTITION BY b.artist_key "  # noqa: S608
+            f"ORDER BY coalesce(b.popularity, 0) DESC, b.rating_key) AS artist_rank FROM ({base}) b"
+        )
+        known = "AND artist_rank <= :known_top AND popularity > 0 "
     query = text(
-        f"SELECT * FROM ({_BASE[kind]}) items "  # noqa: S608 - constant SQL fragments
-        f"WHERE {_POOLS[pool]} AND NOT (rating_key = ANY(:exclude)) "
+        f"SELECT * FROM ({base}) items "  # noqa: S608 - constant SQL fragments
+        f"WHERE {_POOLS[pool]} AND NOT (rating_key = ANY(:exclude)) {known}"
         f"{_TAG_FILTER if tag_id is not None else ''}"
         f"ORDER BY {_ORDER_SQL[order]} LIMIT :fetch"
     )
@@ -195,6 +212,7 @@ async def build_queue(
             "fetch": fetch,
             "alpha": ALPHA,
             "tag_id": tag_id,
+            "known_top": KNOWN_TOP,
         },
     )
     items = [
@@ -223,4 +241,7 @@ async def build_queue(
         return interleave(items, lambda i: float(i.plays), limit, rng)
     if order == "obscure":
         return interleave(items, lambda i: 0.0, limit, rng)  # every artist equally likely
+    if order == "known":
+        # Already in a random order; better-known artists come up a little more often.
+        return interleave(items, lambda i: float(i.popularity or 0) ** 0.5, limit, rng)
     return interleave(items, lambda i: float(i.popularity or 0), limit, rng)
