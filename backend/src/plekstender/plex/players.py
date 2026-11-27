@@ -14,8 +14,12 @@ Not every player still takes every route: Settings → Players tries them.
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import itertools
 import json
+import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -27,6 +31,8 @@ from defusedxml import ElementTree
 from plekstender.config import Settings
 from plekstender.plex.server import PlexServerClient
 from plekstender.plex.tv import PlexError, Resource, plex_headers
+
+log = logging.getLogger(__name__)
 
 Route = Literal["server", "direct"]
 COMMANDS = {
@@ -42,7 +48,7 @@ COMMANDS = {
     # A song in the queue (its key, and its play queue item id).
     "skip_to": "playback/skipTo",
 }
-DIRECT_TIMEOUT = httpx.Timeout(5.0, connect=3.0)
+DIRECT_TIMEOUT = httpx.Timeout(5.0, connect=2.5)
 
 # Players ignore a command whose id isn't higher than the last one from the same controller:
 # start from the time, so ids keep rising across restarts.
@@ -154,19 +160,67 @@ class Answer:
     silent: bool
 
 
-async def _usable(addresses: list[str]) -> list[str]:
-    """The addresses Plekstender may send to: never this machine or its own services (a
-    player's addresses come from plex.tv, which anyone's devices can write to)."""
-    from plekstender.history.scrobblers import ScrobblerError, check_server_address
+# 10-10-1-4.<hash>.plex.direct: the address is in the name. Read it from there rather than
+# asking DNS (home routers often refuse plex.direct names, or take seconds to say so).
+_PLEX_DIRECT = re.compile(r"^(\d{1,3}(?:-\d{1,3}){3})\.[0-9a-f]+\.plex\.direct$")
+NAME_LOOKUP = 2.0  # seconds, for any other host name
 
-    usable = []
-    for address in addresses:
+
+def plain_address(uri: str) -> str:
+    """A player's address with a plex.direct name turned into its IP address (over http:
+    the certificate is for the name, and players answer plain http on their port)."""
+    parts = urlsplit(uri)
+    found = _PLEX_DIRECT.match(parts.hostname or "")
+    if not found:
+        return uri.rstrip("/")
+    return f"http://{found.group(1).replace('-', '.')}:{parts.port or 32500}"
+
+
+async def _usable(addresses: list[str]) -> list[str]:
+    """The addresses Plekstender may send to, each once: never this machine or its own
+    services (a player's addresses come from plex.tv, which anyone's devices can write
+    to). IP addresses are checked as they are; other names are looked up (briefly)."""
+    from plekstender.history.scrobblers import (
+        OWN_HOSTS,
+        ScrobblerError,
+        _never_a_server,
+        check_server_address,
+    )
+
+    usable: list[str] = []
+    for address in dict.fromkeys(plain_address(a) for a in addresses):
+        host = (urlsplit(address).hostname or "").lower()
         try:
-            await check_server_address(address)
-        except ScrobblerError:
-            continue
+            ipaddress.ip_address(host.split("%")[0])
+        except ValueError:
+            if host in OWN_HOSTS or host.endswith(".localhost"):
+                continue
+            try:
+                await asyncio.wait_for(check_server_address(address), NAME_LOOKUP)
+            except ScrobblerError, TimeoutError:
+                continue
+        else:
+            if _never_a_server(host):
+                continue
         usable.append(address)
     return usable
+
+
+# When a player last went unanswered in the log, so a widget asking every few seconds
+# doesn't fill it: once every few minutes per player, and once when it answers again.
+LOG_EVERY = 300.0
+_logged: dict[str, float] = {}
+
+
+def _note(player: Player, tried: list[str]) -> None:
+    now = time.monotonic()
+    if now - _logged.get(player.id, -LOG_EVERY) >= LOG_EVERY:
+        _logged[player.id] = now
+        log.warning(
+            "player %s (%s, %s) didn't answer: %s",
+            player.name, player.product or "?", player.id,
+            "; ".join(tried) or "no address Plekstender may use",
+        )  # fmt: skip
 
 
 async def _direct(
@@ -184,7 +238,7 @@ async def _direct(
     for address in addresses:
         try:
             resp = await http.get(
-                f"{address.rstrip('/')}{path}",
+                f"{address}{path}",
                 params=params,
                 headers=headers,
                 timeout=DIRECT_TIMEOUT,
@@ -196,8 +250,11 @@ async def _direct(
         answered = True
         if resp.is_success:
             _answered[player.id] = address
+            if _logged.pop(player.id, None) is not None:
+                log.info("player %s answers again at %s", player.name, urlsplit(address).netloc)
             return Answer(resp, tried, False)
         tried.append(f"{urlsplit(address).netloc}: HTTP {resp.status_code}")
+    _note(player, tried)
     return Answer(None, tried, bool(tried) and not answered)
 
 

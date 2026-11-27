@@ -45,6 +45,7 @@ def fresh_caches() -> None:
     routes._resources.clear()
     routes._clients.clear()
     plex_players._answered.clear()
+    plex_players._logged.clear()
 
 
 @pytest.fixture
@@ -307,3 +308,66 @@ async def test_no_answer_from_a_player_says_to_check_the_firewall(
     assert "No answer from Plexamp (Mac)" in detail and "firewall" in detail and "32500" in detail
     state = (await owner.get(f"/api/servers/{sid}/players/{PLEXAMP}/state")).json()
     assert state["reachable"] is False and "firewall" in state["detail"]
+
+
+def test_player_addresses_need_no_dns() -> None:
+    from plekstender.plex.players import plain_address
+
+    # plex.direct names carry their address: plain http to it (the certificate is the name's).
+    assert plain_address("https://10-10-1-4.0123abcdef.plex.direct:32500") == (
+        "http://10.10.1.4:32500"
+    )
+    assert plain_address("http://192.168.1.20:32500/") == "http://192.168.1.20:32500"
+    assert plain_address("https://player.example:32500") == "https://player.example:32500"
+
+
+async def test_which_player_addresses_are_used(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from plekstender.artwork import fetch
+    from plekstender.plex import players as plex_players
+
+    async def slow(host: str) -> list[str]:
+        await asyncio.sleep(10)  # a router that won't answer for plex.direct names
+        return ["10.0.0.9"]
+
+    monkeypatch.setattr(fetch, "resolver", slow)
+    monkeypatch.setattr(plex_players, "NAME_LOOKUP", 0.05)
+    usable = await plex_players._usable(
+        [
+            "https://10-10-1-4.abc123.plex.direct:32500",  # read from the name, no lookup
+            "http://10.10.1.4:32500",  # the same, once
+            "http://127.0.0.1:32500",  # this machine: never
+            "http://[fe80::1]:32500",  # link-local: never
+            "http://db:5432",  # Plekstender's own database: never
+            "http://slow.example:32500",  # can't be looked up in time: left out
+        ]
+    )
+    assert usable == ["http://10.10.1.4:32500"]
+
+
+@pytest.mark.db
+async def test_an_unanswered_player_is_logged_once_in_a_while(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+
+    monkeypatch.setitem(
+        RESOURCES, "owner-token", [home_server(True, "srv-owner"), plexamp_resource()]
+    )
+    plex.router.get(f"{SERVER_URI}/clients").mock(
+        return_value=httpx.Response(200, json={"MediaContainer": {"size": 0}})
+    )
+    route = plex.router.get(url__startswith=f"{PLEXAMP_URI}/player/")
+    route.mock(side_effect=httpx.ConnectTimeout("timed out"))
+    owner, sid = await owner_with_library(app, plex)
+    url = f"/api/servers/{sid}/players/{PLEXAMP}/state"
+    with caplog.at_level(logging.INFO, logger="plekstender.plex.players"):
+        for _ in range(3):
+            assert (await owner.get(url)).json()["reachable"] is False
+        route.mock(side_effect=None, return_value=httpx.Response(200, content=TIMELINE))
+        assert (await owner.get(url)).json()["reachable"] is True
+    messages = [r.getMessage() for r in caplog.records]
+    assert len(messages) == 2, messages
+    assert "didn't answer: 192.168.1.20:32500: no answer (timed out)" in messages[0]
+    assert messages[1] == "player Plexamp (Mac) answers again at 192.168.1.20:32500"
