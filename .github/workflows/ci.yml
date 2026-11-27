@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # staging too: its builds are published as the "staging" image (publish.yml).
+    branches: [main, staging]
   pull_request:
 
 permissions:

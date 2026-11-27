@@ -293,8 +293,11 @@ async def test_listens_behind_a_chart(app: FastAPI, plex: FakePlex) -> None:
     )
     assert names(by_album) == ["Airbag", "Lucky"]
 
-    # A heatmap square: weekday and hour in the viewer's time zone.
-    stamp = (now - dt.timedelta(days=8, minutes=4)).astimezone(dt.UTC)
+    # A heatmap square: weekday and hour in the viewer's time zone. The hour is the listen's
+    # own (worked out from `now`, it was another hour when the test ran just after one began).
+    everything = (await owner.get("/api/listens")).json()["items"]
+    glory_box = next(i for i in everything if i["track_name"] == "Glory Box")
+    stamp = dt.datetime.fromisoformat(glory_box["listened_at"]).astimezone(dt.UTC)
     cell = await owner.get(
         "/api/listens",
         params={"weekday": stamp.isoweekday(), "hour": stamp.hour, "tz": "UTC"},

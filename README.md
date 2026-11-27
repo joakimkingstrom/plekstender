@@ -61,7 +61,7 @@ Already running Traefik? Copy `compose.override.example.yaml` to `compose.overri
 
 ### Using the published image
 
-Images for amd64 and arm64 are published to `ghcr.io/joakimkingstrom/plekstender` after each successful CI run on `main` (`latest`, `sha-<commit>`, and version tags). To run one instead of building locally, add this to `.env`:
+Images for amd64 and arm64 are published to `ghcr.io/joakimkingstrom/plekstender` after each successful CI run on `main` (`latest`, `sha-<commit>`, and version tags). Pushes to `staging` that pass CI are published as `staging` (and `staging-<commit>`), for trying changes before they reach `main`. To run one instead of building locally, add this to `.env`:
 
 ```bash
 PLEKSTENDER_IMAGE=ghcr.io/joakimkingstrom/plekstender:latest
