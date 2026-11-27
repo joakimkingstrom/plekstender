@@ -1,8 +1,13 @@
+import { useState } from 'react'
 import { Link } from 'react-router'
-import { useGotTicket, useStarShow, type LiveShow } from '../api/live'
-import { formatRelative } from '../format'
+import { errorMessage } from '../api/client'
+import { useGotTicket, useMakeGigPlaylist, useStarShow, type LiveShow } from '../api/live'
+import { formatCount, formatRelative } from '../format'
 import { formatPrice, localDate } from '../live'
 import { countryName } from '../places'
+import { Dialog } from './Dialog'
+import { Tooltip } from './Tooltip'
+import { Button } from './ui'
 
 const SOURCE_NAMES: Record<string, string> = {
   jambase: 'JamBase',
@@ -56,6 +61,8 @@ export function GigRow({
   const star = useStarShow()
   const starred = star.isPending ? star.variables.starred : show.starred
   const ticket = useGotTicket()
+  const playlist = useMakeGigPlaylist()
+  const [undoTicket, setUndoTicket] = useState(false)
   const gotTicket = starred && (ticket.isPending ? ticket.variables.gotTicket : show.got_ticket)
   return (
     <li className="flex items-start gap-3 p-3">
@@ -80,7 +87,25 @@ export function GigRow({
             </span>
           ))}
           {status && <span className="ml-2 rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">{status}</span>}
-          {gotTicket && ticketPill && <span className="ml-2 rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok">🎟 Got a ticket</span>}
+          {gotTicket && ticketPill && (
+            <button
+              type="button"
+              onClick={() => setUndoTicket(true)}
+              className="ml-2 rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok hover:bg-ok/25"
+              title="Change it"
+            >
+              🎟 Got a ticket
+            </button>
+          )}
+          {starred && !gotTicket && (
+            <button
+              type="button"
+              onClick={() => ticket.mutate({ ids: show.ids, gotTicket: true })}
+              className="ml-2 rounded-full border border-dashed border-border px-2 py-0.5 text-xs font-medium text-muted hover:border-ok hover:text-ok"
+            >
+              🎟 Got a ticket?
+            </button>
+          )}
           {show.is_new && (
             <span
               className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent"
@@ -114,34 +139,47 @@ export function GigRow({
               {t.source === 'calendar' ? calendarSite(t.url) : `Also on ${SOURCE_NAMES[t.source] ?? t.source}`}
             </a>
           ))}
-          {starred && (
+        </p>
+        {playlist.isError && <p className="text-xs text-danger">{errorMessage(playlist.error)}</p>}
+        {playlist.isSuccess && (
+          <p className="text-xs text-ok">
+            {playlist.data.playlist_id
+              ? `Playlist ready: ${formatCount(playlist.data.songs)} songs${playlist.data.missing ? `, ${formatCount(playlist.data.missing)} not in your library` : ''}. `
+              : 'None of the songs they play lately are in your library.'}
+            {playlist.data.playlist_id ? (
+              <Link to="/library/playlists" className="underline">
+                Playlists
+              </Link>
+            ) : null}
+          </p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {starred && (
+          <Tooltip content="Add to your calendar">
+            <a
+              href={`/api/live/shows/${show.id}.ics`}
+              download
+              aria-label="Add to calendar"
+              className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-text"
+            >
+              <CalendarIcon />
+            </a>
+          </Tooltip>
+        )}
+        {show.artists.length > 0 && (
+          <Tooltip content={show.playlist_id ? "Rebuild the playlist of what they've been playing lately" : "Make a playlist of what they've been playing lately"}>
             <button
               type="button"
-              aria-pressed={gotTicket}
-              onClick={() => ticket.mutate({ ids: show.ids, gotTicket: !gotTicket })}
-              className="underline hover:text-accent"
+              onClick={() => playlist.mutate(show.id)}
+              disabled={playlist.isPending}
+              aria-label={show.playlist_id ? 'Rebuild the playlist for this gig' : 'Make a playlist for this gig'}
+              className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-text disabled:animate-pulse"
             >
-              {gotTicket ? "I don't have a ticket" : "I've got a ticket"}
+              <PlaylistIcon />
             </button>
-          )}
-          {starred && (
-            <a href={`/api/live/shows/${show.id}.ics`} download className="underline hover:text-accent">
-              Add to calendar
-            </a>
-          )}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <button
-          type="button"
-          aria-pressed={starred}
-          aria-label={starred ? 'Starred' : 'Star'}
-          title={starred ? 'Starred: kept and in your calendar' : 'Star: keep it and put it in your calendar'}
-          onClick={() => star.mutate({ ids: show.ids, starred: !starred })}
-          className={`rounded-lg px-2 py-1 text-lg leading-none ${starred ? 'text-accent' : 'text-muted hover:text-text'}`}
-        >
-          {starred ? '★' : '☆'}
-        </button>
+          </Tooltip>
+        )}
         {first && (
           <a
             href={first.url}
@@ -153,7 +191,58 @@ export function GigRow({
             {first.is_ticket ? 'Tickets' : 'Details'}
           </a>
         )}
+        <button
+          type="button"
+          aria-pressed={starred}
+          aria-label={starred ? 'Starred' : 'Star'}
+          title={starred ? 'Starred: kept and in your calendar' : 'Star: keep it and put it in your calendar'}
+          onClick={() => star.mutate({ ids: show.ids, starred: !starred })}
+          className={`rounded-lg px-2 py-1 text-lg leading-none ${starred ? 'text-accent' : 'text-muted hover:text-text'}`}
+        >
+          {starred ? '★' : '☆'}
+        </button>
       </div>
+      {undoTicket && (
+        <Dialog title="No ticket after all?" onClose={() => setUndoTicket(false)}>
+          <div className="space-y-4 text-sm">
+            <p>
+              Change {show.artists[0]?.name ?? show.name} on {day.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })} to not having a
+              ticket?
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                busy={ticket.isPending}
+                onClick={() => ticket.mutate({ ids: show.ids, gotTicket: false }, { onSuccess: () => setUndoTicket(false) })}
+              >
+                I don't have a ticket
+              </Button>
+              <Button variant="ghost" onClick={() => setUndoTicket(false)}>
+                Keep it
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </li>
+  )
+}
+
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-[18px]" aria-hidden>
+      <rect x="2.5" y="3.5" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function PlaylistIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-[18px]" aria-hidden>
+      <path d="M2.5 4h7M2.5 7.5h7M2.5 11h4.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M12 12.5V5l2 1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="10.6" cy="12.6" r="1.4" fill="currentColor" />
+    </svg>
   )
 }

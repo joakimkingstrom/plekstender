@@ -494,6 +494,9 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **Out in the last 90 days** can show only the albums not in the library (*All / Not in your library*, remembered in the browser).
 - **Discover → + Lidarr**: looks the artist up by name in Lidarr's metadata (up to six matches, with MusicBrainz's disambiguation, type and the start of the biography; those in Lidarr already can't be picked), then adds the one picked, monitoring new albums from now on (the default), the latest and new ones, every album, or nothing yet, and optionally searching for them now (`searchForMissingAlbums`).
 
+## Polish, second round (27 Nov)
+- **Gig rows**: the "Got a ticket" pill asks before taking the ticket back; a starred gig without one has a dashed "Got a ticket?" pill. On the right, in order: add to calendar (an icon, starred gigs), make or rebuild the before-the-gig playlist (an icon), Tickets / Details, and the star. The playlist button makes it now (`POST /api/live/shows/{id}/playlist`, setlist.fm's recent setlists as for the automatic ones), also when it was deleted before and whether or not gig playlists are turned on; gigs carry `playlist_id` when they have one.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

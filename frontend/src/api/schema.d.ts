@@ -3541,6 +3541,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live/shows/{show_id}/playlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make Playlist
+         * @description Make (or rebuild) the before-the-gig playlist for this gig now: what the artists have
+         *     been playing lately. Also when it was deleted before; Plex gets it from the worker.
+         */
+        post: operations["make_playlist_api_live_shows__show_id__playlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/live/artists/{server_id}/{rating_key}/gigs": {
         parameters: {
             query?: never;
@@ -6432,6 +6453,21 @@ export interface components {
             /** Songs */
             songs: components["schemas"]["GigSong"][];
         };
+        /** GigShowPlaylistOut */
+        GigShowPlaylistOut: {
+            /**
+             * Playlist Id
+             * @description None: none of the setlists' songs were found.
+             */
+            playlist_id: number | null;
+            /** Songs */
+            songs: number;
+            /**
+             * Missing
+             * @description Setlist songs not in the library.
+             */
+            missing: number;
+        };
         /** GigSong */
         GigSong: {
             /** Name */
@@ -7554,6 +7590,11 @@ export interface components {
              * @description Everyone on the bill.
              */
             performers: components["schemas"]["LiveArtistOut"][];
+            /**
+             * Playlist Id
+             * @description Its before-the-gig playlist, when there is one.
+             */
+            playlist_id?: number | null;
         };
         /** LiveShowsOut */
         LiveShowsOut: {
@@ -16606,6 +16647,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LiveShowsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    make_playlist_api_live_shows__show_id__playlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                show_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigShowPlaylistOut"];
                 };
             };
             /** @description Validation Error */

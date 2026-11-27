@@ -168,6 +168,18 @@ export function useGotTicket() {
   })
 }
 
+/** Make (or rebuild) a gig's before-the-gig playlist now, even one deleted before. */
+export function useMakeGigPlaylist() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (showId: number) => unwrap(api.POST('/api/live/shows/{show_id}/playlist', { params: { path: { show_id: showId } } })),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...liveKeys.all, 'shows'] })
+      void qc.invalidateQueries({ queryKey: ['gigs'] })
+    },
+  })
+}
+
 export type LiveFeed = Schemas['LiveFeedOut']
 
 export function useLiveFeeds() {
