@@ -35,6 +35,7 @@ from plekstender.api.routes import (
     listens,
     live,
     lyrics,
+    new_music,
     notifications,
     playlists,
     previews,
@@ -132,6 +133,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         notifications,
         job_stops,
         achievements,
+        new_music,
         admin,
     ):
         app.include_router(module.router)

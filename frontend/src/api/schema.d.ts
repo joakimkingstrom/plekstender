@@ -3991,6 +3991,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/new-music": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get New Music */
+        get: operations["get_new_music_api_servers__server_id__new_music_get"];
+        /**
+         * Put New Music
+         * @description Choose what's done for new artists and albums, after each library sync. Only what's
+         *     added from now on counts as new.
+         */
+        put: operations["put_new_music_api_servers__server_id__new_music_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/access": {
         parameters: {
             query?: never;
@@ -8286,6 +8308,93 @@ export interface components {
             contact: string | null;
             /** Source */
             source: ("settings" | "environment") | null;
+        };
+        /** NewMusicIn */
+        NewMusicIn: {
+            /**
+             * Logos
+             * @description fanart.tv's most liked logo for new artists.
+             */
+            logos: boolean;
+            /**
+             * Covers
+             * @description The best cover match for new albums.
+             */
+            covers: boolean;
+            /**
+             * Lyrics
+             * @description Look up lyrics for new albums' songs.
+             */
+            lyrics: boolean;
+            /** @description Where found lyrics are written (tag editing on); none: only looked up. */
+            lyrics_write?: components["schemas"]["NewMusicLyricsWrite"] | null;
+        };
+        /** NewMusicLyricsWrite */
+        NewMusicLyricsWrite: {
+            /**
+             * Sidecar
+             * @description A .lrc (synced) or .txt next to each song.
+             * @default true
+             */
+            sidecar: boolean;
+            /**
+             * Lyricsfile
+             * @description A .lyricsfile.yaml next to each song.
+             * @default false
+             */
+            lyricsfile: boolean;
+            /**
+             * Embedded
+             * @description The plain lyrics in each song's tags.
+             * @default false
+             */
+            embedded: boolean;
+            /**
+             * Overwrite
+             * @description Replace lyrics the files already have.
+             * @default false
+             */
+            overwrite: boolean;
+        };
+        /** NewMusicOut */
+        NewMusicOut: {
+            /**
+             * Logos
+             * @description fanart.tv's most liked logo for new artists.
+             */
+            logos: boolean;
+            /**
+             * Covers
+             * @description The best cover match for new albums.
+             */
+            covers: boolean;
+            /**
+             * Lyrics
+             * @description Look up lyrics for new albums' songs.
+             */
+            lyrics: boolean;
+            /** @description Where found lyrics are written (tag editing on); none: only looked up. */
+            lyrics_write?: components["schemas"]["NewMusicLyricsWrite"] | null;
+            /**
+             * Since
+             * @description Added to Plex after this counts as new.
+             */
+            since: string | null;
+            /**
+             * Fanart Ready
+             * @description fanart.tv has an API key (logos need one).
+             */
+            fanart_ready: boolean;
+            /**
+             * Folder Ready
+             * @description The music folder is set up (lyrics need it).
+             */
+            folder_ready: boolean;
+            /**
+             * Tag Editing
+             * @description Tag editing is on (writing lyrics needs it).
+             */
+            tag_editing: boolean;
         };
         /** NewReleaseOut */
         NewReleaseOut: {
@@ -17626,6 +17735,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AchievementsSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_new_music_api_servers__server_id__new_music_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewMusicOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_new_music_api_servers__server_id__new_music_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewMusicIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewMusicOut"];
                 };
             };
             /** @description Validation Error */
