@@ -2955,8 +2955,9 @@ export interface paths {
         };
         /**
          * Cover Sources
-         * @description The sources that can be used here: the open ones always; Tidal and fanart.tv once an
-         *     admin has set them up (checked when saved); web search while SearXNG answers.
+         * @description The sources that can be used here: the open ones unless an admin turned them off;
+         *     Tidal and fanart.tv once an admin has set them up (checked when saved); web search
+         *     while SearXNG answers.
          */
         get: operations["cover_sources_api_servers__server_id__artwork_albums_sources_get"];
         put?: never;
@@ -4024,6 +4025,31 @@ export interface paths {
          *     its shared secret. A secret on its own goes with the key that's set already.
          */
         put: operations["put_lastfm_api_admin_lastfm_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/cover-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Cover Sources
+         * @description Which of Deezer, iTunes and the Cover Art Archive album covers may come from.
+         */
+        get: operations["get_cover_sources_api_admin_cover_sources_get"];
+        /**
+         * Put Cover Sources
+         * @description Turn Deezer, iTunes or the Cover Art Archive off (or on again) for album covers: on
+         *     the album covers page and for best matches, for everyone.
+         */
+        put: operations["put_cover_sources_api_admin_cover_sources_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5325,6 +5351,27 @@ export interface components {
         CoverSourcesOut: {
             /** Sources */
             sources: ("coverartarchive" | "deezer" | "itunes" | "tidal" | "fanart" | "plex" | "search")[];
+        };
+        /**
+         * CoverSourcesSettings
+         * @description The album cover sources that need nothing set up: on (the default) or off.
+         */
+        CoverSourcesSettings: {
+            /**
+             * Deezer
+             * @default true
+             */
+            deezer: boolean;
+            /**
+             * Itunes
+             * @default true
+             */
+            itunes: boolean;
+            /**
+             * Coverartarchive
+             * @default true
+             */
+            coverartarchive: boolean;
         };
         /** DataThistleOut */
         DataThistleOut: {
@@ -17063,6 +17110,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LastFmKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cover_sources_api_admin_cover_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverSourcesSettings"];
+                };
+            };
+        };
+    };
+    put_cover_sources_api_admin_cover_sources_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverSourcesSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverSourcesSettings"];
                 };
             };
             /** @description Validation Error */

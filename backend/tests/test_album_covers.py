@@ -364,3 +364,16 @@ async def test_best_match(
     assert done["stats"] == {"applied": 0, "not_found": 1, "already": 0, "failed": 0}
     nothing = await owner.post(f"{base}/best", json={"show": "low"}, headers=CSRF)
     assert nothing.status_code == 422  # OKNOTOK isn't low any more
+
+    # An admin can turn the open sources off: gone from the page and from best matches.
+    sources = (await owner.get("/api/admin/cover-sources")).json()
+    assert sources == {"deezer": True, "itunes": True, "coverartarchive": True}
+    off = {"deezer": False, "itunes": False, "coverartarchive": True}
+    assert (await owner.put("/api/admin/cover-sources", json=off, headers=CSRF)).json() == off
+    assert "deezer" not in (await owner.get(f"{base}/sources")).json()["sources"]
+    refused = await owner.get(f"{base}/201/candidates", params={"source": "deezer"})
+    assert refused.status_code == 409
+    only_off = await owner.post(
+        f"{base}/best", json={"show": "needs", "sources": ["deezer", "itunes"]}, headers=CSRF
+    )
+    assert only_off.status_code == 422 and "turned off" in only_off.text

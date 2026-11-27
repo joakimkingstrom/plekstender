@@ -779,6 +779,14 @@ class CataloguePage(BaseModel):
     available: bool = Field(description="False when Google Fonts couldn't be reached.")
 
 
+class CoverSourcesSettings(BaseModel):
+    """The album cover sources that need nothing set up: on (the default) or off."""
+
+    deezer: bool = True
+    itunes: bool = True
+    coverartarchive: bool = True
+
+
 class FanartKeyOut(BaseModel):
     configured: bool
     source: Literal["settings", "environment"] | None

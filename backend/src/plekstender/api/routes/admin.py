@@ -22,6 +22,7 @@ from plekstender.api.schemas import (
     AdminUserOut,
     CatalogueFont,
     CataloguePage,
+    CoverSourcesSettings,
     DataThistleOut,
     DataThistleTokensIn,
     FanartKeyIn,
@@ -50,10 +51,12 @@ from plekstender.artwork.sources import SourceError, fanart_logos
 from plekstender.artwork.text import FontError, check_font
 from plekstender.auth.sessions import end_sessions_without_access
 from plekstender.db.instance import (
+    OPEN_COVER_SOURCES,
     DataThistleTokens,
     LibrarySettings,
     get_access_settings,
     get_acoustid_api_key,
+    get_cover_sources_off,
     get_datathistle_tokens,
     get_datathistle_usage,
     get_fanart_api_key,
@@ -73,6 +76,7 @@ from plekstender.db.instance import (
     save_jambase_quota,
     set_access_settings,
     set_acoustid_api_key,
+    set_cover_sources_off,
     set_datathistle_tokens,
     set_fanart_api_key,
     set_fonts,
@@ -296,6 +300,24 @@ async def put_lastfm(
 
 # Radiohead: a well-known artist to check a fanart.tv key against.
 FANART_CHECK_MBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+
+
+@router.get("/cover-sources", response_model=CoverSourcesSettings)
+async def get_cover_sources(db: DbDep, _: AdminDep) -> CoverSourcesSettings:
+    """Which of Deezer, iTunes and the Cover Art Archive album covers may come from."""
+    off = await get_cover_sources_off(db)
+    return CoverSourcesSettings(**{s: s not in off for s in OPEN_COVER_SOURCES})
+
+
+@router.put("/cover-sources", response_model=CoverSourcesSettings)
+async def put_cover_sources(
+    body: CoverSourcesSettings, db: DbDep, admin: AdminDep
+) -> CoverSourcesSettings:
+    """Turn Deezer, iTunes or the Cover Art Archive off (or on again) for album covers: on
+    the album covers page and for best matches, for everyone."""
+    await set_cover_sources_off(db, {s for s, on in body.model_dump().items() if not on})
+    await db.commit()
+    return await get_cover_sources(db, admin)
 
 
 @router.get("/fanart", response_model=FanartKeyOut)
