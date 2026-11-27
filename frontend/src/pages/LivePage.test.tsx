@@ -131,7 +131,7 @@ beforeEach(() => {
       case '/api/live/feeds':
         if (request?.method === 'POST') {
           const { url: added } = await request.clone().json()
-          if (!added.startsWith('webcal://www.songkick.com')) return json({ detail: "That address isn't a calendar (iCal) file." }, 422)
+          if (new URL(added).hostname !== 'www.songkick.com') return json({ detail: "That address isn't a calendar (iCal) file." }, 422)
           feeds.push({ id: 9, host: 'songkick.com', name: 'Songkick: tracked artists', fetched_at: null, error: null, show_count: null })
           return json(feeds.at(-1), 201)
         }
