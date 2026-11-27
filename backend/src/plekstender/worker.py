@@ -48,6 +48,7 @@ from plekstender.history.places import fill_places, refresh_public_addresses
 from plekstender.history.plex_capture import capture_plays
 from plekstender.history.scrobblers import submit_targets
 from plekstender.history.sessions import POLLS_PER_RUN, attach_sessions, watch
+from plekstender.job_list import close_abandoned
 from plekstender.playlists.service import build as build_playlist_in_plex
 from plekstender.previews import trim_cache as trim_preview_cache
 from plekstender.releases import look_up as look_up_releases
@@ -55,7 +56,6 @@ from plekstender.sync.popularity import recompute_popularity
 from plekstender.sync.runner import run_sync
 from plekstender.sync.schedule import due_sync
 from plekstender.tags.apply import run_change_set as run_tag_change_set
-from plekstender.tags.lyrics import close_edit as close_lyrics_edit
 from plekstender.tags.scan import run_scan as run_file_scan
 
 log = logging.getLogger(__name__)
@@ -867,8 +867,8 @@ async def heartbeat(timestamp: int) -> None:
 
 # A worker that stopped (a restart, a new image) leaves its running jobs "doing", holding
 # their locks: no other job with the same lock (a lyrics lookup, a scan) could ever start.
-# Its heartbeats stop, so after this long its jobs are closed as failed. The app's own
-# records of them (scans, syncs...) are marked interrupted by cleanup_sessions.
+# Its heartbeats stop, so after this long its jobs are closed as failed, and so are the app's
+# own records of them (scans, edits, syncs...), which would otherwise stay "running".
 STALLED_WORKER_SECONDS = 300
 
 
@@ -888,6 +888,10 @@ async def close_stalled_jobs(timestamp: int) -> None:
             len(stalled),
             ", ".join(f"{j.task_name}[{j.id}]" for j in stalled),
         )
+    async with get_sessionmaker()() as db:
+        closed = await close_abandoned(db)
+    if closed:
+        log.warning("closed %d jobs a stopped worker left running: %s", len(closed), closed)
 
 
 @app.periodic(cron="45 * * * *", periodic_id="gig-playlists")
@@ -969,40 +973,6 @@ async def prune_history(timestamp: int) -> None:
 async def cleanup_sessions(timestamp: int) -> None:
     async with get_sessionmaker()() as db:
         removed = await delete_expired_sessions(db)
-        stale = await db.execute(
-            update(SyncRun)
-            .where(
-                SyncRun.status == "running",
-                SyncRun.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
-            )
-            .values(status="failed", error="Interrupted (the worker stopped during the sync).")
-        )
-        stale_imports = await db.execute(
-            update(ListenImport)
-            .where(
-                ListenImport.status == "running",
-                ListenImport.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
-            )
-            .values(status="failed", error="Interrupted (the worker stopped). Resume to continue.")
-        )
-        # Lyrics lookups that wrote as they went: their edits are closed too (below).
-        stale_lyrics = list(
-            await db.scalars(
-                select(FileScan).where(
-                    FileScan.status == "running",
-                    FileScan.kind == "lyrics",
-                    FileScan.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
-                )
-            )
-        )
-        await db.execute(
-            update(FileScan)
-            .where(
-                FileScan.status == "running",
-                FileScan.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
-            )
-            .values(status="failed", error="Interrupted (the worker stopped). Start it again.")
-        )
         await db.execute(
             update(Playlist)
             .where(
@@ -1011,24 +981,9 @@ async def cleanup_sessions(timestamp: int) -> None:
             )
             .values(status="error", error="Interrupted (the worker stopped). Build it again.")
         )
-        await db.execute(
-            update(ArtworkJob)
-            .where(
-                ArtworkJob.status == "running",
-                ArtworkJob.updated_at < dt.datetime.now(dt.UTC) - STALE_AFTER,
-            )
-            .values(status="failed", error="Interrupted (the worker stopped). Start it again.")
-        )
         await db.commit()
-        for job in stale_lyrics:
-            if set_id := job.params.get("applied_set_id"):
-                await close_lyrics_edit(db, job, set_id)
     remove_old_uploads(get_settings(), dt.timedelta(days=1))
     trim_preview_cache(get_settings())
     remove_old_files(get_settings(), dt.timedelta(days=7))  # artwork exports and imports
-    if stale_import_count := int(getattr(stale_imports, "rowcount", 0) or 0):
-        log.warning("marked %d interrupted listen imports as failed", stale_import_count)
     if removed:
         log.info("removed %d expired sessions", removed)
-    if stale_count := int(getattr(stale, "rowcount", 0) or 0):
-        log.warning("marked %d interrupted sync runs as failed", stale_count)

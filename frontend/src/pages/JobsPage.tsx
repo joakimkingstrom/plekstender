@@ -36,15 +36,16 @@ function more(job: Job): { to: string; label: string } | null {
 }
 
 function ActiveJob({ job }: { job: Job }) {
-  const { done = 0, total = 0 } = (job.progress ?? {}) as { done?: number; total?: number }
+  const { done = 0, total = 0, step } = (job.progress ?? {}) as { done?: number; total?: number; step?: string }
   const running = job.status === 'running'
+  const count = total ? `${formatCount(done)} / ${formatCount(total)}` : ''
   const link = more(job)
   return (
     <li className="space-y-2 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="min-w-0 font-medium">{job.what}</p>
         <span className="text-xs tabular-nums text-muted">
-          {running ? (total ? `${formatCount(done)} / ${formatCount(total)}` : 'Running') : `Waiting since ${formatRelative(job.created_at)}`}
+          {running ? [step, count].filter(Boolean).join(' · ') || 'Running' : `Waiting since ${formatRelative(job.created_at)}`}
         </span>
       </div>
       {running && (

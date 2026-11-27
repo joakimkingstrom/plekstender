@@ -226,6 +226,9 @@ def prepare(data: bytes, max_px: int = MAX_PX, max_bytes: int = MAX_BYTES) -> by
     """A baseline JPEG at most `max_px` on its longest side and (if it can be) `max_bytes`."""
     try:
         with Image.open(io.BytesIO(data)) as source:
+            # A JPEG is decoded at a fraction of its size when that's still big enough (a
+            # 3000px cover for a 300px thumbnail: several times faster).
+            source.draft("RGB", (max_px, max_px))
             image = source.convert("RGB")
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise PictureError("That isn't a picture Plekstender can read.") from exc

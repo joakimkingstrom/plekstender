@@ -384,7 +384,12 @@ async def test_jobs_of_a_stopped_worker_are_closed(monkeypatch: pytest.MonkeyPat
         closed.append((job.id, status))
 
     monkeypatch.setattr(worker.app.job_manager, "get_stalled_jobs", get_stalled_jobs)
+
+    async def close_abandoned(db: Any) -> list[str]:
+        return []
+
     monkeypatch.setattr(worker.app.job_manager, "finish_job", finish_job)
+    monkeypatch.setattr(worker, "close_abandoned", close_abandoned)
     await worker.close_stalled_jobs.func(timestamp=0)
     assert closed == [(7, Status.FAILED)]
 
@@ -636,9 +641,10 @@ async def test_an_interrupted_lookup_closes_its_edit(
 ) -> None:
     from sqlalchemy import func, update
 
+    from plekstender import worker
     from plekstender.db import get_sessionmaker
     from plekstender.db.models import FileScan, TagChangeSet
-    from plekstender.worker import cleanup_sessions, look_up_lyrics
+    from plekstender.worker import look_up_lyrics
 
     monkeypatch.setattr(lrclib, "INTERVAL", 0.0)
     owner, base = await _library_with_lyrics(app, plex, music)
@@ -657,7 +663,12 @@ async def test_an_interrupted_lookup_closes_its_edit(
             update(TagChangeSet).where(TagChangeSet.id == set_id).values(status="running")
         )
         await db.commit()
-    await cleanup_sessions.func(timestamp=0)
+
+    async def no_stalled_jobs(seconds_since_heartbeat: float) -> list[Any]:
+        return []
+
+    monkeypatch.setattr(worker.app.job_manager, "get_stalled_jobs", no_stalled_jobs)
+    await worker.close_stalled_jobs.func(timestamp=0)
     plan = (await owner.get(f"{base}/lyrics/{job['id']}")).json()
     assert plan["job"]["status"] == "failed"
     [edit] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
