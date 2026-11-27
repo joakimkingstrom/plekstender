@@ -2849,3 +2849,30 @@ class JobOut(BaseModel):
 class JobsOut(BaseModel):
     active: list[JobOut] = Field(description="Running, then waiting (oldest first).")
     finished: list[JobOut] = Field(description="The latest finished, newest first.")
+
+
+# --- automatic actions for new music ---------------------------------------------------------
+
+
+class NewMusicLyricsWrite(BaseModel):
+    sidecar: bool = Field(default=True, description="A .lrc (synced) or .txt next to each song.")
+    lyricsfile: bool = Field(default=False, description="A .lyricsfile.yaml next to each song.")
+    embedded: bool = Field(default=False, description="The plain lyrics in each song's tags.")
+    overwrite: bool = Field(default=False, description="Replace lyrics the files already have.")
+
+
+class NewMusicIn(BaseModel):
+    logos: bool = Field(description="fanart.tv's most liked logo for new artists.")
+    covers: bool = Field(description="The best cover match for new albums.")
+    lyrics: bool = Field(description="Look up lyrics for new albums' songs.")
+    lyrics_write: NewMusicLyricsWrite | None = Field(
+        default=None,
+        description="Where found lyrics are written (tag editing on); none: only looked up.",
+    )
+
+
+class NewMusicOut(NewMusicIn):
+    since: dt.datetime | None = Field(description="Added to Plex after this counts as new.")
+    fanart_ready: bool = Field(description="fanart.tv has an API key (logos need one).")
+    folder_ready: bool = Field(description="The music folder is set up (lyrics need it).")
+    tag_editing: bool = Field(description="Tag editing is on (writing lyrics needs it).")

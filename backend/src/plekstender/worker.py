@@ -87,6 +87,28 @@ async def sync_library(run_id: int) -> None:
         us = await db.get(UserServer, run.user_server_id) if run else None
     if run is not None and run.status == "succeeded" and us is not None:
         await enqueue_listen_counts([us.user_id])  # new or changed items to match
+        await enqueue_new_music(us.server_id)  # logos, covers and lyrics for what's new
+
+
+@app.task(queue="maintenance", lock="new-music")
+async def act_on_new_music(server_id: int) -> None:
+    """After a sync: the owner's automatic actions for artists and albums new in Plex (see
+    plekstender.new_music)."""
+    from plekstender import new_music
+
+    async with get_sessionmaker()() as db:
+        done = await new_music.act(db, get_settings(), server_id)
+    if done:
+        log.info("new music on server %s: %s", server_id, done)
+
+
+async def enqueue_new_music(server_id: int) -> None:
+    try:
+        await act_on_new_music.configure(queueing_lock=f"new-music-{server_id}").defer_async(
+            server_id=server_id
+        )
+    except AlreadyEnqueued:
+        pass
 
 
 async def enqueue_sync(db: AsyncSession, us: UserServer, kind: str, trigger: str) -> SyncRun:
