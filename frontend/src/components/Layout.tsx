@@ -3,6 +3,7 @@ import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-route
 import { useLogout, useMe, useSetPreferences } from '../api/hooks'
 import { useOnline } from '../online'
 import { InstallPrompt } from './InstallPrompt'
+import { PlayerWidget } from './PlayerWidget'
 import { UpdateBanner } from './UpdateBanner'
 import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
@@ -173,6 +174,7 @@ export function Layout() {
         <Outlet />
       </main>
       <AchievementCelebration enabled={me.preferences?.achievements !== false} />
+      <PlayerWidget />
 
       {/* Mobile bottom navigation */}
       <nav

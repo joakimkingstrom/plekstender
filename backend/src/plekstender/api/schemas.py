@@ -2849,3 +2849,111 @@ class JobOut(BaseModel):
 class JobsOut(BaseModel):
     active: list[JobOut] = Field(description="Running, then waiting (oldest first).")
     finished: list[JobOut] = Field(description="The latest finished, newest first.")
+
+
+# --- players (remote control) -----------------------------------------------------------------
+
+
+class PlayerNowOut(BaseModel):
+    title: str | None
+    artist: str | None
+    album: str | None
+    state: str | None = Field(description="playing, paused or buffering")
+    rating_key: int | None
+
+
+class PlayerOut(BaseModel):
+    id: str
+    name: str
+    product: str | None
+    platform: str | None
+    version: str | None
+    on_account: bool = Field(description="plex.tv lists it among the account's devices.")
+    on_server: bool = Field(description="The server is in touch with it now (/clients).")
+    online: bool
+    direct: bool = Field(description="Plex lists an address to reach it at directly.")
+    playing: PlayerNowOut | None
+
+
+class PlayersOut(BaseModel):
+    players: list[PlayerOut]
+    direct_allowed: bool = Field(
+        description="May send straight to players (admins, or everyone if an admin allows it)."
+    )
+
+
+PlayerCommand = Literal[
+    "play", "pause", "next", "previous", "stop", "seek", "shuffle", "repeat", "skip_to"
+]
+# auto: through the server when it is in touch with the player, else straight to it.
+PlayerRoute = Literal["auto", "server", "direct"]
+
+
+class PlayerCommandIn(BaseModel):
+    command: PlayerCommand
+    route: PlayerRoute = "auto"
+    value: int | None = Field(
+        default=None,
+        description="seek: where (ms); shuffle: 0 or 1; repeat: 0 off, 1 the song, 2 all; "
+        "skip_to: the queue item's id.",
+    )
+    key: str | None = Field(
+        default=None, pattern=r"^/library/metadata/\d+$", description="skip_to: the song's key."
+    )
+
+
+class PlayerStateOut(BaseModel):
+    """What a player is doing, as it says itself."""
+
+    reachable: bool
+    detail: str | None = Field(description="Why it couldn't be reached.")
+    state: str | None = Field(description="playing, paused, buffering or stopped")
+    position_ms: int | None
+    duration_ms: int | None
+    rating_key: int | None
+    queue_id: int | None
+    queue_item_id: int | None
+    shuffle: bool
+    repeat: int = Field(description="0 off, 1 the song, 2 all")
+    controllable: list[str]
+    title: str | None
+    artist: str | None
+    album: str | None
+    thumb: str | None = Field(description="Plex image path (for /image).")
+
+
+class QueueItemOut(BaseModel):
+    item_id: int
+    key: str
+    rating_key: int | None
+    title: str | None
+    artist: str | None
+    album: str | None
+    duration_ms: int | None
+    thumb: str | None
+
+
+class PlayerQueueOut(BaseModel):
+    items: list[QueueItemOut]
+    current_item_id: int | None
+
+
+class PlayerAccessOut(BaseModel):
+    access: Literal["admins", "everyone"] = Field(
+        description="Who may control players (straight to them, on Plekstender's network)."
+    )
+
+
+class PlayerAccessIn(BaseModel):
+    access: Literal["admins", "everyone"]
+
+
+class PlayerPlayIn(BaseModel):
+    rating_key: int = Field(description="A song or an album.")
+    route: PlayerRoute = "auto"
+
+
+class PlayerSentOut(BaseModel):
+    ok: bool
+    route: Literal["server", "direct"] = Field(description="The way it went.")
+    detail: str

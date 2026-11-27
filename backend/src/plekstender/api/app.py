@@ -36,6 +36,7 @@ from plekstender.api.routes import (
     live,
     lyrics,
     notifications,
+    players,
     playlists,
     previews,
     ratings,
@@ -132,9 +133,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         notifications,
         job_stops,
         achievements,
+        players,
         admin,
     ):
         app.include_router(module.router)
+    app.include_router(players.access_router)
     app.include_router(discover.art_router)
     app.include_router(artwork.fonts_router)
     app.include_router(game.stats_router)
