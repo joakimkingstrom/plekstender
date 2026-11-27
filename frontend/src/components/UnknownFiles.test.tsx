@@ -59,7 +59,10 @@ describe('Unknown files', () => {
 
     fireEvent.click(match)
     fireEvent.click(screen.getByRole('option', { name: 'Airbag · Radiohead · OKNOTOK (2017, GB, CD) · 93%' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Check the changes for 1 file' }))
+    // Above the list (it can be 200 files long), not below it.
+    const check = screen.getByRole('button', { name: 'Check the changes for 1 file' })
+    expect(check.compareDocumentPosition(screen.getAllByRole('listitem')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(check)
     expect(await screen.findByText('Airbag')).toBeInTheDocument()
     expect(screen.getByText('+ 1 MusicBrainz ID')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Write 2 changes' }))

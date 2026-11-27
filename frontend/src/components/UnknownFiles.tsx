@@ -164,6 +164,24 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
               (last.stop_requested ? <p className="text-xs text-muted">{last.error}</p> : <Notice tone="error">{last.error}</Notice>)}
             {last?.status === 'succeeded' && !active && <LastRun stats={last.stats} />}
 
+            {/* At the top: with up to 200 files listed, the bottom is a long way down. */}
+            {choices.length > 0 &&
+              (canWrite ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="primary" onClick={() => setReviewing(choices)}>
+                    Check the changes for {choices.length} {choices.length === 1 ? 'file' : 'files'}
+                  </Button>
+                  <span className="text-xs text-muted">The matches chosen below.</span>
+                </div>
+              ) : (
+                <Notice>
+                  Allow changing files (
+                  <Link to="/settings/files/scan" className="underline">
+                    Settings → Music files → Tags in your files
+                  </Link>
+                  ) to write the matches into the files.
+                </Notice>
+              ))}
             <ul className="divide-y divide-border rounded-lg border border-border">
               {list.map((f) => (
                 <FileRow
@@ -177,16 +195,6 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
             {files.data.total > list.length && (
               <p className="text-xs text-muted">The first {list.length} are listed; write these, and the next ones show.</p>
             )}
-            {choices.length > 0 &&
-              (canWrite ? (
-                <div className="flex justify-end">
-                  <Button variant="primary" onClick={() => setReviewing(choices)}>
-                    Check the changes for {choices.length} {choices.length === 1 ? 'file' : 'files'}
-                  </Button>
-                </div>
-              ) : (
-                <Notice>Allow changing files (above) to write the matches into the files.</Notice>
-              ))}
           </>
         )}
       </div>
