@@ -59,13 +59,15 @@ def _int(value: Any) -> int | None:
         return None
 
 
-_ARTIST_SPLIT = re.compile(r"\s*(?:;|,|\s&\s|\sfeat\.?\s|\sft\.?\s|\sx\s)\s*", re.I)
+# Between artists; the spaces around them are stripped from the parts afterwards (in the
+# pattern, they'd overlap with the separators' own spaces).
+_ARTIST_SPLIT = re.compile(r";|,|\s&\s|\sfeat\.?\s|\sft\.?\s|\sx\s", re.I)
 
 
 def split_artists(text: str) -> list[str]:
     """ "A, B & C" → [the whole, A, B, C] (the whole first: "Simon & Garfunkel")."""
     text = " ".join(text.split())
-    parts = [p for p in _ARTIST_SPLIT.split(text) if p]
+    parts = [p.strip() for p in _ARTIST_SPLIT.split(text) if p.strip()]
     return list(dict.fromkeys([text, *parts])) if text else []
 
 

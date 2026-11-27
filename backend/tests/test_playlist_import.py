@@ -55,6 +55,14 @@ def test_reading_playlist_files() -> None:
         240000,
     )
     assert split_artists("Simon & Garfunkel") == ["Simon & Garfunkel", "Simon", "Garfunkel"]
+    assert split_artists("  A ;B,  C feat. D  x E ") == [
+        "A ;B, C feat. D x E",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+    ]
     with pytest.raises(PlaylistFileError):
         parse("x.csv", "just,some\n1,2\n")
 
