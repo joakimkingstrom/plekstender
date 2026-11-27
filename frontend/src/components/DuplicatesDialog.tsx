@@ -183,8 +183,8 @@ function Results({
             <li key={g.files.map((f) => f.file_id).join('-')} className="rounded-lg border border-border p-3">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <p className="font-medium">
+                  {first.artist && <span className="font-normal text-muted">{first.artist} · </span>}
                   {first.title ?? first.path}
-                  {first.artist && <span className="font-normal text-muted"> · {first.artist}</span>}
                 </p>
                 {g.confirmed ? (
                   <Badge tone="ok">Same recording{g.similarity !== null && ` · ${Math.round(g.similarity * 100)}% alike`}</Badge>

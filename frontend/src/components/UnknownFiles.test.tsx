@@ -46,7 +46,7 @@ describe('Unknown files', () => {
     const match = await screen.findByRole('button', { name: 'Match for demo.mp3' })
     fireEvent.click(match)
     expect(screen.getByRole('option', { selected: true })).toHaveTextContent(/OK Computer \(1997/)
-    expect(screen.getByRole('option', { name: 'Airbag · Radiohead · OKNOTOK (2017, GB, CD) · 93%' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Radiohead · OKNOTOK (2017, GB, CD) · Airbag · 93%' })).toBeInTheDocument()
     fireEvent.click(match) // close
     expect(screen.getByText('Not identified yet.')).toBeInTheDocument()
     expect(screen.getByText('Last run: 1 identified.')).toBeInTheDocument()
@@ -58,7 +58,7 @@ describe('Unknown files', () => {
     })
 
     fireEvent.click(match)
-    fireEvent.click(screen.getByRole('option', { name: 'Airbag · Radiohead · OKNOTOK (2017, GB, CD) · 93%' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Radiohead · OKNOTOK (2017, GB, CD) · Airbag · 93%' }))
     // Above the list (it can be 200 files long), not below it.
     const check = screen.getByRole('button', { name: 'Check the changes for 1 file' })
     expect(check.compareDocumentPosition(screen.getAllByRole('listitem')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

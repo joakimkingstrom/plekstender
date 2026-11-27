@@ -107,8 +107,8 @@ function SetlistMissing({ playlist }: { playlist: Playlist }) {
       <ul className="mt-1 space-y-0.5 pl-4">
         {setlist.missing.map((m) => (
           <li key={`${m.artist}|${m.title}`}>
+            {artists > 1 && <span>{m.artist} · </span>}
             {m.title}
-            {artists > 1 && <span> · {m.artist}</span>}
           </li>
         ))}
         {count > setlist.missing.length && <li>and {formatCount(count - setlist.missing.length)} more</li>}
@@ -707,8 +707,8 @@ function Chosen({ draft, serverId, set }: { draft: Draft; serverId: number; set:
                 label={`Remove ${t.title}`}
                 onRemove={() => set({ tracks: draft.tracks.filter((x) => x.rating_key !== t.rating_key) })}
               >
+                {t.artist && <span className="text-muted">{t.artist} ·</span>}
                 {t.title}
-                {t.artist && <span className="text-muted">· {t.artist}</span>}
               </Chip>
             ))}
           </ul>
@@ -799,8 +799,8 @@ function Suggestions({
             <SuggestionRow title="Sonically similar songs">
               {sonicTracks.map((t) => (
                 <AddChip key={t.rating_key} onAdd={() => onTrack(t)} label={`Add ${t.title}`}>
+                  {t.artist && <span className="opacity-70">{t.artist} ·</span>}
                   {t.title}
-                  {t.artist && <span className="opacity-70">· {t.artist}</span>}
                 </AddChip>
               ))}
             </SuggestionRow>
