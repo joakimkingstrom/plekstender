@@ -93,11 +93,26 @@ it('stays away while nothing plays', async () => {
   expect(screen.queryByRole('button', { name: /Playing on/ })).toBeNull()
 })
 
-it('says what to check when the player gives no answer', async () => {
-  localStorage.setItem('player-widget', 'plexamp-1')
-  Object.assign(state, { reachable: false, detail: 'No answer from joabook (10.10.1.4:32500: no answer (timed out)). Plexamp listens for remote control on port 32500: check that a firewall…' })
-  show()
-  fireEvent.click(await screen.findByRole('button', { name: /Playing on joabook/ }))
-  fireEvent.click(within(screen.getByRole('list', { name: 'Players' })).getByRole('button', { name: /joabook/ }))
-  expect(await screen.findByRole('alert')).toHaveTextContent(/firewall/)
+it('rides out a missed answer, and says what to check once the player stays quiet', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  try {
+    localStorage.setItem('player-widget', 'plexamp-1')
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: /Playing on joabook/ }))
+    fireEvent.click(within(screen.getByRole('list', { name: 'Players' })).getByRole('button', { name: /joabook/ }))
+    const widget = await screen.findByRole('region', { name: 'Playing on joabook' })
+    expect(await within(widget).findByText('If')).toBeInTheDocument()
+
+    // Plexamp misses an answer now and then: what it last said stays, no error.
+    Object.assign(state, { reachable: false, detail: 'No answer from joabook (10.10.1.4:32500: no answer (timed out)). Plexamp listens for remote control on port 32500: check that a firewall…' })
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(within(widget).getByText('If')).toBeInTheDocument()
+    expect(within(widget).queryByRole('alert')).toBeNull()
+
+    // Quiet for longer than that: now it says so.
+    await vi.advanceTimersByTimeAsync(12_000)
+    expect(await within(widget).findByRole('alert')).toHaveTextContent(/firewall/)
+  } finally {
+    vi.useRealTimers()
+  }
 })

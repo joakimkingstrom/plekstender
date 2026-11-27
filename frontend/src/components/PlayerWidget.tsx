@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { errorMessage } from '../api/client'
 import { imageUrl, useActiveServer } from '../api/library'
 import { usePlayerCommand, usePlayerQueue, usePlayers, usePlayerState, type Player, type PlayerCommand, type PlayerState } from '../api/players'
@@ -37,6 +37,35 @@ function Control({ label, onClick, active = false, disabled = false, big = false
       </button>
     </Tooltip>
   )
+}
+
+/** How long the player may not answer before the widget says so. */
+const QUIET_FOR = 10_000
+
+/**
+ * What the player last said, kept through a missed answer or two: `shown` is the latest
+ * state it gave (and when), `silent` turns true once it hasn't answered for QUIET_FOR.
+ */
+function useSteadyState(data: PlayerState | undefined, updatedAt: number) {
+  const [seen, setSeen] = useState(0)
+  const [good, setGood] = useState<{ state: PlayerState; at: number } | null>(null)
+  const [quietSince, setQuietSince] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  // Each new answer once (React's "adjust state while rendering", not an effect).
+  if (data && updatedAt !== seen) {
+    setSeen(updatedAt)
+    if (data.reachable) {
+      setGood({ state: data, at: updatedAt })
+      setQuietSince(null)
+    } else if (quietSince === null) setQuietSince(updatedAt)
+  }
+  useEffect(() => {
+    if (quietSince === null) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [quietSince])
+  const silent = quietSince !== null && now - quietSince >= QUIET_FOR
+  return { shown: good ?? undefined, silent }
 }
 
 /** Where the song is: from the player's last answer, moved on locally while it plays. */
@@ -79,12 +108,21 @@ function Chooser({ players, current, onChoose }: { players: Player[]; current: s
 
 function Queue({ serverId, playerId, state, onSkip }: { serverId: number; playerId: string; state: PlayerState; onSkip: (itemId: number, key: string) => void }) {
   const queue = usePlayerQueue(serverId, playerId, state.queue_id, true)
+  const list = useRef<HTMLOListElement>(null)
+  const currentId = state.queue_item_id ?? queue.data?.current_item_id ?? null
+  // The song playing at the top (what's coming up below it; what's played above, a scroll
+  // away): when the queue opens, and when the next song starts.
+  useEffect(() => {
+    const ol = list.current
+    const row = ol?.querySelector<HTMLElement>('[aria-current="true"]')
+    if (ol && row) ol.scrollTop = row.offsetTop - ol.offsetTop
+  }, [currentId, queue.data])
   if (!state.queue_id) return <p className="px-4 py-3 text-xs text-muted">This player doesn't say what's queued.</p>
   if (queue.isPending) return <p className="px-4 py-3 text-xs text-muted">Loading the queue…</p>
   if (queue.isError) return <p className="px-4 py-3 text-xs text-danger">{errorMessage(queue.error)}</p>
   const current = state.queue_item_id ?? queue.data.current_item_id
   return (
-    <ol className="max-h-64 overflow-y-auto border-t border-border py-1 text-sm" aria-label="Queue">
+    <ol ref={list} className="relative max-h-64 overflow-y-auto border-t border-border py-1 text-sm" aria-label="Queue">
       {queue.data.items.map((item) => (
         <li key={item.item_id}>
           <button
@@ -107,13 +145,16 @@ function Queue({ serverId, playerId, state, onSkip }: { serverId: number; player
 
 function Expanded({ serverId, player, onMinimise, onSwitch }: { serverId: number; player: Player; onMinimise: () => void; onSwitch: () => void }) {
   const state = usePlayerState(serverId, player.id)
+  const { shown, silent } = useSteadyState(state.data, state.dataUpdatedAt)
   const command = usePlayerCommand(serverId)
   const [showQueue, setShowQueue] = useState(false)
-  const position = usePosition(state.data, state.dataUpdatedAt)
-  const s = state.data
+  const position = usePosition(shown?.state, shown?.at ?? 0)
+  const s = shown?.state
   const send = (c: PlayerCommand, value: number | null = null, key: string | null = null) => command.mutate({ playerId: player.id, command: c, value, key })
   const failed = command.data && !command.data.ok ? command.data.detail : command.error ? errorMessage(command.error) : null
-  const problem = s && !s.reachable ? s.detail : state.isError ? errorMessage(state.error) : failed
+  // A button that didn't work says so at once; the player going quiet only once it's been a
+  // while (Plexamp now and then doesn't answer for a few seconds, then carries on).
+  const problem = failed ?? (silent ? (state.data?.detail ?? (state.isError ? errorMessage(state.error) : null)) : null)
   const can = (what: string) => !s?.controllable.length || s.controllable.includes(what)
   const cover = imageUrl(serverId, s?.thumb, 320)
   const playing = s?.state === 'playing' || s?.state === 'buffering'
@@ -150,7 +191,7 @@ function Expanded({ serverId, player, onMinimise, onSwitch }: { serverId: number
               <p className="truncate text-xs text-muted">{s.album}</p>
             </>
           ) : (
-            <p className="text-sm text-muted">{state.isPending ? 'Asking the player…' : 'Nothing playing.'}</p>
+            <p className="text-sm text-muted">{s || silent ? 'Nothing playing.' : 'Asking the player…'}</p>
           )}
         </div>
       </div>

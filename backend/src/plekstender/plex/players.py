@@ -49,6 +49,9 @@ COMMANDS = {
     "skip_to": "playback/skipTo",
 }
 DIRECT_TIMEOUT = httpx.Timeout(5.0, connect=2.5)
+# Asking what a player is doing, every couple of seconds: Plexamp now and then doesn't
+# answer for a few seconds, and the next ask may well get through, so don't wait as long.
+STATE_TIMEOUT = httpx.Timeout(3.0, connect=2.0)
 
 # Players ignore a command whose id isn't higher than the last one from the same controller:
 # start from the time, so ids keep rising across restarts.
@@ -226,6 +229,7 @@ def _note(player: Player, tried: list[str]) -> None:
 async def _direct(
     settings: Settings, http: httpx.AsyncClient, player: Player, path: str,
     params: dict[str, Any], account_token: str | None,
+    wait: httpx.Timeout = DIRECT_TIMEOUT,
 ) -> Answer:  # fmt: skip
     """GET a path on the player itself, at each of its addresses until one answers."""
     headers = plex_headers(settings, player.token or account_token)
@@ -241,7 +245,7 @@ async def _direct(
                 f"{address}{path}",
                 params=params,
                 headers=headers,
-                timeout=DIRECT_TIMEOUT,
+                timeout=wait,
                 follow_redirects=False,
             )
         except httpx.HTTPError as exc:
@@ -386,7 +390,9 @@ async def timeline(
         except (PlexError, httpx.HTTPError) as exc:
             return State(reachable=False, detail=f"The server couldn't ask it: {_why(exc)}.")
         return parse_timeline(resp.content, resp.headers.get("content-type", ""))
-    answer = await _direct(settings, http, player, "/player/timeline/poll", params, account_token)
+    answer = await _direct(
+        settings, http, player, "/player/timeline/poll", params, account_token, STATE_TIMEOUT
+    )
     if answer.resp is None:
         detail = (
             _silent(player, answer.tried)
