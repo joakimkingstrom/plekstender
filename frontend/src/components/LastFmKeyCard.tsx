@@ -9,6 +9,7 @@ const field = 'w-full rounded-lg border border-border bg-surface-2 px-3 py-2 fon
 /**
  * The instance's Last.fm API key and its shared secret (admins). The key alone is enough for
  * importing scrobbles; scrobbling to Last.fm needs the secret too (Last.fm signs those calls).
+ * Since 1 December 2026 importing needs a key whose owner has Last.fm Pro; scrobbling doesn't.
  */
 export function LastFmKeyCard() {
   const key = useLastFmKey(true)
@@ -32,8 +33,8 @@ export function LastFmKeyCard() {
           <a href="https://www.last.fm/api/account/create" target="_blank" rel="noreferrer" className="text-accent underline">
             last.fm/api/account/create
           </a>{' '}
-          (the callback URL can be left empty); it shows the API key and the shared secret. From 1 December 2026 the key
-          only works while its owner has Last.fm Pro.
+          (the callback URL can be left empty); it shows the API key and the shared secret. Scrobbling works with any key;
+          from 1 December 2026, importing only works with a key whose owner has Last.fm Pro.
         </p>
         {key.isPending ? (
           <Spinner small />
@@ -65,8 +66,11 @@ export function LastFmKeyCard() {
             save.mutate(
               { api_key: apiKey.trim() || null, shared_secret: secret.trim() || null },
               {
-                onSuccess: () => {
-                  setSaved(apiKey.trim() && secret.trim() ? 'Saved. Last.fm accepted the key and secret.' : apiKey.trim() ? 'Saved. Last.fm accepted the key.' : 'Saved. Last.fm accepted the secret.')
+                onSuccess: (out) => {
+                  setSaved(
+                    out.note ??
+                      (apiKey.trim() && secret.trim() ? 'Saved. Last.fm accepted the key and secret.' : apiKey.trim() ? 'Saved. Last.fm accepted the key.' : 'Saved. Last.fm accepted the secret.'),
+                  )
                   setApiKey('')
                   setSecret('')
                 },

@@ -32,7 +32,7 @@ from plekstender.artwork import fetch
 from plekstender.config import Settings
 from plekstender.db.instance import get_lastfm_api_key, get_lastfm_shared_secret
 from plekstender.db.models import Listen, ScrobbleTarget
-from plekstender.history.lastfm import KEY_REJECTED
+from plekstender.history.lastfm import SCROBBLE_KEY_REJECTED
 from plekstender.history.listenbrainz import (
     ListenBrainzClient,
     ScrobbleServiceError,
@@ -241,7 +241,8 @@ class AudioscrobblerClient:
             # they wait (not skipped, not paused) until an admin fixes it.
             if code in (10, 26):
                 raise ScrobbleServiceError(
-                    KEY_REJECTED if self._name == "Last.fm" else f"{name}: {message}", status=403
+                    SCROBBLE_KEY_REJECTED if self._name == "Last.fm" else f"{name}: {message}",
+                    status=403,
                 )
             if code == 13:
                 raise ScrobbleServiceError(
