@@ -65,13 +65,15 @@ export function GigRow({
   const [undoTicket, setUndoTicket] = useState(false)
   const gotTicket = starred && (ticket.isPending ? ticket.variables.gotTicket : show.got_ticket)
   return (
-    <li className="flex items-start gap-3 p-3">
-      <div className="w-12 shrink-0 text-center">
+    // The buttons sit beside the name lines; the venue and the rest run on to the right edge
+    // below them.
+    <li className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-start gap-x-3 p-3">
+      <div className="row-span-2 text-center">
         <div className="text-xs uppercase text-muted">{day.toLocaleDateString(undefined, { weekday: 'short' })}</div>
         <div className="text-xl font-bold tabular-nums leading-tight">{day.getDate()}</div>
         <div className="text-xs text-muted">{day.toLocaleDateString(undefined, { month: 'short' })}</div>
       </div>
-      <div className="min-w-0 flex-1 space-y-0.5 text-sm">
+      <div className="min-w-0 space-y-0.5 text-sm">
         <p className="font-medium">
           {show.artists.length === 0 && <span>{show.name}</span>}
           {show.artists.map((a, i) => (
@@ -126,6 +128,8 @@ export function GigRow({
                 .join(', ')}${others.length > 3 ? ` and ${others.length - 3} more` : ''}`}
           </p>
         )}
+      </div>
+      <div className="col-start-2 col-span-2 row-start-2 mt-0.5 min-w-0 space-y-0.5 text-sm">
         <p className="text-muted">
           {where}
           {show.start_time && ` · ${show.start_time}`}
@@ -154,7 +158,7 @@ export function GigRow({
           </p>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="col-start-3 row-start-1 flex items-center gap-1">
         {starred && (
           <Tooltip content="Add to your calendar">
             <a
