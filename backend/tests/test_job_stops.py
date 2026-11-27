@@ -192,7 +192,9 @@ async def test_stopping_and_cancelling_an_edit(
     set_id = await _edit_of_two(owner, sid, music)
     _asking(apply, TagChangeSet, monkeypatch, 2, "cancel")
     await apply_tag_changes.func(set_id=set_id)
-    edits = (await owner.get(f"/api/servers/{sid}/files/changes")).json()
+    edits = (
+        await owner.get(f"/api/servers/{sid}/files/changes", params={"everything": True})
+    ).json()
     [undo_edit, edit] = edits[:2]
     assert (edit["id"], edit["status"], edit["counts"]) == (
         set_id,
@@ -236,7 +238,9 @@ async def test_stopping_and_cancelling_an_edit(
     assert cancelled["error"] == (
         "Stopped: 0 changes were not written. What was written is being undone."
     )
-    [undo_edit] = (await owner.get(f"/api/servers/{sid}/files/changes")).json()[:1]
+    [undo_edit] = (
+        await owner.get(f"/api/servers/{sid}/files/changes", params={"everything": True})
+    ).json()[:1]
     assert (undo_edit["kind"], undo_edit["total"]) == ("undo", 2)
     await apply_tag_changes.func(set_id=undo_edit["id"])
     assert _titles(music) == before
