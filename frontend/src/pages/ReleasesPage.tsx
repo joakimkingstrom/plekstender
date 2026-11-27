@@ -13,6 +13,7 @@ import {
   type ReleaseKind,
 } from '../api/releases'
 import { Artwork } from '../components/library'
+import { HideToggle } from '../components/HideToggle'
 import { DownloadIcon, LidarrBadge, LidarrDownloadDialog, LidarrMonitorButton } from '../components/LidarrDownload'
 import { CoverSizeSwitch } from '../components/CoverSizeSwitch'
 import { Segmented } from '../components/Segmented'
@@ -129,21 +130,12 @@ function ReleaseCard({ release, serverId, artist }: { release: Release; serverId
             </Button>
           </Tooltip>
         )}
-        <Tooltip content={release.hidden ? 'Show it again' : 'Hide it'}>
-          <Button
-            variant="ghost"
-            size="xs"
-            busy={hide.isPending}
-            onClick={() => hide.mutate({ mbid: release.mbid, hide: !release.hidden })}
-            aria-label={`${release.hidden ? 'Show' : 'Hide'} ${release.title}`}
-          >
-            <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
-              <path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              {!release.hidden && <path d="M2.5 13.5l11-11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />}
-            </svg>
-          </Button>
-        </Tooltip>
+        <HideToggle
+          hidden={release.hidden}
+          name={release.title}
+          busy={hide.isPending}
+          onToggle={() => hide.mutate({ mbid: release.mbid, hide: !release.hidden })}
+        />
       </div>
       {downloading && (
         <LidarrDownloadDialog mbid={release.mbid} title={release.title} artist={artist?.name} onClose={() => setDownloading(false)} />
