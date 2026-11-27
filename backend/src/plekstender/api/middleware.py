@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections import defaultdict, deque
+from urllib.parse import urlsplit
 
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+log = logging.getLogger(__name__)
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 CSRF_HEADER = "x-plekstender"
@@ -39,6 +43,22 @@ class CSRFMiddleware:
     def __init__(self, app: ASGIApp, *, allowed_origin: str) -> None:
         self.app = app
         self.allowed_origin = allowed_origin
+        self._warned: set[str] = set()
+
+    def _wrong_scheme(self, origin: str) -> bool:
+        """The page is at APP_URL's address, but over the other scheme (https behind a
+        proxy, APP_URL set to http://): a setup mistake, not another site. Logged once."""
+        page, app = urlsplit(origin), urlsplit(self.allowed_origin)
+        if page.netloc.lower() != app.netloc.lower() or page.scheme == app.scheme:
+            return False
+        if origin not in self._warned:
+            self._warned.add(origin)
+            log.warning(
+                "Blocked a request from %s: APP_URL is %s. If people open Plekstender at %s, "
+                "set APP_URL to that (in .env) and restart.",
+                origin, self.allowed_origin, origin,
+            )  # fmt: skip
+        return True
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if (
@@ -52,6 +72,14 @@ class CSRFMiddleware:
                 return
             origin = headers.get("origin")
             if origin is not None and origin != self.allowed_origin:
+                if self._wrong_scheme(origin):
+                    await _reject(
+                        send,
+                        403,
+                        f"Plekstender's APP_URL starts with {urlsplit(self.allowed_origin).scheme}"
+                        f"://, but this page is at {origin}. Set APP_URL to {origin} and restart.",
+                    )
+                    return
                 await _reject(send, 403, "Cross-origin request blocked")
                 return
         await self.app(scope, receive, send)

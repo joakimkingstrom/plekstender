@@ -549,6 +549,9 @@ class LastFmKeyOut(BaseModel):
     configured: bool
     source: Literal["settings", "environment"] | None
     scrobbling: bool = Field(description="The shared secret is set too, so people can scrobble.")
+    note: str | None = Field(
+        default=None, description="On saving: something to know (it can't be used to import)."
+    )
 
 
 class LastFmKeyIn(BaseModel):
