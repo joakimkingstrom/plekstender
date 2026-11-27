@@ -2,7 +2,7 @@ import { useArtistPastGigs } from '../api/gigs'
 import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Zoomable } from '../components/Lightbox'
 import { ListensDialog } from '../components/listens'
 import { Select } from '../components/Select'
@@ -521,18 +521,21 @@ export function ArtistPage() {
 }
 
 /** Previous and next artist (by name), as subtle arrows in the margins either side of the
- * page, halfway down the window; hidden when the window is too narrow to have margins. */
+ * page, halfway down the window: placed from where the page's content really starts and
+ * ends (measured, so nothing wide can end up under them), and left out when the margins are
+ * too narrow for them. */
 function ArtistSteps({ serverId, artistKey }: { serverId: number; artistKey: number }) {
   const found = useArtistNeighbours(serverId, artistKey)
-  const arrow =
-    'fixed top-1/2 z-20 hidden -translate-y-1/2 items-center justify-center rounded-full p-2 text-muted/60 transition-colors hover:bg-surface-2 hover:text-text min-[1290px]:flex'
+  const margins = usePageMargins()
+  const fits = margins !== null && margins.left >= ARROW_ROOM && margins.right >= ARROW_ROOM
   const step = (to: { rating_key: number; title: string } | null | undefined, side: 'previous' | 'next') =>
-    to ? (
+    to && fits ? (
       <Link
         to={`/library/artists/${to.rating_key}`}
         aria-label={`${side === 'previous' ? 'Previous' : 'Next'} artist: ${to.title}`}
         title={to.title}
-        className={`${arrow} ${side === 'previous' ? 'left-[calc(50%-36rem-3.75rem)]' : 'right-[calc(50%-36rem-3.75rem)]'}`}
+        style={side === 'previous' ? { left: margins.left - ARROW_ROOM + ARROW_GAP } : { right: margins.right - ARROW_ROOM + ARROW_GAP }}
+        className="fixed top-1/2 z-20 flex -translate-y-1/2 items-center justify-center rounded-full p-2 text-muted/60 transition-colors hover:bg-surface-2 hover:text-text"
       >
         <svg viewBox="0 0 24 24" className="size-8" aria-hidden>
           <path d={side === 'previous' ? 'M15 4l-8 8 8 8' : 'M9 4l8 8-8 8'} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -545,6 +548,37 @@ function ArtistSteps({ serverId, artistKey }: { serverId: number; artistKey: num
       {step(found.data?.next, 'next')}
     </nav>
   )
+}
+
+const ARROW_GAP = 8 // px between an arrow and the content, and the window's edge
+const ARROW_ROOM = 48 + ARROW_GAP * 2 // an arrow (p-2 around 32 px) with its gaps
+
+/** How much room there is left and right of the page's content (<main>, without its
+ * padding, and however wide its content really is), kept up to date as the window and the
+ * page change size. Null before it's measured. */
+function usePageMargins(): { left: number; right: number } | null {
+  const [margins, setMargins] = useState<{ left: number; right: number } | null>(null)
+  useLayoutEffect(() => {
+    const main = document.querySelector('main')
+    if (!main) return
+    const measure = () => {
+      const box = main.getBoundingClientRect()
+      const style = getComputedStyle(main)
+      const left = box.left + parseFloat(style.paddingLeft || '0')
+      const right = box.left + Math.max(box.width, main.scrollWidth) - parseFloat(style.paddingRight || '0')
+      const next = { left: Math.round(left), right: Math.round(window.innerWidth - right) }
+      setMargins((m) => (m && m.left === next.left && m.right === next.right ? m : next))
+    }
+    measure()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(main)
+    window.addEventListener('resize', measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [])
+  return margins
 }
 
 function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: number }) {
@@ -586,7 +620,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           {gigs.data && gigs.data.length > 0 && (
             <Card
@@ -692,7 +726,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           <Summary text={al.summary} />
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Card>
           {[...discs].sort((a, b) => a - b).map((disc) => (
             <div key={disc}>

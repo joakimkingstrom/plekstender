@@ -42,15 +42,28 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
+
+/** The page's <main>: `width` wide in the middle of a `window`-wide window. */
+function layout(window_: number, width: number) {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: window_ })
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const left = this.tagName === 'MAIN' ? (window_ - width) / 2 : 0
+    const w = this.tagName === 'MAIN' ? width : 0
+    return { left, right: left + w, width: w, top: 0, bottom: 0, height: 0, x: left, y: 0, toJSON: () => ({}) }
+  })
+}
 
 function renderArtist(key = 100) {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter initialEntries={[`/library/artists/${key}`]}>
-        <Routes>
-          <Route path="/library/artists/:key" element={<ArtistPage />} />
-        </Routes>
+        <main>
+          <Routes>
+            <Route path="/library/artists/:key" element={<ArtistPage />} />
+          </Routes>
+        </main>
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -67,13 +80,25 @@ describe('Artist page', () => {
   })
 
   it('steps to the previous and next artist by name', async () => {
+    layout(1600, 1152) // 224 px either side
     renderArtist()
     const next = await screen.findByRole('link', { name: 'Next artist: Sigur Rós' })
+    // In the margin, outside the content (which starts at 224 px).
+    expect(next.style.right).toBe('168px')
+    expect(screen.getByRole('link', { name: 'Previous artist: Portishead' }).style.left).toBe('168px')
     expect(screen.getByRole('link', { name: 'Previous artist: Portishead' })).toHaveAttribute('href', '/library/artists/99')
     fireEvent.click(next)
     expect(await screen.findByRole('heading', { name: 'Sigur Rós' })).toBeInTheDocument()
     // The last one: no next.
     expect(await screen.findByRole('link', { name: 'Previous artist: Radiohead' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Next artist/ })).not.toBeInTheDocument()
+  })
+
+  it('leaves the arrows out when the margins are too narrow for them', async () => {
+    layout(1200, 1152) // 24 px either side
+    renderArtist()
+    expect(await screen.findByRole('heading', { name: 'Radiohead' })).toBeInTheDocument()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByRole('link', { name: /artist:/ })).not.toBeInTheDocument()
   })
 })
