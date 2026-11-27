@@ -68,7 +68,8 @@ async def look_up_lyrics(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Set up the music folder first (Settings → Music files)."
         )
-    params: dict[str, object] = {"albums": sorted(set(body.albums)), "again": body.again}
+    mode = body.mode or ("all" if body.again else "new")
+    params: dict[str, object] = {"albums": sorted(set(body.albums)), "mode": mode}
     if body.write is not None:
         await _editable(db, user, server_id)
         if not (body.write.sidecar or body.write.lyricsfile or body.write.embedded):

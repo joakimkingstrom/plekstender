@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
-import { bulk, useLyricsPlan, useRefreshFiles, type LyricsDestinations } from '../api/files'
+import { bulk, useLyricsPlan, useRefreshFiles, type LyricsDestinations, type LyricsLookupMode } from '../api/files'
 import { formatCount } from '../format'
 import { Dialog } from './Dialog'
+import { Select } from './Select'
 import { Button, Notice, Spinner } from './ui'
 
 const DESTINATIONS: [keyof LyricsDestinations, string, string][] = [
@@ -33,6 +34,13 @@ const history = (
  * (one edit, written along the way: a long lookup that stops keeps what it wrote), or looked
  * up first and written afterwards. Both can be undone. `jobId` continues an earlier lookup.
  */
+const LOOKUP_MODES: { value: LyricsLookupMode; label: string }[] = [
+  { value: 'new', label: 'Songs not looked up yet' },
+  { value: 'missing', label: 'Songs without lyrics' },
+  { value: 'unsynced', label: 'Songs without synced lyrics' },
+  { value: 'all', label: 'Every song, again' },
+]
+
 export function LyricsPanel({
   serverId,
   albums,
@@ -45,7 +53,7 @@ export function LyricsPanel({
   canWrite: boolean
   jobId?: number | null
 }) {
-  const [again, setAgain] = useState(false)
+  const [mode, setMode] = useState<LyricsLookupMode>('new')
   const [asFound, setAsFound] = useState(canWrite)
   const [jobId, setJobId] = useState<number | null>(startJob)
   const [starting, setStarting] = useState(false)
@@ -66,7 +74,7 @@ export function LyricsPanel({
     setWritten(null)
     try {
       const write = asFound && canWrite ? { ...to, overwrite } : null
-      setJobId((await bulk.lookUpLyrics(serverId, albums, again, write)).id)
+      setJobId((await bulk.lookUpLyrics(serverId, albums, mode, write)).id)
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -150,10 +158,7 @@ export function LyricsPanel({
           </span>
         </span>
       </label>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />
-        Look again for songs looked up before
-      </label>
+      <Select label="Which songs" value={mode} onChange={setMode} options={LOOKUP_MODES} />
       <Button
         variant={jobId === null ? 'primary' : 'secondary'}
         busy={starting}

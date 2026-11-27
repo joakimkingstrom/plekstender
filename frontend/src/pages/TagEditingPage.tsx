@@ -64,6 +64,15 @@ function TagEditing({ serverId }: { serverId: number }) {
   const page = useAlbumIssues(serverId, issue, q, offset, PAGE)
   const [selected, setSelected] = useState<Map<number, AlbumIssues>>(new Map())
   const [action, setAction] = useState<Action | null>(null)
+  // Albums fixed here: hidden from the list while the worker writes their files (the list
+  // only catches up once they've been read again).
+  const [written, setWritten] = useState<Set<number>>(new Set())
+  const onWritten = (key: number) => setWritten((w) => new Set(w).add(key))
+  // Closing a dialog lets go of the albums it fixed (not before: its rows stay put).
+  const closeAction = () => {
+    setSelected((s) => new Map([...s].filter(([key]) => !written.has(key))))
+    setAction(null)
+  }
 
   if (summary.isPending) return <Spinner />
   if (summary.isError) return <Notice tone="error">{errorMessage(summary.error)}</Notice>
@@ -78,7 +87,9 @@ function TagEditing({ serverId }: { serverId: number }) {
       </Notice>
     )
   const canWrite = summary.data.tag_editing
-  const items = page.data?.items ?? []
+  const all = page.data?.items ?? []
+  const items = issue === 'all' ? all : all.filter((a) => !written.has(a.rating_key))
+  const hiddenHere = all.length - items.length
   const counts = page.data?.counts ?? {}
   const toggle = (a: AlbumIssues) =>
     setSelected((s) => {
@@ -167,7 +178,9 @@ function TagEditing({ serverId }: { serverId: number }) {
       ) : page.isError ? (
         <Notice tone="error">{errorMessage(page.error)}</Notice>
       ) : items.length === 0 ? (
-        <p className="text-sm text-muted">{issue === 'any' && !q ? 'Every album looks fine.' : 'No albums match.'}</p>
+        <p className="text-sm text-muted">
+          {hiddenHere > 0 ? 'Every album on this page has been fixed.' : issue === 'any' && !q ? 'Every album looks fine.' : 'No albums match.'}
+        </p>
       ) : (
         <>
           <div className="flex items-center justify-between gap-3 text-xs text-muted">
@@ -176,7 +189,8 @@ function TagEditing({ serverId }: { serverId: number }) {
               Select all on this page
             </label>
             <span>
-              {formatCount(offset + 1)}–{formatCount(offset + items.length)} of {formatCount(page.data.total)}
+              {hiddenHere > 0 && `${formatCount(hiddenHere)} just fixed, hidden · `}
+              {formatCount(offset + 1)}–{formatCount(offset + all.length)} of {formatCount(page.data.total)}
             </span>
           </div>
           <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
@@ -213,8 +227,10 @@ function TagEditing({ serverId }: { serverId: number }) {
           </Button>
         </div>
       )}
-      {action === 'musicbrainz' && <BulkMusicBrainz serverId={serverId} albums={chosen} canWrite={canWrite} onClose={() => setAction(null)} />}
-      {action === 'plex' && <BulkPlex serverId={serverId} albums={chosen} canWrite={canWrite} onClose={() => setAction(null)} />}
+      {action === 'musicbrainz' && (
+        <BulkMusicBrainz serverId={serverId} albums={chosen} canWrite={canWrite} onWritten={onWritten} onClose={closeAction} />
+      )}
+      {action === 'plex' && <BulkPlex serverId={serverId} albums={chosen} canWrite={canWrite} onWritten={onWritten} onClose={closeAction} />}
       {action === 'rename' && <BulkRename serverId={serverId} albums={chosen} canWrite={canWrite} onClose={() => setAction(null)} />}
       {action === 'lyrics' && (
         <LyricsDialog serverId={serverId} albums={chosen.map((a) => a.rating_key)} canWrite={canWrite} onClose={() => setAction(null)} />
@@ -301,13 +317,14 @@ function useEach<T>(albums: AlbumIssues[], work: (album: AlbumIssues) => Promise
 }
 
 /** What happened to each album when its edit was written. */
-function useWrites() {
+function useWrites(onWritten?: (key: number) => void) {
   const [writes, setWrites] = useState<Record<number, 'writing' | 'written' | string>>({})
   const write = async (key: number, request: () => Promise<unknown>) => {
     setWrites((w) => ({ ...w, [key]: 'writing' }))
     try {
       await request()
       setWrites((w) => ({ ...w, [key]: 'written' }))
+      onWritten?.(key)
     } catch (e) {
       setWrites((w) => ({ ...w, [key]: errorMessage(e) }))
     }
@@ -326,15 +343,17 @@ function BulkMusicBrainz({
   serverId,
   albums,
   canWrite,
+  onWritten,
   onClose,
 }: {
   serverId: number
   albums: AlbumIssues[]
   canWrite: boolean
+  onWritten?: (key: number) => void
   onClose: () => void
 }) {
   const { results } = useEach<MbBest>(albums, (a) => bulk.best(serverId, a.rating_key))
-  const { writes, write } = useWrites()
+  const { writes, write } = useWrites(onWritten)
   const [skipped, setSkipped] = useState<Set<number>>(new Set())
   const refresh = useRefreshFiles(serverId)
   const accept = (a: AlbumIssues, best: MbBest) => write(a.rating_key, () => bulk.applyRelease(serverId, a.rating_key, best.release!.id))
@@ -448,15 +467,17 @@ function BulkPlex({
   serverId,
   albums,
   canWrite,
+  onWritten,
   onClose,
 }: {
   serverId: number
   albums: AlbumIssues[]
   canWrite: boolean
+  onWritten?: (key: number) => void
   onClose: () => void
 }) {
   const { results } = useEach(albums, (a) => bulk.plexPreview(serverId, a.rating_key))
-  const { writes, write } = useWrites()
+  const { writes, write } = useWrites(onWritten)
   const refresh = useRefreshFiles(serverId)
   const [writing, setWriting] = useState(false)
   const todo = albums.filter((a) => (results[a.rating_key]?.value?.changes ?? 0) > 0 && !writes[a.rating_key])

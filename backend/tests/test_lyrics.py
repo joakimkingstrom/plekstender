@@ -660,3 +660,28 @@ async def test_an_interrupted_lookup_closes_its_edit(
     assert plan["job"]["status"] == "failed"
     [edit] = (await owner.get(f"{base}/changes")).json()
     assert (edit["id"], edit["status"]) == (set_id, "applied")
+
+
+def test_which_songs_a_lookup_asks_about() -> None:
+    import datetime as dt
+
+    from plekstender.tags.lyrics import _due, lookup_mode
+
+    now = dt.datetime(2026, 11, 27, tzinfo=dt.UTC)
+    yesterday = now - dt.timedelta(days=1)
+    never, not_found, found_plain = None, ("none", yesterday), ("plain", yesterday)
+    # New (the default): never looked up, or errors; LRCLIB's misses wait a month.
+    assert _due(never, "new", now) and not _due(not_found, "new", now)
+    assert _due(("none", now - dt.timedelta(days=31)), "new", now)
+    # Songs without lyrics: however recently LRCLIB missed them, but not songs that have some.
+    assert _due(not_found, "missing", now, has=None)
+    assert not _due(never, "missing", now, has="plain")
+    assert not _due(found_plain, "missing", now, has=None)  # found, waiting to be written
+    # Without synced lyrics: plain ones are asked about again.
+    assert _due(found_plain, "unsynced", now, has="plain")
+    assert not _due(never, "unsynced", now, has="word")
+    assert not _due(("synced", yesterday), "unsynced", now, has=None)
+    assert _due(("synced", yesterday), "all", now, has="synced")
+    # Jobs from before modes.
+    assert lookup_mode({"again": True}) == "all" and lookup_mode({}) == "new"
+    assert lookup_mode({"mode": "missing"}) == "missing"

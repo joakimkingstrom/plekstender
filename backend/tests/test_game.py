@@ -143,6 +143,13 @@ async def test_guess_the_intro(app: FastAPI, plex: FakePlex, songs: dict[str, by
         return [(i["rating_key"], i["title"]) for i in resp.json()]
 
     assert await search(kind="artist", q="head") == [(100, "Radiohead"), (101, "Portishead")]
+    # One or two letters ("U2"): names that start with them, not every name containing them.
+    assert await search(kind="artist", q="Po") == [(101, "Portishead")]
+    assert await search(kind="artist", q="he") == []
+    assert [t for _, t in await search(kind="album", q="ok")] == [
+        "OK Computer",
+        "OK Computer OKNOTOK",
+    ]
     assert [t for _, t in await search(kind="album", q="ok comp")] == [
         "OK Computer",
         "OK Computer OKNOTOK",

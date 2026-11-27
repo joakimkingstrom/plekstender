@@ -61,10 +61,12 @@ it('looks up lyrics for the chosen albums, previews them and writes them as an e
   expect(screen.getByText(/From LRCLIB, for 2 albums/)).toBeInTheDocument()
   // Looked up first, written afterwards.
   fireEvent.click(screen.getByRole('checkbox', { name: /Write lyrics as they're found/ }))
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Look again for songs looked up before' }))
+  // Only the songs without lyrics, however recently LRCLIB was asked.
+  fireEvent.click(screen.getByRole('button', { name: 'Which songs' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Songs without lyrics' }))
   fireEvent.click(screen.getByRole('button', { name: 'Look up lyrics' }))
   expect(await screen.findByText('Writing changes 2 songs: 1 .lrc, 1 .txt.')).toBeInTheDocument()
-  expect(await posted('/api/servers/1/files/lyrics')).toEqual([{ albums: [200, 201], again: true, write: null }])
+  expect(await posted('/api/servers/1/files/lyrics')).toEqual([{ albums: [200, 201], mode: 'missing', again: false, write: null }])
   expect(screen.getByText(/Of 3 songs; 1 already had lyrics/)).toBeInTheDocument()
   expect(screen.getByText('.txt · replaces lyrics it had · Karma police')).toBeInTheDocument()
   expect(screen.getByText('.lrc · word-synced · Please could you stop the noise')).toBeInTheDocument()
@@ -113,7 +115,7 @@ it('writes lyrics as they are found, as one edit', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Look up lyrics' }))
   expect(await screen.findByText(/Looking up and writing lyrics… 40 of 100 songs · 25 files written/)).toBeInTheDocument()
   expect(await posted('/api/servers/1/files/lyrics')).toEqual([
-    { albums: [], again: false, write: { sidecar: true, lyricsfile: true, embedded: false, overwrite: false } },
+    { albums: [], mode: 'new', again: false, write: { sidecar: true, lyricsfile: true, embedded: false, overwrite: false } },
   ])
   expect(screen.getByText(/Lyrics are written as they're found, as one edit/)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Write lyrics to/ })).not.toBeInTheDocument()
