@@ -2639,3 +2639,54 @@ class ArtistSuggestionsOut(BaseModel):
 class HideSuggestionIn(BaseModel):
     key: str = Field(max_length=300)
     name: str = Field(max_length=255)
+
+
+# --- Lidarr -------------------------------------------------------------------------------
+
+LidarrAccess = Literal["admins", "everyone"]
+
+
+class LidarrAdminOut(BaseModel):
+    configured: bool
+    url: str | None = None
+    root_folder: str | None = None
+    quality_profile_id: int | None = None
+    metadata_profile_id: int | None = None
+    access: LidarrAccess = "admins"
+
+
+class LidarrCheckIn(BaseModel):
+    url: str = Field(min_length=8, max_length=500)
+    api_key: str | None = Field(
+        default=None, max_length=100, description="Left out: the saved one."
+    )
+
+
+class LidarrFolderOut(BaseModel):
+    path: str
+    free_space: int | None = None
+
+
+class LidarrProfileOut(BaseModel):
+    id: int
+    name: str
+
+
+class LidarrOptionsOut(BaseModel):
+    """What the Lidarr at that address offers, to choose from."""
+
+    version: str
+    root_folders: list[LidarrFolderOut]
+    quality_profiles: list[LidarrProfileOut]
+    metadata_profiles: list[LidarrProfileOut]
+
+
+class LidarrIn(LidarrCheckIn):
+    root_folder: str = Field(min_length=1, max_length=500)
+    quality_profile_id: int
+    metadata_profile_id: int
+    access: LidarrAccess = "admins"
+
+
+class LidarrStatusOut(BaseModel):
+    available: bool = Field(description="Lidarr is connected and you may use it.")

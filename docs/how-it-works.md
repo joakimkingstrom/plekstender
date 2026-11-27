@@ -487,6 +487,9 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 - **Settings → Services → Artwork**: Deezer, iTunes and the Cover Art Archive can be turned off (instance setting `cover_sources`); off, they aren't offered on the album covers page, their candidates are refused, and best matches skip them.
 - Servers: Reconnect sits above Disconnect. Home's "Gigs you've got tickets for" leaves out the "Got a ticket" pill.
 
+## Lidarr (27 Nov)
+- **Connecting** (Settings → Services → Lidarr, admins): Lidarr's address (as Plekstender's server reaches it; a base path like `/lidarr` is fine) and API key, checked with `/api/v1/system/status`, then a root folder, quality profile and metadata profile for artists new to Lidarr (from its own lists), and who may add to it: admins only (the default) or everyone. The key is kept encrypted (purpose `instance.lidarr_api_key`) and never sent back; changing other settings keeps it. Lidarr's address isn't held to the outbound fetcher's rules: like a Plex server's, it's an admin's choice and usually on the local network. `GET /api/lidarr` tells the page whether to show Lidarr's buttons.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

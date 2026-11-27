@@ -4463,6 +4463,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lidarr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lidarr Status
+         * @description Whether Lidarr's buttons show for you (connected, and admins let you).
+         */
+        get: operations["lidarr_status_api_lidarr_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/lidarr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lidarr */
+        get: operations["get_lidarr_api_admin_lidarr_get"];
+        /**
+         * Put Lidarr
+         * @description Connect Lidarr (checked first: the folder and profiles must be ones it has).
+         */
+        put: operations["put_lidarr_api_admin_lidarr_put"];
+        post?: never;
+        /**
+         * Delete Lidarr
+         * @description Disconnect Lidarr (the API key is forgotten).
+         */
+        delete: operations["delete_lidarr_api_admin_lidarr_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/lidarr/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Lidarr
+         * @description Try the address and API key (the saved key when none is given), and say what that
+         *     Lidarr offers: its root folders and quality and metadata profiles.
+         */
+        post: operations["check_lidarr_api_admin_lidarr_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6778,6 +6844,93 @@ export interface components {
             decades: components["schemas"]["DecadeCount"][];
             /** Undated Albums */
             undated_albums: number;
+        };
+        /** LidarrAdminOut */
+        LidarrAdminOut: {
+            /** Configured */
+            configured: boolean;
+            /** Url */
+            url?: string | null;
+            /** Root Folder */
+            root_folder?: string | null;
+            /** Quality Profile Id */
+            quality_profile_id?: number | null;
+            /** Metadata Profile Id */
+            metadata_profile_id?: number | null;
+            /**
+             * Access
+             * @default admins
+             * @enum {string}
+             */
+            access: "admins" | "everyone";
+        };
+        /** LidarrCheckIn */
+        LidarrCheckIn: {
+            /** Url */
+            url: string;
+            /**
+             * Api Key
+             * @description Left out: the saved one.
+             */
+            api_key?: string | null;
+        };
+        /** LidarrFolderOut */
+        LidarrFolderOut: {
+            /** Path */
+            path: string;
+            /** Free Space */
+            free_space?: number | null;
+        };
+        /** LidarrIn */
+        LidarrIn: {
+            /** Url */
+            url: string;
+            /**
+             * Api Key
+             * @description Left out: the saved one.
+             */
+            api_key?: string | null;
+            /** Root Folder */
+            root_folder: string;
+            /** Quality Profile Id */
+            quality_profile_id: number;
+            /** Metadata Profile Id */
+            metadata_profile_id: number;
+            /**
+             * Access
+             * @default admins
+             * @enum {string}
+             */
+            access: "admins" | "everyone";
+        };
+        /**
+         * LidarrOptionsOut
+         * @description What the Lidarr at that address offers, to choose from.
+         */
+        LidarrOptionsOut: {
+            /** Version */
+            version: string;
+            /** Root Folders */
+            root_folders: components["schemas"]["LidarrFolderOut"][];
+            /** Quality Profiles */
+            quality_profiles: components["schemas"]["LidarrProfileOut"][];
+            /** Metadata Profiles */
+            metadata_profiles: components["schemas"]["LidarrProfileOut"][];
+        };
+        /** LidarrProfileOut */
+        LidarrProfileOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /** LidarrStatusOut */
+        LidarrStatusOut: {
+            /**
+             * Available
+             * @description Lidarr is connected and you may use it.
+             */
+            available: boolean;
         };
         /** ListenBrainzImportIn */
         ListenBrainzImportIn: {
@@ -18003,6 +18156,130 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lidarr_status_api_lidarr_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrStatusOut"];
+                };
+            };
+        };
+    };
+    get_lidarr_api_admin_lidarr_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrAdminOut"];
+                };
+            };
+        };
+    };
+    put_lidarr_api_admin_lidarr_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_lidarr_api_admin_lidarr_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    check_lidarr_api_admin_lidarr_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrOptionsOut"];
+                };
             };
             /** @description Validation Error */
             422: {

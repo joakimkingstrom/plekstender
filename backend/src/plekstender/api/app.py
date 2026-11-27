@@ -31,6 +31,7 @@ from plekstender.api.routes import (
     insights,
     library,
     library_stats,
+    lidarr,
     listens,
     live,
     lyrics,
@@ -138,6 +139,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(game.stats_router)
     app.include_router(game.sample_router)
     app.include_router(releases.covers_router)
+    app.include_router(lidarr.router)
+    app.include_router(lidarr.admin_router)
 
     if settings.static_dir:
         _mount_spa(app, settings.static_dir)

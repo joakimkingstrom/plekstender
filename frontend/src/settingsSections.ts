@@ -3,6 +3,7 @@ export const SERVICE_KINDS = [
   { slug: 'gigs', title: 'Gigs', about: 'Upcoming gigs near people (Gigs → Upcoming), and importing the ones they went to.' },
   { slug: 'playlists', title: 'Playlists', about: 'Importing playlists from Spotify and Tidal links.' },
   { slug: 'artwork', title: 'Artwork', about: 'Artist logos and album covers for Library → Artwork.' },
+  { slug: 'lidarr', title: 'Lidarr', about: 'Adding albums and artists to Lidarr, from Library → Releases and Discover.' },
   { slug: 'files', title: 'Identifying files', about: 'Recognising music files by how they sound (Settings → Music files → Unknown files).' },
   {
     slug: 'musicbrainz',
