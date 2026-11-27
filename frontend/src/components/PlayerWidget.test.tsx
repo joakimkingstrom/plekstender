@@ -61,7 +61,11 @@ async function sent(path: string, nth: number) {
 
 it('shows small while something plays, then opens on the chosen player with its controls and queue', async () => {
   show()
-  fireEvent.click(await screen.findByRole('button', { name: /Playing on joabook/ }))
+  // Small: what's playing (the artist first) and where.
+  const small = await screen.findByRole('button', { name: /Playing on joabook/ })
+  expect(small).toHaveTextContent('Glasvegas · IfPlaying on joabook')
+  fireEvent.click(small)
+  expect(within(screen.getByRole('list', { name: 'Players' })).getByRole('button', { name: /joabook/ })).toHaveTextContent('Playing: Glasvegas · If')
   fireEvent.click(within(screen.getByRole('list', { name: 'Players' })).getByRole('button', { name: /joabook/ }))
 
   const widget = await screen.findByRole('region', { name: 'Playing on joabook' })
