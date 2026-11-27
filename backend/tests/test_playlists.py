@@ -9,11 +9,11 @@ from typing import Any
 import httpx
 import pytest
 from fastapi import FastAPI
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 
 from plekstender.config import get_settings
 from plekstender.db import get_sessionmaker
-from plekstender.db.models import Playlist
+from plekstender.db.models import Album, Playlist
 from plekstender.playlists.service import build
 from plekstender.worker import schedule_due_playlists
 from tests.fakes import CSRF, FakePlex, sign_in
@@ -95,6 +95,40 @@ async def test_choosing_songs(app: FastAPI, plex: FakePlex) -> None:
         await friend.post("/api/servers", json={"machine_identifier": "home-machine"}, headers=CSRF)
     ).json()["server"]["id"]
     assert keys(await preview(friend, friend_sid, artists=[102])) == []
+
+
+async def test_fresh_picks(app: FastAPI, plex: FakePlex) -> None:
+    """The best songs of albums added lately, picked again at each refresh."""
+    owner, sid = await owner_with_library(app, plex)
+    now = dt.datetime.now(dt.UTC)
+    async with get_sessionmaker()() as db:
+        await db.execute(update(Album).values(added_at=now - dt.timedelta(days=200)))
+        added = {201: 3, 202: 10}  # OK Computer OKNOTOK 3 days ago, Dummy 10 days ago
+        for key, days in added.items():
+            await db.execute(
+                update(Album)
+                .where(Album.rating_key == key)
+                .values(added_at=now - dt.timedelta(days=days))
+            )
+        await db.commit()
+
+    def new(days: int, per_album: int) -> dict[str, Any]:
+        return {"new_albums": {"days": days, "per_album": per_album}, "order": "popular"}
+
+    # Each new album's most popular song. OKNOTOK's Karma Police is its own (the remaster),
+    # not the 1997 original, and new albums alone are enough for a playlist.
+    assert keys(await preview(owner, sid, **new(30, 1))) == [302, 304]
+    assert keys(await preview(owner, sid, **new(30, 2))) == [302, 304, 303]
+    assert keys(await preview(owner, sid, **new(5, 3))) == [302, 303]
+    assert keys(await preview(owner, sid, **new(1, 3))) == []
+    # The rules still apply.
+    only_loved = {"min_rating": 8, "include_unrated": False}
+    assert keys(await preview(owner, sid, **new(30, 2), rules=only_loved)) == []
+    # Nothing chosen at all: refused.
+    resp = await owner.post(
+        f"/api/servers/{sid}/playlists/preview", json={"order": "popular"}, headers=CSRF
+    )
+    assert resp.status_code == 422
 
 
 async def test_builder_helpers(app: FastAPI, plex: FakePlex) -> None:

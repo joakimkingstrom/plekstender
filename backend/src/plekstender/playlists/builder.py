@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.history.insights import forgotten_keys
-from plekstender.playlists.definition import Definition
+from plekstender.playlists.definition import Definition, NewAlbums
 from plekstender.sync.parse import normalise_artist
 
 # Songs released more than once count once (earliest release); a song's rating is its
@@ -23,6 +24,7 @@ _SONGS = """
                max(s.user_rating) OVER song AS rating,
                row_number() OVER (song ORDER BY al.year NULLS LAST, t.rating_key) AS release,
                t.rating_key = ANY(:tracks) AS chosen,
+               t.rating_key = ANY(:fresh) AS fresh,
                cardinality(CAST(:tags AS integer[])) = 0 OR EXISTS (
                    SELECT 1 FROM item_tags it
                    WHERE it.server_id = t.server_id AND it.tag_id = ANY(CAST(:tags AS integer[]))
@@ -35,17 +37,61 @@ _SONGS = """
         LEFT JOIN artists ar ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
         WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
           AND (t.artist_rating_key = ANY(:artists) OR t.rating_key = ANY(:tracks)
-               OR t.rating_key = ANY(:found))
+               OR t.rating_key = ANY(:found) OR t.rating_key = ANY(:fresh))
         WINDOW song AS (PARTITION BY t.artist_rating_key, t.title_norm)
     ),
     ranked AS (
         SELECT *, percent_rank() OVER (
             PARTITION BY artist_rating_key ORDER BY popularity DESC, rating_key
         ) AS pct
-        FROM songs WHERE release = 1 OR chosen
+        FROM songs WHERE release = 1 OR chosen OR fresh
     )
     SELECT * FROM ranked
 """
+
+
+# Each recently added album's most popular songs (then your rating, then album order: new
+# albums often have no popularity yet). A new album's songs are its own, not an earlier
+# release of the same song.
+_FRESH = """
+    SELECT rating_key FROM (
+        SELECT t.rating_key, row_number() OVER (
+                   PARTITION BY t.album_rating_key
+                   ORDER BY coalesce(t.popularity, 0) DESC, s.user_rating DESC NULLS LAST,
+                            t.disc NULLS LAST, t.number NULLS LAST, t.rating_key
+               ) AS n
+        FROM tracks t
+        JOIN user_item_state s
+          ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
+        JOIN albums al ON al.server_id = t.server_id AND al.rating_key = t.album_rating_key
+        WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
+          AND al.added_at >= :since
+    ) ranked
+    WHERE n <= :per_album
+"""
+
+
+async def new_album_keys(
+    db: AsyncSession,
+    user_id: int,
+    server_id: int,
+    sections: list[str],
+    new: NewAlbums,
+    now: dt.datetime | None = None,
+) -> list[int]:
+    """The best songs of the albums added in the last `new.days` days."""
+    since = (now or dt.datetime.now(dt.UTC)) - dt.timedelta(days=new.days)
+    rows = await db.scalars(
+        text(_FRESH),
+        {
+            "user_id": user_id,
+            "server_id": server_id,
+            "sections": sections,
+            "since": since,
+            "per_album": new.per_album,
+        },
+    )
+    return list(rows)
 
 
 @dataclass
@@ -87,6 +133,9 @@ async def matching_songs(
     """Every song the definition selects (before the limit), most popular first."""
     # Songs found by a rule rather than chosen (the rules still apply to them).
     found = await forgotten_keys(db, user_id, server_id, sections) if d.forgotten else []
+    fresh = (
+        await new_album_keys(db, user_id, server_id, sections, d.new_albums) if d.new_albums else []
+    )
     rows = await db.execute(
         text(_SONGS),
         {
@@ -96,6 +145,7 @@ async def matching_songs(
             "artists": d.artists,
             "tracks": d.tracks,
             "found": found,
+            "fresh": fresh,
             "tags": d.rules.tags,
         },
     )
