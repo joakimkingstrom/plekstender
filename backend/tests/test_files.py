@@ -856,7 +856,8 @@ class FakeAcoustId:
         import httpx
 
         known = {
-            "FP-demo.mp3": acoustid_recording(1, "Airbag"),
+            # AcoustID gives some lengths with a fraction.
+            "FP-demo.mp3": {**acoustid_recording(1, "Airbag"), "duration": 284.426},
             "FP-300.flac": acoustid_recording(2, "Paranoid Android"),
         }
         self.lookups: list[dict[str, str]] = []
@@ -952,6 +953,22 @@ async def test_identifying_files_by_sound(
     [demo] = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()["files"]
     assert demo["status"] == "identified"
     assert demo["results"][0]["recordings"][0]["releases"][0]["date"] == "1997-05-21"
+    assert demo["results"][0]["recordings"][0]["duration"] == 284  # whole seconds
+    # Results kept before lengths were rounded are listed too (they were a 500).
+    from sqlalchemy import text
+
+    from plekstender.db import get_sessionmaker
+
+    async with get_sessionmaker()() as db:
+        await db.execute(
+            text(
+                "UPDATE media_files SET identity = jsonb_set(identity, "
+                "'{results,0,recordings,0,duration}', '133.426') WHERE path = 'extra/demo.mp3'"
+            )
+        )
+        await db.commit()
+    [demo] = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()["files"]
+    assert demo["results"][0]["recordings"][0]["duration"] == 133
     suggestion = demo["suggestion"]
     assert suggestion["track_id"].endswith("01")
     again = await owner.post(f"{base}/identify", json={"kind": "missing"}, headers=CSRF)

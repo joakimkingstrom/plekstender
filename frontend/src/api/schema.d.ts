@@ -6780,7 +6780,10 @@ export interface components {
             title: string;
             /** Artist */
             artist: string;
-            /** Duration */
+            /**
+             * Duration
+             * @description Seconds.
+             */
             duration: number | null;
             /** Releases */
             releases: components["schemas"]["IdentityRelease"][];

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from plekstender.config import AccessMode
 from plekstender.playlists.definition import Definition
@@ -1707,8 +1707,15 @@ class IdentityRecording(BaseModel):
     id: str
     title: str
     artist: str
-    duration: int | None
+    duration: int | None = Field(description="Seconds.")
     releases: list[IdentityRelease]
+
+    @field_validator("duration", mode="before")
+    @classmethod
+    def _whole_seconds(cls, value: object) -> object:
+        """AcoustID gives some lengths with a fraction (133.426); results kept from before
+        rounding was added still have them."""
+        return round(value) if isinstance(value, float) else value
 
 
 class IdentityResult(BaseModel):
