@@ -109,9 +109,11 @@ def web(plex: FakePlex, monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     plex.router.get("https://musicbrainz.org/ws/2/release-group").mock(side_effect=browse)
     cover = io.BytesIO()
     Image.new("RGB", (500, 500), "navy").save(cover, "JPEG")
-    plex.router.get(
-        "https://coverartarchive.org/release-group/00000002-0000-4000-8000-000000000000/front-250"
-    ).mock(return_value=httpx.Response(200, content=cover.getvalue()))
+    for size in (250, 500):
+        plex.router.get(
+            "https://coverartarchive.org/release-group/"
+            f"00000002-0000-4000-8000-000000000000/front-{size}"
+        ).mock(return_value=httpx.Response(200, content=cover.getvalue()))
     plex.router.get(
         "https://coverartarchive.org/release-group/00000003-0000-4000-8000-000000000000/front-250"
     ).mock(return_value=httpx.Response(404))
@@ -252,6 +254,12 @@ async def test_releases(app: FastAPI, plex: FakePlex, web: dict[str, int]) -> No
     assert cover.status_code == 200
     assert cover.headers["content-type"] == "image/jpeg"
     assert Image.open(io.BytesIO(cover.content)).size == (250, 250)
+    big = await owner.get(f"/api/releases/{kid_a}/cover", params={"size": 500})  # large covers
+    assert big.status_code == 200, big.text
+    assert Image.open(io.BytesIO(big.content)).size == (500, 500)
+    assert (
+        await owner.get(f"/api/releases/{kid_a}/cover", params={"size": 1200})
+    ).status_code == 422
     none = await owner.get("/api/releases/00000003-0000-4000-8000-000000000000/cover")
     assert none.status_code == 404
     assert "max-age" in none.headers["cache-control"]

@@ -33,6 +33,7 @@ from plekstender.db.models import HiddenRelease
 
 router = APIRouter(prefix="/api/servers/{server_id}/releases", tags=["releases"])
 covers_router = APIRouter(prefix="/api/releases", tags=["releases"])
+COVER_SIZES = (250, 500)  # the Cover Art Archive's thumbnails that are used
 
 Kinds = Annotated[
     list[ReleaseKind] | None, Query(description="Kinds of release to show; none: your settings.")
@@ -163,14 +164,22 @@ async def show_release(server_id: int, mbid: str, db: DbDep, user: UserDep) -> N
     dependencies=[rate_limit("release-cover", limit=600, window=60)],
 )
 async def release_cover(
-    mbid: str, user: UserDep, settings: SettingsDep, http: HttpDep
+    mbid: str,
+    user: UserDep,
+    settings: SettingsDep,
+    http: HttpDep,
+    size: Annotated[int, Query(description="250 or 500 pixels.")] = 250,
 ) -> RawResponse:
-    """A release group's front cover from the Cover Art Archive, small, fetched by the server
-    (the page only loads images from here)."""
-    url = f"{settings.coverartarchive_url.rstrip('/')}/release-group/{_check_mbid(mbid)}/front-250"
+    """A release group's front cover from the Cover Art Archive, 250 or 500 pixels, fetched
+    by the server (the page only loads images from here)."""
+    if size not in COVER_SIZES:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "size: 250 or 500")
+    url = (
+        f"{settings.coverartarchive_url.rstrip('/')}/release-group/{_check_mbid(mbid)}/front-{size}"
+    )
     try:
         data, _ = await fetch(http, url, max_bytes=5 * 1024 * 1024)
-        body, content_type = images.thumbnail(data, 250)
+        body, content_type = images.thumbnail(data, size)
     except FetchError, ImageError:
         # Most often there's no cover; let the browser remember that for a while too.
         return RawResponse(status_code=404, headers={"Cache-Control": "private, max-age=86400"})

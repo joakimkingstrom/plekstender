@@ -4425,8 +4425,8 @@ export interface paths {
         };
         /**
          * Release Cover
-         * @description A release group's front cover from the Cover Art Archive, small, fetched by the server
-         *     (the page only loads images from here).
+         * @description A release group's front cover from the Cover Art Archive, 250 or 500 pixels, fetched
+         *     by the server (the page only loads images from here).
          */
         get: operations["release_cover_api_releases__mbid__cover_get"];
         put?: never;
@@ -17859,7 +17859,10 @@ export interface operations {
     };
     release_cover_api_releases__mbid__cover_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 250 or 500 pixels. */
+                size?: number;
+            };
             header?: never;
             path: {
                 mbid: string;
