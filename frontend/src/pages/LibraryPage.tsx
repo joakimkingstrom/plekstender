@@ -30,6 +30,8 @@ import { Segmented } from '../components/Segmented'
 import { Card, Notice, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
 import { countryFlag, countryName } from '../places'
+import { COVER_PIXELS, useCoverSize, type CoverSize } from '../coverSize'
+import { CoverSizeSwitch } from '../components/CoverSizeSwitch'
 
 const SORTS: { value: ArtistSort; label: string }[] = [
   { value: 'title', label: 'Name' },
@@ -59,6 +61,7 @@ export function LibraryPage() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<ArtistSort>('title')
   const [tag, setTag] = useState<number | null>(null)
+  const [size, setSize] = useCoverSize('library-cover-size')
   const deferredQuery = useDeferredValue(query.trim())
 
   return (
@@ -75,9 +78,10 @@ export function LibraryPage() {
               aria-label="Search artists"
             />
             <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
+            <CoverSizeSwitch value={size} onChange={setSize} />
           </div>
           <TagFilter serverId={active!.id} selected={tag} onSelect={setTag} />
-          <ArtistGrid serverId={active!.id} q={deferredQuery} sort={sort} tag={tag} />
+          <ArtistGrid serverId={active!.id} q={deferredQuery} sort={sort} tag={tag} size={size} />
         </>
       )}
     </>
@@ -143,16 +147,31 @@ function TagFilter({
   )
 }
 
+/** The library's artists, by cover size. */
+const ARTIST_GRIDS: Record<CoverSize, string> = {
+  small: 'grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8',
+  medium: 'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6',
+  large: 'grid grid-cols-1 gap-5 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+}
+/** An artist's albums (in the wider column), by cover size. */
+const ALBUM_GRIDS: Record<CoverSize, string> = {
+  small: 'grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5',
+  medium: 'grid grid-cols-2 gap-4 sm:grid-cols-3',
+  large: 'grid grid-cols-1 gap-5 min-[420px]:grid-cols-2',
+}
+
 function ArtistGrid({
   serverId,
   q,
   sort,
   tag,
+  size,
 }: {
   serverId: number
   q: string
   sort: ArtistSort
   tag: number | null
+  size: CoverSize
 }) {
   const artists = useArtists(serverId, q, sort, tag)
   const withGigs = useArtistsWithGigs(serverId)
@@ -186,12 +205,19 @@ function ArtistGrid({
       {items.length === 0 ? (
         <p className="text-sm text-muted">No artists match.</p>
       ) : (
-        <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <ul className={ARTIST_GRIDS[size]}>
           {items.map((a) => (
             <li key={a.rating_key}>
               <Link to={`/library/artists/${a.rating_key}`} className="group block">
                 <div className="relative">
-                  <Artwork serverId={serverId} path={a.thumb} title={a.title} round className="w-full transition-opacity group-hover:opacity-85" />
+                  <Artwork
+                    serverId={serverId}
+                    path={a.thumb}
+                    title={a.title}
+                    size={COVER_PIXELS[size]}
+                    round
+                    className="w-full transition-opacity group-hover:opacity-85"
+                  />
                   {withGigs.data?.has(a.rating_key) && <GigMarker className="bottom-[6%] right-[6%] size-7" />}
                 </div>
                 <div className="mt-2 truncate text-center text-sm font-medium">{a.title}</div>
@@ -438,6 +464,7 @@ const RELEASE_HEADINGS: Record<string, string> = {
 
 /** An artist's releases, grouped by type (albums, EPs, singles, live, compilations…). */
 function Releases({ serverId, albums }: { serverId: number; albums: Schemas['AlbumSummary'][] }) {
+  const [size, setSize] = useCoverSize('artist-cover-size')
   const groups = new Map<string, Schemas['AlbumSummary'][]>()
   for (const al of albums) groups.set(al.release_type ?? 'Album', [...(groups.get(al.release_type ?? 'Album') ?? []), al])
   const rank = (type: string) => {
@@ -448,12 +475,16 @@ function Releases({ serverId, albums }: { serverId: number; albums: Schemas['Alb
   return (
     <>
       {ordered.map(([type, items]) => (
-        <Card key={type} title={ordered.length > 1 ? (RELEASE_HEADINGS[type] ?? type) : 'Albums'}>
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Card
+          key={type}
+          title={ordered.length > 1 ? (RELEASE_HEADINGS[type] ?? type) : 'Albums'}
+          action={type === ordered[0][0] ? <CoverSizeSwitch value={size} onChange={setSize} /> : undefined}
+        >
+          <ul className={ALBUM_GRIDS[size]}>
             {items.map((al) => (
                 <li key={al.rating_key}>
                   <Link to={`/library/albums/${al.rating_key}`} className="group block">
-                    <Artwork serverId={serverId} path={al.thumb} title={al.title} className="w-full group-hover:opacity-85" />
+                    <Artwork serverId={serverId} path={al.thumb} title={al.title} size={COVER_PIXELS[size]} className="w-full group-hover:opacity-85" />
                     <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
                   </Link>
                   <div className="flex items-center justify-between gap-2 text-xs text-muted">

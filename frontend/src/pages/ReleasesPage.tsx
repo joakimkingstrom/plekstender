@@ -14,11 +14,13 @@ import {
 } from '../api/releases'
 import { Artwork } from '../components/library'
 import { DownloadIcon, LidarrBadge, LidarrDownloadDialog, LidarrMonitorButton } from '../components/LidarrDownload'
+import { CoverSizeSwitch } from '../components/CoverSizeSwitch'
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
 import { Badge, Button, Card, Notice, Spinner } from '../components/ui'
 import { Tooltip } from '../components/Tooltip'
 import { useLibraryServer } from '../components/useLibraryServer'
+import { useCoverSize, type CoverSize } from '../coverSize'
 import { formatCount } from '../format'
 
 const KINDS: [ReleaseKind, string][] = [
@@ -135,12 +137,6 @@ function ReleaseCard({ release, serverId, artist }: { release: Release; serverId
   )
 }
 
-type CoverSize = 'small' | 'medium' | 'large'
-const SIZES: [CoverSize, string][] = [
-  ['small', 'S'],
-  ['medium', 'M'],
-  ['large', 'L'],
-]
 const GRIDS: Record<CoverSize, string> = {
   small: 'grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8',
   medium: 'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6',
@@ -148,27 +144,6 @@ const GRIDS: Record<CoverSize, string> = {
 }
 const SIZE_KEY = 'releases-cover-size'
 const CoverSizeContext = createContext<CoverSize>('medium')
-
-/** The covers' size, remembered in this browser. */
-function useCoverSize(): [CoverSize, (size: CoverSize) => void] {
-  const [size, setSize] = useState<CoverSize>(() => {
-    try {
-      const stored = localStorage.getItem(SIZE_KEY)
-      return SIZES.some(([s]) => s === stored) ? (stored as CoverSize) : 'medium'
-    } catch {
-      return 'medium'
-    }
-  })
-  const change = (next: CoverSize) => {
-    setSize(next)
-    try {
-      localStorage.setItem(SIZE_KEY, next)
-    } catch {
-      // private browsing: just for now
-    }
-  }
-  return [size, change]
-}
 
 const OUT_FILTER_KEY = 'releases-out-filter'
 
@@ -204,7 +179,7 @@ export function ReleasesPage() {
   const [settings, saveSettings] = useReleaseSettings()
   const kinds = settings.kinds.length ? settings.kinds : DEFAULT_SETTINGS.kinds
   const [includeHidden, setIncludeHidden] = useState(false)
-  const [size, setSize] = useCoverSize()
+  const [size, setSize] = useCoverSize(SIZE_KEY)
   const update = (patch: Record<string, string>) => setParams({ ...Object.fromEntries(params), ...patch }, { replace: true })
   // Saved on your account: the same kinds next time, on any device.
   const toggleKind = (kind: ReleaseKind) => {
@@ -244,7 +219,7 @@ export function ReleasesPage() {
             <input type="checkbox" checked={includeHidden} onChange={(e) => setIncludeHidden(e.target.checked)} />
             Show hidden
           </label>
-          <Segmented label="Cover size" value={size} onChange={setSize} options={SIZES} />
+          <CoverSizeSwitch value={size} onChange={setSize} />
         </div>
       </div>
       <CoverSizeContext value={size}>
