@@ -2,6 +2,8 @@ import { useArtistPastGigs } from '../api/gigs'
 import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
+import { AlbumLyricsIcon, SongLyricsIcon } from '../components/LyricsIcon'
+import { useLyricsIcons } from '../api/hooks'
 import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Zoomable } from '../components/Lightbox'
 import { ListensDialog } from '../components/listens'
@@ -249,6 +251,7 @@ function TrackList({
   /** A column with the user's own listens of each song. */
   showListens?: boolean
 }) {
+  const lyricsIcons = useLyricsIcons()
   return (
     <ol className="divide-y divide-border">
       {tracks.map((t, i) => (
@@ -260,6 +263,7 @@ function TrackList({
             <span className="flex items-center gap-1.5">
               <span className="truncate">{t.title}</span>
               {t.seen_live > 0 && <SeenLive times={t.seen_live} />}
+              {lyricsIcons && <SongLyricsIcon kind={t.lyrics} />}
             </span>
             {(showAlbum || t.original_title) && (
               <span className="block truncate text-xs text-muted">
@@ -466,6 +470,7 @@ const RELEASE_HEADINGS: Record<string, string> = {
 /** An artist's releases, grouped by type (albums, EPs, singles, live, compilations…). */
 function Releases({ serverId, albums }: { serverId: number; albums: Schemas['AlbumSummary'][] }) {
   const [size, setSize] = useCoverSize('artist-cover-size')
+  const lyricsIcons = useLyricsIcons()
   const groups = new Map<string, Schemas['AlbumSummary'][]>()
   for (const al of albums) groups.set(al.release_type ?? 'Album', [...(groups.get(al.release_type ?? 'Album') ?? []), al])
   const rank = (type: string) => {
@@ -489,7 +494,10 @@ function Releases({ serverId, albums }: { serverId: number; albums: Schemas['Alb
                     <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
                   </Link>
                   <div className="flex items-center justify-between gap-2 text-xs text-muted">
-                    <span>{al.year ?? ''}</span>
+                    <span className="flex items-center gap-1.5">
+                      {al.year ?? ''}
+                      {lyricsIcons && <AlbumLyricsIcon lyrics={al.lyrics} />}
+                    </span>
                     <RateStars serverId={serverId} ratingKey={al.rating_key} value={al.user_rating} label={`Rate ${al.title}`} size="size-3.5" />
                   </div>
                 </li>
@@ -693,6 +701,7 @@ export function AlbumPage() {
 
 function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number }) {
   const album = useAlbum(serverId, albumKey)
+  const lyricsIcons = useLyricsIcons()
   if (album.isPending) return <Spinner />
   if (album.isError) return <Notice tone="error">{errorMessage(album.error)}</Notice>
   const al = album.data
@@ -721,6 +730,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
             <RateStars serverId={serverId} ratingKey={al.rating_key} value={al.user_rating} label={`Rate the album ${al.title}`} size="size-5" />
             {al.critic_rating !== null && <span>Critics {al.critic_rating.toFixed(1)}/10</span>}
             <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(al.plays)} plays</span></Tooltip>
+            {lyricsIcons && <AlbumLyricsIcon lyrics={al.lyrics} />}
           </div>
           <TagChips tags={al.tags} />
           <Summary text={al.summary} />
