@@ -188,7 +188,7 @@ function ArtworkBody({ serverId, albumKey, art, canWrite }: { serverId: number; 
           {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
         </div>
       ) : (
-        <p className="text-xs text-muted">Turn on "Allow changing files" (Settings → Music files) to embed or save covers.</p>
+        <p className="text-xs text-muted">Turn on "Allow changing files" (Settings → Music files → Tags in your files) to embed or save covers.</p>
       )}
     </div>
   )

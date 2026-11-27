@@ -405,50 +405,137 @@ async def _before(
         )
     }
     for group in merge(rows):
-        refs = [f"{r.source}:{r.source_id}"[:128] for r in sorted(group, key=lambda r: r.id)]
+        refs = show_refs(group)
         record = next((known[r] for r in refs if r in known), None)
         if _deleted(record) or (record and now - record.refreshed_at < REFRESH_EVERY):
             continue
-        # The user's artists on the bill (headliners last: they play last).
-        artists: dict[str, dict[str, Any]] = {}
-        for row in group:
-            for a in row.artists:
-                artists.setdefault(normalise_artist(a["name"]), a)
-        bill = sorted(artists.values(), key=lambda a: bool(a.get("headliner")))[-MAX_ARTISTS:]
-        if not bill:
-            continue
-        mbids = await _mbids(db, servers, [a["name"] for a in bill])
-        parts = []
-        for a in bill:
-            usual = await recent_setlist(
-                http, settings, key, a["name"], mbids.get(normalise_artist(a["name"])), today
-            )
-            parts.append(Part(a["name"], usual, a.get("rating_key")))
-        us, matched = await _best_server(db, servers, parts)
-        show = group[0]
-        names = ", ".join(reversed([a["name"] for a in bill]))  # headliners first
-        place = ", ".join(x for x in (show.venue, show.city) if x)
-        await _save(
-            db,
-            record=record,
-            user=user,
-            kind="before",
-            ref=record.ref if record else refs[0],
-            gig_date=show.start_date,
-            us=us,
-            matched=matched,
-            name=f"Before the gig: {names}, {nice_date(show.start_date)}",
-            description=(
-                f"What {names} {'has' if len(bill) == 1 else 'have'} been playing lately "
-                f"(recent setlists on setlist.fm), for the gig"
-                + (f" at {place}" if place else "")
-                + f" on {nice_date(show.start_date)}. Made by Plekstender, refreshed weekly "
-                "until the gig."
-            ),
-            now=now,
-            result=result,
+        await _make_before(
+            db, http, settings, key, user, servers, group, record, today, now, result
         )
         await db.commit()
+
+
+def show_refs(group: list[LiveShow]) -> list[str]:
+    return [f"{r.source}:{r.source_id}"[:128] for r in sorted(group, key=lambda r: r.id)]
+
+
+async def _make_before(
+    db: AsyncSession,
+    http: httpx.AsyncClient,
+    settings: Settings,
+    key: str,
+    user: User,
+    servers: list[UserServer],
+    group: list[LiveShow],
+    record: GigPlaylist | None,
+    today: dt.date,
+    now: dt.datetime,
+    result: Made,
+) -> bool:
+    """Make or refresh one gig's playlist (its rows from every source). False: none of the
+    user's artists are on the bill."""
+    refs = show_refs(group)
+    # The user's artists on the bill (headliners last: they play last).
+    artists: dict[str, dict[str, Any]] = {}
+    for row in group:
+        for a in row.artists:
+            artists.setdefault(normalise_artist(a["name"]), a)
+    bill = sorted(artists.values(), key=lambda a: bool(a.get("headliner")))[-MAX_ARTISTS:]
+    if not bill:
+        return False
+    mbids = await _mbids(db, servers, [a["name"] for a in bill])
+    parts = []
+    for a in bill:
+        usual = await recent_setlist(
+            http, settings, key, a["name"], mbids.get(normalise_artist(a["name"])), today
+        )
+        parts.append(Part(a["name"], usual, a.get("rating_key")))
+    us, matched = await _best_server(db, servers, parts)
+    show = group[0]
+    names = ", ".join(reversed([a["name"] for a in bill]))  # headliners first
+    place = ", ".join(x for x in (show.venue, show.city) if x)
+    await _save(
+        db,
+        record=record,
+        user=user,
+        kind="before",
+        ref=record.ref if record else refs[0],
+        gig_date=show.start_date,
+        us=us,
+        matched=matched,
+        name=f"Before the gig: {names}, {nice_date(show.start_date)}",
+        description=(
+            f"What {names} {'has' if len(bill) == 1 else 'have'} been playing lately "
+            f"(recent setlists on setlist.fm), for the gig"
+            + (f" at {place}" if place else "")
+            + f" on {nice_date(show.start_date)}. Made by Plekstender, refreshed weekly "
+            "until the gig."
+        ),
+        now=now,
+        result=result,
+    )
+    return True
+
+
+class ShowPlaylistError(Exception):
+    """A gig's playlist can't be made (said why)."""
+
+
+async def make_show_playlist(
+    db: AsyncSession,
+    http: httpx.AsyncClient,
+    settings: Settings,
+    user: User,
+    show_id: int,
+    now: dt.datetime | None = None,
+) -> tuple[Made, int | None]:
+    """Make (or rebuild) the playlist for one upcoming gig now, asked for from its row:
+    also when it was deleted before, and whether or not gig playlists are turned on.
+    Returns what was done and the playlist (None: no songs found). Commits."""
+    key, _ = await get_setlistfm_api_key(db, settings)
+    if not key:
+        raise ShowPlaylistError("setlist.fm isn't set up: an admin can add its API key.")
+    servers = [
+        us
+        for us in await db.scalars(select(UserServer).where(UserServer.user_id == user.id))
+        if us.music_section_keys
+    ]
+    if not servers:
+        raise ShowPlaylistError("Connect a Plex server with a music library first.")
+    show = await db.get(LiveShow, show_id)
+    if show is None or show.user_id != user.id:
+        raise LookupError(show_id)
+    now = now or dt.datetime.now(dt.UTC)
+    same_day = list(
+        await db.scalars(
+            select(LiveShow).where(
+                LiveShow.user_id == user.id, LiveShow.start_date == show.start_date
+            )
+        )
+    )
+    group = next((g for g in merge(same_day) if any(r.id == show.id for r in g)), [show])
+    refs = show_refs(group)
+    record = await db.scalar(
+        select(GigPlaylist).where(
+            GigPlaylist.user_id == user.id, GigPlaylist.kind == "before", GigPlaylist.ref.in_(refs)
+        )
+    )
+    result = Made()
+    try:
+        made = await _make_before(
+            db, http, settings, key, user, servers, group, record, now.date(), now, result
+        )
+    except ImportError_ as exc:
+        raise ShowPlaylistError("setlist.fm didn't answer; try again in a while.") from exc
+    if not made:
+        raise ShowPlaylistError("None of the artists on the bill are in your library.")
+    await db.commit()
+    record = await db.scalar(
+        select(GigPlaylist).where(
+            GigPlaylist.user_id == user.id, GigPlaylist.kind == "before", GigPlaylist.ref.in_(refs)
+        )
+    )
+    return result, record.playlist_id if record else None
 
 
 async def _after(

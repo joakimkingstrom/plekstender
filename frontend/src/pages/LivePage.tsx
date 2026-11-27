@@ -58,7 +58,7 @@ export function LivePage() {
           <SetupCard settings={settings.data} onDone={() => setEditing(false)} onCancel={settings.data.place_name ? () => setEditing(false) : undefined} />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_18rem]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <Shows settings={settings.data} />
           <div className="order-first space-y-4 lg:order-none">
             <Summary settings={settings.data} onEdit={() => setEditing(true)} />

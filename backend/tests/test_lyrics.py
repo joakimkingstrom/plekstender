@@ -271,7 +271,9 @@ async def test_looking_up_and_writing_lyrics(
     await apply_tag_changes.func(set_id=edit["id"])
     statuses = {
         (c["path"], c["field"]): (c["status"], c["error"])
-        for c in (await owner.get(f"{base}/changes")).json()[0]["changes"]
+        for c in (await owner.get(f"{base}/changes", params={"everything": True})).json()[0][
+            "changes"
+        ]
     }
     assert statuses[("300.lrc", "lrc")] == ("applied", None)
     assert statuses[("300.flac", "lyrics")] == ("applied", None)
@@ -382,7 +384,12 @@ async def test_jobs_of_a_stopped_worker_are_closed(monkeypatch: pytest.MonkeyPat
         closed.append((job.id, status))
 
     monkeypatch.setattr(worker.app.job_manager, "get_stalled_jobs", get_stalled_jobs)
+
+    async def close_abandoned(db: Any) -> list[str]:
+        return []
+
     monkeypatch.setattr(worker.app.job_manager, "finish_job", finish_job)
+    monkeypatch.setattr(worker, "close_abandoned", close_abandoned)
     await worker.close_stalled_jobs.func(timestamp=0)
     assert closed == [(7, Status.FAILED)]
 
@@ -452,7 +459,7 @@ async def test_writing_lyrics_as_they_are_found(
     plan = (await owner.get(f"{base}/lyrics/{job['id']}")).json()
     assert plan["job"]["status"] == "succeeded"
     assert plan["job"]["progress"]["written"] == 3
-    [edit] = (await owner.get(f"{base}/changes")).json()
+    [edit] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert edit["id"] == plan["applied_set_id"]
     assert edit["description"] == (
         "Lyrics from LRCLIB (.lrc / .txt, .lyricsfile.yaml; library, as found)"
@@ -465,7 +472,7 @@ async def test_writing_lyrics_as_they_are_found(
     # Nothing new to write: no empty edit is left in the history.
     again = (await owner.post(f"{base}/lyrics", json={"write": write}, headers=CSRF)).json()
     await look_up_lyrics.func(job_id=again["id"])
-    assert len((await owner.get(f"{base}/changes")).json()) == 1
+    assert len((await owner.get(f"{base}/changes", params={"everything": True})).json()) == 1
     assert (await owner.get(f"{base}/lyrics/{again['id']}")).json()["applied_set_id"] is None
 
 
@@ -585,7 +592,7 @@ async def test_stopping_and_cancelling_a_lookup(
     assert plan["job"]["error"] == lyrics_mod.STOP_MESSAGES["undo"]
     assert (music / "300.lrc").exists()  # written before it was cancelled...
     assert await found() == 0  # ...but what it found is gone
-    edits = (await owner.get(f"{base}/changes")).json()
+    edits = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert [(e["kind"], e["status"]) for e in edits[:2]] == [
         ("undo", "queued"),
         ("edit", "applied"),
@@ -616,7 +623,7 @@ async def test_stopping_and_cancelling_a_lookup(
         lyrics_mod.STOP_MESSAGES["undo"],
     )
     assert await found() == 0
-    [undo, *_] = (await owner.get(f"{base}/changes")).json()
+    [undo, *_] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert undo["kind"] == "undo"
     await apply_tag_changes.func(set_id=undo["id"])
     assert not (music / "300.lrc").exists()
@@ -634,9 +641,10 @@ async def test_an_interrupted_lookup_closes_its_edit(
 ) -> None:
     from sqlalchemy import func, update
 
+    from plekstender import worker
     from plekstender.db import get_sessionmaker
     from plekstender.db.models import FileScan, TagChangeSet
-    from plekstender.worker import cleanup_sessions, look_up_lyrics
+    from plekstender.worker import look_up_lyrics
 
     monkeypatch.setattr(lrclib, "INTERVAL", 0.0)
     owner, base = await _library_with_lyrics(app, plex, music)
@@ -655,10 +663,15 @@ async def test_an_interrupted_lookup_closes_its_edit(
             update(TagChangeSet).where(TagChangeSet.id == set_id).values(status="running")
         )
         await db.commit()
-    await cleanup_sessions.func(timestamp=0)
+
+    async def no_stalled_jobs(seconds_since_heartbeat: float) -> list[Any]:
+        return []
+
+    monkeypatch.setattr(worker.app.job_manager, "get_stalled_jobs", no_stalled_jobs)
+    await worker.close_stalled_jobs.func(timestamp=0)
     plan = (await owner.get(f"{base}/lyrics/{job['id']}")).json()
     assert plan["job"]["status"] == "failed"
-    [edit] = (await owner.get(f"{base}/changes")).json()
+    [edit] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert (edit["id"], edit["status"]) == (set_id, "applied")
 
 

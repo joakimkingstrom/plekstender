@@ -105,6 +105,29 @@ def _never_a_server(address: str) -> bool:
     )
 
 
+async def server_address(host: str) -> str:
+    """The address to connect to for a scrobble server's host, checked on every request
+    (see guarded_client): refused for this machine, link-local and Plekstender's own
+    services; the home network is fine."""
+    host = host.lower()
+    if host in OWN_HOSTS or host.endswith(".localhost"):
+        raise ScrobblerError("That address is one of Plekstender's own services.")
+    try:
+        addresses = await fetch.resolver(host)
+    except (OSError, UnicodeError) as exc:
+        raise ScrobblerError(f"Couldn't find {host}.") from exc
+    if not addresses or any(_never_a_server(a) for a in addresses):
+        raise ScrobblerError("That address can't be a scrobble server: it's this machine.")
+    return addresses[0]
+
+
+def guarded_client() -> httpx.AsyncClient:
+    """A client for scrobble servers people set themselves: each request's host is checked
+    (server_address) and connected to as checked, so a name that later points elsewhere
+    (DNS rebinding) can't reach this machine or its services. Close it after use."""
+    return httpx.AsyncClient(transport=fetch.GuardedTransport(server_address))
+
+
 async def check_server_address(url: str) -> None:
     """Refuse addresses that can't be a scrobble server (see _never_a_server), so the server
     can't be pointed at itself or its own services. A name that doesn't resolve is left for
@@ -315,26 +338,37 @@ async def submit_targets(
             )
         )
     )
-    for target in targets:
-        secret = _cipher(settings).decrypt(target.token_enc, purpose=PURPOSE)
-        client: Any
-        if target.kind == "lastfm":
-            api_key, _ = await get_lastfm_api_key(db, settings)
-            api_secret = await get_lastfm_shared_secret(db, settings)
-            if not api_key or not api_secret:
-                # Waits (not paused) until an admin sets the key and secret again.
-                target.last_error = LASTFM_UNAVAILABLE
-                results[target.id] = SubmitResult(error=LASTFM_UNAVAILABLE)
-                await db.commit()
-                continue
-            client = AudioscrobblerClient(
-                http, target.api_url, secret, api_key=api_key, api_secret=api_secret, name="Last.fm"
+    # Servers people set themselves (Libre.fm or another GNU FM, ListenBrainz-compatible
+    # ones) are reached through a client that checks each request's address; Last.fm's own
+    # address needs no such care.
+    async with guarded_client() as guarded:
+        for target in targets:
+            secret = _cipher(settings).decrypt(target.token_enc, purpose=PURPOSE)
+            client: Any
+            if target.kind == "lastfm":
+                api_key, _ = await get_lastfm_api_key(db, settings)
+                api_secret = await get_lastfm_shared_secret(db, settings)
+                if not api_key or not api_secret:
+                    # Waits (not paused) until an admin sets the key and secret again.
+                    target.last_error = LASTFM_UNAVAILABLE
+                    results[target.id] = SubmitResult(error=LASTFM_UNAVAILABLE)
+                    await db.commit()
+                    continue
+                client = AudioscrobblerClient(
+                    http,
+                    target.api_url,
+                    secret,
+                    api_key=api_key,
+                    api_secret=api_secret,
+                    name="Last.fm",
+                )
+            elif target.kind == "librefm":
+                client = AudioscrobblerClient(guarded, target.api_url, secret)
+            else:
+                client = ListenBrainzClient(guarded, target.api_url, secret)
+            results[target.id] = await send_pending(
+                db, target, client, service_label(target.service)
             )
-        elif target.kind == "librefm":
-            client = AudioscrobblerClient(http, target.api_url, secret)
-        else:
-            client = ListenBrainzClient(http, target.api_url, secret)
-        results[target.id] = await send_pending(db, target, client, service_label(target.service))
     return results
 
 

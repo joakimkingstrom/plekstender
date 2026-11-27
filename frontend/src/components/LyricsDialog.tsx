@@ -24,8 +24,8 @@ function songs(n: number) {
 }
 
 const history = (
-  <Link to="/settings/files" className="underline">
-    Settings → Music files
+  <Link to="/settings/files/history" className="underline">
+    Settings → Music files → Tag history
   </Link>
 )
 
@@ -172,7 +172,11 @@ export function LyricsPanel({
     </div>
   )
   const writeOff = !canWrite && (
-    <Notice tone="warn">Writing to the files is off. Turn on tag editing on {history}.</Notice>
+    <Notice tone="warn">Writing to the files is off. Turn on tag editing on{' '}
+      <Link to="/settings/files/scan" className="underline">
+        Settings → Music files → Tags in your files
+      </Link>
+      .</Notice>
   )
 
   return (

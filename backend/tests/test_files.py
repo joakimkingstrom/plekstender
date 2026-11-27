@@ -193,7 +193,9 @@ async def test_editing_tags_with_history_and_undo(
     async def run(change_set: dict[str, Any]) -> dict[str, Any]:
         await apply_tag_changes.func(set_id=change_set["id"])
         [done] = [
-            s for s in (await owner.get(f"{base}/changes")).json() if s["id"] == change_set["id"]
+            s
+            for s in (await owner.get(f"{base}/changes", params={"everything": True})).json()
+            if s["id"] == change_set["id"]
         ]
         return done
 
@@ -254,15 +256,20 @@ async def test_editing_tags_with_history_and_undo(
     )
     assert again.status_code == 400  # already undone
 
+    # The history: edits that wrote something (not the one that ran into a conflict).
     history = (await owner.get(f"{base}/changes", params={"album": 200})).json()
-    assert [s["description"] for s in history] == [
+    assert [s["description"] for s in history] == ["Undid 1 change", "Fix OK Computer"]
+    everything = (
+        await owner.get(f"{base}/changes", params={"album": 200, "everything": True})
+    ).json()
+    assert [s["description"] for s in everything] == [
         "Undid 1 change",
         "Edited 1 tag in 1 file",
         "Fix OK Computer",
     ]
-    original = {c["id"]: c for c in history[2]["changes"]}
+    original = {c["id"]: c for c in history[1]["changes"]}
     assert original[title_change["id"]]["undone"] is True
-    assert history[2]["user"] == "owner"
+    assert history[1]["user"] == "owner"
     nothing = await owner.post(
         f"{base}/edits",
         json={
@@ -366,7 +373,7 @@ async def test_writing_plex_metadata_in_bulk(app: FastAPI, plex: FakePlex, music
     assert change_set["counts"] == {"pending": 1} and change_set["total"] == 1
     await apply_tag_changes.func(set_id=change_set["id"])
     assert FLAC(music / "301.flac")["title"] == ["Karma Police"]
-    [done] = (await owner.get(f"{base}/changes")).json()
+    [done] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert (done["status"], done["counts"], done["undoable"]) == ("applied", {"applied": 1}, 1)
 
     # Undo the whole edit, by its id (big edits have too many changes to list).
@@ -374,7 +381,7 @@ async def test_writing_plex_metadata_in_bulk(app: FastAPI, plex: FakePlex, music
     assert resp.status_code == 201, resp.text
     await apply_tag_changes.func(set_id=resp.json()["id"])
     assert FLAC(music / "301.flac")["title"] == ["Karma Police (Live)"]
-    history = (await owner.get(f"{base}/changes")).json()
+    history = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert history[1]["undoable"] == 0
     assert (await owner.post(f"{base}/undo", json={}, headers=CSRF)).status_code == 422
 
@@ -650,6 +657,18 @@ async def test_tag_editing_tab(
     assert (await owner.get(f"{base}/albums", params={"q": "radio"})).json()["total"] == 1
     assert (await owner.get(f"{base}/albums", params={"q": "nothing"})).json()["total"] == 0
 
+    # Looked up and skipped: left out for a while if asked (the page asks for 90 days).
+    skipped = await owner.post(f"{base}/albums/skipped", json={"album_keys": [200]}, headers=CSRF)
+    assert skipped.status_code == 204
+    hiding = (await owner.get(f"{base}/albums", params={"skipped_within": 90})).json()
+    assert (hiding["items"], hiding["total"], hiding["skipped_hidden"]) == ([], 0, 1)
+    showing = (await owner.get(f"{base}/albums")).json()
+    assert showing["items"][0]["skipped_at"] is not None and showing["skipped_hidden"] == 0
+    unskipped = await owner.delete(f"{base}/albums/skipped/200", headers=CSRF)
+    assert unskipped.status_code == 204
+    hiding = (await owner.get(f"{base}/albums", params={"skipped_within": 90})).json()
+    assert hiding["total"] == 1 and hiding["items"][0]["skipped_at"] is None
+
     # Found by searching: both files match, but the release has 12 tracks, so it's
     # proposed, not a clear match.
     best = (await owner.post(f"{base}/albums/200/musicbrainz/best", headers=CSRF)).json()
@@ -844,7 +863,8 @@ class FakeAcoustId:
         import httpx
 
         known = {
-            "FP-demo.mp3": acoustid_recording(1, "Airbag"),
+            # AcoustID gives some lengths with a fraction.
+            "FP-demo.mp3": {**acoustid_recording(1, "Airbag"), "duration": 284.426},
             "FP-300.flac": acoustid_recording(2, "Paranoid Android"),
         }
         self.lookups: list[dict[str, str]] = []
@@ -940,6 +960,22 @@ async def test_identifying_files_by_sound(
     [demo] = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()["files"]
     assert demo["status"] == "identified"
     assert demo["results"][0]["recordings"][0]["releases"][0]["date"] == "1997-05-21"
+    assert demo["results"][0]["recordings"][0]["duration"] == 284  # whole seconds
+    # Results kept before lengths were rounded are listed too (they were a 500).
+    from sqlalchemy import text
+
+    from plekstender.db import get_sessionmaker
+
+    async with get_sessionmaker()() as db:
+        await db.execute(
+            text(
+                "UPDATE media_files SET identity = jsonb_set(identity, "
+                "'{results,0,recordings,0,duration}', '133.426') WHERE path = 'extra/demo.mp3'"
+            )
+        )
+        await db.commit()
+    [demo] = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()["files"]
+    assert demo["results"][0]["recordings"][0]["duration"] == 133
     suggestion = demo["suggestion"]
     assert suggestion["track_id"].endswith("01")
     again = await owner.post(f"{base}/identify", json={"kind": "missing"}, headers=CSRF)
@@ -1020,7 +1056,7 @@ async def test_tags_an_older_scan_couldnt_read(
 
     resp = await owner.post(f"{base}/albums/200/musicbrainz", json=body, headers=CSRF)
     await apply_tag_changes.func(set_id=resp.json()["id"])
-    [done] = (await owner.get(f"{base}/changes")).json()
+    [done] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert (done["status"], done["counts"]) == ("applied", {"applied": 4})
     assert {c["old_value"] for c in done["changes"]} == {"XW", "old-track"}  # what was there
     assert FLAC(music / "301.flac")["releasecountry"] == ["GB"]
@@ -1215,7 +1251,7 @@ async def test_renaming_files_and_moving_them_back(
         "Radiohead/OK Computer/02 - Paranoid Android.flac",
         "Radiohead/OK Computer/06 - Karma Police (Live).flac",
     }
-    [done] = (await owner.get(f"{base}/changes")).json()
+    [done] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert (done["status"], done["counts"]) == ("applied", {"applied": 3})
 
     # Undo moves them back, and the emptied folders go.
@@ -1237,7 +1273,7 @@ async def test_renaming_files_and_moving_them_back(
     (album / "06 - Karma Police (Live).flac").write_bytes(b"someone else's")
     resp = await owner.post(f"{base}/renames/{job['id']}/apply", headers=CSRF)
     await apply_tag_changes.func(set_id=resp.json()["id"])
-    latest = (await owner.get(f"{base}/changes")).json()[0]
+    latest = (await owner.get(f"{base}/changes", params={"everything": True})).json()[0]
     assert latest["counts"] == {"applied": 2, "conflict": 1}
     assert (album / "06 - Karma Police (Live).flac").read_bytes() == b"someone else's"
     assert (music / "301.flac").exists()
@@ -1462,7 +1498,7 @@ async def test_album_artwork_in_files_and_folders(
     for name in ("300.flac", "301.flac"):
         data, mime = embedded(music / name) or (b"", "")
         assert mime == "image/jpeg" and data != huge
-    [done] = (await owner.get(f"{base}/changes")).json()
+    [done] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert done["counts"] == {"applied": 2}
     undo = await owner.post(f"{base}/undo", json={"set_id": done["id"]}, headers=CSRF)
     await apply_tag_changes.func(set_id=undo.json()["id"])
@@ -1482,7 +1518,7 @@ async def test_album_artwork_in_files_and_folders(
         i["path"] for i in (await owner.get(f"{base}/albums/200/artwork")).json()["folder_images"]
     ]
     assert names == ["cover.jpg", "folder.jpg"]
-    latest = (await owner.get(f"{base}/changes")).json()[0]
+    latest = (await owner.get(f"{base}/changes", params={"everything": True})).json()[0]
     undo = await owner.post(f"{base}/undo", json={"set_id": latest["id"]}, headers=CSRF)
     await apply_tag_changes.func(set_id=undo.json()["id"])
     assert not (music / "folder.jpg").exists()
@@ -1495,3 +1531,122 @@ async def test_album_artwork_in_files_and_folders(
 
     assert info(embedded(music / "300.flac")[0]).width == 800  # type: ignore[index]
     assert (await owner.post(f"{base}/artwork/shrink", json={}, headers=CSRF)).status_code == 400
+
+
+def _wav(path: Path) -> None:
+    import wave
+
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(44100)
+        w.writeframes(b"\0\0" * 4410)
+
+
+def _aiff(path: Path) -> None:
+    import struct
+
+    frames = 4410
+    rate = bytes.fromhex("400EAC44000000000000")  # 44,100 as an 80-bit float
+    comm = struct.pack(">hLh", 1, frames, 16) + rate
+    ssnd = struct.pack(">LL", 0, 0) + b"\0\0" * frames
+    body = b"AIFF" + b"COMM" + struct.pack(">L", len(comm)) + comm
+    body += b"SSND" + struct.pack(">L", len(ssnd)) + ssnd
+    path.write_bytes(b"FORM" + struct.pack(">L", len(body)) + body)
+
+
+@pytest.mark.parametrize("make", [_wav, _aiff], ids=["wav", "aiff"])
+def test_id3_tags_in_wav_and_aiff_files(tmp_path: Path, make: Any) -> None:
+    """mutagen only gives MP3s' ID3 tags the easy names: in WAV and AIFF files they came as
+    raw frames, so they read as missing and a MusicBrainz ID (UFID) broke the snapshot."""
+    import mutagen
+    from mutagen.id3 import TIT2, TPE1, UFID
+
+    from plekstender.tags.read import read_file
+    from plekstender.tags.write import Planned, apply, snapshot
+
+    path = tmp_path / ("song.wav" if make is _wav else "song.aiff")
+    make(path)
+    audio = mutagen.File(path)
+    audio.add_tags()
+    audio.tags.add(TIT2(encoding=3, text=["Old title"]))
+    audio.tags.add(TPE1(encoding=3, text=["Radiohead"]))
+    audio.tags.add(
+        UFID(owner="http://musicbrainz.org", data=b"10000000-0000-4000-8000-000000000001")
+    )
+    audio.save()
+
+    assert read_file(path)["tags"]["title"] == "Old title"
+    before = snapshot(path)
+    assert before["title"] == ["Old title"] and before["artist"] == ["Radiohead"]
+    [outcome] = apply(path, [Planned(1, "title", "Old title", "New title")])
+    assert outcome.status == "applied", outcome.error
+    again = mutagen.File(path)
+    assert str(again.tags["TIT2"]) == "New title"
+    assert again.tags["UFID:http://musicbrainz.org"].data.startswith(b"10000000")  # kept
+    assert read_file(path)["tags"]["title"] == "New title"
+
+
+@pytest.mark.db
+async def test_a_scan_says_what_it_is_doing_and_stops_at_any_step(
+    app: FastAPI, plex: FakePlex, music: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After the tags come the lyrics files, .nfo files, folder pictures (a first scan of a
+    big library can spend a long time on those) and matching to Plex: each shows as a step,
+    and Stop works in any of them."""
+    from sqlalchemy import update
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import FileScan
+    from plekstender.tags import scan as scan_module
+    from plekstender.worker import scan_music_files
+
+    (music / "cover.jpg").write_bytes(picture_bytes(1200, 1200, "JPEG", "green"))
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    steps: list[tuple[str, int, int]] = []
+    stop_at: str | None = None
+    reporter = scan_module._reporter
+
+    def recording(db: Any, scan: FileScan, step: str) -> Any:
+        report = reporter(db, scan, step)
+
+        async def recorded(done: int, total: int) -> None:
+            steps.append((step, done, total))
+            if step == stop_at:  # Stop pressed now
+                async with get_sessionmaker()() as other:
+                    await other.execute(
+                        update(FileScan).where(FileScan.id == scan.id).values(stop_requested="stop")
+                    )
+                    await other.commit()
+            await report(done, total)
+
+        return recorded
+
+    monkeypatch.setattr(scan_module, "_reporter", recording)
+    first = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=first["id"])
+    assert list(dict.fromkeys(step for step, _, _ in steps)) == [
+        "Music files",
+        "Lyrics files",
+        "Folder pictures",
+        "Matching files to Plex",
+    ]
+    assert ("Folder pictures", 0, 1) in steps
+    assert (await owner.get(f"{base}/summary")).json()["last"]["status"] == "succeeded"
+
+    # A new picture to read, and Stop pressed while the scan reads it.
+    (music / "cover.jpg").write_bytes(picture_bytes(1000, 1000, "JPEG", "red"))
+    steps.clear()
+    stop_at = "Folder pictures"
+    second = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=second["id"])
+    last = (await owner.get(f"{base}/summary")).json()["last"]
+    assert (last["id"], last["status"]) == (second["id"], "failed")
+    assert last["error"].startswith("Stopped.")
+    assert steps[-1][0] == "Folder pictures"

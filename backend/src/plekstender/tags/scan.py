@@ -12,6 +12,7 @@ import asyncio
 import datetime as dt
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -42,6 +43,16 @@ from plekstender.tags.read import AUDIO_EXTENSIONS, READER, TagReadError, read_f
 log = logging.getLogger(__name__)
 
 BATCH = 200
+# What a scan is doing, for its progress.
+STEPS = {
+    "files": "Music files",
+    "lyrics": "Lyrics files",
+    "nfo": ".nfo files",
+    "images": "Folder pictures",
+    "matching": "Matching files to Plex",
+}
+# Saves a step's progress (and stops the scan there when it's been asked to): done, total.
+Report = Callable[[int, int], Awaitable[None]] | None
 
 
 class ScanError(Exception):
@@ -109,7 +120,9 @@ def _read_nfos(root: Path, items: list[Found]) -> list[dict[str, Any]]:
     return out
 
 
-async def _scan_nfos(db: AsyncSession, server: PlexServer, root: Path, nfos: list[Found]) -> int:
+async def _scan_nfos(
+    db: AsyncSession, server: PlexServer, root: Path, nfos: list[Found], report: Report = None
+) -> int:
     """Read new and changed .nfo files; forget the ones that are gone."""
     known = {
         path: (size, mtime)
@@ -123,6 +136,8 @@ async def _scan_nfos(db: AsyncSession, server: PlexServer, root: Path, nfos: lis
     }
     changed = [f for f in nfos if known.get(f.path) != (f.size, f.mtime)]
     for start in range(0, len(changed), BATCH):
+        if report:
+            await report(start, len(changed))
         batch = changed[start : start + BATCH]
         read = await asyncio.to_thread(_read_nfos, root, batch)
         rows = [
@@ -228,7 +243,7 @@ def _read_images(root: Path, items: list[Found], data_dir: Path) -> list[dict[st
 
 
 async def _scan_images(
-    db: AsyncSession, server: PlexServer, root: Path, images: list[Found]
+    db: AsyncSession, server: PlexServer, root: Path, images: list[Found], report: Report = None
 ) -> int:
     """Describe new and changed folder images (cover.jpg, artist.jpg...); forget gone ones."""
     data_dir = get_settings().data_dir
@@ -244,6 +259,8 @@ async def _scan_images(
     }
     changed = [f for f in images if known.get(f.path) != (f.size, f.mtime)]
     for start in range(0, len(changed), BATCH):
+        if report:
+            await report(start, len(changed))
         batch = changed[start : start + BATCH]
         read = await asyncio.to_thread(_read_images, root, batch, data_dir)
         rows = [
@@ -303,6 +320,16 @@ async def _scan_lyrics(
         await db.execute(update(MediaFile), changed[start : start + 1000])
     await db.commit()
     return with_lyrics
+
+
+def _reporter(db: AsyncSession, scan: FileScan, step: str) -> Callable[[int, int], Awaitable[None]]:
+    async def report(done: int, total: int) -> None:
+        await check_stop(db, FileScan, scan.id)
+        scan.progress = {"step": step, "done": done, "total": total}
+        scan.updated_at = dt.datetime.now(dt.UTC)
+        await db.commit()
+
+    return report
 
 
 def plex_path(server: PlexServer, relative: str) -> str:
@@ -380,13 +407,13 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
         ).all()
     }
     stats = {"files": len(files), "read": 0, "unchanged": 0, "removed": 0, "errors": 0}
-    scan.progress = {"done": 0, "total": len(files)}
-    await db.commit()
+    report = _reporter(db, scan, STEPS["files"])
+    await report(0, len(files))
 
     changed = [f for f in files if known.get(f.path) != (f.size, f.mtime, READER)]
     stats["unchanged"] = len(files) - len(changed)
     for start in range(0, len(changed), BATCH):
-        await check_stop(db, FileScan, scan.id)
+        await report(stats["unchanged"] + stats["read"], len(files))
         batch = changed[start : start + BATCH]
         read = await asyncio.to_thread(_read_all, root, batch, get_settings().data_dir)
         rows = [
@@ -416,8 +443,6 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
         )
         stats["read"] += len(batch)
         stats["errors"] += sum(1 for info in read if info["error"])
-        scan.progress = {"done": stats["unchanged"] + stats["read"], "total": len(files)}
-        scan.updated_at = dt.datetime.now(dt.UTC)
         await db.commit()
 
     # Files that are gone, and matches for unchanged files (Plex may have new tracks).
@@ -430,14 +455,28 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
             )
         )
     stats["removed"] = len(gone)
+    # The steps after the tags (on a first scan, the pictures can take a while).
+    await _reporter(db, scan, STEPS["lyrics"])(0, 0)
     stats["lyrics"] = await _scan_lyrics(db, server, root, [f.path for f in files], lyrics)
-    stats["nfo"] = await _scan_nfos(db, server, root, nfos)
-    stats["images"] = await _scan_images(db, server, root, images)
-    unmatched = await db.scalars(
-        select(MediaFile).where(MediaFile.server_id == server.id, MediaFile.rating_key.is_(None))
+    stats["nfo"] = await _scan_nfos(db, server, root, nfos, _reporter(db, scan, STEPS["nfo"]))
+    stats["images"] = await _scan_images(
+        db, server, root, images, _reporter(db, scan, STEPS["images"])
     )
-    for row in unmatched:
-        row.rating_key = tracks.get(plex_path(server, row.path))
+    await _reporter(db, scan, STEPS["matching"])(0, 0)
+    unmatched = (
+        await db.execute(
+            select(MediaFile.id, MediaFile.path).where(
+                MediaFile.server_id == server.id, MediaFile.rating_key.is_(None)
+            )
+        )
+    ).all()
+    matches = [
+        {"id": file_id, "rating_key": key}
+        for file_id, path in unmatched
+        if (key := tracks.get(plex_path(server, path))) is not None
+    ]
+    for start in range(0, len(matches), 1000):
+        await db.execute(update(MediaFile), matches[start : start + 1000])
     await db.commit()
     stats["matched"] = (
         await db.scalar(

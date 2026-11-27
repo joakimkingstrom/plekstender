@@ -21,6 +21,14 @@ import { Button, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCompact } from '../format'
 
 type Section = { to: string; label: string; end?: boolean; children?: Section[] }
+
+/** Settings → Music files, a page each ('' is the main one). */
+const FILES_PARTS = [
+  { slug: '', title: 'Folder and tools' },
+  { slug: 'scan', title: 'Tags in your files' },
+  { slug: 'unknown', title: 'Unknown files' },
+  { slug: 'history', title: 'Tag history' },
+] as const
 type Group = { name: string; sections: Section[] }
 
 /** The Settings sections, in groups: yours, your server's library (owners), and the admin's. */
@@ -38,10 +46,21 @@ function settingsGroups(owner: boolean, admin: boolean): Group[] {
           label: 'Export & import',
           children: EXPORT_PARTS.filter((p) => !p.owners || owner).map((p) => ({ to: `/settings/export/${p.slug}`, label: p.title })),
         },
+        { to: '/settings/jobs', label: 'Jobs' },
       ],
     },
   ]
-  if (owner) groups.push({ name: 'Library', sections: [{ to: '/settings/files', label: 'Music files' }] })
+  if (owner)
+    groups.push({
+      name: 'Library',
+      sections: [
+        {
+          to: '/settings/files',
+          label: 'Music files',
+          children: FILES_PARTS.map((p) => ({ to: p.slug ? `/settings/files/${p.slug}` : '/settings/files', label: p.title, end: !p.slug })),
+        },
+      ],
+    })
   if (admin)
     groups.push({
       name: 'Admin',
@@ -85,7 +104,7 @@ export function SettingsLayout() {
   return (
     <>
       <PageTitle>Settings</PageTitle>
-      <div className="grid gap-6 lg:grid-cols-[13rem_1fr] lg:gap-8">
+      <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8">
         <nav aria-label="Settings" className="hidden lg:block">
           {groups.map((g) => (
             <div key={g.name} className="mb-5">
@@ -98,7 +117,7 @@ export function SettingsLayout() {
                   {s.children && matches(s) && (
                     <div className="mb-1 ml-3 mt-0.5 border-l border-border pl-2">
                       {s.children.map((c) => (
-                        <NavLink key={c.to} to={c.to} className={subLink}>
+                        <NavLink key={c.to} to={c.to} end={c.end} className={subLink}>
                           {c.label}
                         </NavLink>
                       ))}
@@ -777,22 +796,23 @@ function UnknownFilesCard({ serverId }: { serverId: number }) {
   return <UnknownFiles serverId={serverId} canWrite={summary.data.tag_editing} isAdmin={Boolean(me.data?.is_admin)} />
 }
 
-/** The music folder and tag scans (server owners). */
+/** Settings → Music files (server owners): the folder and the tools that write to it, then
+ * a page each for reading the files' tags, identifying unknown files, and the edits made. */
 export function FilesSettingsPage() {
   const { active, servers } = useActiveServer()
+  const { part } = useParams()
   if (servers.isPending) return <Spinner />
   if (!active?.is_owner) return <Navigate to="/settings" replace />
+  if (part !== undefined && !FILES_PARTS.some((p) => p.slug === part)) return <Navigate to="/settings/files" replace />
+  if (part === 'scan') return <div className="max-w-2xl"><ScanCard serverId={active.id} /></div>
+  if (part === 'unknown') return <div className="max-w-3xl"><UnknownFilesCard serverId={active.id} /></div>
+  if (part === 'history') return <TagHistory serverId={active.id} />
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
+      <FolderSettings serverId={active.id} />
       <div className="space-y-4">
-        <FolderSettings serverId={active.id} />
-        <UnknownFilesCard serverId={active.id} />
-      </div>
-      <div className="space-y-4">
-        <ScanCard serverId={active.id} />
         <PlexSyncCard serverId={active.id} />
         <ArtworkCard serverId={active.id} />
-        <TagHistory serverId={active.id} />
       </div>
     </div>
   )

@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import ColumnElement, and_, func, select
+from sqlalchemy import ColumnElement, and_, func, literal, select, tuple_
 from sqlalchemy.orm import aliased
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
@@ -21,6 +21,8 @@ from plekstender.api.schemas import (
     AlbumDetail,
     AlbumSummary,
     ArtistDetail,
+    ArtistNeighbourOut,
+    ArtistNeighboursOut,
     ArtistPage,
     ArtistSummary,
     ItemListensOut,
@@ -573,6 +575,43 @@ async def _title_norms(db: DbDep, server_id: int, keys: list[int]) -> dict[int, 
         )
     )
     return {k: t for k, t in rows.all()}
+
+
+@router.get("/library/artists/{rating_key}/neighbours", response_model=ArtistNeighboursOut)
+async def artist_neighbours(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep
+) -> ArtistNeighboursOut:
+    """The artists just before and after this one, by name as the library lists them (to
+    step through artist pages)."""
+    us = await get_user_server(db, user, server_id)
+    state, cond, where = visible(Artist, user.id, us)
+    name = func.lower(func.coalesce(Artist.title_sort, Artist.title))
+    here = (
+        await db.execute(
+            select(name, Artist.rating_key)
+            .join(state, cond)
+            .where(*where, Artist.rating_key == rating_key)
+        )
+    ).first()
+    if here is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Artist not found")
+    key = tuple_(name, Artist.rating_key)
+    at = tuple_(literal(here[0]), literal(here[1]))
+
+    async def one(before: bool) -> ArtistNeighbourOut | None:
+        order = (name.desc(), Artist.rating_key.desc()) if before else (name, Artist.rating_key)
+        row = (
+            await db.execute(
+                select(Artist.rating_key, Artist.title)
+                .join(state, cond)
+                .where(*where, key < at if before else key > at)
+                .order_by(*order)
+                .limit(1)
+            )
+        ).first()
+        return ArtistNeighbourOut(rating_key=row[0], title=row[1]) if row else None
+
+    return ArtistNeighboursOut(previous=await one(True), next=await one(False))
 
 
 @router.get("/library/artists/{rating_key}", response_model=ArtistDetail)

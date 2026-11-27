@@ -5,12 +5,14 @@ pages; the edits themselves go through the album endpoints in files.py, one edit
 
 from __future__ import annotations
 
+import datetime as dt
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import aliased
 
 from plekstender import musicbrainz
@@ -24,8 +26,9 @@ from plekstender.api.schemas import (
     MbApplyIn,
     MbBestOut,
     MbReleaseSummary,
+    SkipAlbumsIn,
 )
-from plekstender.db.models import Album, Artist, ItemTag, MediaFile, Tag, Track
+from plekstender.db.models import Album, Artist, ItemTag, MediaFile, SkippedAlbum, Tag, Track
 
 router = APIRouter(prefix="/api/servers/{server_id}/files", tags=["files"])
 
@@ -60,6 +63,13 @@ async def album_issues(
     q: str | None = Query(default=None, max_length=200),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    skipped_within: int = Query(
+        default=0,
+        ge=0,
+        le=3650,
+        description="Leave out albums you skipped in a MusicBrainz lookup this many days ago "
+        "or less (0: show them).",
+    ),
 ) -> AlbumIssuesPage:
     """Albums with scanned files, and what's off about them: files whose tags differ from
     Plex's metadata, without a MusicBrainz release ID, missing a title, artist, album or
@@ -150,15 +160,30 @@ async def album_issues(
         if any(not tags.get(f) for f in NEEDED):
             c.missing += 1
 
+    skipped = dict(
+        (
+            await db.execute(
+                select(SkippedAlbum.rating_key, SkippedAlbum.skipped_at).where(
+                    SkippedAlbum.user_id == user.id, SkippedAlbum.server_id == us.server_id
+                )
+            )
+        ).all()
+    )
+    since = dt.datetime.now(dt.UTC) - dt.timedelta(days=skipped_within)
     needle = (q or "").strip().lower()
     found = []
+    skipped_hidden = 0
     for key, c in counts.items():
         album = albums[key]
         artist = artists.get(album.artist_rating_key) if album.artist_rating_key else None
         if needle and needle not in album.title.lower() and needle not in (artist or "").lower():
             continue
-        if c.has(issue):
-            found.append((album, artist, c))
+        if not c.has(issue):
+            continue
+        if skipped_within and (when := skipped.get(key)) is not None and when >= since:
+            skipped_hidden += 1
+            continue
+        found.append((album, artist, c))
     found.sort(
         key=lambda x: ((x[1] or "").lower(), x[0].year or 9999, x[0].title.lower(), x[0].rating_key)
     )
@@ -189,6 +214,7 @@ async def album_issues(
                 no_mbid=c.no_mbid,
                 missing=c.missing,
                 errors=c.errors,
+                skipped_at=skipped.get(album.rating_key),
             )
             for album, artist, c in found[offset : offset + limit]
         ],
@@ -198,6 +224,7 @@ async def album_issues(
         albums=len(counts),
         counts=totals,
         not_in_plex=not_in_plex or 0,
+        skipped_hidden=skipped_hidden,
     )
 
 
@@ -289,3 +316,40 @@ async def best_release(
         clear=clear,
         note=note,
     )
+
+
+@router.post("/albums/skipped", status_code=status.HTTP_204_NO_CONTENT)
+async def skip_albums(server_id: int, body: SkipAlbumsIn, db: DbDep, user: UserDep) -> Response:
+    """Remember that you looked these albums up and skipped them (now), so the list can
+    leave them out for a while."""
+    us = await owner_server(db, user, server_id)
+    now = dt.datetime.now(dt.UTC)
+    stmt = insert(SkippedAlbum).values(
+        [
+            {"user_id": user.id, "server_id": us.server_id, "rating_key": k, "skipped_at": now}
+            for k in sorted(set(body.album_keys))
+        ]
+    )
+    await db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["user_id", "server_id", "rating_key"],
+            set_={"skipped_at": stmt.excluded.skipped_at},
+        )
+    )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/albums/skipped/{album_key}", status_code=status.HTTP_204_NO_CONTENT)
+async def unskip_album(server_id: int, album_key: int, db: DbDep, user: UserDep) -> Response:
+    """Forget that you skipped an album: it's listed again."""
+    us = await owner_server(db, user, server_id)
+    await db.execute(
+        delete(SkippedAlbum).where(
+            SkippedAlbum.user_id == user.id,
+            SkippedAlbum.server_id == us.server_id,
+            SkippedAlbum.rating_key == album_key,
+        )
+    )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

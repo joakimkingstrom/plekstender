@@ -4,6 +4,7 @@ import { errorMessage } from '../api/client'
 import {
   bulk,
   DEFAULT_TEMPLATE,
+  SKIPPED_DAYS,
   useAlbumIssues,
   useFilesSummary,
   useRefreshFiles,
@@ -17,9 +18,10 @@ import { DuplicatesDialog } from '../components/DuplicatesDialog'
 import { LyricsDialog } from '../components/LyricsDialog'
 import { Artwork } from '../components/library'
 import { Select } from '../components/Select'
+import { Tooltip } from '../components/Tooltip'
 import { Badge, Button, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
-import { formatCount } from '../format'
+import { formatCount, formatRelative } from '../format'
 import { storedTemplate, storeTemplate } from '../renameTemplate'
 
 const PAGE = 50
@@ -61,7 +63,10 @@ function TagEditing({ serverId }: { serverId: number }) {
   const [query, setQuery] = useState('')
   const q = useDeferredValue(query.trim())
   const [offset, setOffset] = useState(0)
-  const page = useAlbumIssues(serverId, issue, q, offset, PAGE)
+  const [hideSkipped, setHideSkipped] = useHideSkipped()
+  const skippedWithin = hideSkipped ? SKIPPED_DAYS : 0
+  const page = useAlbumIssues(serverId, issue, q, offset, PAGE, skippedWithin)
+  const refreshList = useRefreshFiles(serverId)
   const [selected, setSelected] = useState<Map<number, AlbumIssues>>(new Map())
   const [action, setAction] = useState<Action | null>(null)
   const [batch, setBatch] = useState(0) // a new MusicBrainz dialog for the next albums
@@ -76,7 +81,7 @@ function TagEditing({ serverId }: { serverId: number }) {
   const nextBatch = async () => {
     const next: AlbumIssues[] = []
     for (let from = 0; next.length < PAGE; from += 200) {
-      const found = await bulk.albumIssues(serverId, issue, q, from, 200)
+      const found = await bulk.albumIssues(serverId, issue, q, from, 200, skippedWithin)
       for (const a of found.items) {
         if (next.length < PAGE && !written.has(a.rating_key) && !offered.current.has(a.rating_key)) next.push(a)
       }
@@ -151,8 +156,8 @@ function TagEditing({ serverId }: { serverId: number }) {
       {!canWrite && (
         <Notice tone="warn">
           Writing to the files is off, so you can look but not fix. Turn on tag editing on{' '}
-          <Link to="/settings/files" className="underline">
-            Settings → Music files
+          <Link to="/settings/files/scan" className="underline">
+            Settings → Music files → Tags in your files
           </Link>
           .
         </Notice>
@@ -182,12 +187,24 @@ function TagEditing({ serverId }: { serverId: number }) {
           className="min-w-0 flex-1 basis-56 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
         />
       </div>
+      <label className="flex items-center gap-2 text-sm text-muted">
+        <input
+          type="checkbox"
+          checked={hideSkipped}
+          onChange={(e) => {
+            setHideSkipped(e.target.checked)
+            setOffset(0)
+          }}
+        />
+        Hide albums skipped in the last {SKIPPED_DAYS} days
+        {hideSkipped && (page.data?.skipped_hidden ?? 0) > 0 && ` (${formatCount(page.data!.skipped_hidden)} hidden)`}
+      </label>
       {(page.data?.not_in_plex ?? 0) > 0 && (
         <p className="text-xs text-muted">
           {formatCount(page.data!.not_in_plex)} {page.data!.not_in_plex === 1 ? "file isn't" : "files aren't"} in Plex at
           all: identify them by sound on{' '}
-          <Link to="/settings/files" className="text-accent hover:underline">
-            Settings → Music files
+          <Link to="/settings/files/unknown" className="text-accent hover:underline">
+            Settings → Music files → Unknown files
           </Link>
           .
         </p>
@@ -215,7 +232,17 @@ function TagEditing({ serverId }: { serverId: number }) {
           </div>
           <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
             {items.map((a) => (
-              <AlbumRow key={a.rating_key} serverId={serverId} album={a} checked={selected.has(a.rating_key)} onToggle={() => toggle(a)} />
+              <AlbumRow
+                key={a.rating_key}
+                serverId={serverId}
+                album={a}
+                checked={selected.has(a.rating_key)}
+                onToggle={() => toggle(a)}
+                onUnskip={async () => {
+                  await bulk.unskipAlbum(serverId, a.rating_key)
+                  await refreshList()
+                }}
+              />
             ))}
           </ul>
           {page.data.total > PAGE && (
@@ -274,12 +301,15 @@ function AlbumRow({
   album: a,
   checked,
   onToggle,
+  onUnskip,
 }: {
   serverId: number
   album: AlbumIssues
   checked: boolean
   onToggle: () => void
+  onUnskip: () => Promise<void>
 }) {
+  const [unskipping, setUnskipping] = useState(false)
   const badges: string[] = []
   if (a.errors) badges.push(`${formatCount(a.errors)} unreadable`)
   if (a.missing) badges.push(`${formatCount(a.missing)} missing tags`)
@@ -307,11 +337,58 @@ function AlbumRow({
           </div>
         )}
       </div>
+      {a.skipped_at && (
+        <span className="flex shrink-0 items-center gap-1 text-xs text-muted">
+          Skipped {formatRelative(a.skipped_at)}
+          <Tooltip content="Don't skip it any more">
+            <Button
+              variant="ghost"
+              size="xs"
+              busy={unskipping}
+              aria-label={`Stop skipping ${a.title}`}
+              onClick={async () => {
+                setUnskipping(true)
+                try {
+                  await onUnskip()
+                } finally {
+                  setUnskipping(false)
+                }
+              }}
+            >
+              <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+                <path d="M3.5 6.5h6.5a3 3 0 0 1 0 6H6.5M3.5 6.5l3-3M3.5 6.5l3 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </Button>
+          </Tooltip>
+        </span>
+      )}
     </li>
   )
 }
 
 /** Runs `work` for each album in turn when the dialog opens (and stops when it closes). */
+const HIDE_SKIPPED_KEY = 'tag-editing-hide-skipped'
+
+/** Whether albums skipped lately are left out (on unless turned off; remembered here). */
+function useHideSkipped(): [boolean, (hide: boolean) => void] {
+  const [hide, setHide] = useState(() => {
+    try {
+      return localStorage.getItem(HIDE_SKIPPED_KEY) !== 'off'
+    } catch {
+      return true
+    }
+  })
+  const change = (next: boolean) => {
+    setHide(next)
+    try {
+      localStorage.setItem(HIDE_SKIPPED_KEY, next ? 'on' : 'off')
+    } catch {
+      // private browsing: just for now
+    }
+  }
+  return [hide, change]
+}
+
 function useEach<T>(albums: AlbumIssues[], work: (album: AlbumIssues) => Promise<T>, start = true) {
   const [results, setResults] = useState<Record<number, { busy?: boolean; value?: T; error?: string }>>({})
   const set = (key: number, patch: { busy?: boolean; value?: T; error?: string }) => setResults((r) => ({ ...r, [key]: patch }))
@@ -396,6 +473,12 @@ function BulkMusicBrainz({
   const { results } = useEach<MbBest>(albums, (a) => bulk.best(serverId, a.rating_key))
   const { writes, write } = useWrites(onWritten)
   const [skipped, setSkipped] = useState<Set<number>>(new Set())
+  const [skippedRest, setSkippedRest] = useState(0)
+  // Skipped albums are remembered, so the list can leave them out for a while.
+  const skip = (keys: number[]) => {
+    setSkipped((s) => new Set([...s, ...keys]))
+    void bulk.skipAlbums(serverId, keys).catch(() => {})
+  }
   const refresh = useRefreshFiles(serverId)
   const accept = (a: AlbumIssues, best: MbBest) => write(a.rating_key, () => bulk.applyRelease(serverId, a.rating_key, best.release!.id))
   const clear = albums.filter((a) => {
@@ -404,6 +487,8 @@ function BulkMusicBrainz({
   })
   const looking = albums.some((a) => !results[a.rating_key] || results[a.rating_key].busy)
   const [acceptingAll, setAcceptingAll] = useState(false)
+  // Not accepted (or written) and not skipped yet.
+  const rest = albums.filter((a) => !writes[a.rating_key] && !skipped.has(a.rating_key))
 
   return (
     <Dialog
@@ -429,16 +514,34 @@ function BulkMusicBrainz({
           >
             Accept {clear.length || ''} clear {clear.length === 1 ? 'match' : 'matches'}
           </Button>
+          {!looking && rest.length > 0 && (
+            <Tooltip content={`Leave them for now: hidden from the list for ${SKIPPED_DAYS} days`}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  skip(rest.map((a) => a.rating_key))
+                  setSkippedRest(rest.length)
+                }}
+              >
+                Skip the rest ({formatCount(rest.length)})
+              </Button>
+            </Tooltip>
+          )}
           {looking && (
             <span className="flex items-center gap-2 text-xs text-muted">
               <Spinner small /> Looking them up, one a second (MusicBrainz's limit)…
             </span>
           )}
         </div>
-        {acceptedAll > 0 && onNext && (
+        {(acceptedAll > 0 || skippedRest > 0) && onNext && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-ok/10 px-3 py-2">
             <span className="mr-auto">
-              {formatCount(acceptedAll)} {acceptedAll === 1 ? 'album' : 'albums'} queued for writing.
+              {[
+                acceptedAll > 0 && `${formatCount(acceptedAll)} ${acceptedAll === 1 ? 'album' : 'albums'} queued for writing.`,
+                skippedRest > 0 && `${formatCount(skippedRest)} skipped.`,
+              ]
+                .filter(Boolean)
+                .join(' ')}
               {noMore && ' There are no more albums to look at here.'}
             </span>
             {!noMore && (
@@ -508,7 +611,7 @@ function BulkMusicBrainz({
                           <Button variant="secondary" size="sm" disabled={!canWrite} onClick={() => void accept(a, best)}>
                             Accept
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setSkipped((s) => new Set(s).add(a.rating_key))}>
+                          <Button variant="ghost" size="sm" onClick={() => skip([a.rating_key])}>
                             Skip
                           </Button>
                         </>

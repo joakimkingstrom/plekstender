@@ -520,10 +520,16 @@ async def tag_history(
     album: int | None = None,
     artist: int | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    everything: Annotated[
+        bool, Query(description="Also edits that wrote nothing (queued, running, failed).")
+    ] = False,
 ) -> list[TagChangeSetOut]:
-    """Edits (newest first) that touched an album's or an artist's files, or any."""
+    """Edits (newest first) that changed an album's or an artist's files, or any: only
+    those that wrote something, unless `everything` (the others are on Settings → Jobs)."""
     us = await owner_server(db, user, server_id)
     touched = select(TagChange.change_set_id)
+    if not everything:
+        touched = touched.where(TagChange.status == "applied")
     if album is not None or artist is not None:
         column = Track.album_rating_key if album is not None else Track.artist_rating_key
         keys = select(Track.rating_key).where(

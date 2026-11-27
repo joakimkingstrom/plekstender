@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from plekstender.config import AccessMode
 from plekstender.playlists.definition import Definition
@@ -1707,8 +1707,15 @@ class IdentityRecording(BaseModel):
     id: str
     title: str
     artist: str
-    duration: int | None
+    duration: int | None = Field(description="Seconds.")
     releases: list[IdentityRelease]
+
+    @field_validator("duration", mode="before")
+    @classmethod
+    def _whole_seconds(cls, value: object) -> object:
+        """AcoustID gives some lengths with a fraction (133.426); results kept from before
+        rounding was added still have them."""
+        return round(value) if isinstance(value, float) else value
 
 
 class IdentityResult(BaseModel):
@@ -1950,6 +1957,9 @@ class LiveShowOut(BaseModel):
     currency: str | None = None
     artists: list[LiveArtistOut] = Field(description="The user's artists on the bill.")
     performers: list[LiveArtistOut] = Field(description="Everyone on the bill.")
+    playlist_id: int | None = Field(
+        default=None, description="Its before-the-gig playlist, when there is one."
+    )
 
 
 class LiveArtistCount(BaseModel):
@@ -2358,6 +2368,9 @@ class AlbumIssues(BaseModel):
     no_mbid: int = Field(description="Files without a MusicBrainz release ID.")
     missing: int = Field(description="Files without a title, artist, album or track number.")
     errors: int = Field(description="Files whose tags couldn't be read.")
+    skipped_at: dt.datetime | None = Field(
+        default=None, description="When you last skipped it in a MusicBrainz lookup."
+    )
 
 
 class AlbumIssuesPage(BaseModel):
@@ -2368,6 +2381,9 @@ class AlbumIssuesPage(BaseModel):
     albums: int = Field(description="Albums with scanned files.")
     counts: dict[str, int] = Field(description="Albums with each kind of issue (and any).")
     not_in_plex: int = Field(description="Readable files that aren't a Plex track.")
+    skipped_hidden: int = Field(
+        default=0, description="Albums with this filter left out as skipped lately."
+    )
 
 
 class MbBestOut(BaseModel):
@@ -2639,3 +2655,172 @@ class ArtistSuggestionsOut(BaseModel):
 class HideSuggestionIn(BaseModel):
     key: str = Field(max_length=300)
     name: str = Field(max_length=255)
+
+
+# --- Lidarr -------------------------------------------------------------------------------
+
+LidarrAccess = Literal["admins", "everyone"]
+
+
+class LidarrAdminOut(BaseModel):
+    configured: bool
+    url: str | None = None
+    root_folder: str | None = None
+    quality_profile_id: int | None = None
+    metadata_profile_id: int | None = None
+    access: LidarrAccess = "admins"
+
+
+class LidarrCheckIn(BaseModel):
+    url: str = Field(min_length=8, max_length=500)
+    api_key: str | None = Field(
+        default=None, max_length=100, description="Left out: the saved one."
+    )
+
+
+class LidarrFolderOut(BaseModel):
+    path: str
+    free_space: int | None = None
+
+
+class LidarrProfileOut(BaseModel):
+    id: int
+    name: str
+
+
+class LidarrOptionsOut(BaseModel):
+    """What the Lidarr at that address offers, to choose from."""
+
+    version: str
+    root_folders: list[LidarrFolderOut]
+    quality_profiles: list[LidarrProfileOut]
+    metadata_profiles: list[LidarrProfileOut]
+
+
+class LidarrIn(LidarrCheckIn):
+    root_folder: str = Field(min_length=1, max_length=500)
+    quality_profile_id: int
+    metadata_profile_id: int
+    access: LidarrAccess = "admins"
+
+
+class LidarrStatusOut(BaseModel):
+    available: bool = Field(description="Lidarr is connected and you may use it.")
+
+
+LidarrAlbumState = Literal["absent", "monitored", "unmonitored", "downloaded"]
+
+
+class LidarrStatesIn(BaseModel):
+    mbids: list[str] = Field(max_length=300, description="Release group MBIDs.")
+
+
+class LidarrAlbumIn(BaseModel):
+    mbid: str = Field(pattern=r"^[0-9a-f-]{36}$", description="The release group's MBID.")
+    search: bool = Field(
+        default=False,
+        description="Have Lidarr search its indexers and download the best now (else it's "
+        "only monitored: grabbed when it turns up, or chosen by hand).",
+    )
+
+
+class LidarrAlbumOut(BaseModel):
+    id: int
+    title: str
+    state: LidarrAlbumState
+
+
+class LidarrReleaseOut(BaseModel):
+    guid: str
+    indexer_id: int
+    indexer: str | None
+    title: str
+    size: int | None
+    quality: str | None
+    protocol: str | None = Field(description="torrent or usenet.")
+    seeders: int | None
+    leechers: int | None
+    age_days: int | None
+    approved: bool = Field(description="Lidarr would take it (its profile allows it).")
+    rejections: list[str]
+
+
+class LidarrGrabIn(BaseModel):
+    guid: str = Field(min_length=1, max_length=2000)
+    indexer_id: int
+
+
+class LidarrArtistOut(BaseModel):
+    mbid: str
+    name: str
+    disambiguation: str | None
+    kind: str | None = Field(description="Group, Person, ... as MusicBrainz says.")
+    overview: str | None = Field(description="The start of Lidarr's biography.")
+    in_lidarr: bool
+
+
+class LidarrArtistIn(BaseModel):
+    mbid: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    monitor: Literal["none", "future", "latest", "all"] = Field(
+        default="future",
+        description="Which albums Lidarr gets: none yet, new ones, the latest and new ones, "
+        "or all.",
+    )
+    search: bool = Field(default=False, description="Look for the monitored albums now.")
+
+
+class LidarrArtistAddedOut(BaseModel):
+    id: int
+    name: str
+
+
+class GigShowPlaylistOut(BaseModel):
+    playlist_id: int | None = Field(description="None: none of the setlists' songs were found.")
+    songs: int
+    missing: int = Field(description="Setlist songs not in the library.")
+
+
+class ArtistNeighbourOut(BaseModel):
+    rating_key: int
+    title: str
+
+
+class ArtistNeighboursOut(BaseModel):
+    """The artists before and after one, in the library's order by name."""
+
+    previous: ArtistNeighbourOut | None
+    next: ArtistNeighbourOut | None
+
+
+class SkipAlbumsIn(BaseModel):
+    album_keys: list[int] = Field(min_length=1, max_length=500)
+
+
+# --- Jobs (Settings → Jobs) -----------------------------------------------------------------
+
+
+class JobWaitingOut(BaseModel):
+    what: str = Field(description="The job ahead of it, or why it hasn't started.")
+    since: dt.datetime | None = Field(description="When that job started.")
+
+
+class JobOut(BaseModel):
+    kind: Literal["sync", "artwork", "files", "edits", "imports"]
+    id: int
+    what: str
+    subkind: str | None = Field(description="scan, identify, lyrics, fanart, lastfm...")
+    status: str = Field(description="queued, running, succeeded, failed, applied, partial...")
+    server_id: int | None
+    created_at: dt.datetime
+    started_at: dt.datetime | None
+    finished_at: dt.datetime | None
+    progress: dict[str, Any]
+    error: str | None
+    stop_requested: str | None
+    stoppable: bool = Field(description="Can be stopped from the jobs page.")
+    waiting_for: JobWaitingOut | None
+
+
+class JobsOut(BaseModel):
+    active: list[JobOut] = Field(description="Running, then waiting (oldest first).")
+    finished: list[JobOut] = Field(description="The latest finished, newest first.")

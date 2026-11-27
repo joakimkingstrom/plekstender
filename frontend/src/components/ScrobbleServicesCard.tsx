@@ -182,12 +182,22 @@ function LastFmConnect({ onDone }: { onDone: () => void }) {
   )
 }
 
+/** A web address's host name ('' when it isn't one). */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return ''
+  }
+}
+
 function AddForm({ service, url: knownUrl, onDone }: { service: ScrobbleService; url?: string; onDone: () => void }) {
   const add = useAddScrobbler()
   const info = SERVICES.find((s) => s.value === service)!
   const libre = service === 'librefm'
   const hintId = useId()
-  const [url, setUrl] = useState(knownUrl && !(libre && knownUrl.startsWith('https://libre.fm')) ? knownUrl : '')
+  // Libre.fm's own address isn't shown (it's the default); another GNU FM server's is.
+  const [url, setUrl] = useState(knownUrl && !(libre && hostOf(knownUrl) === 'libre.fm') ? knownUrl : '')
   const [token, setToken] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')

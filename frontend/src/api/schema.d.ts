@@ -572,6 +572,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/artists/{rating_key}/neighbours": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Artist Neighbours
+         * @description The artists just before and after this one, by name as the library lists them (to
+         *     step through artist pages).
+         */
+        get: operations["artist_neighbours_api_servers__server_id__library_artists__rating_key__neighbours_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/artists/{rating_key}": {
         parameters: {
             query?: never;
@@ -2131,7 +2152,8 @@ export interface paths {
         };
         /**
          * Tag History
-         * @description Edits (newest first) that touched an album's or an artist's files, or any.
+         * @description Edits (newest first) that changed an album's or an artist's files, or any: only
+         *     those that wrote something, unless `everything` (the others are on Settings → Jobs).
          */
         get: operations["tag_history_api_servers__server_id__files_changes_get"];
         put?: never;
@@ -2562,6 +2584,47 @@ export interface paths {
          */
         post: operations["best_release_api_servers__server_id__files_albums__album_key__musicbrainz_best_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/skipped": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Albums
+         * @description Remember that you looked these albums up and skipped them (now), so the list can
+         *     leave them out for a while.
+         */
+        post: operations["skip_albums_api_servers__server_id__files_albums_skipped_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/albums/skipped/{album_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unskip Album
+         * @description Forget that you skipped an album: it's listed again.
+         */
+        delete: operations["unskip_album_api_servers__server_id__files_albums_skipped__album_key__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3541,6 +3604,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live/shows/{show_id}/playlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make Playlist
+         * @description Make (or rebuild) the before-the-gig playlist for this gig now: what the artists have
+         *     been playing lately. Also when it was deleted before; Plex gets it from the worker.
+         */
+        post: operations["make_playlist_api_live_shows__show_id__playlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/live/artists/{server_id}/{rating_key}/gigs": {
         parameters: {
             query?: never;
@@ -3800,6 +3884,27 @@ export interface paths {
          * @description Admins: hide one about the instance for every admin.
          */
         post: operations["hide_for_everyone_api_notifications__notification_id__hide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Jobs
+         * @description Your jobs (and those on servers you own): running and waiting ones, each waiting one
+         *     with what it waits for, then the latest finished.
+         */
+        get: operations["list_jobs_api_jobs_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4463,6 +4568,197 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lidarr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lidarr Status
+         * @description Whether Lidarr's buttons show for you (connected, and admins let you).
+         */
+        get: operations["lidarr_status_api_lidarr_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/albums/states": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Album States
+         * @description Whether each album (release group MBID) is in Lidarr: absent, monitored, not
+         *     monitored, or downloaded.
+         */
+        post: operations["album_states_api_lidarr_albums_states_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Album
+         * @description Add the album to Lidarr, monitored (its artist too if new, not monitored for anything
+         *     else); already there, it's monitored. With `search`, Lidarr looks for it right away.
+         */
+        post: operations["add_album_api_lidarr_albums_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/albums/{album_id}/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Album Releases
+         * @description What Lidarr's indexers have for an album in Lidarr, the ones it would take first,
+         *     then by seeders (slow: Lidarr asks them all).
+         */
+        get: operations["album_releases_api_lidarr_albums__album_id__releases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grab Release
+         * @description Have Lidarr download one of the releases found.
+         */
+        post: operations["grab_release_api_lidarr_releases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/artists/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lookup Artists
+         * @description Artists by this name as Lidarr's metadata knows them (to pick the right one), the
+         *     closest first; those already in Lidarr are said so.
+         */
+        get: operations["lookup_artists_api_lidarr_artists_lookup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lidarr/artists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Artist
+         * @description Add an artist to Lidarr (in the admin's root folder and profiles), monitoring the
+         *     albums asked for, and with `search`, looking for them now.
+         */
+        post: operations["add_artist_api_lidarr_artists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/lidarr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lidarr */
+        get: operations["get_lidarr_api_admin_lidarr_get"];
+        /**
+         * Put Lidarr
+         * @description Connect Lidarr (checked first: the folder and profiles must be ones it has).
+         */
+        put: operations["put_lidarr_api_admin_lidarr_put"];
+        post?: never;
+        /**
+         * Delete Lidarr
+         * @description Disconnect Lidarr (the API key is forgotten).
+         */
+        delete: operations["delete_lidarr_api_admin_lidarr_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/lidarr/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Lidarr
+         * @description Try the address and API key (the saved key when none is given), and say what that
+         *     Lidarr offers: its root folders and quality and metadata profiles.
+         */
+        post: operations["check_lidarr_api_admin_lidarr_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4816,6 +5112,11 @@ export interface components {
              * @description Files whose tags couldn't be read.
              */
             errors: number;
+            /**
+             * Skipped At
+             * @description When you last skipped it in a MusicBrainz lookup.
+             */
+            skipped_at?: string | null;
         };
         /** AlbumIssuesPage */
         AlbumIssuesPage: {
@@ -4844,6 +5145,12 @@ export interface components {
              * @description Readable files that aren't a Plex track.
              */
             not_in_plex: number;
+            /**
+             * Skipped Hidden
+             * @description Albums with this filter left out as skipped lately.
+             * @default 0
+             */
+            skipped_hidden: number;
         };
         /** AlbumSummary */
         AlbumSummary: {
@@ -4929,6 +5236,21 @@ export interface components {
             /** Top Tracks */
             top_tracks: components["schemas"]["TrackOut"][];
             your_listens: components["schemas"]["ItemListensOut"];
+        };
+        /** ArtistNeighbourOut */
+        ArtistNeighbourOut: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ArtistNeighboursOut
+         * @description The artists before and after one, in the library's order by name.
+         */
+        ArtistNeighboursOut: {
+            previous: components["schemas"]["ArtistNeighbourOut"] | null;
+            next: components["schemas"]["ArtistNeighbourOut"] | null;
         };
         /** ArtistPage */
         ArtistPage: {
@@ -6241,6 +6563,21 @@ export interface components {
             /** Songs */
             songs: components["schemas"]["GigSong"][];
         };
+        /** GigShowPlaylistOut */
+        GigShowPlaylistOut: {
+            /**
+             * Playlist Id
+             * @description None: none of the setlists' songs were found.
+             */
+            playlist_id: number | null;
+            /** Songs */
+            songs: number;
+            /**
+             * Missing
+             * @description Setlist songs not in the library.
+             */
+            missing: number;
+        };
         /** GigSong */
         GigSong: {
             /** Name */
@@ -6465,7 +6802,10 @@ export interface components {
             title: string;
             /** Artist */
             artist: string;
-            /** Duration */
+            /**
+             * Duration
+             * @description Seconds.
+             */
             duration: number | null;
             /** Releases */
             releases: components["schemas"]["IdentityRelease"][];
@@ -6633,6 +6973,53 @@ export interface components {
             /** Quota Checked At */
             quota_checked_at: string | null;
         };
+        /** JobOut */
+        JobOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "sync" | "artwork" | "files" | "edits" | "imports";
+            /** Id */
+            id: number;
+            /** What */
+            what: string;
+            /**
+             * Subkind
+             * @description scan, identify, lyrics, fanart, lastfm...
+             */
+            subkind: string | null;
+            /**
+             * Status
+             * @description queued, running, succeeded, failed, applied, partial...
+             */
+            status: string;
+            /** Server Id */
+            server_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Progress */
+            progress: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+            /** Stop Requested */
+            stop_requested: string | null;
+            /**
+             * Stoppable
+             * @description Can be stopped from the jobs page.
+             */
+            stoppable: boolean;
+            waiting_for: components["schemas"]["JobWaitingOut"] | null;
+        };
         /** JobStopIn */
         JobStopIn: {
             /**
@@ -6650,6 +7037,32 @@ export interface components {
             error: string | null;
             /** Stop Requested */
             stop_requested: ("stop" | "cancel") | null;
+        };
+        /** JobWaitingOut */
+        JobWaitingOut: {
+            /**
+             * What
+             * @description The job ahead of it, or why it hasn't started.
+             */
+            what: string;
+            /**
+             * Since
+             * @description When that job started.
+             */
+            since: string | null;
+        };
+        /** JobsOut */
+        JobsOut: {
+            /**
+             * Active
+             * @description Running, then waiting (oldest first).
+             */
+            active: components["schemas"]["JobOut"][];
+            /**
+             * Finished
+             * @description The latest finished, newest first.
+             */
+            finished: components["schemas"]["JobOut"][];
         };
         /** LastFmImportIn */
         LastFmImportIn: {
@@ -6778,6 +7191,213 @@ export interface components {
             decades: components["schemas"]["DecadeCount"][];
             /** Undated Albums */
             undated_albums: number;
+        };
+        /** LidarrAdminOut */
+        LidarrAdminOut: {
+            /** Configured */
+            configured: boolean;
+            /** Url */
+            url?: string | null;
+            /** Root Folder */
+            root_folder?: string | null;
+            /** Quality Profile Id */
+            quality_profile_id?: number | null;
+            /** Metadata Profile Id */
+            metadata_profile_id?: number | null;
+            /**
+             * Access
+             * @default admins
+             * @enum {string}
+             */
+            access: "admins" | "everyone";
+        };
+        /** LidarrAlbumIn */
+        LidarrAlbumIn: {
+            /**
+             * Mbid
+             * @description The release group's MBID.
+             */
+            mbid: string;
+            /**
+             * Search
+             * @description Have Lidarr search its indexers and download the best now (else it's only monitored: grabbed when it turns up, or chosen by hand).
+             * @default false
+             */
+            search: boolean;
+        };
+        /** LidarrAlbumOut */
+        LidarrAlbumOut: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "absent" | "monitored" | "unmonitored" | "downloaded";
+        };
+        /** LidarrArtistAddedOut */
+        LidarrArtistAddedOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /** LidarrArtistIn */
+        LidarrArtistIn: {
+            /** Mbid */
+            mbid: string;
+            /**
+             * Monitor
+             * @description Which albums Lidarr gets: none yet, new ones, the latest and new ones, or all.
+             * @default future
+             * @enum {string}
+             */
+            monitor: "none" | "future" | "latest" | "all";
+            /**
+             * Search
+             * @description Look for the monitored albums now.
+             * @default false
+             */
+            search: boolean;
+        };
+        /** LidarrArtistOut */
+        LidarrArtistOut: {
+            /** Mbid */
+            mbid: string;
+            /** Name */
+            name: string;
+            /** Disambiguation */
+            disambiguation: string | null;
+            /**
+             * Kind
+             * @description Group, Person, ... as MusicBrainz says.
+             */
+            kind: string | null;
+            /**
+             * Overview
+             * @description The start of Lidarr's biography.
+             */
+            overview: string | null;
+            /** In Lidarr */
+            in_lidarr: boolean;
+        };
+        /** LidarrCheckIn */
+        LidarrCheckIn: {
+            /** Url */
+            url: string;
+            /**
+             * Api Key
+             * @description Left out: the saved one.
+             */
+            api_key?: string | null;
+        };
+        /** LidarrFolderOut */
+        LidarrFolderOut: {
+            /** Path */
+            path: string;
+            /** Free Space */
+            free_space?: number | null;
+        };
+        /** LidarrGrabIn */
+        LidarrGrabIn: {
+            /** Guid */
+            guid: string;
+            /** Indexer Id */
+            indexer_id: number;
+        };
+        /** LidarrIn */
+        LidarrIn: {
+            /** Url */
+            url: string;
+            /**
+             * Api Key
+             * @description Left out: the saved one.
+             */
+            api_key?: string | null;
+            /** Root Folder */
+            root_folder: string;
+            /** Quality Profile Id */
+            quality_profile_id: number;
+            /** Metadata Profile Id */
+            metadata_profile_id: number;
+            /**
+             * Access
+             * @default admins
+             * @enum {string}
+             */
+            access: "admins" | "everyone";
+        };
+        /**
+         * LidarrOptionsOut
+         * @description What the Lidarr at that address offers, to choose from.
+         */
+        LidarrOptionsOut: {
+            /** Version */
+            version: string;
+            /** Root Folders */
+            root_folders: components["schemas"]["LidarrFolderOut"][];
+            /** Quality Profiles */
+            quality_profiles: components["schemas"]["LidarrProfileOut"][];
+            /** Metadata Profiles */
+            metadata_profiles: components["schemas"]["LidarrProfileOut"][];
+        };
+        /** LidarrProfileOut */
+        LidarrProfileOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /** LidarrReleaseOut */
+        LidarrReleaseOut: {
+            /** Guid */
+            guid: string;
+            /** Indexer Id */
+            indexer_id: number;
+            /** Indexer */
+            indexer: string | null;
+            /** Title */
+            title: string;
+            /** Size */
+            size: number | null;
+            /** Quality */
+            quality: string | null;
+            /**
+             * Protocol
+             * @description torrent or usenet.
+             */
+            protocol: string | null;
+            /** Seeders */
+            seeders: number | null;
+            /** Leechers */
+            leechers: number | null;
+            /** Age Days */
+            age_days: number | null;
+            /**
+             * Approved
+             * @description Lidarr would take it (its profile allows it).
+             */
+            approved: boolean;
+            /** Rejections */
+            rejections: string[];
+        };
+        /** LidarrStatesIn */
+        LidarrStatesIn: {
+            /**
+             * Mbids
+             * @description Release group MBIDs.
+             */
+            mbids: string[];
+        };
+        /** LidarrStatusOut */
+        LidarrStatusOut: {
+            /**
+             * Available
+             * @description Lidarr is connected and you may use it.
+             */
+            available: boolean;
         };
         /** ListenBrainzImportIn */
         ListenBrainzImportIn: {
@@ -7156,6 +7776,11 @@ export interface components {
              * @description Everyone on the bill.
              */
             performers: components["schemas"]["LiveArtistOut"][];
+            /**
+             * Playlist Id
+             * @description Its before-the-gig playlist, when there is one.
+             */
+            playlist_id?: number | null;
         };
         /** LiveShowsOut */
         LiveShowsOut: {
@@ -9195,6 +9820,11 @@ export interface components {
             /** Rating Key */
             rating_key: number | null;
         };
+        /** SkipAlbumsIn */
+        SkipAlbumsIn: {
+            /** Album Keys */
+            album_keys: number[];
+        };
         /** SkipRateOut */
         SkipRateOut: {
             /**
@@ -10932,6 +11562,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artist_neighbours_api_servers__server_id__library_artists__rating_key__neighbours_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistNeighboursOut"];
                 };
             };
             /** @description Validation Error */
@@ -13753,6 +14415,8 @@ export interface operations {
                 album?: number | null;
                 artist?: number | null;
                 limit?: number;
+                /** @description Also edits that wrote nothing (queued, running, failed). */
+                everything?: boolean;
             };
             header?: never;
             path: {
@@ -14464,6 +15128,8 @@ export interface operations {
                 q?: string | null;
                 offset?: number;
                 limit?: number;
+                /** @description Leave out albums you skipped in a MusicBrainz lookup this many days ago or less (0: show them). */
+                skipped_within?: number;
             };
             header?: never;
             path: {
@@ -14513,6 +15179,69 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MbBestOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_albums_api_servers__server_id__files_albums_skipped_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkipAlbumsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unskip_album_api_servers__server_id__files_albums_skipped__album_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                album_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -16221,6 +16950,37 @@ export interface operations {
             };
         };
     };
+    make_playlist_api_live_shows__show_id__playlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                show_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GigShowPlaylistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     artist_gigs_api_live_artists__server_id___rating_key__gigs_get: {
         parameters: {
             query?: never;
@@ -16635,6 +17395,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_jobs_api_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsOut"];
                 };
             };
         };
@@ -18003,6 +18783,324 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lidarr_status_api_lidarr_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrStatusOut"];
+                };
+            };
+        };
+    };
+    album_states_api_lidarr_albums_states_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrStatesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: "absent" | "monitored" | "unmonitored" | "downloaded";
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_album_api_lidarr_albums_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrAlbumIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrAlbumOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    album_releases_api_lidarr_albums__album_id__releases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrReleaseOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grab_release_api_lidarr_releases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrGrabIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lookup_artists_api_lidarr_artists_lookup_get: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrArtistOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_artist_api_lidarr_artists_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrArtistIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrArtistAddedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lidarr_api_admin_lidarr_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrAdminOut"];
+                };
+            };
+        };
+    };
+    put_lidarr_api_admin_lidarr_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_lidarr_api_admin_lidarr_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    check_lidarr_api_admin_lidarr_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LidarrCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LidarrOptionsOut"];
+                };
             };
             /** @description Validation Error */
             422: {

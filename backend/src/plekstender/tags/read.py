@@ -5,12 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import mutagen
 from mutagen.flac import FLAC
 from mutagen.id3 import ID3
 from mutagen.mp4 import MP4
 
-from plekstender.tags import keys as _keys  # noqa: F401 - registers MP4 keys
+from plekstender.tags.keys import open_easy  # also registers the extra keys
 
 AUDIO_EXTENSIONS = {
     ".flac", ".mp3", ".m4a", ".mp4", ".aac", ".alac", ".ogg", ".oga", ".opus",
@@ -98,7 +97,7 @@ def _has_cover(path: Path, audio: Any) -> bool:
 def read_file(path: Path) -> dict[str, Any]:
     """Format, duration, normalised tags and whether there's an embedded cover."""
     try:
-        audio = mutagen.File(path, easy=True)
+        audio = open_easy(path)
     except Exception as exc:  # mutagen raises many kinds for broken files
         raise TagReadError(f"Couldn't read the file: {exc}") from exc
     if audio is None:

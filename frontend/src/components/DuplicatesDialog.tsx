@@ -148,8 +148,8 @@ function Results({
       <Notice>
         Moving {formatCount(moved)} {moved === 1 ? 'file' : 'files'} into .plekstender-duplicates. Delete that folder when
         you're sure, or undo from the edit history on{' '}
-        <Link to="/settings/files" className="underline">
-          Settings → Music files
+        <Link to="/settings/files/history" className="underline">
+          Settings → Music files → Tag history
         </Link>
         .
       </Notice>
@@ -243,8 +243,8 @@ function Results({
           {!canWrite && (
             <Notice tone="warn">
               Moving files is off. Turn on tag editing on{' '}
-              <Link to="/settings/files" className="underline">
-                Settings → Music files
+              <Link to="/settings/files/scan" className="underline">
+                Settings → Music files → Tags in your files
               </Link>
               .
             </Notice>

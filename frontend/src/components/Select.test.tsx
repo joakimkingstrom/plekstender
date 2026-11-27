@@ -62,4 +62,19 @@ describe('Select', () => {
     fireEvent.click(button)
     expect(await screen.findByRole('listbox')).toHaveClass('top-full')
   })
+
+  it('opens upwards near the bottom of a dialog that scrolls, not only of the window', async () => {
+    render(
+      <div data-testid="body" style={{ overflowY: 'auto' }}>
+        <Fonts />
+      </div>,
+    )
+    const body = screen.getByTestId('body')
+    body.getBoundingClientRect = () => ({ top: 100, bottom: 400, left: 0, right: 500, width: 500, height: 300, x: 0, y: 100, toJSON: () => ({}) })
+    const button = screen.getByRole('button', { name: 'Font' })
+    // Plenty of window below, but the dialog's body ends 40 px under the button.
+    button.getBoundingClientRect = () => ({ top: 324, bottom: 360, left: 0, right: 100, width: 100, height: 36, x: 0, y: 324, toJSON: () => ({}) })
+    fireEvent.click(button)
+    expect(await screen.findByRole('listbox')).toHaveClass('bottom-full')
+  })
 })

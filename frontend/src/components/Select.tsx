@@ -7,6 +7,22 @@ const LIST_MAX = 288
 const GAP = 4
 const OPTION_HEIGHT = 34 // about, for working out whether the list fits below
 
+/** The visible area an element can draw in: the window, narrowed by every ancestor that
+ * scrolls or clips its overflow. */
+function clipBounds(el: HTMLElement): { top: number; bottom: number } {
+  let top = 0
+  let bottom = window.innerHeight
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node)
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden' || overflowY === 'clip') {
+      const r = node.getBoundingClientRect()
+      top = Math.max(top, r.top)
+      bottom = Math.min(bottom, r.bottom)
+    }
+  }
+  return { top, bottom }
+}
+
 /**
  * A site-styled dropdown (button + listbox) in place of the browser's <select>. It opens
  * downwards, or upwards when there's more room above (near the bottom of the window), and
@@ -68,8 +84,11 @@ export function Select<T extends string | number>({
     const rect = button.current?.getBoundingClientRect()
     if (rect) {
       const wanted = Math.min(LIST_MAX, options.length * OPTION_HEIGHT + 8)
-      const below = window.innerHeight - rect.bottom - GAP * 2
-      const above = rect.top - GAP * 2
+      // The room it has: the window's, or less inside something that scrolls or clips (a
+      // dialog's body), which would cut the list off.
+      const bounds = clipBounds(button.current!)
+      const below = bounds.bottom - rect.bottom - GAP * 2
+      const above = rect.top - bounds.top - GAP * 2
       const up = below < wanted && above > below
       setPlace({ up, max: Math.max(120, Math.min(LIST_MAX, up ? above : below)) })
     }

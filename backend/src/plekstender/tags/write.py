@@ -12,9 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import mutagen
-
-from plekstender.tags import keys as _keys  # noqa: F401 - registers MP4 keys
+from plekstender.tags import keys as _keys
 
 # Fields that can be edited (mutagen's "easy" keys: the same for ID3, MP4 and Vorbis).
 EDITABLE: tuple[str, ...] = (
@@ -65,7 +63,7 @@ def clean(field: str, value: Any) -> Value:
 
 def _open(path: Path) -> Any:
     try:
-        audio = mutagen.File(path, easy=True)
+        audio = _keys.open_easy(path)
     except Exception as exc:  # mutagen raises many kinds for broken files
         raise TagWriteError(f"Couldn't read the file: {exc}") from exc
     if audio is None:
@@ -73,6 +71,7 @@ def _open(path: Path) -> Any:
     if audio.tags is None:
         try:
             audio.add_tags()
+            _keys.easy_tags(audio)
         except Exception as exc:
             raise TagWriteError(f"This file can't hold tags: {exc}") from exc
     return audio

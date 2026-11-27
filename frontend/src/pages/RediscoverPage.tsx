@@ -4,9 +4,10 @@ import { errorMessage, type Schemas } from '../api/client'
 import { useActiveServer } from '../api/library'
 import { useRate } from '../api/ratings'
 import { useHideSong, useRediscover } from '../api/stats'
+import { HideToggle } from '../components/HideToggle'
 import { Artwork } from '../components/library'
 import { StarRating } from '../components/StarRating'
-import { Button, Card, Notice, Spinner } from '../components/ui'
+import { Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatDate } from '../format'
 
 type Song = Schemas['RediscoverSongOut']
@@ -49,16 +50,12 @@ function SongRow({ song, serverId }: { song: Song; serverId: number }) {
         disabled={rate.isPending}
         onChange={(rating) => rate.mutate({ rating_key: song.rating_key, rating })}
       />
-      <Button
-        variant="ghost"
-        size="xs"
-        className="w-20 shrink-0"
+      <HideToggle
+        hidden={song.hidden}
+        name={song.title}
         busy={hide.isPending}
-        onClick={() => hide.mutate({ ratingKey: song.rating_key, hide: !song.hidden })}
-        aria-label={`${song.hidden ? 'Show' : 'Hide'} ${song.title}`}
-      >
-        {song.hidden ? 'Show again' : 'Hide'}
-      </Button>
+        onToggle={() => hide.mutate({ ratingKey: song.rating_key, hide: !song.hidden })}
+      />
     </li>
   )
 }

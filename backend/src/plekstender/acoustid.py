@@ -136,6 +136,13 @@ async def lookup(
     return condense(body.get("results") or [])
 
 
+def _seconds(value: object) -> int | None:
+    """A recording's length in whole seconds (AcoustID gives some with a fraction)."""
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return round(value)
+    return None
+
+
 def _credit(artists: list[dict[str, Any]] | None) -> str:
     return "".join(f"{a.get('name', '')}{a.get('joinphrase', '')}" for a in artists or []).strip()
 
@@ -194,7 +201,7 @@ def condense(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "title": rec["title"],
                     "artist": _credit(rec.get("artists")),
                     "artist_id": _first_id(rec.get("artists")),
-                    "duration": rec.get("duration"),
+                    "duration": _seconds(rec.get("duration")),
                     "releases": releases[:MAX_RELEASES],
                 }
             )

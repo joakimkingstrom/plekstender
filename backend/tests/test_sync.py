@@ -97,6 +97,17 @@ async def test_full_sync_mirrors_library(app: FastAPI, plex: FakePlex) -> None:
     search = (await owner.get(f"/api/servers/{sid}/library/artists", params={"q": "PORT"})).json()
     assert [a["title"] for a in search["items"]] == ["Portishead"]
 
+    # Stepping through artist pages: before and after, by name as the library lists them.
+    async def neighbours(key: int) -> tuple[str | None, str | None]:
+        found = (await owner.get(f"/api/servers/{sid}/library/artists/{key}/neighbours")).json()
+        return tuple((found[k] or {}).get("title") for k in ("previous", "next"))  # type: ignore[return-value]
+
+    assert await neighbours(100) == ("Portishead", "Secret Band")
+    assert await neighbours(101) == (None, "Radiohead")
+    assert await neighbours(102) == ("Radiohead", None)
+    missing = await owner.get(f"/api/servers/{sid}/library/artists/999/neighbours")
+    assert missing.status_code == 404
+
     genres = (await owner.get(f"/api/servers/{sid}/library/tags", params={"kind": "genre"})).json()
     assert [(t["name"], t["count"]) for t in genres] == [
         ("Rock", 2),

@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, unwrap } from './client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, unwrap, type Schemas } from './client'
 
 /** The jobs that can be stopped: artwork jobs, music folder jobs (scans, identifying,
  * duplicates), edits being written, and history imports and sends. */
@@ -19,5 +19,17 @@ export function useStopJob(kind: StoppableJob, jobId: number) {
       ),
     // Whichever page shows the job polls it; have them all look again now.
     onSuccess: () => qc.invalidateQueries(),
+  })
+}
+
+export type Job = Schemas['JobOut']
+
+/** Settings → Jobs: running and waiting jobs, then the latest finished. Looked at every few
+ * seconds while something's running or waiting. */
+export function useJobs() {
+  return useQuery({
+    queryKey: ['jobs'],
+    queryFn: () => unwrap(api.GET('/api/jobs')),
+    refetchInterval: (query) => ((query.state.data?.active.length ?? 0) > 0 ? 3000 : 30_000),
   })
 }

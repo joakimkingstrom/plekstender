@@ -31,6 +31,15 @@ beforeEach(() => {
             : json({ items: [muse, massive], total: 2, hidden: 0 })
         case '/api/servers/1/library/discover/hidden':
           return json(null, 204)
+        case '/api/lidarr':
+          return json({ available: true })
+        case '/api/lidarr/artists/lookup':
+          return json([
+            { mbid: '9c9f1380-2516-4fc9-a3e6-f9f61941d090', name: 'Muse', disambiguation: 'UK rock band', kind: 'Group', overview: 'English rock band.', in_lidarr: false },
+            { mbid: '11112222-3333-4444-8555-666677778888', name: 'Muse', disambiguation: 'Japanese idol', kind: null, overview: null, in_lidarr: false },
+          ])
+        case '/api/lidarr/artists':
+          return json({ id: 1, name: 'Muse' }, 201)
         default:
           return json({ detail: 'Not found' }, 404)
       }
@@ -65,5 +74,25 @@ describe('Discover', () => {
     await vi.waitFor(() => expect(requests.some((r) => r.method === 'POST')).toBe(true))
     const posted = requests.find((r) => r.method === 'POST')!
     expect(await posted.clone().json()).toEqual({ key: 'muse', name: 'Muse' })
+  })
+
+  it('adds a suggested artist to Lidarr: the right one, and which albums', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <DiscoverPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Muse to Lidarr' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add Muse to Lidarr' })
+    expect(await within(dialog).findByText('UK rock band · Group')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Monitor/ }))
+    fireEvent.click(await within(dialog).findByRole('option', { name: 'Every album' }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Look for them now' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add to Lidarr' }))
+    expect(await within(dialog).findByText(/Added Muse to Lidarr: it's looking for their albums now/)).toBeInTheDocument()
+    const post = requests.find((r) => new URL(r.url).pathname === '/api/lidarr/artists')!
+    expect(await post.clone().json()).toEqual({ mbid: '9c9f1380-2516-4fc9-a3e6-f9f61941d090', monitor: 'all', search: true })
   })
 })

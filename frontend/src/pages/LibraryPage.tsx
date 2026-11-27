@@ -2,7 +2,7 @@ import { useArtistPastGigs } from '../api/gigs'
 import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Zoomable } from '../components/Lightbox'
 import { ListensDialog } from '../components/listens'
 import { Select } from '../components/Select'
@@ -13,6 +13,7 @@ import {
   imageUrl,
   useAlbum,
   useArtist,
+  useArtistNeighbours,
   useArtists,
   useTags,
   type ArtistSort,
@@ -30,6 +31,8 @@ import { Segmented } from '../components/Segmented'
 import { Card, Notice, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
 import { countryFlag, countryName } from '../places'
+import { COVER_PIXELS, useCoverSize, type CoverSize } from '../coverSize'
+import { CoverSizeSwitch } from '../components/CoverSizeSwitch'
 
 const SORTS: { value: ArtistSort; label: string }[] = [
   { value: 'title', label: 'Name' },
@@ -59,6 +62,7 @@ export function LibraryPage() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<ArtistSort>('title')
   const [tag, setTag] = useState<number | null>(null)
+  const [size, setSize] = useCoverSize('library-cover-size')
   const deferredQuery = useDeferredValue(query.trim())
 
   return (
@@ -75,9 +79,10 @@ export function LibraryPage() {
               aria-label="Search artists"
             />
             <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
+            <CoverSizeSwitch value={size} onChange={setSize} />
           </div>
           <TagFilter serverId={active!.id} selected={tag} onSelect={setTag} />
-          <ArtistGrid serverId={active!.id} q={deferredQuery} sort={sort} tag={tag} />
+          <ArtistGrid serverId={active!.id} q={deferredQuery} sort={sort} tag={tag} size={size} />
         </>
       )}
     </>
@@ -143,16 +148,31 @@ function TagFilter({
   )
 }
 
+/** The library's artists, by cover size. */
+const ARTIST_GRIDS: Record<CoverSize, string> = {
+  small: 'grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8',
+  medium: 'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6',
+  large: 'grid grid-cols-1 gap-5 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+}
+/** An artist's albums (in the wider column), by cover size. */
+const ALBUM_GRIDS: Record<CoverSize, string> = {
+  small: 'grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5',
+  medium: 'grid grid-cols-2 gap-4 sm:grid-cols-3',
+  large: 'grid grid-cols-1 gap-5 min-[420px]:grid-cols-2',
+}
+
 function ArtistGrid({
   serverId,
   q,
   sort,
   tag,
+  size,
 }: {
   serverId: number
   q: string
   sort: ArtistSort
   tag: number | null
+  size: CoverSize
 }) {
   const artists = useArtists(serverId, q, sort, tag)
   const withGigs = useArtistsWithGigs(serverId)
@@ -186,12 +206,19 @@ function ArtistGrid({
       {items.length === 0 ? (
         <p className="text-sm text-muted">No artists match.</p>
       ) : (
-        <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <ul className={ARTIST_GRIDS[size]}>
           {items.map((a) => (
             <li key={a.rating_key}>
               <Link to={`/library/artists/${a.rating_key}`} className="group block">
                 <div className="relative">
-                  <Artwork serverId={serverId} path={a.thumb} title={a.title} round className="w-full transition-opacity group-hover:opacity-85" />
+                  <Artwork
+                    serverId={serverId}
+                    path={a.thumb}
+                    title={a.title}
+                    size={COVER_PIXELS[size]}
+                    round
+                    className="w-full transition-opacity group-hover:opacity-85"
+                  />
                   {withGigs.data?.has(a.rating_key) && <GigMarker className="bottom-[6%] right-[6%] size-7" />}
                 </div>
                 <div className="mt-2 truncate text-center text-sm font-medium">{a.title}</div>
@@ -438,6 +465,7 @@ const RELEASE_HEADINGS: Record<string, string> = {
 
 /** An artist's releases, grouped by type (albums, EPs, singles, live, compilations…). */
 function Releases({ serverId, albums }: { serverId: number; albums: Schemas['AlbumSummary'][] }) {
+  const [size, setSize] = useCoverSize('artist-cover-size')
   const groups = new Map<string, Schemas['AlbumSummary'][]>()
   for (const al of albums) groups.set(al.release_type ?? 'Album', [...(groups.get(al.release_type ?? 'Album') ?? []), al])
   const rank = (type: string) => {
@@ -448,12 +476,16 @@ function Releases({ serverId, albums }: { serverId: number; albums: Schemas['Alb
   return (
     <>
       {ordered.map(([type, items]) => (
-        <Card key={type} title={ordered.length > 1 ? (RELEASE_HEADINGS[type] ?? type) : 'Albums'}>
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Card
+          key={type}
+          title={ordered.length > 1 ? (RELEASE_HEADINGS[type] ?? type) : 'Albums'}
+          action={type === ordered[0][0] ? <CoverSizeSwitch value={size} onChange={setSize} /> : undefined}
+        >
+          <ul className={ALBUM_GRIDS[size]}>
             {items.map((al) => (
                 <li key={al.rating_key}>
                   <Link to={`/library/albums/${al.rating_key}`} className="group block">
-                    <Artwork serverId={serverId} path={al.thumb} title={al.title} className="w-full group-hover:opacity-85" />
+                    <Artwork serverId={serverId} path={al.thumb} title={al.title} size={COVER_PIXELS[size]} className="w-full group-hover:opacity-85" />
                     <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
                   </Link>
                   <div className="flex items-center justify-between gap-2 text-xs text-muted">
@@ -488,6 +520,67 @@ export function ArtistPage() {
   )
 }
 
+/** Previous and next artist (by name), as subtle arrows in the margins either side of the
+ * page, halfway down the window: placed from where the page's content really starts and
+ * ends (measured, so nothing wide can end up under them), and left out when the margins are
+ * too narrow for them. */
+function ArtistSteps({ serverId, artistKey }: { serverId: number; artistKey: number }) {
+  const found = useArtistNeighbours(serverId, artistKey)
+  const margins = usePageMargins()
+  const fits = margins !== null && margins.left >= ARROW_ROOM && margins.right >= ARROW_ROOM
+  const step = (to: { rating_key: number; title: string } | null | undefined, side: 'previous' | 'next') =>
+    to && fits ? (
+      <Link
+        to={`/library/artists/${to.rating_key}`}
+        aria-label={`${side === 'previous' ? 'Previous' : 'Next'} artist: ${to.title}`}
+        title={to.title}
+        style={side === 'previous' ? { left: margins.left - ARROW_ROOM + ARROW_GAP } : { right: margins.right - ARROW_ROOM + ARROW_GAP }}
+        className="fixed top-1/2 z-20 flex -translate-y-1/2 items-center justify-center rounded-full p-2 text-muted/60 transition-colors hover:bg-surface-2 hover:text-text"
+      >
+        <svg viewBox="0 0 24 24" className="size-8" aria-hidden>
+          <path d={side === 'previous' ? 'M15 4l-8 8 8 8' : 'M9 4l8 8-8 8'} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </Link>
+    ) : null
+  return (
+    <nav aria-label="Other artists">
+      {step(found.data?.previous, 'previous')}
+      {step(found.data?.next, 'next')}
+    </nav>
+  )
+}
+
+const ARROW_GAP = 8 // px between an arrow and the content, and the window's edge
+const ARROW_ROOM = 48 + ARROW_GAP * 2 // an arrow (p-2 around 32 px) with its gaps
+
+/** How much room there is left and right of the page's content (<main>, without its
+ * padding, and however wide its content really is), kept up to date as the window and the
+ * page change size. Null before it's measured. */
+function usePageMargins(): { left: number; right: number } | null {
+  const [margins, setMargins] = useState<{ left: number; right: number } | null>(null)
+  useLayoutEffect(() => {
+    const main = document.querySelector('main')
+    if (!main) return
+    const measure = () => {
+      const box = main.getBoundingClientRect()
+      const style = getComputedStyle(main)
+      const left = box.left + parseFloat(style.paddingLeft || '0')
+      const right = box.left + Math.max(box.width, main.scrollWidth) - parseFloat(style.paddingRight || '0')
+      const next = { left: Math.round(left), right: Math.round(window.innerWidth - right) }
+      setMargins((m) => (m && m.left === next.left && m.right === next.right ? m : next))
+    }
+    measure()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(main)
+    window.addEventListener('resize', measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [])
+  return margins
+}
+
 function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: number }) {
   const artist = useArtist(serverId, artistKey)
   const gigs = useArtistGigs(serverId, artistKey)
@@ -498,6 +591,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
   return (
     <>
       <BackLink to="/library" label="Library" />
+      <ArtistSteps serverId={serverId} artistKey={artistKey} />
       <div className="mb-8 flex flex-col gap-6 sm:flex-row">
         <div className="relative w-40 shrink-0 self-center sm:self-start">
           <Zoomable image={a.thumb ? { src: imageUrl(serverId, a.thumb, 1000)!, alt: a.title } : null} className="w-full">
@@ -526,7 +620,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           {gigs.data && gigs.data.length > 0 && (
             <Card
@@ -632,7 +726,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           <Summary text={al.summary} />
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Card>
           {[...discs].sort((a, b) => a - b).map((disc) => (
             <div key={disc}>

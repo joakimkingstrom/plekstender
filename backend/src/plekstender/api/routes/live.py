@@ -21,6 +21,7 @@ from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
+    GigShowPlaylistOut,
     LiveArtistCount,
     LiveArtistOut,
     LiveCalendarOut,
@@ -43,7 +44,16 @@ from plekstender.db.instance import (
     get_jambase_api_key,
     get_ticketmaster_api_key,
 )
-from plekstender.db.models import LiveFeed, LiveSeen, LiveSettings, LiveShow, User
+from plekstender.db.models import (
+    GigPlaylist,
+    LiveFeed,
+    LiveSeen,
+    LiveSettings,
+    LiveShow,
+    Playlist,
+    User,
+)
+from plekstender.gigs.playlists import ShowPlaylistError, make_show_playlist, show_refs
 from plekstender.live import feeds, geocode, ical
 from plekstender.live.merge import merge
 from plekstender.live.refresh import (
@@ -55,7 +65,7 @@ from plekstender.live.refresh import (
     seen_key,
 )
 from plekstender.security.crypto import hash_session_token
-from plekstender.worker import LIVE_MANUAL_GAP, enqueue_live_refresh
+from plekstender.worker import LIVE_MANUAL_GAP, enqueue_live_refresh, enqueue_playlist_build
 
 router = APIRouter(prefix="/api/live", tags=["live"])
 
@@ -302,7 +312,50 @@ async def _upcoming(
         select(LiveSeen.key, LiveSeen.first_seen_at).where(LiveSeen.user_id == user_id)
     )
     seen = {key: when for key, when in sightings.all()}
-    return [_show(group, seen) for group in merge(list(await db.scalars(query)))]
+    playlists = {
+        ref: playlist_id
+        for ref, playlist_id in await db.execute(
+            select(GigPlaylist.ref, GigPlaylist.playlist_id).where(
+                GigPlaylist.user_id == user_id,
+                GigPlaylist.kind == "before",
+                GigPlaylist.playlist_id.is_not(None),
+            )
+        )
+    }
+    out = []
+    for group in merge(list(await db.scalars(query))):
+        show = _show(group, seen)
+        show.playlist_id = next((playlists[r] for r in show_refs(group) if r in playlists), None)
+        out.append(show)
+    return out
+
+
+@router.post(
+    "/shows/{show_id}/playlist",
+    response_model=GigShowPlaylistOut,
+    dependencies=[rate_limit("gig-playlist", limit=10, window=60)],
+)
+async def make_playlist(
+    show_id: int, db: DbDep, user: UserDep, settings: SettingsDep, http: HttpDep
+) -> GigShowPlaylistOut:
+    """Make (or rebuild) the before-the-gig playlist for this gig now: what the artists have
+    been playing lately. Also when it was deleted before; Plex gets it from the worker."""
+    try:
+        made, playlist_id = await make_show_playlist(db, http, settings, user, show_id)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gig not found") from exc
+    except ShowPlaylistError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    playlist = await db.get(Playlist, playlist_id) if playlist_id else None
+    for build_id in made.to_build:
+        if (queued := await db.get(Playlist, build_id)) is not None:
+            await enqueue_playlist_build(queued)
+    setlist = ((playlist.display or {}).get("setlist") or {}) if playlist else {}
+    return GigShowPlaylistOut(
+        playlist_id=playlist_id,
+        songs=len((playlist.definition or {}).get("tracks") or []) if playlist else 0,
+        missing=int(setlist.get("missing_count") or 0),
+    )
 
 
 @router.get("/artists/{server_id}/{rating_key}/gigs", response_model=list[LiveShowOut])

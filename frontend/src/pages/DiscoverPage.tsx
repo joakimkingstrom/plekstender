@@ -2,6 +2,11 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useArtistSuggestions, useHideSuggestion, type ArtistSuggestion } from '../api/discover'
+import { useLidarrAvailable } from '../api/lidarr'
+import { HideToggle } from '../components/HideToggle'
+import { LidarrArtistDialog } from '../components/LidarrArtist'
+import { LidarrAddIcon } from '../components/LidarrDownload'
+import { Tooltip } from '../components/Tooltip'
 import { Segmented } from '../components/Segmented'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { Button, Card, Notice, Spinner } from '../components/ui'
@@ -127,6 +132,8 @@ function Suggestion({
   onToggle: () => void
 }) {
   const more = artist.similar_to - artist.sources.length
+  const lidarr = useLidarrAvailable()
+  const [adding, setAdding] = useState(false)
   return (
     <li className="flex items-start gap-3 py-3 text-sm">
       <span className="w-7 shrink-0 pt-0.5 text-right text-xs tabular-nums text-muted">{rank}</span>
@@ -151,19 +158,29 @@ function Suggestion({
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <a
-          href={`https://www.last.fm/music/${encodeURIComponent(artist.name).replace(/%20/g, '+')}`}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text"
-          aria-label={`${artist.name} on Last.fm`}
-        >
-          Last.fm
-        </a>
-        <Button variant="ghost" busy={busy} onClick={onToggle} size="xs" aria-label={`${hidden ? 'Bring back' : 'Hide'} ${artist.name}`}>
-          {hidden ? 'Bring back' : 'Hide'}
-        </Button>
+        <Tooltip content="On Last.fm">
+          <a
+            href={`https://www.last.fm/music/${encodeURIComponent(artist.name).replace(/%20/g, '+')}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-text"
+            aria-label={`${artist.name} on Last.fm`}
+          >
+            <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+              <path d="M9.5 2.5h4v4M13.5 2.5L7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </a>
+        </Tooltip>
+        {lidarr && (
+          <Tooltip content="Add to Lidarr">
+            <Button variant="ghost" size="xs" onClick={() => setAdding(true)} aria-label={`Add ${artist.name} to Lidarr`}>
+              <LidarrAddIcon />
+            </Button>
+          </Tooltip>
+        )}
+        <HideToggle hidden={hidden} name={artist.name} busy={busy} onToggle={onToggle} />
       </div>
+      {adding && <LidarrArtistDialog name={artist.name} onClose={() => setAdding(false)} />}
     </li>
   )
 }

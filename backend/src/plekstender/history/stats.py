@@ -47,7 +47,7 @@ def resolve_period(key: str, tz: ZoneInfo, now: dt.datetime | None = None) -> Pe
     now = now or dt.datetime.now(dt.UTC)
     local_now = now.astimezone(tz)
     today = dt.datetime.combine(local_now.date(), dt.time(), tz)
-    if match := re.fullmatch(r"(\d+)d", key):
+    if match := re.fullmatch(r"(\d{1,4})d", key):  # the API allows 7d, 30d and 365d
         days = int(match.group(1))
         start = today - dt.timedelta(days=days - 1)
         bucket: Bucket = "day" if days <= 31 else "week"

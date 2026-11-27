@@ -111,7 +111,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
   const current = selected ? (items.find((a) => a.rating_key === selected.rating_key) ?? selected) : null
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[18rem_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
       <div className={`space-y-3 ${current ? 'hidden lg:block' : ''}`}>
         <BulkFanart serverId={serverId} todo={counts.none ?? 0} />
         <input
@@ -258,7 +258,7 @@ function ArtistEditor({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_20rem]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <Card>
           <div className="mb-4 flex flex-wrap gap-1 border-b border-border" role="tablist">
             {TABS.map(([key, label]) => (

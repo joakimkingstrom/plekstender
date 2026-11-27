@@ -22,7 +22,7 @@ export function ScanCard({ serverId }: { serverId: number }) {
   if (summary.isError) return <Notice tone="error">{errorMessage(summary.error)}</Notice>
   const s = summary.data
   const active = s.active
-  const { done = 0, total = 0 } = (active?.progress ?? {}) as { done?: number; total?: number }
+  const { done = 0, total = 0, step } = (active?.progress ?? {}) as { done?: number; total?: number; step?: string }
   return (
     <Card title="Tags in your files">
       <div className="space-y-3 text-sm">
@@ -36,6 +36,7 @@ export function ScanCard({ serverId }: { serverId: number }) {
           <div className="space-y-2" aria-live="polite">
             <p>
               {active.status === 'queued' ? 'Waiting for the worker…' : 'Scanning…'}{' '}
+              {active.status === 'running' && step && <span className="text-muted">{step} </span>}
               {total > 0 && (
                 <span className="text-muted tabular-nums">
                   {formatCount(done)} / {formatCount(total)}
@@ -192,8 +193,8 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
       ) : !scanned ? (
         <p className="text-sm text-muted">
           Scan your music folder (
-          <Link to="/settings/files" className="text-accent underline">
-            Settings → Music files
+          <Link to="/settings/files/scan" className="text-accent underline">
+            Settings → Music files → Tags in your files
           </Link>
           ) to see the tags in these songs' files.
         </p>
@@ -256,8 +257,8 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
               <>
                 {' '}
                 To edit tags, allow it in{' '}
-                <Link to="/settings/files" className="underline">
-                  Settings → Music files
+                <Link to="/settings/files/scan" className="underline">
+                  Settings → Music files → Tags in your files
                 </Link>
                 .
               </>

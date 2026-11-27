@@ -18,8 +18,13 @@ const radiohead = { rating_key: 100, name: 'Radiohead', thumb: null }
 
 let fetchMock: ReturnType<typeof vi.fn<(input: Request) => Promise<Response>>>
 let preferences: Record<string, unknown>
+let lidarrOn = false
+let lidarrStates: Record<string, string> = {}
 
 beforeEach(() => {
+  lidarrOn = false
+  lidarrStates = {}
+  localStorage.removeItem('releases-out-filter')
   preferences = { releases: { kinds: ['album', 'ep'], follow_rating: 8, follow_top: 50 } }
   fetchMock = vi.fn<(input: Request) => Promise<Response>>(async (input: Request) => {
     const url = new URL(input.url)
@@ -40,6 +45,7 @@ beforeEach(() => {
           items: [
             { ...release(7, 'Still to Come', { kind: 'ep', first_release_date: '2026-12' }), upcoming: true, artist: radiohead },
             { ...release(6, 'A Fresh One', { in_library: true }), upcoming: false, artist: radiohead },
+            ...(lidarrOn ? [{ ...release(8, 'Out Now'), upcoming: false, artist: radiohead }] : []),
           ],
           following: 12,
           following_with_mbid: 10,
@@ -52,6 +58,18 @@ beforeEach(() => {
           total_artists: 3,
           coverage: { artists: 10, with_mbid: 8, checked: 5 },
         })
+      case '/api/lidarr':
+        return json({ available: lidarrOn })
+      case '/api/lidarr/albums/states':
+        return json(Object.fromEntries((await input.clone().json()).mbids.map((m: string) => [m, lidarrStates[m] ?? 'absent'])))
+      case '/api/lidarr/albums':
+        return json({ id: 5, title: 'Out Now', state: 'monitored' })
+      case '/api/lidarr/albums/5/releases':
+        return json([
+          { guid: 'flac', indexer_id: 3, indexer: 'Indexer', title: 'Radiohead - Out Now (FLAC)', size: 450_000_000, quality: 'FLAC', protocol: 'torrent', seeders: 12, leechers: 1, age_days: 3, approved: true, rejections: [] },
+        ])
+      case '/api/lidarr/releases':
+        return json(null, 204)
       default:
         if (url.pathname.startsWith('/api/servers/1/releases/hidden/')) return json(null, 204)
         return json({ detail: 'Not found' }, 404)
@@ -88,7 +106,7 @@ it('shows new releases from followed artists, coming ones first, and hides one',
   expect(within(coming).getByText('Still to Come')).toBeInTheDocument()
   expect(within(coming).getByText(/EP · December 2026/)).toBeInTheDocument()
   const out = screen.getByRole('heading', { name: 'Out in the last 90 days' }).closest('section')!
-  expect(within(out).getByText('In your library')).toBeInTheDocument()
+  expect(within(out).getByRole('img', { name: 'In your library' })).toBeInTheDocument()
   expect(within(out).getByRole('link', { name: 'Radiohead' })).toHaveAttribute('href', '/library/artists/100')
   // Releases you have are listed too; artists not read yet are said to be.
   expect(within(out).getByText(/including what you already have: that's marked "In your library"/)).toBeInTheDocument()
@@ -110,6 +128,52 @@ it('shows new releases from followed artists, coming ones first, and hides one',
   await vi.waitFor(() =>
     expect(fetchMock.mock.calls.some(([r]) => r.method === 'PUT' && r.url.endsWith('/releases/hidden/00000006-0000-4000-8000-000000000000'))).toBe(true),
   )
+})
+
+it('downloads an album with Lidarr: chosen from what the indexers have', async () => {
+  lidarrOn = true
+  renderAt('/library/releases')
+  // Only for what's out and not in the library.
+  fireEvent.click(await screen.findByRole('button', { name: 'Download Out Now with Lidarr' }))
+  expect(screen.queryByRole('button', { name: /Download A Fresh One/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Download Still to Come/ })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /Choose a release/ }))
+  expect(await screen.findByText('Radiohead - Out Now (FLAC)')).toBeInTheDocument()
+  expect(screen.getByText(/FLAC · 450 MB · 12 seeders · 3 days old · Indexer/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+  expect(await screen.findByText(/Sent to your download client/)).toBeInTheDocument()
+  const posted = (path: string) => fetchMock.mock.calls.filter(([r]) => new URL(r.url).pathname === path && r.method === 'POST').map(([r]) => r)
+  expect(await posted('/api/lidarr/albums')[0].clone().json()).toEqual({ mbid: '00000008-0000-4000-8000-000000000000', search: false })
+  expect(await posted('/api/lidarr/releases')[0].clone().json()).toEqual({ guid: 'flac', indexer_id: 3 })
+})
+
+it('shows only the albums out lately that are not in the library, if asked', async () => {
+  localStorage.removeItem('releases-out-filter')
+  renderAt('/library/releases')
+  const out = (await screen.findByRole('heading', { name: 'Out in the last 90 days' })).closest('section')!
+  expect(within(out).getByText('A Fresh One')).toBeInTheDocument()
+  fireEvent.click(within(out).getByRole('button', { name: 'Not in your library' }))
+  expect(within(out).queryByText('A Fresh One')).not.toBeInTheDocument()
+  expect(within(out).getByText("You have everything that's out lately.")).toBeInTheDocument()
+  expect(localStorage.getItem('releases-out-filter')).toBe('missing')
+})
+
+it("shows how albums stand in Lidarr as icons", async () => {
+  lidarrOn = true
+  lidarrStates = { '00000006-0000-4000-8000-000000000000': 'downloaded', '00000008-0000-4000-8000-000000000000': 'unmonitored' }
+  renderAt('/library/releases')
+  expect(await screen.findByRole('img', { name: 'Downloaded by Lidarr' })).toHaveClass('text-ok')
+  expect(screen.getByRole('img', { name: /^In Lidarr, but not monitored/ })).toHaveClass('text-accent')
+})
+
+it('has Lidarr monitor an album coming up', async () => {
+  lidarrOn = true
+  renderAt('/library/releases')
+  fireEvent.click(await screen.findByRole('button', { name: 'Monitor Still to Come in Lidarr' }))
+  await vi.waitFor(async () => {
+    const [post] = fetchMock.mock.calls.filter(([r]) => new URL(r.url).pathname === '/api/lidarr/albums' && r.method === 'POST')
+    expect(await post[0].clone().json()).toEqual({ mbid: '00000007-0000-4000-8000-000000000000', search: false })
+  })
 })
 
 it('makes the covers smaller or bigger, and remembers it', async () => {
