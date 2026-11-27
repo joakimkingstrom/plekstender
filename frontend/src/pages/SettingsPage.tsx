@@ -85,7 +85,7 @@ export function SettingsLayout() {
   return (
     <>
       <PageTitle>Settings</PageTitle>
-      <div className="grid gap-6 lg:grid-cols-[13rem_1fr] lg:gap-8">
+      <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8">
         <nav aria-label="Settings" className="hidden lg:block">
           {groups.map((g) => (
             <div key={g.name} className="mb-5">

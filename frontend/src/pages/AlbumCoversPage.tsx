@@ -95,7 +95,7 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
   const current = selected ? (items.find((a) => a.rating_key === selected.rating_key) ?? selected) : null
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[20rem_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
       <div className={`space-y-3 ${current ? 'hidden lg:block' : ''}`}>
         <input
           type="search"
@@ -261,7 +261,7 @@ function CoverEditor({
       {best.isError && <Notice tone="error">{errorMessage(best.error)}</Notice>}
       {found && <Notice>{bestText(found)}</Notice>}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem] xl:items-start">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
         <Card>
           <ScrollTabs
             label="Where from"
