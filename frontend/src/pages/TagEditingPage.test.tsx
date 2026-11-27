@@ -31,11 +31,17 @@ beforeEach(() => {
         return json({ active: null, last: null, last_sync_at: null, counts: { artists: 1, albums: 2, tracks: 24, rated_tracks: 0, plays: 0 }, incremental_minutes: 30, full_days: 7 })
       case '/api/servers/1/files/summary':
         return json({ mapped: true, tag_editing: true, files: 24, matched: 24, errors: 0, active: null, last: null })
-      case '/api/servers/1/files/albums':
+      case '/api/servers/1/files/albums': {
+        // More than the page shows: The Bends is beyond it (asked for by "Next 50 albums").
+        const items = [album(200, 'OK Computer', { differs: 2, differing_fields: ['title', 'year'] }), album(201, 'Kid A')]
+        if (url.searchParams.get('limit') === '200') items.push(album(202, 'The Bends'))
         return json({
-          items: [album(200, 'OK Computer', { differs: 2, differing_fields: ['title', 'year'] }), album(201, 'Kid A')],
-          total: 2, offset: 0, limit: 50, albums: 5, counts: { any: 2, differs: 1, no_mbid: 2, missing: 0, errors: 0 }, not_in_plex: 3,
+          items,
+          total: items.length, offset: 0, limit: 50, albums: 5, counts: { any: 2, differs: 1, no_mbid: 2, missing: 0, errors: 0 }, not_in_plex: 3,
         })
+      }
+      case '/api/servers/1/files/albums/202/musicbrainz/best':
+        return json(best[201])
       case '/api/servers/1/files/albums/200/musicbrainz/best':
         return json(best[200])
       case '/api/servers/1/files/albums/201/musicbrainz/best':
@@ -84,5 +90,17 @@ describe('Tag editing', () => {
     expect(applied).toEqual(['/api/servers/1/files/albums/200/musicbrainz'])
     const post = fetchMock.mock.calls.find(([r]) => new URL((r as Request).url).pathname.endsWith('/200/musicbrainz'))!
     expect(await (post[0] as Request).clone().json()).toEqual({ release_id: '11111111-1111-1111-1111-111111111111' })
+
+    // The next albums are offered: those not in this dialog (or fixed), so The Bends.
+    expect(within(dialog).getByText('1 album queued for writing.')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Next 50 albums' }))
+    expect(await screen.findByRole('link', { name: /The Bends/ })).toBeInTheDocument()
+    const next = screen.getByRole('dialog', { name: 'MusicBrainz releases' })
+    expect(within(next).queryByRole('link', { name: /Kid A/ })).not.toBeInTheDocument()
+
+    // Closed: the album just fixed is hidden while its files are written.
+    fireEvent.click(within(next).getByRole('button', { name: /Close/ }))
+    expect(await screen.findByText(/1 just fixed, hidden/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'OK Computer' })).not.toBeInTheDocument()
   })
 })

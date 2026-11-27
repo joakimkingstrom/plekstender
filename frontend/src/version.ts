@@ -8,3 +8,8 @@ export const SOURCE_URL = 'https://github.com/joakimkingstrom/plekstender'
 export function wasUpdated(pageVersion: string | null, serverVersion: string | undefined): boolean {
   return Boolean(pageVersion && serverVersion && pageVersion !== serverVersion && !serverVersion.endsWith('-dev'))
 }
+
+/** A build from the staging branch (published for trying changes before they go into main). */
+export function isStaging(version: string | null | undefined): boolean {
+  return Boolean(version?.endsWith('-staging'))
+}

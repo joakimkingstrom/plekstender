@@ -86,6 +86,40 @@ describe('Playlists', () => {
     expect(screen.getByRole('link', { name: '+ New playlist' })).toHaveAttribute('href', '/library/playlists/new')
   })
 
+  it("shows a gig playlist's setlist songs that aren't in the library", async () => {
+    playlists = [
+      {
+        id: 7,
+        name: 'Before the gig: Radiohead, 7 Dec 2026',
+        description: null,
+        definition: { tracks: [303, 300, 301], order: 'listed' },
+        display: {
+          gig: { kind: 'before', date: '2026-12-07' },
+          setlist: {
+            songs: 5,
+            missing: [
+              { artist: 'Radiohead', title: 'Creep' },
+              { artist: 'Radiohead', title: 'Exit Music' },
+            ],
+            missing_count: 2,
+          },
+        },
+        schedule: 'manual',
+        plex_playlist_key: 9,
+        status: 'ok',
+        error: null,
+        last_result: { count: 3, duration_ms: 720_000 },
+        last_built_at: null,
+        exportable: false,
+      },
+    ]
+    renderAt('/playlists')
+    const summary = await screen.findByText("2 of the setlists' 5 songs aren't in your library")
+    fireEvent.click(summary)
+    expect(screen.getByText('Creep')).toBeInTheDocument()
+    expect(screen.getByText('Exit Music')).toBeInTheDocument()
+  })
+
   it('builds a playlist from search and suggestions, previews it and saves it', async () => {
     renderAt('/playlists/new')
     fireEvent.change(await screen.findByRole('searchbox', { name: 'Search artists and songs' }), {

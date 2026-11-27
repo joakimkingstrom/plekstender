@@ -46,12 +46,12 @@ beforeEach(() => {
           return json([{ rating_key: 200, title: 'OK Computer', thumb: null, artist_title: 'Radiohead', hex: '#2850c8' }])
         case '/api/servers/1/library/stats/file-types':
           return json([
-            { format: 'flac', tracks: 600 },
-            { format: 'mp3', tracks: 300 },
-            { format: 'm4a', tracks: 50 },
-            { format: 'ogg', tracks: 30 },
-            { format: 'opus', tracks: 12 },
-            { format: '', tracks: 8 },
+            { format: 'flac', tracks: 600, bytes: 18_000_000_000, sized: 600 },
+            { format: 'mp3', tracks: 300, bytes: 2_400_000_000, sized: 300 },
+            { format: 'm4a', tracks: 50, bytes: 300_000_000, sized: 50 },
+            { format: 'ogg', tracks: 30, bytes: 150_000_000, sized: 30 },
+            { format: 'opus', tracks: 12, bytes: 60_000_000, sized: 12 },
+            { format: '', tracks: 8, bytes: 0, sized: 0 },
           ])
         case '/api/servers/1/library/stats/seen-live':
           return json({ tracks: 1234, seen: 9, setlists: 4, gigs: 6, artists_total: 300, artists_seen: 12, artists: [{ rating_key: 100, title: 'Radiohead', thumb: null, tracks: 40, seen: 8 }] })
@@ -90,7 +90,11 @@ describe('Library stats', () => {
       'OGG30 songs3.0%',
       'Other20 songs2.0%',
     ])
-    expect(screen.getByText('OPUS 12, Unknown 8')).toBeInTheDocument()
+    expect(screen.getByText('60 MB · OPUS 12, Unknown 8')).toBeInTheDocument()
+    // How much room they take: each type, and in all (so far: 8 files' sizes aren't known).
+    expect(screen.getByText('18 GB')).toBeInTheDocument()
+    expect(screen.getByText('20.9 GB')).toBeInTheDocument()
+    expect(screen.getByText('so far')).toBeInTheDocument()
     expect(screen.getByText(/1 album without a year isn't counted/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'The 1990s: 2 albums' }))

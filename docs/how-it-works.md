@@ -474,6 +474,19 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
   - **ListenBrainz send:** stop only: what's sent stays on ListenBrainz.
 - In the app: Stop and Cancel… (with a confirmation saying what Cancel takes back) next to each job's progress, the bell's too; a stopped job's message shows in place of the error.
 
+## Polish (27 Nov)
+- **Listening time** reads in its two biggest units: `1 h 30 m`, then `3 d 4 h`, `2 w 3 d`, `4 mo 1 w`, `1 y 2 mo` (top lists by time, totals, playlists, Rewind, the map).
+- **Types of file** (Library → Stats) shows how much room each takes and the total: Plex's file sizes (`tracks.file_size`, from each track's part; filled in by the next full sync), else the scan's. "So far" while some aren't known.
+- **Gig playlists** keep the setlist songs the library doesn't have in the playlist's `display.setlist` (`songs`, up to 50 `missing` songs, `missing_count`); the card says "2 of the setlists' 5 songs aren't in your library", opening to the list.
+- **Artist pages** show where the artist is from as a flag, at the end of the name's row (`country` on the artist: Plex's country tag, else MusicBrainz's area); the country's name as its tooltip.
+- **Releases**: covers small, medium or large (remembered in the browser); large ones are the Cover Art Archive's 500 px thumbnails (`/api/releases/{mbid}/cover?size=500`).
+- **Discover**: your plays of a suggested artist as a small bar (log scale against the most played suggestion) with the count.
+- **Guess the intro**: once the round shows the artist (song mode), the guess box searches their songs; suggestions never show covers. Queue items carry `artist_key` for this.
+- **Tag editing**: after "Accept N clear matches", the dialog offers the next 50 albums with the same filter and search that haven't been offered or fixed this visit.
+- **Album covers**: "Crop to a square → Always" (`square_covers`, per account) ticks it for every album chosen by hand (best matches are always square); sizes of 1500 px or more are green; the sources' tabs scroll by dragging with the mouse, move after holding one for a second (or Alt + ←/→; the order is `cover_tabs`, per account), and fade with an arrow at an edge that has more.
+- **Settings → Services → Artwork**: Deezer, iTunes and the Cover Art Archive can be turned off (instance setting `cover_sources`); off, they aren't offered on the album covers page, their candidates are refused, and best matches skip them.
+- Servers: Reconnect sits above Disconnect. Home's "Gigs you've got tickets for" leaves out the "Got a ticket" pill.
+
 ## The original design
 
 How each feature was first planned. Where the sections above say otherwise, they describe what

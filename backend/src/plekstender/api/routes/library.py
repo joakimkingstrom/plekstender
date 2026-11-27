@@ -33,6 +33,7 @@ from plekstender.api.schemas import (
     TrackOut,
     YearListens,
 )
+from plekstender.artist_countries import ArtistKey, artist_country
 from plekstender.db.models import (
     Album,
     Artist,
@@ -620,6 +621,11 @@ async def get_artist(
         **summary.model_dump(),
         summary=artist.summary,
         art=artist.art,
+        country=await artist_country(
+            db,
+            us.server_id,
+            ArtistKey(artist.rating_key, artist.title, artist.mbid, artist.name_key),
+        ),
         tags=await _tags_for(db, us.server_id, rating_key),
         similar=[SimilarArtistOut(name=n, rating_key=in_library.get(n.lower())) for n in names],
         albums=await _albums(db, user.id, us, Album.artist_rating_key == rating_key),

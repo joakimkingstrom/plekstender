@@ -60,6 +60,29 @@ async def plex_countries(db: AsyncSession, server_id: int) -> dict[int, str]:
     return out
 
 
+async def artist_country(db: AsyncSession, server_id: int, artist: ArtistKey) -> str | None:
+    """One artist's country (ISO code): Plex's, else MusicBrainz's (None: not known yet)."""
+    names = await db.scalars(
+        select(Tag.name)
+        .join(ItemTag, ItemTag.tag_id == Tag.id)
+        .where(
+            ItemTag.server_id == server_id,
+            ItemTag.rating_key == artist.rating_key,
+            Tag.kind == "country",
+        )
+        .order_by(Tag.name)
+    )
+    for name in names:
+        if plex := country_code(name):
+            return plex
+    if artist.area_key is None:
+        return None
+    found: str | None = await db.scalar(
+        select(ArtistArea.country_code).where(ArtistArea.key == artist.area_key)
+    )
+    return found
+
+
 async def countries_for(
     db: AsyncSession, server_id: int, artists: Iterable[ArtistKey]
 ) -> tuple[dict[int, str], int]:

@@ -45,6 +45,7 @@ MIN_SHARE = 0.25  # of those shows, to count as "been playing"
 MIN_SONGS = 8  # fewer than this: the most played ones instead
 FALLBACK_SONGS = 15
 MAX_ARTISTS = 4  # per gig (a festival's bill can be long)
+MAX_MISSING = 50  # setlist songs not in the library, listed on the playlist's card
 SETLISTFM_INTERVAL = 0.6  # its limit is about two requests a second
 
 _last_request = 0.0
@@ -214,9 +215,21 @@ async def _match(
     return {title: key for title, key in rows.all()}
 
 
-async def library_songs(db: AsyncSession, us: UserServer, parts: list[Part]) -> list[int]:
-    """The parts' songs in this server's library, in order (each once)."""
+@dataclass
+class Matched:
+    """The setlists' songs found in a library (in order, each once), and those that weren't."""
+
+    keys: list[int] = field(default_factory=list)
+    missing: list[tuple[str, str]] = field(default_factory=list)  # (artist, song), each once
+    wanted: int = 0  # different songs in the setlists
+
+
+async def library_songs(db: AsyncSession, us: UserServer, parts: list[Part]) -> Matched:
+    """The parts' songs in this server's library, in order (each once), and the ones it
+    doesn't have."""
     out: list[int] = []
+    seen: set[tuple[str, str]] = set()
+    missing: list[tuple[str, str]] = []
     for part in parts:
         titles = [normalise_title(s.name) for s in part.songs]
         own = await _match(db, us, part.artist, part.rating_key, titles)
@@ -230,20 +243,28 @@ async def library_songs(db: AsyncSession, us: UserServer, parts: list[Part]) -> 
                 covers[(original, title)] = key
         for song, title in zip(part.songs, titles, strict=True):
             found = own.get(title) or (covers.get((song.cover, title)) if song.cover else None)
-            if found is not None and found not in out:
+            song_key = (normalise_artist(part.artist), title)
+            first = song_key not in seen
+            seen.add(song_key)
+            if found is None:
+                if first:
+                    missing.append((part.artist, song.name))
+            elif found not in out:
                 out.append(found)
-    return out
+    return Matched(out, missing, len(seen))
 
 
 async def _best_server(
     db: AsyncSession, servers: list[UserServer], parts: list[Part]
-) -> tuple[UserServer | None, list[int]]:
+) -> tuple[UserServer | None, Matched]:
     """The user's server whose library has the most of the songs."""
-    best: tuple[UserServer | None, list[int]] = (None, [])
+    best: tuple[UserServer | None, Matched] = (None, Matched())
     for us in servers:
-        songs = await library_songs(db, us, parts)
-        if len(songs) > len(best[1]):
-            best = (us, songs)
+        matched = await library_songs(db, us, parts)
+        if best[0] is None or len(matched.keys) > len(best[1].keys):
+            best = (us, matched)
+    if not best[1].keys:  # none anywhere: still say how many songs there were
+        best = (None, best[1])
     return best
 
 
@@ -259,13 +280,15 @@ async def _save(
     ref: str,
     gig_date: dt.date,
     us: UserServer | None,
-    songs: list[int],
+    matched: Matched,
     name: str,
     description: str,
     now: dt.datetime,
     result: Made,
 ) -> None:
-    """Make or update the playlist (when songs matched), and remember it."""
+    """Make or update the playlist (when songs matched), and remember it, with the setlist
+    songs the library doesn't have (shown on its card)."""
+    songs = matched.keys
     if record is None:
         record = GigPlaylist(user_id=user.id, kind=kind, ref=ref, made_at=now, songs=0)
         db.add(record)
@@ -282,7 +305,17 @@ async def _save(
         result.refreshed += 1
     playlist.name, playlist.description = name[:200], description
     playlist.definition = Definition(tracks=songs, order="listed", limit=None).model_dump()
-    playlist.display = {"gig": {"kind": kind, "date": gig_date.isoformat()}}
+    playlist.display = {
+        "gig": {"kind": kind, "date": gig_date.isoformat()},
+        "setlist": {
+            "songs": matched.wanted,
+            "missing": [
+                {"artist": artist, "title": title}
+                for artist, title in matched.missing[:MAX_MISSING]
+            ],
+            "missing_count": len(matched.missing),
+        },
+    }
     playlist.status, playlist.error = "queued", None
     await db.flush()
     record.playlist_id = playlist.id
@@ -391,7 +424,7 @@ async def _before(
                 http, settings, key, a["name"], mbids.get(normalise_artist(a["name"])), today
             )
             parts.append(Part(a["name"], usual, a.get("rating_key")))
-        us, songs = await _best_server(db, servers, parts)
+        us, matched = await _best_server(db, servers, parts)
         show = group[0]
         names = ", ".join(reversed([a["name"] for a in bill]))  # headliners first
         place = ", ".join(x for x in (show.venue, show.city) if x)
@@ -403,7 +436,7 @@ async def _before(
             ref=record.ref if record else refs[0],
             gig_date=show.start_date,
             us=us,
-            songs=songs,
+            matched=matched,
             name=f"Before the gig: {names}, {nice_date(show.start_date)}",
             description=(
                 f"What {names} {'has' if len(bill) == 1 else 'have'} been playing lately "
@@ -471,7 +504,7 @@ async def _after(
             Part(str(s["artist"]), _set_songs(s.get("songs") or []), _rating_key(gig, s["artist"]))
             for s in setlists
         ]
-        us, songs = await _best_server(db, servers, parts)
+        us, matched = await _best_server(db, servers, parts)
         names = ", ".join(str(a.get("name")) for a in gig.artists[:MAX_ARTISTS])
         place = ", ".join(x for x in (gig.venue, gig.city) if x)
         await _save(
@@ -482,7 +515,7 @@ async def _after(
             ref=str(gig.id),
             gig_date=gig.date,
             us=us,
-            songs=songs,
+            matched=matched,
             name=f"{names} live"
             + (f", {gig.venue}" if gig.venue else "")
             + f", {nice_date(gig.date)}",

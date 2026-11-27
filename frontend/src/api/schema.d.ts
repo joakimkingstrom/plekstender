@@ -398,7 +398,7 @@ export interface paths {
         /**
          * File Types
          * @description The library's songs by type of file (their extension, as Plex has the files), most
-         *     first.
+         *     first, with their size: Plex's (filled in by a full sync), else the scan's.
          */
         get: operations["file_types_api_servers__server_id__library_stats_file_types_get"];
         put?: never;
@@ -2955,8 +2955,9 @@ export interface paths {
         };
         /**
          * Cover Sources
-         * @description The sources that can be used here: the open ones always; Tidal and fanart.tv once an
-         *     admin has set them up (checked when saved); web search while SearXNG answers.
+         * @description The sources that can be used here: the open ones unless an admin turned them off;
+         *     Tidal and fanart.tv once an admin has set them up (checked when saved); web search
+         *     while SearXNG answers.
          */
         get: operations["cover_sources_api_servers__server_id__artwork_albums_sources_get"];
         put?: never;
@@ -4031,6 +4032,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/cover-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Cover Sources
+         * @description Which of Deezer, iTunes and the Cover Art Archive album covers may come from.
+         */
+        get: operations["get_cover_sources_api_admin_cover_sources_get"];
+        /**
+         * Put Cover Sources
+         * @description Turn Deezer, iTunes or the Cover Art Archive off (or on again) for album covers: on
+         *     the album covers page and for best matches, for everyone.
+         */
+        put: operations["put_cover_sources_api_admin_cover_sources_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/fanart": {
         parameters: {
             query?: never;
@@ -4425,8 +4451,8 @@ export interface paths {
         };
         /**
          * Release Cover
-         * @description A release group's front cover from the Cover Art Archive, small, fetched by the server
-         *     (the page only loads images from here).
+         * @description A release group's front cover from the Cover Art Archive, 250 or 500 pixels, fetched
+         *     by the server (the page only loads images from here).
          */
         get: operations["release_cover_api_releases__mbid__cover_get"];
         put?: never;
@@ -4889,6 +4915,11 @@ export interface components {
             summary: string | null;
             /** Art */
             art: string | null;
+            /**
+             * Country
+             * @description Where they're from: an ISO 3166 code (Plex's, else MusicBrainz's).
+             */
+            country?: string | null;
             /** Tags */
             tags: components["schemas"]["TagOut"][];
             /** Similar */
@@ -5321,6 +5352,27 @@ export interface components {
             /** Sources */
             sources: ("coverartarchive" | "deezer" | "itunes" | "tidal" | "fanart" | "plex" | "search")[];
         };
+        /**
+         * CoverSourcesSettings
+         * @description The album cover sources that need nothing set up: on (the default) or off.
+         */
+        CoverSourcesSettings: {
+            /**
+             * Deezer
+             * @default true
+             */
+            deezer: boolean;
+            /**
+             * Itunes
+             * @default true
+             */
+            itunes: boolean;
+            /**
+             * Coverartarchive
+             * @default true
+             */
+            coverartarchive: boolean;
+        };
         /** DataThistleOut */
         DataThistleOut: {
             /** Configured */
@@ -5645,6 +5697,16 @@ export interface components {
             format: string;
             /** Tracks */
             tracks: number;
+            /**
+             * Bytes
+             * @description The files' size, of those whose size is known.
+             */
+            bytes: number;
+            /**
+             * Sized
+             * @description Songs whose file size is known (Plex's, or the scan's).
+             */
+            sized: number;
         };
         /** FilesSummaryOut */
         FilesSummaryOut: {
@@ -8161,6 +8223,17 @@ export interface components {
              * @description Album covers: where a best match may come from.
              */
             best_cover_sources?: ("deezer" | "itunes" | "tidal" | "coverartarchive")[];
+            /**
+             * Cover Tabs
+             * @description Album covers: the sources' tabs in this order (others after them).
+             */
+            cover_tabs?: ("deezer" | "itunes" | "coverartarchive" | "tidal" | "fanart" | "plex" | "search" | "upload")[];
+            /**
+             * Square Covers
+             * @description Album covers: crop a cover chosen by hand to a square, unless unticked (best matches always are).
+             * @default false
+             */
+            square_covers: boolean;
         };
         /** PreviewOut */
         PreviewOut: {
@@ -8242,6 +8315,11 @@ export interface components {
              * @description Artist, for songs and albums.
              */
             subtitle: string | null;
+            /**
+             * Artist Key
+             * @description The artist's rating key (songs and albums; artists: itself).
+             */
+            artist_key?: number | null;
             /** Album Title */
             album_title: string | null;
             /** Album Rating Key */
@@ -17045,6 +17123,59 @@ export interface operations {
             };
         };
     };
+    get_cover_sources_api_admin_cover_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverSourcesSettings"];
+                };
+            };
+        };
+    };
+    put_cover_sources_api_admin_cover_sources_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverSourcesSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverSourcesSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_fanart_api_admin_fanart_get: {
         parameters: {
             query?: never;
@@ -17844,7 +17975,10 @@ export interface operations {
     };
     release_cover_api_releases__mbid__cover_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 250 or 500 pixels. */
+                size?: number;
+            };
             header?: never;
             path: {
                 mbid: string;

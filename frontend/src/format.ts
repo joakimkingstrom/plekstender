@@ -67,13 +67,40 @@ export function formatDate(iso: string): string {
   return dateFormat.format(new Date(iso))
 }
 
-/** 5,400,000 ms → "1 h 30 m"; 450,000,000 ms → "125 h". */
+/** 1,234,000,000 → "1.2 GB" (powers of 1000, as macOS and most file managers count). */
+export function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000
+    unit++
+  }
+  const digits = unit === 0 || value >= 100 ? 0 : 1
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: digits })} ${units[unit]}`
+}
+
+const TIME_UNITS: [string, number][] = [
+  ['y', 525_960], // minutes in a year of 365.25 days
+  ['mo', 43_830], // a twelfth of that
+  ['w', 10_080],
+  ['d', 1_440],
+  ['h', 60],
+  ['m', 1],
+]
+
+/** Listening time in its two biggest units: 5,400,000 ms → "1 h 30 m"; past a day "3 d 4 h",
+ * then weeks, months and years ("2 w 3 d", "4 mo 1 w", "1 y 2 mo"). A zero second unit is
+ * left out ("2 d"). */
 export function formatListeningTime(ms: number): string {
   const minutes = Math.round(ms / 60_000)
-  const hours = Math.floor(minutes / 60)
-  if (hours >= 100) return `${formatCount(hours)} h`
-  if (hours === 0) return `${minutes} m`
-  return `${hours} h ${minutes % 60} m`
+  const first = TIME_UNITS.findIndex(([, size]) => minutes >= size)
+  if (first === -1 || first === TIME_UNITS.length - 1) return `${minutes} m`
+  const [name, size] = TIME_UNITS[first]
+  const [nextName, nextSize] = TIME_UNITS[first + 1]
+  const whole = Math.floor(minutes / size)
+  const rest = Math.floor((minutes - whole * size) / nextSize)
+  return rest ? `${formatCount(whole)} ${name} ${rest} ${nextName}` : `${formatCount(whole)} ${name}`
 }
 
 /** Change vs a previous value: "+12%", "−8%", or null when there's nothing to compare. */

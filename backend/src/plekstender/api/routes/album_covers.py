@@ -4,6 +4,7 @@ saving one to Plex for everyone using the server."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -33,13 +34,23 @@ from plekstender.artwork import service as art
 from plekstender.artwork.covers import LOW, AlbumRef, CoverError, CoverSource
 from plekstender.artwork.fetch import FetchError
 from plekstender.artwork.sources import Candidate, SourceError
-from plekstender.db.instance import get_fanart_api_key, get_tidal_client
+from plekstender.db.instance import (
+    get_cover_sources_off,
+    get_fanart_api_key,
+    get_tidal_client,
+)
 from plekstender.db.models import Album, AlbumCover, Artist, User, UserServer
 from plekstender.plex.server import PlexServerClient
 from plekstender.plex.tv import PlexError
 from plekstender.worker import enqueue_cover_sizes
 
 router = APIRouter(prefix="/api/servers/{server_id}/artwork/albums", tags=["artwork"])
+
+
+async def _best_sources(db: DbDep, wanted: Sequence[str]) -> list[str]:
+    """The sources a best match may come from: those wanted that an admin hasn't turned off."""
+    off = await get_cover_sources_off(db)
+    return [s for s in wanted if s not in off]
 
 
 class CoverRenderIn(BaseModel):
@@ -217,10 +228,12 @@ class CoverSourcesOut(BaseModel):
 async def cover_sources(
     server_id: int, db: DbDep, user: UserDep, settings: SettingsDep, http: HttpDep
 ) -> CoverSourcesOut:
-    """The sources that can be used here: the open ones always; Tidal and fanart.tv once an
-    admin has set them up (checked when saved); web search while SearXNG answers."""
+    """The sources that can be used here: the open ones unless an admin turned them off;
+    Tidal and fanart.tv once an admin has set them up (checked when saved); web search
+    while SearXNG answers."""
     await owner_server(db, user, server_id)
-    found: list[CoverSource] = ["deezer", "itunes", "coverartarchive"]
+    off = await get_cover_sources_off(db)
+    found: list[CoverSource] = [s for s in ("deezer", "itunes", "coverartarchive") if s not in off]
     if await get_tidal_client(db, settings) is not None:
         found.append("tidal")
     if (await get_fanart_api_key(db, settings))[0]:
@@ -248,6 +261,8 @@ async def candidates(
 ) -> CandidatesOut:
     """Covers for the album from one source (with a note when there are none)."""
     us = await owner_server(db, user, server_id)
+    if source in await get_cover_sources_off(db):
+        raise HTTPException(status.HTTP_409_CONFLICT, "An admin has turned this source off.")
     album, artist = await _album(db, user, us, rating_key)
     ref = AlbumRef(album.title, artist, album.mbid)
     found: list[Candidate] = []
@@ -443,7 +458,7 @@ async def apply_best(
         result = await covers.apply_best(
             db, http, settings, server_client(us, cipher, settings, http),
             await get_tidal_client(db, settings), album, artist, user.id,
-            load_preferences(user).best_cover_sources,
+            await _best_sources(db, load_preferences(user).best_cover_sources),
         )  # fmt: skip
     except (CoverError, FetchError) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
@@ -466,6 +481,11 @@ async def start_best(
     """Apply the best match to every album the list shows with this filter and search (in
     the background, a few seconds an album)."""
     us = await owner_server(db, user, server_id)
+    sources = await _best_sources(db, body.sources or load_preferences(user).best_cover_sources)
+    if not sources:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Every source chosen has been turned off."
+        )
     vis, cond, where = visible(Album, user.id, us)
     cover_state, kept, shorter = _columns()
     keys = list(
@@ -496,7 +516,6 @@ async def start_best(
     )
     if not keys:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No albums to look for.")
-    sources = body.sources or load_preferences(user).best_cover_sources
     job = await start_job(
         db, us, "covers", {"rating_keys": keys, "show": body.show, "sources": list(sources)}
     )

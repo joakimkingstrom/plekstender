@@ -23,7 +23,7 @@ import { Segmented } from '../components/Segmented'
 import { WordCloud } from '../components/WordCloud'
 import { Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
-import { formatCount, formatShare } from '../format'
+import { formatBytes, formatCount, formatShare } from '../format'
 
 type Measure = 'tracks' | 'albums' | 'artists'
 
@@ -86,25 +86,48 @@ function songs(n: number) {
 }
 
 /** The library's songs by type of file: the four most common each their own colour, the
- * rest together as "Other" (named in the legend). */
+ * rest together as "Other" (named in the legend), with how much room they take. */
 function FileTypes({ serverId }: { serverId: number }) {
   const types = useFileTypes(serverId)
   if (!types.data?.length) return null
   const name = (format: string) => (format ? format.toUpperCase() : 'Unknown')
   const named = types.data.filter((t) => t.format).slice(0, SLOTS.length)
   const rest = types.data.filter((t) => !named.includes(t))
-  const slices: DonutSlice[] = named.map((t, i) => ({ key: t.format, label: name(t.format), value: t.tracks, color: SLOTS[i] }))
-  if (rest.length)
+  const sized = types.data.some((t) => t.sized > 0)
+  const size = (bytes: number) => (sized ? formatBytes(bytes) : undefined)
+  const slices: DonutSlice[] = named.map((t, i) => ({
+    key: t.format,
+    label: name(t.format),
+    value: t.tracks,
+    color: SLOTS[i],
+    note: size(t.bytes),
+  }))
+  if (rest.length) {
+    const restBytes = rest.reduce((n, t) => n + t.bytes, 0)
     slices.push({
       key: 'other',
       label: rest.length === 1 ? name(rest[0].format) : 'Other',
       value: rest.reduce((n, t) => n + t.tracks, 0),
       color: 'var(--color-series-other)',
-      note: rest.length > 1 ? rest.map((t) => `${name(t.format)} ${formatCount(t.tracks)}`).join(', ') : undefined,
+      note:
+        rest.length > 1
+          ? [size(restBytes), rest.map((t) => `${name(t.format)} ${formatCount(t.tracks)}`).join(', ')].filter(Boolean).join(' · ')
+          : size(restBytes),
     })
+  }
+  const total = types.data.reduce((n, t) => n + t.bytes, 0)
+  const partly = types.data.some((t) => t.sized < t.tracks)
   return (
     <Card title="Types of file">
-      <Donut slices={slices} caption="Songs by type of file" unit={songs} />
+      <Donut
+        slices={slices}
+        caption="Songs by type of file"
+        unit={songs}
+        center={sized ? { value: formatBytes(total), label: partly ? 'so far' : 'in all' } : undefined}
+      />
+      {sized && partly && (
+        <p className="mt-3 text-xs text-muted">Not every file's size is known yet: the next full library sync fills them in.</p>
+      )}
     </Card>
   )
 }

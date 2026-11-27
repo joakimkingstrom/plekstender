@@ -91,8 +91,10 @@ describe('Album covers', () => {
     expect(await screen.findByText('up to 3000 px')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Deezer' }))
     fireEvent.click(await within(await screen.findByRole('list', { name: 'Covers found' })).findByRole('button'))
-    expect(await screen.findByText('New · 1000×1000')).toBeInTheDocument()
-    expect(screen.getByText('Now · 300×300')).toBeInTheDocument()
+    const caption = (text: string) => (_: string, el: Element | null) => el?.tagName === 'FIGCAPTION' && el.textContent === text
+    expect(await screen.findByText(caption('New · 1000×1000'))).toBeInTheDocument()
+    expect(screen.getByText(caption('Now · 300×300'))).toBeInTheDocument()
+    expect(screen.getByText('· 1000×1000')).not.toHaveClass('text-ok') // green from 1500 px
 
     fireEvent.click(screen.getByRole('button', { name: 'Save to Plex' }))
     expect(await screen.findByText('Saved to Plex.')).toBeInTheDocument()

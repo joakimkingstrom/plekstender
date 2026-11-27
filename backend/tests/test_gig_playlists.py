@@ -137,8 +137,18 @@ async def test_gig_playlists(app: FastAPI, plex: FakePlex, monkeypatch: pytest.M
     # In the usual order, the library's songs only (Creep and Exit Music aren't in it).
     assert (before.definition["tracks"], before.definition["order"]) == ([303, 300, 301], "listed")
     assert before.status == "queued" and "refreshed weekly" in (before.description or "")
+    # The setlist songs it couldn't find, for the playlist's card.
+    assert before.display["setlist"] == {
+        "songs": 5,
+        "missing": [
+            {"artist": "Radiohead", "title": "Creep"},
+            {"artist": "Radiohead", "title": "Exit Music"},
+        ],
+        "missing_count": 2,
+    }
     # What was played, without the tape; the setlist is kept on the gig.
     assert after.definition["tracks"] == [304]
+    assert after.display["setlist"]["missing"] == [{"artist": "Portishead", "title": "Roads"}]
     assert [s["artist"] for s in gig.setlists] == ["Portishead"]
     # The preview keeps the setlist's order.
     preview = await owner.post(

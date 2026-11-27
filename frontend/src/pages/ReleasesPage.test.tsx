@@ -65,7 +65,7 @@ afterEach(() => {
 })
 
 function renderAt(path: string) {
-  render(
+  return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter initialEntries={[path]}>
         <ReleasesPage />
@@ -110,6 +110,22 @@ it('shows new releases from followed artists, coming ones first, and hides one',
   await vi.waitFor(() =>
     expect(fetchMock.mock.calls.some(([r]) => r.method === 'PUT' && r.url.endsWith('/releases/hidden/00000006-0000-4000-8000-000000000000'))).toBe(true),
   )
+})
+
+it('makes the covers smaller or bigger, and remembers it', async () => {
+  localStorage.removeItem('releases-cover-size')
+  const { container, unmount } = renderAt('/library/releases')
+  await screen.findByRole('heading', { name: 'Coming up' })
+  const covers = () => [...container.querySelectorAll('img')].map((img) => img.getAttribute('src'))
+  expect(covers().every((src) => !src?.includes('size='))).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'L' }))
+  // Large: bigger covers from the Cover Art Archive.
+  expect(covers().every((src) => src?.endsWith('?size=500'))).toBe(true)
+  expect(localStorage.getItem('releases-cover-size')).toBe('large')
+  unmount()
+  renderAt('/library/releases')
+  await screen.findByRole('heading', { name: 'Coming up' })
+  expect(screen.getByRole('button', { name: 'L' })).toHaveAttribute('aria-pressed', 'true')
 })
 
 it('lists what is missing by artist, with how far the MusicBrainz lookups are', async () => {

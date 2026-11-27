@@ -196,6 +196,8 @@ async def test_preferences_follow_the_account(app: FastAPI, plex: FakePlex) -> N
         "instance_notifications": True,
         "cover_source": "deezer",
         "best_cover_sources": ["deezer", "itunes", "tidal", "coverartarchive"],
+        "cover_tabs": [],
+        "square_covers": False,
     }
     saved = await owner.put("/api/auth/me/preferences", json={"accent": "#3e63dd"}, headers=CSRF)
     assert saved.status_code == 200
@@ -211,6 +213,8 @@ async def test_preferences_follow_the_account(app: FastAPI, plex: FakePlex) -> N
         "instance_notifications": True,
         "cover_source": "deezer",
         "best_cover_sources": ["deezer", "itunes", "tidal", "coverartarchive"],
+        "cover_tabs": [],
+        "square_covers": False,
     }
     # Another browser: a new session for the same account sees it.
     again, _ = await sign_in(app, plex, "owner-token")

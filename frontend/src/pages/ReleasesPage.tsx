@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import { useMe, useSetPreferences } from '../api/hooks'
@@ -55,6 +55,8 @@ function useReleaseSettings(): [Settings, (patch: Partial<Settings>) => void] {
 /** A release group's cover (through Plekstender, from the Cover Art Archive), or its initial. */
 function Cover({ release }: { release: Release }) {
   const [failed, setFailed] = useState(false)
+  const large = useContext(CoverSizeContext) === 'large'
+
   if (failed) {
     return (
       <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-surface-2 font-display text-2xl font-bold text-muted" aria-hidden>
@@ -64,7 +66,7 @@ function Cover({ release }: { release: Release }) {
   }
   return (
     <img
-      src={`/api/releases/${release.mbid}/cover`}
+      src={`/api/releases/${release.mbid}/cover${large ? '?size=500' : ''}`}
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
@@ -111,7 +113,44 @@ function ReleaseCard({ release, serverId, artist }: { release: Release; serverId
   )
 }
 
-const GRID = 'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'
+type CoverSize = 'small' | 'medium' | 'large'
+const SIZES: [CoverSize, string][] = [
+  ['small', 'S'],
+  ['medium', 'M'],
+  ['large', 'L'],
+]
+const GRIDS: Record<CoverSize, string> = {
+  small: 'grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8',
+  medium: 'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6',
+  large: 'grid grid-cols-1 gap-5 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+}
+const SIZE_KEY = 'releases-cover-size'
+const CoverSizeContext = createContext<CoverSize>('medium')
+
+/** The covers' size, remembered in this browser. */
+function useCoverSize(): [CoverSize, (size: CoverSize) => void] {
+  const [size, setSize] = useState<CoverSize>(() => {
+    try {
+      const stored = localStorage.getItem(SIZE_KEY)
+      return SIZES.some(([s]) => s === stored) ? (stored as CoverSize) : 'medium'
+    } catch {
+      return 'medium'
+    }
+  })
+  const change = (next: CoverSize) => {
+    setSize(next)
+    try {
+      localStorage.setItem(SIZE_KEY, next)
+    } catch {
+      // private browsing: just for now
+    }
+  }
+  return [size, change]
+}
+
+function useGrid(): string {
+  return GRIDS[useContext(CoverSizeContext)]
+}
 
 /** Library → Releases: what's new from your artists, and what's missing from the library. */
 export function ReleasesPage() {
@@ -121,6 +160,7 @@ export function ReleasesPage() {
   const [settings, saveSettings] = useReleaseSettings()
   const kinds = settings.kinds.length ? settings.kinds : DEFAULT_SETTINGS.kinds
   const [includeHidden, setIncludeHidden] = useState(false)
+  const [size, setSize] = useCoverSize()
   const update = (patch: Record<string, string>) => setParams({ ...Object.fromEntries(params), ...patch }, { replace: true })
   // Saved on your account: the same kinds next time, on any device.
   const toggleKind = (kind: ReleaseKind) => {
@@ -155,11 +195,15 @@ export function ReleasesPage() {
             </button>
           ))}
         </div>
-        <label className="ml-auto flex items-center gap-2 text-sm text-muted">
-          <input type="checkbox" checked={includeHidden} onChange={(e) => setIncludeHidden(e.target.checked)} />
-          Show hidden
-        </label>
+        <div className="ml-auto flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input type="checkbox" checked={includeHidden} onChange={(e) => setIncludeHidden(e.target.checked)} />
+            Show hidden
+          </label>
+          <Segmented label="Cover size" value={size} onChange={setSize} options={SIZES} />
+        </div>
       </div>
+      <CoverSizeContext value={size}>
       {view === 'new' ? (
         <NewReleases
           serverId={serverId}
@@ -171,6 +215,7 @@ export function ReleasesPage() {
       ) : (
         <MissingReleases serverId={serverId} kinds={kinds} includeHidden={includeHidden} />
       )}
+      </CoverSizeContext>
       <p className="text-xs text-muted">
         Releases come from MusicBrainz, by the artist's MusicBrainz ID in Plex. Each artist is looked up in the background:
         the ones you follow daily, the rest every two weeks.
@@ -217,6 +262,7 @@ function NewReleases({
   onSettings: (patch: Partial<Settings>) => void
 }) {
   const found = useNewReleases(serverId, kinds, includeHidden, settings)
+  const grid = useGrid()
   const followingControls = <Following settings={settings} onSettings={onSettings} />
   if (found.isPending) return <Spinner />
   if (found.isError) return <Notice tone="error">{errorMessage(found.error)}</Notice>
@@ -247,7 +293,7 @@ function NewReleases({
       )}
       {upcoming.length > 0 && (
         <Card title="Coming up">
-          <ul className={GRID}>
+          <ul className={grid}>
             {upcoming.map((r) => (
               <ReleaseCard key={r.mbid} release={r} artist={r.artist} serverId={serverId} />
             ))}
@@ -264,7 +310,7 @@ function NewReleases({
                 : `Nothing in the last ${new_days} days from the ${formatCount(following)} artists you follow.`}
           </p>
         ) : (
-          <ul className={GRID}>
+          <ul className={grid}>
             {out.map((r) => (
               <ReleaseCard key={r.mbid} release={r} artist={r.artist} serverId={serverId} />
             ))}
@@ -313,6 +359,7 @@ function MissingArtistCard({
   onToggle: () => void
 }) {
   const panel = `missing-${artist.rating_key}`
+  const grid = useGrid()
   return (
     <section className="rounded-2xl border border-border bg-surface">
       <div className="flex items-center gap-3 p-4 sm:px-5">
@@ -345,7 +392,7 @@ function MissingArtistCard({
         </button>
       </div>
       {open && (
-        <ul id={panel} className={`${GRID} px-4 pb-4 sm:px-5 sm:pb-5`}>
+        <ul id={panel} className={`${grid} px-4 pb-4 sm:px-5 sm:pb-5`}>
           {artist.releases.map((r) => (
             <ReleaseCard key={r.mbid} release={r} serverId={serverId} />
           ))}

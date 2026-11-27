@@ -461,6 +461,12 @@ export type LyricsLookupMode = NonNullable<Schemas['LyricsLookupIn']['mode']>
 
 /** Plain calls for the bulk actions, which go through albums one at a time. */
 export const bulk = {
+  albumIssues: (serverId: number, issue: AlbumIssue, q: string, offset: number, limit: number) =>
+    unwrap(
+      api.GET('/api/servers/{server_id}/files/albums', {
+        params: { path: { server_id: serverId }, query: { issue, q: q || undefined, offset, limit } },
+      }),
+    ),
   best: (serverId: number, albumKey: number) =>
     unwrap(
       api.POST('/api/servers/{server_id}/files/albums/{album_key}/musicbrainz/best', {

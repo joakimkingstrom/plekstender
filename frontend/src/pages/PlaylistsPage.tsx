@@ -90,6 +90,33 @@ function StatusBadge({ playlist }: { playlist: Playlist }) {
   return <Badge>Not built yet</Badge>
 }
 
+type SetlistDisplay = { songs: number; missing: { artist: string; title: string }[]; missing_count?: number }
+
+/** Gig playlists: the setlists' songs that aren't in the library, listed when opened. */
+function SetlistMissing({ playlist }: { playlist: Playlist }) {
+  const setlist = (playlist.display as { setlist?: SetlistDisplay } | null)?.setlist
+  if (!setlist) return null
+  const count = setlist.missing_count ?? setlist.missing.length
+  if (count === 0) return <p className="text-xs text-muted">Every song from the setlists is in your library.</p>
+  const artists = new Set(setlist.missing.map((m) => m.artist)).size
+  return (
+    <details className="text-xs text-muted">
+      <summary className="cursor-pointer hover:text-text">
+        {formatCount(count)} of the setlists' {formatCount(setlist.songs)} songs {count === 1 ? "isn't" : "aren't"} in your library
+      </summary>
+      <ul className="mt-1 space-y-0.5 pl-4">
+        {setlist.missing.map((m) => (
+          <li key={`${m.artist}|${m.title}`}>
+            {m.title}
+            {artists > 1 && <span> · {m.artist}</span>}
+          </li>
+        ))}
+        {count > setlist.missing.length && <li>and {formatCount(count - setlist.missing.length)} more</li>}
+      </ul>
+    </details>
+  )
+}
+
 function PlaylistList({ serverId }: { serverId: number }) {
   const playlists = usePlaylists(serverId)
   const rebuild = useRebuildPlaylist(serverId)
@@ -150,6 +177,7 @@ function PlaylistList({ serverId }: { serverId: number }) {
                         ) : null}
                       </p>
                     )}
+                    <SetlistMissing playlist={p} />
                     {p.status === 'error' && p.error && <Notice tone="warn">{p.error}</Notice>}
                     <p className="text-xs text-muted">
                       {scheduleText(p.schedule)}

@@ -2,8 +2,15 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 
 export type SelectOption<T extends string | number> = { value: T; label: string; group?: string }
 
+/** The list's most height (px), and its gap from the button. */
+const LIST_MAX = 288
+const GAP = 4
+const OPTION_HEIGHT = 34 // about, for working out whether the list fits below
+
 /**
- * A site-styled dropdown (button + listbox) in place of the browser's <select>.
+ * A site-styled dropdown (button + listbox) in place of the browser's <select>. It opens
+ * downwards, or upwards when there's more room above (near the bottom of the window), and
+ * never makes the page scroll.
  * Keyboard: Enter / Space / ↓ open it; ↑ ↓ Home End move; Enter or Space picks; Esc or Tab
  * closes; typing jumps to the first option starting with those letters.
  */
@@ -27,6 +34,7 @@ export function Select<T extends string | number>({
 }) {
   const id = useId()
   const [open, setOpen] = useState(false)
+  const [place, setPlace] = useState<{ up: boolean; max: number }>({ up: false, max: LIST_MAX })
   const [active, setActive] = useState(0)
   const root = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLUListElement>(null)
@@ -45,15 +53,29 @@ export function Select<T extends string | number>({
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
-  // Keep the active option in view.
+  // Keep the active option in view, scrolling the list only (not the page).
   useEffect(() => {
-    if (open) list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView?.({ block: 'nearest' })
+    const ul = list.current
+    const option = ul?.querySelector<HTMLElement>(`[data-index="${active}"]`)
+    if (!open || !ul || !option) return
+    if (option.offsetTop < ul.scrollTop) ul.scrollTop = option.offsetTop
+    else if (option.offsetTop + option.offsetHeight > ul.scrollTop + ul.clientHeight)
+      ul.scrollTop = option.offsetTop + option.offsetHeight - ul.clientHeight
   }, [open, active])
 
   const openList = () => {
+    // Below, unless it doesn't fit there and there's more room above.
+    const rect = button.current?.getBoundingClientRect()
+    if (rect) {
+      const wanted = Math.min(LIST_MAX, options.length * OPTION_HEIGHT + 8)
+      const below = window.innerHeight - rect.bottom - GAP * 2
+      const above = rect.top - GAP * 2
+      const up = below < wanted && above > below
+      setPlace({ up, max: Math.max(120, Math.min(LIST_MAX, up ? above : below)) })
+    }
     setActive(selectedIndex)
     setOpen(true)
-    requestAnimationFrame(() => list.current?.focus())
+    requestAnimationFrame(() => list.current?.focus({ preventScroll: true }))
   }
   const close = () => {
     setOpen(false)
@@ -126,7 +148,10 @@ export function Select<T extends string | number>({
           aria-labelledby={labelledBy}
           aria-activedescendant={`${id}-${active}`}
           onKeyDown={onListKey}
-          className="absolute left-0 z-40 mt-1 max-h-72 min-w-full overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-xl focus:outline-none"
+          style={{ maxHeight: place.max }}
+          className={`absolute left-0 z-40 min-w-full overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-xl focus:outline-none ${
+            place.up ? 'bottom-full mb-1' : 'top-full mt-1'
+          }`}
         >
           {options.map((option, index) => {
             const heading = headings[index]

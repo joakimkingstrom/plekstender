@@ -23,6 +23,7 @@ import { FilePicker } from '../components/controls'
 import { Artwork } from '../components/library'
 import { Zoomable } from '../components/Lightbox'
 import { ArtworkJobStop } from '../components/ArtworkJobStatus'
+import { ScrollTabs } from '../components/ScrollTabs'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatRelative } from '../format'
 
@@ -44,6 +45,7 @@ const TABS: [Tab, string][] = [
   ['search', 'Web search'],
   ['upload', 'Upload'],
 ]
+const TAB_NAME = Object.fromEntries(TABS) as Record<Tab, string>
 const SOURCE_NAME: Record<string, string> = {
   coverartarchive: 'Cover Art Archive',
   deezer: 'Deezer',
@@ -56,6 +58,10 @@ const SOURCE_NAME: Record<string, string> = {
 }
 
 const size = (w: number | null | undefined, h: number | null | undefined) => (w && h ? `${w}×${h}` : null)
+/** From this many pixels on the shorter side a cover is shown in green: as good as it gets. */
+const GREAT = 1500
+const great = (w: number | null | undefined, h: number | null | undefined) => Boolean(w && h && Math.min(w, h) >= GREAT)
+const sizeTone = (w: number | null | undefined, h: number | null | undefined) => (great(w, h) ? 'text-ok' : 'text-muted')
 
 /** How a cover is doing, for the list and the editor. */
 function CoverBadge({ cover }: { cover: AlbumCover }) {
@@ -66,7 +72,7 @@ function CoverBadge({ cover }: { cover: AlbumCover }) {
         ? [size(cover.width, cover.height) ?? 'Low', 'bg-warn/15 text-warn']
         : cover.state === 'unchecked'
           ? ['Measuring…', 'text-muted']
-          : [size(cover.width, cover.height) ?? 'OK', 'text-muted']
+          : [size(cover.width, cover.height) ?? 'OK', great(cover.width, cover.height) ? 'bg-ok/15 text-ok' : 'text-muted']
   return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums ${tone}`}>{cover.kept ? `Kept · ${text}` : text}</span>
 }
 
@@ -183,11 +189,20 @@ function CoverEditor({
   const opensOn = me.data?.preferences?.cover_source ?? 'deezer'
   const usable = useUsableSources(serverId)
   const tabs = TABS.filter(([key]) => key === 'upload' || usable.includes(key))
+  // In your order (others after them, as listed).
+  const savedOrder = (me.data?.preferences?.cover_tabs ?? []) as Tab[]
+  const tabOrder = [
+    ...savedOrder.filter((k) => tabs.some(([t]) => t === k)),
+    ...tabs.map(([k]) => k).filter((k) => !savedOrder.includes(k)),
+  ]
   const [picked, setTab] = useState<Tab>(opensOn)
   // Only sources that are set up: the default (or the first) when the one picked isn't.
   const tab: Tab = tabs.some(([k]) => k === picked) ? picked : tabs.some(([k]) => k === opensOn) ? opensOn : tabs[0][0]
   const [source, setSource] = useState<SourceSpec | null>(null)
-  const [square, setSquare] = useState(false)
+  // Cropped to a square unless unticked, for people who chose that (Crop to a square → Always).
+  const squarePref = me.data?.preferences?.square_covers ?? false
+  const [squareChoice, setSquare] = useState<boolean | null>(null)
+  const square = squareChoice ?? squarePref
   const [notice, setNotice] = useState<string | null>(null)
   const preview = useCoverPreview(serverId, album.rating_key, source, square)
   const apply = useApplyCover(serverId)
@@ -248,13 +263,16 @@ function CoverEditor({
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem] xl:items-start">
         <Card>
-          <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Where from">
-            {tabs.map(([key, label]) => (
+          <ScrollTabs
+            label="Where from"
+            className="mb-4 border-b border-border"
+            order={tabOrder}
+            onReorder={(order) => savePreferences.mutate({ cover_tabs: order })}
+            renderTab={(key) => (
               // The star: the default source (filled), or make this one the default.
               <span
-                key={key}
                 role="presentation"
-                className={`group flex shrink-0 items-center border-b-2 pb-2 ${tab === key ? 'border-accent' : 'border-transparent'}`}
+                className={`group flex items-center border-b-2 pb-2 ${tab === key ? 'border-accent' : 'border-transparent'}`}
               >
                 <button
                   type="button"
@@ -263,7 +281,7 @@ function CoverEditor({
                   onClick={() => setTab(key)}
                   className={`pl-3 text-sm font-medium ${key === 'upload' ? 'pr-3' : 'pr-1'} ${tab === key ? 'text-text' : 'text-muted hover:text-text'}`}
                 >
-                  {label}
+                  {TAB_NAME[key]}
                 </button>
                 {key !== 'upload' &&
                   (key === opensOn ? (
@@ -275,15 +293,16 @@ function CoverEditor({
                       type="button"
                       onClick={() => savePreferences.mutate({ cover_source: key })}
                       title="Set as default source"
-                      aria-label={`Set ${label} as default source`}
+                      aria-label={`Set ${TAB_NAME[key]} as default source`}
                       className={`pr-3 text-sm text-muted hover:text-accent focus-visible:opacity-100 ${tab === key ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                     >
                       ☆
                     </button>
                   ))}
               </span>
-            ))}
-          </div>
+            )}
+          />
+          <p className="-mt-3 mb-3 text-[11px] text-muted">Drag to scroll; hold a tab for a second to move it.</p>
           {tab === 'upload' ? (
             <CoverUpload serverId={serverId} onUploaded={(id) => choose({ kind: 'upload', upload_id: id })} />
           ) : tab === 'search' ? (
@@ -311,7 +330,9 @@ function CoverEditor({
               <Zoomable image={album.thumb ? { src: imageUrl(serverId, album.thumb, 1000)!, alt: `Current cover of ${album.title}` } : null}>
                 <Artwork serverId={serverId} path={album.thumb} title={album.title} size={1000} className="w-full" />
               </Zoomable>
-              <figcaption className="text-center text-sm text-muted">Now{now ? ` · ${now}` : ''}</figcaption>
+              <figcaption className="text-center text-sm text-muted">
+                Now{now && <span className={sizeTone(album.width, album.height)}> · {now}</span>}
+              </figcaption>
             </figure>
             <figure className="space-y-1">
               <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
@@ -329,7 +350,9 @@ function CoverEditor({
                   </span>
                 )}
               </div>
-              <figcaption className="text-center text-sm text-muted">New{preview.width ? ` · ${size(preview.width, preview.height)}` : ''}</figcaption>
+              <figcaption className="text-center text-sm text-muted">
+                New{preview.width ? <span className={sizeTone(preview.width, preview.height)}> · {size(preview.width, preview.height)}</span> : ''}
+              </figcaption>
             </figure>
           </div>
           {preview.error && (
@@ -338,10 +361,25 @@ function CoverEditor({
             </div>
           )}
           {(wide || square) && (
-            <label className="mt-3 flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)} className="accent-[var(--color-accent)]" />
-              Crop to a square
-            </label>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)} className="accent-[var(--color-accent)]" />
+                Crop to a square
+              </label>
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={squarePref}
+                  disabled={savePreferences.isPending}
+                  onChange={(e) => {
+                    savePreferences.mutate({ square_covers: e.target.checked })
+                    setSquare(null) // follow the new default
+                  }}
+                  className="accent-[var(--color-accent)]"
+                />
+                Always (for every album)
+              </label>
+            </div>
           )}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button
@@ -548,7 +586,7 @@ function CoverGrid({
                 <span className="mt-1 block truncate text-xs" title={c.label ?? undefined}>
                   {c.label ?? 'Cover'}
                 </span>
-                {dims && <span className="block text-[11px] tabular-nums text-muted">{dims}</span>}
+                {dims && <span className={`block text-[11px] tabular-nums ${sizeTone(c.width, c.height)}`}>{dims}</span>}
               </button>
             </li>
           )
