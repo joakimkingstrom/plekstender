@@ -4708,8 +4708,9 @@ export interface paths {
         };
         /**
          * Release Cover
-         * @description A release group's front cover from the Cover Art Archive, 250 or 500 pixels, fetched
-         *     by the server (the page only loads images from here).
+         * @description A release group's front cover from the Cover Art Archive, 250 or 500 pixels: kept on
+         *     the server for recent and upcoming releases (see plekstender.release_covers), else
+         *     fetched by it (the page only loads images from here).
          */
         get: operations["release_cover_api_releases__mbid__cover_get"];
         put?: never;
