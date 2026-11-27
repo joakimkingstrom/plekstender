@@ -8177,6 +8177,11 @@ export interface components {
              */
             best_cover_sources?: ("deezer" | "itunes" | "tidal" | "coverartarchive")[];
             /**
+             * Cover Tabs
+             * @description Album covers: the sources' tabs in this order (others after them).
+             */
+            cover_tabs?: ("deezer" | "itunes" | "coverartarchive" | "tidal" | "fanart" | "plex" | "search" | "upload")[];
+            /**
              * Square Covers
              * @description Album covers: crop a cover chosen by hand to a square, unless unticked (best matches always are).
              * @default false

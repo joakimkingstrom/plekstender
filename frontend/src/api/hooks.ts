@@ -240,6 +240,7 @@ const DEFAULT_PREFERENCES: Schemas["Preferences"] = {
   achievements: true,
   instance_notifications: true,
   cover_source: "deezer",
+  cover_tabs: [],
   square_covers: false,
 };
 

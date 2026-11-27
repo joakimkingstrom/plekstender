@@ -23,6 +23,7 @@ import { FilePicker } from '../components/controls'
 import { Artwork } from '../components/library'
 import { Zoomable } from '../components/Lightbox'
 import { ArtworkJobStop } from '../components/ArtworkJobStatus'
+import { ScrollTabs } from '../components/ScrollTabs'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { formatCount, formatRelative } from '../format'
 
@@ -44,6 +45,7 @@ const TABS: [Tab, string][] = [
   ['search', 'Web search'],
   ['upload', 'Upload'],
 ]
+const TAB_NAME = Object.fromEntries(TABS) as Record<Tab, string>
 const SOURCE_NAME: Record<string, string> = {
   coverartarchive: 'Cover Art Archive',
   deezer: 'Deezer',
@@ -187,6 +189,12 @@ function CoverEditor({
   const opensOn = me.data?.preferences?.cover_source ?? 'deezer'
   const usable = useUsableSources(serverId)
   const tabs = TABS.filter(([key]) => key === 'upload' || usable.includes(key))
+  // In your order (others after them, as listed).
+  const savedOrder = (me.data?.preferences?.cover_tabs ?? []) as Tab[]
+  const tabOrder = [
+    ...savedOrder.filter((k) => tabs.some(([t]) => t === k)),
+    ...tabs.map(([k]) => k).filter((k) => !savedOrder.includes(k)),
+  ]
   const [picked, setTab] = useState<Tab>(opensOn)
   // Only sources that are set up: the default (or the first) when the one picked isn't.
   const tab: Tab = tabs.some(([k]) => k === picked) ? picked : tabs.some(([k]) => k === opensOn) ? opensOn : tabs[0][0]
@@ -255,13 +263,16 @@ function CoverEditor({
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_22rem] xl:items-start">
         <Card>
-          <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Where from">
-            {tabs.map(([key, label]) => (
+          <ScrollTabs
+            label="Where from"
+            className="mb-4 border-b border-border"
+            order={tabOrder}
+            onReorder={(order) => savePreferences.mutate({ cover_tabs: order })}
+            renderTab={(key) => (
               // The star: the default source (filled), or make this one the default.
               <span
-                key={key}
                 role="presentation"
-                className={`group flex shrink-0 items-center border-b-2 pb-2 ${tab === key ? 'border-accent' : 'border-transparent'}`}
+                className={`group flex items-center border-b-2 pb-2 ${tab === key ? 'border-accent' : 'border-transparent'}`}
               >
                 <button
                   type="button"
@@ -270,7 +281,7 @@ function CoverEditor({
                   onClick={() => setTab(key)}
                   className={`pl-3 text-sm font-medium ${key === 'upload' ? 'pr-3' : 'pr-1'} ${tab === key ? 'text-text' : 'text-muted hover:text-text'}`}
                 >
-                  {label}
+                  {TAB_NAME[key]}
                 </button>
                 {key !== 'upload' &&
                   (key === opensOn ? (
@@ -282,15 +293,16 @@ function CoverEditor({
                       type="button"
                       onClick={() => savePreferences.mutate({ cover_source: key })}
                       title="Set as default source"
-                      aria-label={`Set ${label} as default source`}
+                      aria-label={`Set ${TAB_NAME[key]} as default source`}
                       className={`pr-3 text-sm text-muted hover:text-accent focus-visible:opacity-100 ${tab === key ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                     >
                       ☆
                     </button>
                   ))}
               </span>
-            ))}
-          </div>
+            )}
+          />
+          <p className="-mt-3 mb-3 text-[11px] text-muted">Drag to scroll; hold a tab for a second to move it.</p>
           {tab === 'upload' ? (
             <CoverUpload serverId={serverId} onUploaded={(id) => choose({ kind: 'upload', upload_id: id })} />
           ) : tab === 'search' ? (

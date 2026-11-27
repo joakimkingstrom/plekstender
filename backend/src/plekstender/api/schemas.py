@@ -31,6 +31,9 @@ class GameSettings(BaseModel):
 
 
 BestCoverSource = Literal["deezer", "itunes", "tidal", "coverartarchive"]
+CoverTab = Literal[
+    "deezer", "itunes", "coverartarchive", "tidal", "fanart", "plex", "search", "upload"
+]  # fmt: skip
 BEST_COVER_SOURCES: tuple[BestCoverSource, ...] = ("deezer", "itunes", "tidal", "coverartarchive")
 
 
@@ -121,6 +124,11 @@ class Preferences(BaseModel):
         min_length=1,
         max_length=4,
         description="Album covers: where a best match may come from.",
+    )
+    cover_tabs: list[CoverTab] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Album covers: the sources' tabs in this order (others after them).",
     )
     square_covers: bool = Field(
         default=False,
