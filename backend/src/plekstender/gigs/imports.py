@@ -74,12 +74,21 @@ def _ref(*parts: object) -> str:
 
 MAX_SONGS = 150
 # A setlist's page: https://www.setlist.fm/setlist/radiohead/2017/pyramid-stage-…-63de4613.html
-SETLIST_URL = re.compile(r"setlist\.fm/setlist/(?:[^?#]*?-)?([0-9a-f]{6,10})\.html", re.IGNORECASE)
+SETLIST_PATH = "setlist.fm/setlist/"
+# The ID at the end of the page's name (alone, or after the last "-").
+SETLIST_PAGE = re.compile(r"(?:^|-)([0-9a-f]{6,10})\.html$", re.IGNORECASE)
+MAX_LINK = 2000
 
 
 def setlist_id(url: str) -> str | None:
-    """The setlist's ID in a setlist.fm link, if it is one."""
-    found = SETLIST_URL.search(url or "")
+    """The setlist's ID in a setlist.fm link, if it is one. Read apart rather than searched
+    for with one pattern, which took quadratic time on long, repetitive text."""
+    text = (url or "").strip()
+    start = text.lower().find(SETLIST_PATH)
+    if start == -1 or len(text) > MAX_LINK:
+        return None
+    path = re.split(r"[?#\s]", text[start + len(SETLIST_PATH) :], maxsplit=1)[0]
+    found = SETLIST_PAGE.search(path.rsplit("/", 1)[-1])
     return found[1].lower() if found else None
 
 
