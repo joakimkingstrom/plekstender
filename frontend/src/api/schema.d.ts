@@ -2998,7 +2998,8 @@ export interface paths {
         /**
          * List Covers
          * @description Albums and their covers: by default those that most need a better one (no cover
-         *     first, then the smallest), leaving out ones marked as fine.
+         *     first, then the smallest), leaving out ones marked as fine. Low resolution is under
+         *     `low_px` (600, 1000 or 1500) on the shorter side; `sort` orders them otherwise.
          */
         get: operations["list_covers_api_servers__server_id__artwork_albums_get"];
         put?: never;
@@ -3160,7 +3161,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Artists */
+        /**
+         * List Artists
+         * @description The artists and their artwork, by name, or the newest in Plex first (`added`).
+         */
         get: operations["list_artists_api_servers__server_id__artwork_artists_get"];
         put?: never;
         post?: never;
@@ -5116,7 +5120,7 @@ export interface components {
             height: number | null;
             /**
              * State
-             * @description missing: no cover (or one that can't be read); low: under 600 px on its shorter side; unchecked: not measured yet.
+             * @description missing: no cover (or one that can't be read); low: under low_px (600 by default) on its shorter side; unchecked: not measured yet.
              * @enum {string}
              */
             state: "missing" | "low" | "ok" | "unchecked";
@@ -5129,6 +5133,11 @@ export interface components {
             source: string | null;
             /** Applied At */
             applied_at: string | null;
+            /**
+             * Added At
+             * @description Added to Plex.
+             */
+            added_at?: string | null;
         };
         /** AlbumCoverPage */
         AlbumCoverPage: {
@@ -5482,6 +5491,11 @@ export interface components {
              * @default false
              */
             folder_queued: boolean;
+            /**
+             * Added At
+             * @description Added to Plex.
+             */
+            added_at?: string | null;
         };
         /** ArtworkArtistPage */
         ArtworkArtistPage: {
@@ -5612,6 +5626,12 @@ export interface components {
             show: "needs" | "missing" | "low";
             /** Q */
             q?: string | null;
+            /**
+             * Low Px
+             * @description Low resolution: under this many pixels (600, 1000 or 1500).
+             * @default 600
+             */
+            low_px: number;
             /**
              * Sources
              * @description Where matches may come from; None: the user's preference.
@@ -16178,6 +16198,8 @@ export interface operations {
             query?: {
                 show?: "needs" | "missing" | "low" | "all";
                 q?: string | null;
+                low_px?: number;
+                sort?: ("name" | "added" | "smallest") | null;
                 offset?: number;
                 limit?: number;
             };
@@ -16454,6 +16476,7 @@ export interface operations {
             query?: {
                 q?: string | null;
                 status?: ("none" | "custom" | "done") | null;
+                sort?: "name" | "added";
                 offset?: number;
                 limit?: number;
             };

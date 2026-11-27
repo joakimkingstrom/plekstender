@@ -169,9 +169,11 @@ async def list_artists(
     user: UserDep,
     q: Annotated[str | None, Query(max_length=200)] = None,
     status_filter: Annotated[ArtworkStatus | None, Query(alias="status")] = None,
+    sort: Literal["name", "added"] = "name",
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 60,
 ) -> ArtworkArtistPage:
+    """The artists and their artwork, by name, or the newest in Plex first (`added`)."""
     us = await owner_server(db, user, server_id)
     state, cond, where = visible(Artist, user.id, us)
     work = ArtistArtwork
@@ -207,7 +209,11 @@ async def list_artists(
     total = await db.scalar(select(func.count()).select_from(joined.subquery())) or 0
     rows = await db.execute(
         joined.order_by(
-            func.lower(func.coalesce(Artist.title_sort, Artist.title)), Artist.rating_key
+            *(
+                (Artist.added_at.desc().nulls_last(), Artist.rating_key.desc())
+                if sort == "added"
+                else (func.lower(func.coalesce(Artist.title_sort, Artist.title)), Artist.rating_key)
+            )
         )
         .offset(offset)
         .limit(limit)
@@ -225,6 +231,7 @@ async def list_artists(
                 folder=w.folder_path if w else None,
                 folder_saved_at=w.folder_saved_at if w else None,
                 folder_error=w.folder_error if w else None,
+                added_at=a.added_at,
             )
             for a, w in rows.all()
         ],

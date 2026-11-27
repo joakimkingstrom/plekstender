@@ -800,3 +800,17 @@ async def test_search_thumbnails_with_query_strings(
         thumb = await owner.get(candidate["thumb"])
         assert thumb.status_code == 200, (candidate["label"], thumb.text)
         assert thumb.headers["content-type"] == "image/png"
+
+
+@pytest.mark.db
+async def test_artists_by_name_or_newest_first(
+    app: FastAPI, plex: FakePlex, web: respx.MockRouter
+) -> None:
+    owner, sid = await setup(app, plex)
+    base = f"/api/servers/{sid}/artwork/artists"
+    by_name = [a["title"] for a in (await owner.get(base)).json()["items"]]
+    assert by_name == sorted(by_name, key=str.lower)
+    newest = (await owner.get(base, params={"sort": "added"})).json()["items"]
+    # Added a second apart in the fake library, by key: the highest is the newest.
+    keys = [a["rating_key"] for a in newest]
+    assert keys == sorted(keys, reverse=True) and newest[0]["added_at"] is not None
