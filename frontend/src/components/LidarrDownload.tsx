@@ -6,17 +6,45 @@ import { Dialog } from './Dialog'
 import { Tooltip } from './Tooltip'
 import { Badge, Button, Notice, Spinner } from './ui'
 
-const STATE_TEXT: Record<Exclude<LidarrAlbumState, 'absent'>, string> = {
-  monitored: 'In Lidarr',
-  unmonitored: 'In Lidarr, not monitored',
-  downloaded: 'Downloaded by Lidarr',
+/** What each state says (the icon's tooltip and its name for screen readers). */
+function stateText(state: Exclude<LidarrAlbumState, 'absent'>, upcoming: boolean): string {
+  if (state === 'downloaded') return 'Downloaded by Lidarr'
+  if (state === 'unmonitored') return 'In Lidarr, but not monitored: it won\u2019t be downloaded'
+  return upcoming ? 'Monitored by Lidarr: downloaded once it\u2019s out' : 'Monitored by Lidarr'
 }
 
-/** How an album stands in Lidarr, as a small badge (nothing when it isn't there). */
+/** How an album stands in Lidarr, as a small icon with a tooltip (nothing when it isn't
+ * there): monitored a green bookmark, downloaded a green tick, in Lidarr but not monitored
+ * an orange outlined bookmark (something to look at). */
 export function LidarrBadge({ state, upcoming = false }: { state: LidarrAlbumState | undefined; upcoming?: boolean }) {
   if (!state || state === 'absent') return null
-  if (upcoming && state === 'monitored') return <Badge tone="accent">Monitored by Lidarr</Badge>
-  return <Badge tone={state === 'downloaded' ? 'ok' : 'muted'}>{STATE_TEXT[state]}</Badge>
+  const text = stateText(state, upcoming)
+  return (
+    <Tooltip content={text}>
+      <span
+        role="img"
+        aria-label={text}
+        tabIndex={0}
+        className={`inline-flex size-7 items-center justify-center rounded-full ${state === 'unmonitored' ? 'bg-accent/15 text-accent' : 'bg-ok/15 text-ok'}`}
+      >
+        {state === 'downloaded' ? (
+          <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+            <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+            <path
+              d="M4.5 2.5h7v11l-3.5-2.5-3.5 2.5z"
+              fill={state === 'monitored' ? 'currentColor' : 'none'}
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </span>
+    </Tooltip>
+  )
 }
 
 /** Coming up: have Lidarr monitor the album, so it grabs it once it's out. */
@@ -26,7 +54,10 @@ export function LidarrMonitorButton({ mbid, title }: { mbid: string; title: stri
     <>
       <Tooltip content="Lidarr downloads it once it's out">
         <Button variant="ghost" size="xs" busy={add.isPending} onClick={() => add.mutate({ mbid, search: false })} aria-label={`Monitor ${title} in Lidarr`}>
-          Monitor
+          <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+            <path d="M4.5 2.5h7v11l-3.5-2.5-3.5 2.5z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+            <path d="M8 5v4M6 7h4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
         </Button>
       </Tooltip>
       {add.isError && <span className="text-xs text-danger">{errorMessage(add.error)}</span>}

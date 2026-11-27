@@ -1950,6 +1950,9 @@ class LiveShowOut(BaseModel):
     currency: str | None = None
     artists: list[LiveArtistOut] = Field(description="The user's artists on the bill.")
     performers: list[LiveArtistOut] = Field(description="Everyone on the bill.")
+    playlist_id: int | None = Field(
+        default=None, description="Its before-the-gig playlist, when there is one."
+    )
 
 
 class LiveArtistCount(BaseModel):
@@ -2756,3 +2759,21 @@ class LidarrArtistIn(BaseModel):
 class LidarrArtistAddedOut(BaseModel):
     id: int
     name: str
+
+
+class GigShowPlaylistOut(BaseModel):
+    playlist_id: int | None = Field(description="None: none of the setlists' songs were found.")
+    songs: int
+    missing: int = Field(description="Setlist songs not in the library.")
+
+
+class ArtistNeighbourOut(BaseModel):
+    rating_key: int
+    title: str
+
+
+class ArtistNeighboursOut(BaseModel):
+    """The artists before and after one, in the library's order by name."""
+
+    previous: ArtistNeighbourOut | None
+    next: ArtistNeighbourOut | None

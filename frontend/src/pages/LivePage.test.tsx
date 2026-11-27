@@ -118,6 +118,8 @@ beforeEach(() => {
       case '/api/live/tickets':
         festival.got_ticket = (await request!.clone().json()).got_ticket
         return new Response(null, { status: 204 })
+      case '/api/live/shows/2/playlist':
+        return json({ playlist_id: 9, songs: 12, missing: 2 })
       case '/api/live/stars':
         return new Response(null, { status: 204 })
       case '/api/live/calendar':
@@ -240,14 +242,26 @@ describe('LivePage', () => {
     expect(within(row).getByRole('link', { name: 'Songkick' })).toHaveAttribute('href', 'https://www.songkick.com/concerts/42-radiohead')
     // A starred show can be added to a calendar by hand.
     expect(screen.getByRole('link', { name: 'Add to calendar' })).toHaveAttribute('href', '/api/live/shows/2.ics')
-    // Only starred shows offer "I've got a ticket".
-    expect(within(row).queryByRole('button', { name: "I've got a ticket" })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: "I've got a ticket" }))
-    expect(await screen.findByText('🎟 Got a ticket')).toBeInTheDocument()
+    // Only starred shows offer "Got a ticket?".
+    expect(within(row).queryByRole('button', { name: /Got a ticket\?/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Got a ticket\?/ }))
+    const pill = await screen.findByRole('button', { name: '🎟 Got a ticket' })
     await vi.waitFor(async () => {
       const put = requestsTo('/api/live/tickets').at(-1)
       expect(put && (await put.clone().json())).toEqual({ ids: [2], got_ticket: true })
     })
+    // The pill asks before taking it back.
+    fireEvent.click(pill)
+    const confirm = await screen.findByRole('dialog', { name: 'No ticket after all?' })
+    fireEvent.click(within(confirm).getByRole('button', { name: "I don't have a ticket" }))
+    await vi.waitFor(async () => {
+      const put = requestsTo('/api/live/tickets').at(-1)
+      expect(put && (await put.clone().json())).toEqual({ ids: [2], got_ticket: false })
+    })
+
+    // A playlist of what they've been playing lately, made now.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Make a playlist for this gig' }).at(-1)!)
+    expect(await screen.findByText(/Playlist ready: 12 songs, 2 not in your library/)).toBeInTheDocument()
 
     fireEvent.click(within(row).getByRole('button', { name: 'Star' }))
     await vi.waitFor(async () => {

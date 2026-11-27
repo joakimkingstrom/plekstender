@@ -189,3 +189,18 @@ async def test_gig_playlists(app: FastAPI, plex: FakePlex, monkeypatch: pytest.M
     assert asked == []
     items = (await owner.get("/api/gigs/playlists")).json()["items"]
     assert (items[0]["kind"], items[0]["playlist_id"]) == ("before", None)
+
+    # Asked for from the gig's row: made again (deleted or not), straight away.
+    [show] = (await owner.get("/api/live/shows")).json()["shows"]
+    assert show["playlist_id"] is None
+    again = await owner.post(f"/api/live/shows/{show['id']}/playlist", headers=CSRF)
+    assert again.status_code == 200, again.text
+    made_again = again.json()
+    assert (made_again["songs"], made_again["missing"]) == (3, 2)
+    assert made_again["playlist_id"] is not None
+    [show] = (await owner.get("/api/live/shows")).json()["shows"]
+    assert show["playlist_id"] == made_again["playlist_id"]
+    # Rebuilt: the same playlist.
+    rebuilt = (await owner.post(f"/api/live/shows/{show['id']}/playlist", headers=CSRF)).json()
+    assert rebuilt["playlist_id"] == made_again["playlist_id"]
+    assert (await owner.post("/api/live/shows/999999/playlist", headers=CSRF)).status_code == 404

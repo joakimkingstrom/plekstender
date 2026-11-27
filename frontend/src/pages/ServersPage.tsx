@@ -69,24 +69,27 @@ function ConnectedServer({ server }: { server: Schemas['ServerOut'] }) {
         </span>
       }
       action={
-        // Stacked: side by side they squeeze the server's name and badges.
-        <div className="flex flex-col items-end gap-1">
-          <Tooltip content="Find the best address for this server again">
-            <Button variant="ghost" busy={connect.isPending} onClick={() => connect.mutate(server.machine_identifier)}>
-              Reconnect
+        // Stacked, the second one hanging into the space below (next to "Music libraries to
+        // use"), so the title row stays one line high and the name keeps its room.
+        <div className="relative h-9 w-28 shrink-0 self-start">
+          <div className="absolute right-0 top-0 z-10 flex flex-col items-end gap-1">
+            <Tooltip content="Find the best address for this server again">
+              <Button variant="ghost" busy={connect.isPending} onClick={() => connect.mutate(server.machine_identifier)}>
+                Reconnect
+              </Button>
+            </Tooltip>
+            <Button
+              variant="danger"
+              busy={disconnect.isPending}
+              onClick={() => {
+                if (window.confirm(`Disconnect ${server.name} from Plekstender?`)) {
+                  disconnect.mutate(server.id)
+                }
+              }}
+            >
+              Disconnect
             </Button>
-          </Tooltip>
-          <Button
-            variant="danger"
-            busy={disconnect.isPending}
-            onClick={() => {
-              if (window.confirm(`Disconnect ${server.name} from Plekstender?`)) {
-                disconnect.mutate(server.id)
-              }
-            }}
-          >
-            Disconnect
-          </Button>
+          </div>
         </div>
       }
     >
