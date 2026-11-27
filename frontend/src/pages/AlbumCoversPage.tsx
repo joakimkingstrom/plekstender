@@ -56,6 +56,10 @@ const SOURCE_NAME: Record<string, string> = {
 }
 
 const size = (w: number | null | undefined, h: number | null | undefined) => (w && h ? `${w}×${h}` : null)
+/** From this many pixels on the shorter side a cover is shown in green: as good as it gets. */
+const GREAT = 1500
+const great = (w: number | null | undefined, h: number | null | undefined) => Boolean(w && h && Math.min(w, h) >= GREAT)
+const sizeTone = (w: number | null | undefined, h: number | null | undefined) => (great(w, h) ? 'text-ok' : 'text-muted')
 
 /** How a cover is doing, for the list and the editor. */
 function CoverBadge({ cover }: { cover: AlbumCover }) {
@@ -66,7 +70,7 @@ function CoverBadge({ cover }: { cover: AlbumCover }) {
         ? [size(cover.width, cover.height) ?? 'Low', 'bg-warn/15 text-warn']
         : cover.state === 'unchecked'
           ? ['Measuring…', 'text-muted']
-          : [size(cover.width, cover.height) ?? 'OK', 'text-muted']
+          : [size(cover.width, cover.height) ?? 'OK', great(cover.width, cover.height) ? 'bg-ok/15 text-ok' : 'text-muted']
   return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums ${tone}`}>{cover.kept ? `Kept · ${text}` : text}</span>
 }
 
@@ -311,7 +315,9 @@ function CoverEditor({
               <Zoomable image={album.thumb ? { src: imageUrl(serverId, album.thumb, 1000)!, alt: `Current cover of ${album.title}` } : null}>
                 <Artwork serverId={serverId} path={album.thumb} title={album.title} size={1000} className="w-full" />
               </Zoomable>
-              <figcaption className="text-center text-sm text-muted">Now{now ? ` · ${now}` : ''}</figcaption>
+              <figcaption className="text-center text-sm text-muted">
+                Now{now && <span className={sizeTone(album.width, album.height)}> · {now}</span>}
+              </figcaption>
             </figure>
             <figure className="space-y-1">
               <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
@@ -329,7 +335,9 @@ function CoverEditor({
                   </span>
                 )}
               </div>
-              <figcaption className="text-center text-sm text-muted">New{preview.width ? ` · ${size(preview.width, preview.height)}` : ''}</figcaption>
+              <figcaption className="text-center text-sm text-muted">
+                New{preview.width ? <span className={sizeTone(preview.width, preview.height)}> · {size(preview.width, preview.height)}</span> : ''}
+              </figcaption>
             </figure>
           </div>
           {preview.error && (
@@ -548,7 +556,7 @@ function CoverGrid({
                 <span className="mt-1 block truncate text-xs" title={c.label ?? undefined}>
                   {c.label ?? 'Cover'}
                 </span>
-                {dims && <span className="block text-[11px] tabular-nums text-muted">{dims}</span>}
+                {dims && <span className={`block text-[11px] tabular-nums ${sizeTone(c.width, c.height)}`}>{dims}</span>}
               </button>
             </li>
           )
