@@ -158,15 +158,17 @@ export function LyricsPanel({
           </span>
         </span>
       </label>
-      <Select label="Which songs" value={mode} onChange={setMode} options={LOOKUP_MODES} />
-      <Button
-        variant={jobId === null ? 'primary' : 'secondary'}
-        busy={starting}
-        disabled={asFound && canWrite && nowhere}
-        onClick={() => void start()}
-      >
-        {jobId === null ? 'Look up lyrics' : 'Look up again'}
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Select label="Which songs" value={mode} onChange={setMode} options={LOOKUP_MODES} />
+        <Button
+          variant={jobId === null ? 'primary' : 'secondary'}
+          busy={starting}
+          disabled={asFound && canWrite && nowhere}
+          onClick={() => void start()}
+        >
+          {jobId === null ? 'Look up lyrics' : 'Look up again'}
+        </Button>
+      </div>
     </div>
   )
   const writeOff = !canWrite && (
