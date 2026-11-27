@@ -236,14 +236,19 @@ class _Queued:
     status: str
     lock: str | None
     started_at: dt.datetime | None
+    # Running on a worker that has stopped (its heartbeats did): the queue closes it soon.
+    orphaned: bool = False
 
 
 _QUEUE = text(
     """
     SELECT j.id, j.task_name, j.args, j.status::text, j.lock,
            (SELECT min(e.at) FROM procrastinate_events e
-             WHERE e.job_id = j.id AND e.type = 'started') AS started_at
+             WHERE e.job_id = j.id AND e.type = 'started') AS started_at,
+           j.status = 'doing'
+             AND (w.id IS NULL OR w.last_heartbeat < now() - interval '1 minute') AS orphaned
     FROM procrastinate_jobs j
+    LEFT JOIN procrastinate_workers w ON w.id = j.worker_id
     WHERE j.status IN ('todo', 'doing')
     ORDER BY j.id
     """
@@ -284,7 +289,13 @@ async def add_waiting(db: AsyncSession, active: list[Job]) -> None:
             and (e.status == "doing" or e.id < entry.id)
         ]  # fmt: skip
         first = next((e for e in ahead if e.status == "doing"), ahead[0] if ahead else None)
-        if first is not None:
+        if first is not None and first.orphaned:
+            job.waiting_for = Waiting(
+                f"{_describe(first, jobs)}, left unfinished by a worker that stopped"
+                " (it's cleared within 5 minutes)",
+                None,
+            )
+        elif first is not None:
             job.waiting_for = Waiting(_describe(first, jobs), first.started_at)
         elif any(e.status == "doing" for e in entries):
             job.waiting_for = Waiting(

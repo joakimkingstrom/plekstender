@@ -26,11 +26,15 @@ async def test_jobs_and_what_they_wait_for(app: FastAPI, plex: FakePlex) -> None
         await enqueue_duplicates(dupes)
         await enqueue_file_scan(scan)
         # The worker took the duplicates job: it holds the music folder's lock.
+        worker_id = await db.scalar(
+            text("INSERT INTO procrastinate_workers DEFAULT VALUES RETURNING id")
+        )
         await db.execute(
             text(
-                "UPDATE procrastinate_jobs SET status = 'doing' "
+                "UPDATE procrastinate_jobs SET status = 'doing', worker_id = :worker "
                 "WHERE task_name = 'plekstender.worker.find_duplicates'"
-            )
+            ),
+            {"worker": worker_id},
         )
         await db.execute(
             text(
@@ -51,6 +55,19 @@ async def test_jobs_and_what_they_wait_for(app: FastAPI, plex: FakePlex) -> None
     assert waiting["what"] == "Reading the music files' tags"
     assert waiting["waiting_for"]["what"] == "Finding duplicate files"
     assert waiting["waiting_for"]["since"] is not None
+
+    # The worker stops (killed mid-job): its job keeps the lock until the queue closes it.
+    async with get_sessionmaker()() as db:
+        await db.execute(
+            text("UPDATE procrastinate_workers SET last_heartbeat = now() - interval '3 minutes'")
+        )
+        await db.commit()
+    waiting = (await owner.get("/api/jobs")).json()["active"][1]
+    assert waiting["waiting_for"] == {
+        "what": "Finding duplicate files, left unfinished by a worker that stopped"
+        " (it's cleared within 5 minutes)",
+        "since": None,
+    }
     # The library sync that ran when the server was connected, among the finished ones.
     assert any(j["kind"] == "sync" and j["status"] == "succeeded" for j in jobs["finished"])
 
