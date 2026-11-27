@@ -131,6 +131,33 @@ class _ApprovedTransport(httpx.AsyncHTTPTransport):
         self._pool = httpcore.AsyncConnectionPool(ssl_context=_SSL, network_backend=_ApprovedOnly())
 
 
+class GuardedTransport(httpx.AsyncBaseTransport):
+    """For servers people point Plekstender at themselves (a scrobble server on their home
+    network): every request's host is checked by `check` (host -> the address to use, or
+    an error), and the connection goes to that address only, never to a second lookup's
+    answer (DNS rebinding). What's allowed is up to `check`, unlike check_url's public-only
+    rule."""
+
+    def __init__(self, check: Callable[[str], Awaitable[str]]) -> None:
+        self._check = check
+        self._inner = _ApprovedTransport()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        host = request.url.host
+        try:
+            address = await self._check(host)
+        except Exception as exc:  # the check's own reason, as a connection that failed
+            raise httpx.ConnectError(str(exc), request=request) from exc
+        approved = _approved.set({**(_approved.get() or {}), host: address})
+        try:
+            return await self._inner.handle_async_request(request)
+        finally:
+            _approved.reset(approved)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
 @asynccontextmanager
 async def _open(http: httpx.AsyncClient, url: str) -> AsyncIterator[httpx.Response]:
     """A streamed GET of a public URL, redirects followed by hand (each hop checked, and

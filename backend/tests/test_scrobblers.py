@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import ipaddress
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -12,6 +13,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import select
 
+from plekstender.artwork import fetch as fetch_mod
 from plekstender.config import get_settings
 from plekstender.db import get_sessionmaker
 from plekstender.db.models import Listen, ScrobbleTarget, User
@@ -22,6 +24,22 @@ from tests.test_sync import connect, owner_with_library, run_queued_syncs
 MALOJA = "https://maloja.example/apis/listenbrainz"
 KOITO = "https://koito.example/apis/listenbrainz"
 LIBREFM = "https://libre.fm/2.0/"
+
+# Where the fake hosts resolve: a home server (fine for scrobble servers), unless a test
+# says otherwise; addresses are themselves.
+HOSTS: dict[str, str] = {}
+
+
+@pytest.fixture(autouse=True)
+def resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake(host: str) -> list[str]:
+        try:
+            return [str(ipaddress.ip_address(host.strip("[]")))]
+        except ValueError:
+            return [HOSTS.get(host, "192.168.1.20")]
+
+    HOSTS.clear()
+    monkeypatch.setattr(fetch_mod, "resolver", fake)
 
 
 def test_addresses() -> None:
@@ -355,3 +373,26 @@ async def test_scrobble_servers_cant_be_this_machine(app: FastAPI, plex: FakePle
         assert (
             refused.status_code == 400 and "can't be a scrobble server" in refused.json()["detail"]
         ), url
+
+
+@pytest.mark.db
+async def test_a_scrobble_server_that_later_points_here_isnt_reached(
+    app: FastAPI, plex: FakePlex
+) -> None:
+    """Checked when added, and again on every request (connecting to the address checked):
+    a name that later resolves to this machine (DNS rebinding) gets nothing."""
+    owner, _ = await owner_with_library(app, plex)
+    user_id = (await owner.get("/api/auth/me")).json()["id"]
+    servers = FakeServers(plex)
+    added = await owner.post(
+        "/api/scrobblers",
+        json={"service": "maloja", "url": MALOJA, "token": "maloja-key"},
+        headers=CSRF,
+    )
+    assert added.status_code == 201, added.text
+    HOSTS["maloja.example"] = "127.0.0.1"
+    await add_plays(user_id, 1)
+    [result] = (await send(user_id)).values()
+    assert result.sent == 0 and result.error and servers.maloja == []
+    [listed] = (await owner.get("/api/scrobblers")).json()
+    assert listed["pending"] == 1  # kept, for when the address is right again

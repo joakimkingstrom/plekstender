@@ -714,3 +714,25 @@ async def test_gig_filters_and_biggest_artists_first(app: FastAPI, plex: FakePle
     assert await cities(unplaced=True) == ["Brixton", "Stockholm"]
     assert await cities(country="SE", year=2019) == []
     assert (await owner.get("/api/gigs", params={"country": "Sweden"})).status_code == 422
+
+
+def test_setlist_links() -> None:
+    """The setlist's ID from a setlist.fm link, wherever it is in what was pasted; quickly,
+    however long and repetitive the text."""
+    import time
+
+    from plekstender.gigs.imports import setlist_id
+
+    page = (
+        "https://www.setlist.fm/setlist/radiohead/2017/pyramid-stage-pilton-england-63de4613.html"
+    )
+    assert setlist_id(page) == "63de4613"
+    assert setlist_id("setlist.fm/setlist/63DE4613.html") == "63de4613"
+    assert setlist_id(f"see {page}?ref=x thanks") == "63de4613"
+    assert setlist_id("https://www.setlist.fm/venue/the-o2-63de4613.html") is None
+    assert setlist_id("https://example.com/setlist/63de4613.html") is None
+    assert setlist_id("") is None
+    started = time.perf_counter()
+    assert setlist_id("setlist.fm/setlist/" * 100) is None
+    assert setlist_id("setlist.fm/setlist/" + "-" * 100_000) is None  # too long to be a link
+    assert time.perf_counter() - started < 0.2
