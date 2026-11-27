@@ -82,6 +82,11 @@ function usePosition(state: PlayerState | undefined, updatedAt: number): number 
   return Math.min(base + moved, state?.duration_ms ?? base + moved)
 }
 
+/** What a player is playing, the artist first: "Paramore · Pool". */
+function nowPlaying(p: Player): string {
+  return [p.playing?.artist, p.playing?.title].filter(Boolean).join(' · ')
+}
+
 function Chooser({ players, current, onChoose }: { players: Player[]; current: string | null; onChoose: (id: string) => void }) {
   return (
     <ul className="max-h-72 overflow-y-auto py-1" aria-label="Players">
@@ -96,7 +101,7 @@ function Chooser({ players, current, onChoose }: { players: Player[]; current: s
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{p.name}</span>
               <span className="block truncate text-xs text-muted">
-                {p.playing ? `${p.playing.state === 'paused' ? 'Paused' : 'Playing'}: ${p.playing.title ?? ''}${p.playing.artist ? ` · ${p.playing.artist}` : ''}` : [p.product, p.platform].filter(Boolean).join(' · ')}
+                {p.playing ? `${p.playing.state === 'paused' ? 'Paused' : 'Playing'}: ${nowPlaying(p)}` : [p.product, p.platform].filter(Boolean).join(' · ')}
               </span>
             </span>
           </button>
@@ -213,7 +218,10 @@ function Expanded({ serverId, player, onMinimise, onSwitch }: { serverId: number
           <span>{formatTime(duration)}</span>
         </div>
       </div>
-      <div className="flex items-center justify-between px-3 pb-2">
+      {/* The controls centred, the queue at the right (an empty place at the left keeps play
+          in the middle). */}
+      <div className="flex items-center justify-between px-3 pb-3">
+        <span className="size-9" aria-hidden />
         <Control label={s?.shuffle ? 'Shuffle: on' : 'Shuffle: off'} active={s?.shuffle} disabled={!can('shuffle')} onClick={() => send('shuffle', s?.shuffle ? 0 : 1)}>
           <Icon>
             <path d="M3 6h3l8 8h3M3 14h3l2-2M12 8l2-2h3M15 4l2 2-2 2M15 12l2 2-2 2" />
@@ -246,17 +254,17 @@ function Expanded({ serverId, player, onMinimise, onSwitch }: { serverId: number
             {s?.repeat === 1 && <text x="10" y="12.5" fontSize="6" textAnchor="middle" fill="currentColor" stroke="none">1</text>}
           </Icon>
         </Control>
-      </div>
-      <div className="flex items-center justify-between gap-2 px-4 pb-3">
-        <p className={`min-w-0 text-xs ${problem ? 'text-danger' : 'text-muted'}`} role={problem ? 'alert' : undefined}>
-          {problem ?? ''}
-        </p>
         <Control label={showQueue ? 'Hide the queue' : 'Show the queue'} active={showQueue} onClick={() => setShowQueue(!showQueue)}>
           <Icon>
             <path d="M3 5h10M3 10h10M3 15h6M15 12v5l3-2.5z" />
           </Icon>
         </Control>
       </div>
+      {problem && (
+        <p className="px-4 pb-3 text-xs text-danger" role="alert">
+          {problem}
+        </p>
+      )}
       {showQueue && s && <Queue serverId={serverId} playerId={player.id} state={s} onSkip={(itemId, key) => send('skip_to', itemId, key)} />}
     </section>
   )
@@ -277,6 +285,8 @@ export function PlayerWidget() {
   const mine = (players.data?.players ?? []).filter((p) => p.on_account || p.on_server)
   const playing = mine.filter((p) => p.playing)
   const player = mine.find((p) => p.id === chosen) ?? null
+  // Minimised: the chosen player when it's playing, else the first that is.
+  const shownPlaying = playing.find((p) => p.id === chosen) ?? playing[0] ?? null
   if (serverId === null || (!open && playing.length === 0)) return null
 
   const choose = (id: string) => {
@@ -300,15 +310,19 @@ export function PlayerWidget() {
           type="button"
           onClick={() => setChoosing(!choosing)}
           aria-expanded={choosing}
-          className="flex max-w-[min(20rem,calc(100vw-2rem))] items-center gap-2 rounded-full border border-border bg-surface py-2 pr-4 pl-3 text-sm shadow-lg hover:bg-surface-2"
+          className="flex max-w-[min(20rem,calc(100vw-2rem))] items-center gap-3 rounded-full border border-border bg-surface py-2 pr-5 pl-4 text-sm shadow-lg hover:bg-surface-2"
         >
           <span className="flex h-4 items-end gap-0.5 text-accent" aria-hidden>
             <span className="w-1 animate-pulse rounded-sm bg-current" style={{ height: '60%' }} />
             <span className="w-1 animate-pulse rounded-sm bg-current [animation-delay:200ms]" style={{ height: '100%' }} />
             <span className="w-1 animate-pulse rounded-sm bg-current [animation-delay:400ms]" style={{ height: '40%' }} />
           </span>
-          <span className="truncate">
-            {playing.length === 1 ? `Playing on ${playing[0].name}` : `Playing on ${playing.length} players`}
+          <span className="min-w-0 text-left leading-tight">
+            <span className="block truncate font-medium">{shownPlaying ? nowPlaying(shownPlaying) : ''}</span>
+            <span className="block truncate text-xs text-muted">
+              {shownPlaying?.playing?.state === 'paused' ? 'Paused' : 'Playing'} on {shownPlaying?.name}
+              {playing.length > 1 && ` · ${playing.length - 1} more`}
+            </span>
           </span>
         </button>
       )}
