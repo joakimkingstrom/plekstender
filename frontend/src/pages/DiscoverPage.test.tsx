@@ -53,6 +53,47 @@ afterEach(() => {
 })
 
 describe('Discover', () => {
+  it('shows the top 3 as cards with their artwork, 4–10 with their banner, then a list', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      key: `artist ${i + 1}`,
+      name: `Artist ${i + 1}`,
+      similar_to: 20 - i,
+      listens: 0,
+      sources: [{ name: 'Radiohead', rating_key: 100 }],
+      art: i < 10 ? { background: i < 3 ? `/bg${i + 1}` : null, banner: i === 6 ? null : `/banner${i + 1}`, logo: i === 0 ? '/logo1' : null } : null,
+    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: Request) => {
+        const path = new URL(input.url).pathname
+        const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
+        if (path === '/api/servers') return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
+        if (path === '/api/servers/1/sync') return json({ active: null, last: null, last_sync_at: null, counts: { artists: 3, albums: 3, tracks: 30, rated_tracks: 0, plays: 0 }, incremental_minutes: 30, full_days: 7 })
+        if (path === '/api/servers/1/library/discover') return json({ items: many, total: 12, hidden: 0 })
+        return json({ available: false })
+      }),
+    )
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <DiscoverPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    const top = await screen.findByRole('list', { name: 'Top suggestions' })
+    expect(within(top).getAllByRole('listitem')).toHaveLength(3)
+    // The logo stands for the name (an image named after the artist); no logo: the name.
+    expect(within(top).getByRole('img', { name: 'Artist 1' })).toHaveAttribute('src', '/logo1')
+    expect(within(top).getByRole('heading', { name: 'Artist 2' })).toBeInTheDocument()
+    expect(container.querySelector('img[src="/bg2"]')).not.toBeNull()
+    // 4–10: banners (7 has none: its name instead); 11 on: plain rows.
+    expect(container.querySelector('img[src="/banner4"]')).not.toBeNull()
+    expect(container.querySelector('img[src="/banner7"]')).toBeNull()
+    const row11 = screen.getByText('Artist 11').closest('li')!
+    expect(row11.querySelector('img')).toBeNull()
+    expect(row11).toHaveTextContent('11')
+  })
+
   it('lists artists to add, why, and hides one', async () => {
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -62,13 +103,13 @@ describe('Discover', () => {
       </QueryClientProvider>,
     )
     const first = (await screen.findByText('Muse')).closest('li')!
-    expect(first).toHaveTextContent('similar to 12 of your artists')
+    expect(first).toHaveTextContent(/similar to 12 of your artists/i)
     expect(first).toHaveTextContent('42 plays')
     expect(within(first).getByRole('meter', { name: 'Your plays of Muse' })).toHaveAttribute('aria-valuenow', '42')
     expect(first).toHaveTextContent('Radiohead, Placebo and 10 more')
     expect(within(first).getByRole('link', { name: 'Radiohead' })).toHaveAttribute('href', '/library/artists/100')
     expect(within(first).getByRole('link', { name: 'Muse on Last.fm' })).toHaveAttribute('href', 'https://www.last.fm/music/Muse')
-    expect(screen.getByText('Massive Attack').closest('li')).toHaveTextContent('similar to 3 of your artistsPortishead')
+    expect(screen.getByText('Massive Attack').closest('li')).toHaveTextContent(/similar to 3 of your artistsPortishead/i)
 
     fireEvent.click(within(first).getByRole('button', { name: 'Hide Muse' }))
     await vi.waitFor(() => expect(requests.some((r) => r.method === 'POST')).toBe(true))
