@@ -2652,12 +2652,23 @@ class SuggestionSourceOut(BaseModel):
     rating_key: int
 
 
+class SuggestionArtOut(BaseModel):
+    """fanart.tv artwork of a top suggestion (kept by Plekstender): where to load each."""
+
+    background: str | None
+    banner: str | None
+    logo: str | None
+
+
 class ArtistSuggestionOut(BaseModel):
     key: str
     name: str
     similar_to: int = Field(description="Library artists Plex names it as similar to.")
     sources: list[SuggestionSourceOut] = Field(description="Some of them, most played first.")
     listens: int = Field(description="Your listens to it (scrobbles count too).")
+    art: SuggestionArtOut | None = Field(
+        default=None, description="The top suggestions' artwork, once looked up (if any)."
+    )
 
 
 class ArtistSuggestionsOut(BaseModel):

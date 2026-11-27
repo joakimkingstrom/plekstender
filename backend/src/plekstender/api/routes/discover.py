@@ -2,24 +2,31 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi.responses import Response as RawResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from plekstender.api.deps import DbDep, UserDep
+from plekstender import discover_art, musicbrainz
+from plekstender.api.deps import DbDep, SettingsDep, UserDep
+from plekstender.api.ratelimit import rate_limit
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
     ArtistSuggestionOut,
     ArtistSuggestionsOut,
     HideSuggestionIn,
+    SuggestionArtOut,
     SuggestionSourceOut,
 )
 from plekstender.artist_suggestions import SOURCES_SHOWN, suggestions
-from plekstender.db.models import HiddenSuggestion
+from plekstender.db.models import DiscoverArt, HiddenSuggestion
+from plekstender.worker import enqueue_discover_art
 
 router = APIRouter(prefix="/api/servers/{server_id}/library/discover", tags=["library"])
+art_router = APIRouter(prefix="/api/discover-art", tags=["library"])
 
 
 @router.get("", response_model=ArtistSuggestionsOut)
@@ -36,6 +43,12 @@ async def artists_to_add(
     us = await get_user_server(db, user, server_id)
     found = await suggestions(db, user.id, us, hidden=hidden)
     hidden_count = await db.scalar(select(func.count()).where(HiddenSuggestion.user_id == user.id))
+    # The top ones get artwork (the big cards and the banner rows): look up any not yet.
+    top = [] if hidden else [s.key for s in found[: discover_art.TOP]]
+    art = await discover_art.for_keys(db, top)
+    if await discover_art.missing(db, top):
+        await enqueue_discover_art()
+    page = found[offset : offset + limit]
     return ArtistSuggestionsOut(
         items=[
             ArtistSuggestionOut(
@@ -47,11 +60,46 @@ async def artists_to_add(
                     for x in s.sources[:SOURCES_SHOWN]
                 ],
                 listens=s.listens,
+                art=_art(art.get(s.key)),
             )
-            for s in found[offset : offset + limit]
+            for s in page
         ],
         total=len(found),
         hidden=hidden_count or 0,
+    )
+
+
+def _art(found: DiscoverArt | None) -> SuggestionArtOut | None:
+    if found is None or not found.mbid or not (found.background or found.banner or found.logo):
+        return None
+    url = f"/api/discover-art/{found.mbid}"
+    return SuggestionArtOut(
+        background=f"{url}/background" if found.background else None,
+        banner=f"{url}/banner" if found.banner else None,
+        logo=f"{url}/logo" if found.logo else None,
+    )
+
+
+@art_router.get(
+    "/{mbid}/{kind}",
+    response_class=RawResponse,
+    responses={200: {"content": {"image/jpeg": {}, "image/png": {}}}, 404: {}},
+    dependencies=[rate_limit("discover-art", limit=600, window=60)],
+)
+async def discover_artwork(
+    mbid: str, kind: discover_art.Kind, user: UserDep, settings: SettingsDep
+) -> RawResponse:
+    """A suggested artist's fanart.tv background, banner or logo, as kept by Plekstender."""
+    if not musicbrainz.MBID.fullmatch(mbid):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    try:
+        body = await asyncio.to_thread(discover_art.path(settings, mbid, kind).read_bytes)
+    except OSError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found") from exc
+    return RawResponse(
+        body,
+        media_type=discover_art.media_type(body),
+        headers={"Cache-Control": "private, max-age=86400"},
     )
 
 
