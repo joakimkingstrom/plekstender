@@ -1,7 +1,9 @@
 name: Release
 
-# Run by hand (Actions -> Release -> Run workflow) to make a release of the newest image built
-# from main. It doesn't build anything: it names a build that's already published.
+# Runs by itself after each image published from main (a merge into main: CI, then "Publish
+# image", then this), and can be run by hand (Actions -> Release -> Run workflow), with notes,
+# for the newest image built from main. It doesn't build anything: it names a build that's
+# already published.
 # - A GitHub release v<version> at that commit, its notes listing the commits since the last
 #   release (dependency updates separately), after anything written in "notes".
 # - The image tag `stable`, moved to that build, for setups that follow releases only.
@@ -13,6 +15,10 @@ on:
         description: "A few words at the top of the release notes (optional)"
         required: false
         default: ""
+  workflow_run: # zizmor: ignore[dangerous-triggers] main's commits only, checked below; no code from the run is used
+    workflows: [Publish image]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: write # the release and its tag
@@ -24,12 +30,18 @@ concurrency:
 
 jobs:
   release:
+    # By hand, or after an image was published from main (not when CI failed or the publish
+    # was skipped or cancelled).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false # nothing is pushed with git (gh makes the tag)
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -38,12 +50,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # The newest published build: main's newest commit that has an image (main may be a
-      # commit or two ahead of the last build, while CI runs or after a combined push).
+      # commit or two ahead of the last build, while CI runs or after a combined push). After
+      # a publish, the build it just published.
       - id: build
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/plekstender
+          PUBLISHED: ${{ github.event.workflow_run.head_sha }}
         run: |
-          for sha in $(git rev-list --max-count=20 HEAD); do
+          # Only ever main's own commits (workflow_run can be set off from other branches).
+          if [ -n "$PUBLISHED" ] && ! git merge-base --is-ancestor "$PUBLISHED" HEAD; then
+            echo "::error::$PUBLISHED isn't on main."
+            exit 1
+          fi
+          for sha in $(git rev-list --max-count=20 "${PUBLISHED:-HEAD}"); do
             if docker buildx imagetools inspect "$IMAGE:sha-${sha::7}" > /dev/null 2>&1; then
               git checkout --quiet "$sha"
               version=$(.github/scripts/version.sh)
@@ -57,17 +76,26 @@ jobs:
           exit 1
 
       - name: Release notes
+        id: notes
         env:
           SHA: ${{ steps.build.outputs.sha }}
           VERSION: ${{ steps.build.outputs.version }}
           NOTES: ${{ inputs.notes }}
+          EVENT: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "v$VERSION" > /dev/null 2>&1; then
-            echo "::error::v$VERSION is already released."
+          if gh release view "v$VERSION" > /dev/null 2>&1 || gh release view "$VERSION" > /dev/null 2>&1; then
+            # A publish run again, say: nothing new to release.
+            if [ "$EVENT" = workflow_run ]; then
+              echo "$VERSION is already released." >> "$GITHUB_STEP_SUMMARY"
+              echo "released=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::$VERSION is already released."
             exit 1
           fi
-          previous=$(git tag --list 'v*' --merged "$SHA" --sort=-v:refname | head -1)
+          # The last release before this one (tagged v0.1.214, or 0.1.244 when made by hand).
+          previous=$(git tag --list 'v[0-9]*' '[0-9]*' --merged "$SHA" --sort=-creatordate | head -1)
           range=${previous:+$previous..}$SHA
           {
             if [ -n "$NOTES" ]; then printf '%s\n\n' "$NOTES"; fi
@@ -90,12 +118,14 @@ jobs:
           cat notes.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Tag the image `stable`
+        if: steps.notes.outputs.released != 'true'
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/plekstender
           VERSION: ${{ steps.build.outputs.version }}
         run: docker buildx imagetools create --tag "$IMAGE:stable" "$IMAGE:$VERSION"
 
       - name: Make the release
+        if: steps.notes.outputs.released != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ steps.build.outputs.sha }}
