@@ -809,9 +809,10 @@ AlbumCoverState = Literal["missing", "low", "ok", "unchecked"]
 AlbumCoverFilter = Literal["needs", "missing", "low", "all"]
 # Under how many pixels (on its shorter side) a cover counts as low resolution.
 LOW_RESOLUTIONS = (600, 1000, 1500)
-# name: by artist then album; added: newest in Plex first; smallest: no cover first, then
-# the smallest covers (the default, except for "all", which is by name).
-AlbumCoverSort = Literal["name", "added", "smallest"]
+# name: by artist then album; added: newest in Plex first; changed: the covers changed here
+# most recently first; smallest: no cover first, then the smallest covers (the default,
+# except for "all", which is by name).
+AlbumCoverSort = Literal["name", "added", "changed", "smallest"]
 
 
 class AlbumCoverOut(BaseModel):

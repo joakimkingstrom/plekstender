@@ -190,6 +190,8 @@ async def list_covers(
         if sort == "name"
         else (Album.added_at.desc().nulls_last(), Album.rating_key.desc())
         if sort == "added"
+        else (AlbumCover.applied_at.desc().nulls_last(), *by_name)
+        if sort == "changed"
         else (*smallest, *by_name)
     )
     rows = await db.execute(query.order_by(*order).offset(offset).limit(limit))

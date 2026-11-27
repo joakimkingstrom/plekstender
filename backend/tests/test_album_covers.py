@@ -260,6 +260,10 @@ async def test_album_covers(
     )
     assert plex.library.uploaded[-1][0] == 201
     assert [a["title"] for a in (await owner.get(base)).json()["items"]] == ["Dummy"]
+    # Recently changed: the one just saved first, the rest by name.
+    changed = (await owner.get(base, params={"show": "all", "sort": "changed"})).json()["items"]
+    assert changed[0]["rating_key"] == 201 and changed[0]["applied_at"] is not None
+    assert all(a["applied_at"] is None for a in changed[1:])
 
     # A wide image cropped to a square.
     async def upload(data: bytes) -> str:

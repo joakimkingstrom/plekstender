@@ -20,7 +20,7 @@ export const artworkKeys = {
   fanartKey: ['admin', 'fanart'] as const,
 }
 
-export type ArtistSort = 'name' | 'added'
+export type ArtistSort = 'name' | 'added' | 'changed'
 
 export function useArtworkArtists(serverId: number, q: string, status: ArtworkStatus | null, sort: ArtistSort = 'name') {
   return useInfiniteQuery({

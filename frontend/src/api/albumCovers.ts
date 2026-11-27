@@ -11,7 +11,7 @@ export type CoverFilter = NonNullable<
 >
 // Low resolution: under this many pixels on the shorter side.
 export type LowPx = 600 | 1000 | 1500
-export type CoverSort = 'name' | 'added' | 'smallest'
+export type CoverSort = 'name' | 'added' | 'changed' | 'smallest'
 export type CoverSource = 'coverartarchive' | 'deezer' | 'itunes' | 'tidal' | 'fanart' | 'plex' | 'search'
 
 const keys = {

@@ -297,6 +297,9 @@ async def test_artwork_editor_flow(app: FastAPI, plex: FakePlex, web: respx.Mock
     assert applied.json()["thumb"] == "/library/metadata/100/thumb/1"  # the new poster
     [(key, image)] = plex.library.uploaded
     assert key == 100 and jpeg_size(image) == (1000, 1000)
+    # Recently changed: the artist just done first.
+    changed = (await owner.get(f"{base}/artists", params={"sort": "changed"})).json()["items"]
+    assert changed[0]["rating_key"] == 100
 
     # Upload your own, and a Plex poster.
     upload = await owner.post(
