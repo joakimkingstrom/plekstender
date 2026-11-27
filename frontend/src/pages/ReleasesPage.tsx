@@ -17,7 +17,7 @@ import { DownloadIcon, LidarrBadge, LidarrDownloadDialog, LidarrMonitorButton } 
 import { CoverSizeSwitch } from '../components/CoverSizeSwitch'
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
-import { Badge, Button, Card, Notice, Spinner } from '../components/ui'
+import { Button, Card, Notice, Spinner } from '../components/ui'
 import { Tooltip } from '../components/Tooltip'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { useCoverSize, type CoverSize } from '../coverSize'
@@ -110,7 +110,16 @@ function ReleaseCard({ release, serverId, artist }: { release: Release; serverId
         {KIND_NAME[release.kind]} · {formatReleaseDate(release.first_release_date)}
       </p>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-        {release.in_library && <Badge tone="ok">In your library</Badge>}
+        {release.in_library && (
+          <Tooltip content="In your library">
+            <span role="img" aria-label="In your library" tabIndex={0} className="inline-flex size-7 items-center justify-center rounded-full bg-ok/15 text-ok">
+              <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+                <circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+              </svg>
+            </span>
+          </Tooltip>
+        )}
         <LidarrBadge state={state} upcoming={!out} />
         {lidarr && !out && (state === 'absent' || state === 'unmonitored') && <LidarrMonitorButton mbid={release.mbid} title={release.title} />}
         {lidarr && out && !release.in_library && state !== 'downloaded' && (
@@ -120,15 +129,21 @@ function ReleaseCard({ release, serverId, artist }: { release: Release; serverId
             </Button>
           </Tooltip>
         )}
-        <Button
-          variant="ghost"
-          size="xs"
-          busy={hide.isPending}
-          onClick={() => hide.mutate({ mbid: release.mbid, hide: !release.hidden })}
-          aria-label={`${release.hidden ? 'Show' : 'Hide'} ${release.title}`}
-        >
-          {release.hidden ? 'Show again' : 'Hide'}
-        </Button>
+        <Tooltip content={release.hidden ? 'Show it again' : 'Hide it'}>
+          <Button
+            variant="ghost"
+            size="xs"
+            busy={hide.isPending}
+            onClick={() => hide.mutate({ mbid: release.mbid, hide: !release.hidden })}
+            aria-label={`${release.hidden ? 'Show' : 'Hide'} ${release.title}`}
+          >
+            <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+              <path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              {!release.hidden && <path d="M2.5 13.5l11-11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />}
+            </svg>
+          </Button>
+        </Tooltip>
       </div>
       {downloading && (
         <LidarrDownloadDialog mbid={release.mbid} title={release.title} artist={artist?.name} onClose={() => setDownloading(false)} />

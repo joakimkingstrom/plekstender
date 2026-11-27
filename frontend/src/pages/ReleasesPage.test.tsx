@@ -19,9 +19,12 @@ const radiohead = { rating_key: 100, name: 'Radiohead', thumb: null }
 let fetchMock: ReturnType<typeof vi.fn<(input: Request) => Promise<Response>>>
 let preferences: Record<string, unknown>
 let lidarrOn = false
+let lidarrStates: Record<string, string> = {}
 
 beforeEach(() => {
   lidarrOn = false
+  lidarrStates = {}
+  localStorage.removeItem('releases-out-filter')
   preferences = { releases: { kinds: ['album', 'ep'], follow_rating: 8, follow_top: 50 } }
   fetchMock = vi.fn<(input: Request) => Promise<Response>>(async (input: Request) => {
     const url = new URL(input.url)
@@ -58,7 +61,7 @@ beforeEach(() => {
       case '/api/lidarr':
         return json({ available: lidarrOn })
       case '/api/lidarr/albums/states':
-        return json(Object.fromEntries((await input.clone().json()).mbids.map((m: string) => [m, 'absent'])))
+        return json(Object.fromEntries((await input.clone().json()).mbids.map((m: string) => [m, lidarrStates[m] ?? 'absent'])))
       case '/api/lidarr/albums':
         return json({ id: 5, title: 'Out Now', state: 'monitored' })
       case '/api/lidarr/albums/5/releases':
@@ -103,7 +106,7 @@ it('shows new releases from followed artists, coming ones first, and hides one',
   expect(within(coming).getByText('Still to Come')).toBeInTheDocument()
   expect(within(coming).getByText(/EP · December 2026/)).toBeInTheDocument()
   const out = screen.getByRole('heading', { name: 'Out in the last 90 days' }).closest('section')!
-  expect(within(out).getByText('In your library')).toBeInTheDocument()
+  expect(within(out).getByRole('img', { name: 'In your library' })).toBeInTheDocument()
   expect(within(out).getByRole('link', { name: 'Radiohead' })).toHaveAttribute('href', '/library/artists/100')
   // Releases you have are listed too; artists not read yet are said to be.
   expect(within(out).getByText(/including what you already have: that's marked "In your library"/)).toBeInTheDocument()
@@ -153,6 +156,14 @@ it('shows only the albums out lately that are not in the library, if asked', asy
   expect(within(out).queryByText('A Fresh One')).not.toBeInTheDocument()
   expect(within(out).getByText("You have everything that's out lately.")).toBeInTheDocument()
   expect(localStorage.getItem('releases-out-filter')).toBe('missing')
+})
+
+it("shows how albums stand in Lidarr as icons", async () => {
+  lidarrOn = true
+  lidarrStates = { '00000006-0000-4000-8000-000000000000': 'downloaded', '00000008-0000-4000-8000-000000000000': 'unmonitored' }
+  renderAt('/library/releases')
+  expect(await screen.findByRole('img', { name: 'Downloaded by Lidarr' })).toHaveClass('text-ok')
+  expect(screen.getByRole('img', { name: /^In Lidarr, but not monitored/ })).toHaveClass('text-accent')
 })
 
 it('has Lidarr monitor an album coming up', async () => {
