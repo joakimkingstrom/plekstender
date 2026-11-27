@@ -11,9 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import mutagen
 from mutagen.easyid3 import EasyID3
 from mutagen.easymp4 import EasyMP4Tags
-from mutagen.id3 import POPM
+from mutagen.id3 import ID3, POPM
 
 FREEFORM = {
     "musicbrainz_releasegroupid": "MusicBrainz Release Group Id",
@@ -74,3 +75,30 @@ if "label" not in EasyID3.Get:
     EasyID3.RegisterTextKey("label", "TPUB")
 if "rating" not in EasyID3.Get:
     EasyID3.RegisterKey("rating", _popm_get, _popm_set, _popm_delete)
+
+
+class _EasyFrames(EasyID3):
+    """The easy names over another format's own ID3 tags (AIFF, WAV, DSF...), saved the way
+    that format saves them (they don't take EasyID3's `v1`)."""
+
+    def __init__(self, id3: ID3) -> None:
+        super().__init__()
+        self._EasyID3__id3 = id3
+
+    def save(self, filething: Any = None, **kwargs: Any) -> None:
+        kwargs.pop("v1", None)
+        self._EasyID3__id3.save(filething, **kwargs)
+
+
+def easy_tags(audio: Any) -> Any:
+    """Give a file's ID3 tags the easy names when mutagen hasn't: it only does for MP3s, so
+    AIFF, WAV and DSF files' tags came as raw frames ("TIT2", "UFID:...") and read as
+    missing (or broke a snapshot)."""
+    if audio is not None and isinstance(audio.tags, ID3) and not isinstance(audio.tags, EasyID3):
+        audio.tags = _EasyFrames(audio.tags)
+    return audio
+
+
+def open_easy(path: Any) -> Any:
+    """mutagen.File(path, easy=True), with every format's ID3 tags under the easy names."""
+    return easy_tags(mutagen.File(path, easy=True))
