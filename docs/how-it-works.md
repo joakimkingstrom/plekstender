@@ -635,7 +635,7 @@ Plekstender keeps every user's plays in its own `listens` table. Stats, the rati
 **Duplicates across sources.** Plexamp plays that were also scrobbled to Last.fm appear twice. Two listens by the same user of the same normalised artist + title within *duration + 5 minutes* of each other are one play: the Plex one is kept and the other gets `duplicate_of`, so stats skip it.
 
 **Last.fm import**
-- Instance API key from `LASTFM_API_KEY` or Settings (admin, encrypted). From 1 Dec 2026 the key's owner needs Last.fm Pro; without it the import page says so and points to ListenBrainz import.
+- Instance API key from `LASTFM_API_KEY` or Settings (admin, encrypted). From 1 Dec 2026 imports need a key whose owner has Last.fm Pro (scrobbling doesn't); without it the import page says so and points to ListenBrainz import. A key whose reads are refused is still saved when its shared secret works, for scrobbling only.
 - The user enters their Last.fm username (checked with `user.getInfo`, which also gives the total to show progress). The job pages backwards through `user.getRecentTracks` (200 per page, `to=` cursor, ≤5 requests/s), saving the cursor so it resumes after restarts. ~100k scrobbles ≈ 500 requests, a few minutes. Running it again only fetches newer scrobbles.
 - Profiles with hidden recent listening can't be read with an API key alone; the job fails with that explanation.
 - Any public username can be entered. That only affects the importer's own stats, so it isn't verified.

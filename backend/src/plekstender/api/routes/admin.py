@@ -91,7 +91,12 @@ from plekstender.db.instance import (
 )
 from plekstender.db.models import PlexServer, User, UserServer
 from plekstender.history import scrobblers
-from plekstender.history.lastfm import LastFmClient, LastFmError
+from plekstender.history.lastfm import (
+    INVALID_API_KEY,
+    SUSPENDED_API_KEY,
+    LastFmClient,
+    LastFmError,
+)
 from plekstender.history.listenbrainz import ScrobbleServiceError
 from plekstender.live import datathistle, jambase, ticketmaster
 from plekstender.sync.popularity import preview_artist_ranking
@@ -265,13 +270,21 @@ async def put_lastfm(
     body: LastFmKeyIn, db: DbDep, admin: AdminDep, settings: SettingsDep, http: HttpDep
 ) -> LastFmKeyOut:
     """Set (after checking them with Last.fm) or clear the instance's Last.fm API key and
-    its shared secret. A secret on its own goes with the key that's set already."""
+    its shared secret. A secret on its own goes with the key that's set already.
+
+    Since 1 December 2026 Last.fm lets only Last.fm Pro subscribers' keys read (imports), but
+    any key scrobble: a key whose reads are refused is kept when its secret works (for
+    scrobbling only), and the answer says imports won't work with it."""
+    reads = True
     if body.api_key:
         try:
             await LastFmClient(http, body.api_key, settings.lastfm_api_url).check_key()
         except LastFmError as exc:
-            code = status.HTTP_502_BAD_GATEWAY if exc.transient else status.HTTP_400_BAD_REQUEST
-            raise HTTPException(code, str(exc)) from exc
+            refused = exc.code in (INVALID_API_KEY, SUSPENDED_API_KEY)
+            if exc.transient or not (refused and body.shared_secret):
+                code = status.HTTP_502_BAD_GATEWAY if exc.transient else status.HTTP_400_BAD_REQUEST
+                raise HTTPException(code, str(exc)) from exc
+            reads = False  # the secret's signed call below says whether the key is real
     key, source = await get_lastfm_api_key(db, settings)
     if body.shared_secret:
         api_key = body.api_key or key
@@ -295,7 +308,13 @@ async def put_lastfm(
     keep_key = body.api_key or (key if body.shared_secret and source == "settings" else None)
     await set_lastfm_api_key(db, settings, keep_key, body.shared_secret)
     await db.commit()
-    return await get_lastfm(db, admin, settings)
+    saved = await get_lastfm(db, admin, settings)
+    if not reads:
+        saved.note = (
+            "Saved for scrobbling. Last.fm won't let this key read scrobbles, so importing "
+            "from Last.fm needs a key whose owner has Last.fm Pro."
+        )
+    return saved
 
 
 # Radiohead: a well-known artist to check a fanart.tv key against.

@@ -4189,6 +4189,10 @@ export interface paths {
          * Put Lastfm
          * @description Set (after checking them with Last.fm) or clear the instance's Last.fm API key and
          *     its shared secret. A secret on its own goes with the key that's set already.
+         *
+         *     Since 1 December 2026 Last.fm lets only Last.fm Pro subscribers' keys read (imports), but
+         *     any key scrobble: a key whose reads are refused is kept when its secret works (for
+         *     scrobbling only), and the answer says imports won't work with it.
          */
         put: operations["put_lastfm_api_admin_lastfm_put"];
         post?: never;
@@ -7152,6 +7156,11 @@ export interface components {
              * @description The shared secret is set too, so people can scrobble.
              */
             scrobbling: boolean;
+            /**
+             * Note
+             * @description On saving: something to know (it can't be used to import).
+             */
+            note?: string | null;
         };
         /** LastFmScrobblingOut */
         LastFmScrobblingOut: {
