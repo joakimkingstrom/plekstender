@@ -38,6 +38,7 @@ function settingsGroups(owner: boolean, admin: boolean): Group[] {
           label: 'Export & import',
           children: EXPORT_PARTS.filter((p) => !p.owners || owner).map((p) => ({ to: `/settings/export/${p.slug}`, label: p.title })),
         },
+        { to: '/settings/jobs', label: 'Jobs' },
       ],
     },
   ]
