@@ -19,6 +19,7 @@ beforeEach(() => {
         JSON.stringify({
           active: [
             job({ progress: { done: 1200, total: 99000 } }),
+            job({ id: 3, what: "Reading the music files' tags", subkind: 'scan', progress: { step: 'Folder pictures', done: 200, total: 15000 } }),
             job({ id: 2, what: "Reading the music files' tags", subkind: 'scan', status: 'queued', started_at: null, created_at: ago(20), waiting_for: { what: 'Finding duplicate files', since: ago(125) } }),
           ],
           finished: [
@@ -47,9 +48,11 @@ it('lists running and waiting jobs (and what a waiting one waits for), then fini
   )
   const active = (await screen.findByRole('heading', { name: 'Running and waiting' })).closest('section')!
   expect(within(active).getByText('1,200 / 99,000')).toBeInTheDocument()
+  // A job with steps (a scan, after the tags) says which it's on.
+  expect(within(active).getByText('Folder pictures · 200 / 15,000')).toBeInTheDocument()
   expect(within(active).getByRole('button', { name: 'Stop finding duplicate files' })).toBeInTheDocument()
   expect(within(active).getByText(/Waiting for:/).textContent).toMatch(/Finding duplicate files \(started 2 hours ago\)/)
-  expect(within(active).getByRole('link', { name: 'Tags in your files →' })).toHaveAttribute('href', '/settings/files/scan')
+  expect(within(active).getAllByRole('link', { name: 'Tags in your files →' })[0]).toHaveAttribute('href', '/settings/files/scan')
   const finished = screen.getByRole('heading', { name: 'Finished' }).closest('section')!
   expect(within(finished).getByText('Written')).toBeInTheDocument()
   expect(within(finished).getByText('Failed')).toBeInTheDocument()

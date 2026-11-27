@@ -1585,3 +1585,68 @@ def test_id3_tags_in_wav_and_aiff_files(tmp_path: Path, make: Any) -> None:
     assert str(again.tags["TIT2"]) == "New title"
     assert again.tags["UFID:http://musicbrainz.org"].data.startswith(b"10000000")  # kept
     assert read_file(path)["tags"]["title"] == "New title"
+
+
+@pytest.mark.db
+async def test_a_scan_says_what_it_is_doing_and_stops_at_any_step(
+    app: FastAPI, plex: FakePlex, music: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After the tags come the lyrics files, .nfo files, folder pictures (a first scan of a
+    big library can spend a long time on those) and matching to Plex: each shows as a step,
+    and Stop works in any of them."""
+    from sqlalchemy import update
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import FileScan
+    from plekstender.tags import scan as scan_module
+    from plekstender.worker import scan_music_files
+
+    (music / "cover.jpg").write_bytes(picture_bytes(1200, 1200, "JPEG", "green"))
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(music)},
+        headers=CSRF,
+    )
+    steps: list[tuple[str, int, int]] = []
+    stop_at: str | None = None
+    reporter = scan_module._reporter
+
+    def recording(db: Any, scan: FileScan, step: str) -> Any:
+        report = reporter(db, scan, step)
+
+        async def recorded(done: int, total: int) -> None:
+            steps.append((step, done, total))
+            if step == stop_at:  # Stop pressed now
+                async with get_sessionmaker()() as other:
+                    await other.execute(
+                        update(FileScan).where(FileScan.id == scan.id).values(stop_requested="stop")
+                    )
+                    await other.commit()
+            await report(done, total)
+
+        return recorded
+
+    monkeypatch.setattr(scan_module, "_reporter", recording)
+    first = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=first["id"])
+    assert list(dict.fromkeys(step for step, _, _ in steps)) == [
+        "Music files",
+        "Lyrics files",
+        "Folder pictures",
+        "Matching files to Plex",
+    ]
+    assert ("Folder pictures", 0, 1) in steps
+    assert (await owner.get(f"{base}/summary")).json()["last"]["status"] == "succeeded"
+
+    # A new picture to read, and Stop pressed while the scan reads it.
+    (music / "cover.jpg").write_bytes(picture_bytes(1000, 1000, "JPEG", "red"))
+    steps.clear()
+    stop_at = "Folder pictures"
+    second = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=second["id"])
+    last = (await owner.get(f"{base}/summary")).json()["last"]
+    assert (last["id"], last["status"]) == (second["id"], "failed")
+    assert last["error"].startswith("Stopped.")
+    assert steps[-1][0] == "Folder pictures"

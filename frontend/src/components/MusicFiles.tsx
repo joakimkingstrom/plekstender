@@ -22,7 +22,7 @@ export function ScanCard({ serverId }: { serverId: number }) {
   if (summary.isError) return <Notice tone="error">{errorMessage(summary.error)}</Notice>
   const s = summary.data
   const active = s.active
-  const { done = 0, total = 0 } = (active?.progress ?? {}) as { done?: number; total?: number }
+  const { done = 0, total = 0, step } = (active?.progress ?? {}) as { done?: number; total?: number; step?: string }
   return (
     <Card title="Tags in your files">
       <div className="space-y-3 text-sm">
@@ -36,6 +36,7 @@ export function ScanCard({ serverId }: { serverId: number }) {
           <div className="space-y-2" aria-live="polite">
             <p>
               {active.status === 'queued' ? 'Waiting for the worker…' : 'Scanning…'}{' '}
+              {active.status === 'running' && step && <span className="text-muted">{step} </span>}
               {total > 0 && (
                 <span className="text-muted tabular-nums">
                   {formatCount(done)} / {formatCount(total)}
