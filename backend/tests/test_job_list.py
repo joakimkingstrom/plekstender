@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from plekstender.db import get_sessionmaker
-from plekstender.db.models import FileScan
+from plekstender.db.models import FileScan, UserServer
 from tests.fakes import FakePlex, sign_in
 from tests.test_sync import owner_with_library
 
@@ -16,10 +16,11 @@ from tests.test_sync import owner_with_library
 async def test_jobs_and_what_they_wait_for(app: FastAPI, plex: FakePlex) -> None:
     from plekstender.worker import enqueue_duplicates, enqueue_file_scan
 
-    owner, sid = await owner_with_library(app, plex)
+    owner, _ = await owner_with_library(app, plex)
     async with get_sessionmaker()() as db:
-        dupes = FileScan(server_id=sid, kind="dupes", status="running", params={})
-        scan = FileScan(server_id=sid, kind="scan", status="queued", params={})
+        server_id = await db.scalar(select(UserServer.server_id).where(UserServer.is_owner))
+        dupes = FileScan(server_id=server_id, kind="dupes", status="running", params={})
+        scan = FileScan(server_id=server_id, kind="scan", status="queued", params={})
         db.add_all([dupes, scan])
         await db.commit()
         await enqueue_duplicates(dupes)
