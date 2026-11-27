@@ -301,6 +301,10 @@ class AlbumColour(Base):
     hue: Mapped[float | None] = mapped_column(Float)  # 0-360
     saturation: Mapped[float | None] = mapped_column(Float)  # 0-1
     lightness: Mapped[float | None] = mapped_column(Float)  # 0-1
+    # How light the whole cover is, 0-1 (relative luminance): light or dark backgrounds.
+    brightness: Mapped[float | None] = mapped_column(Float)
+    # cover_colours.METHOD it was worked out with (older: worked out again).
+    method: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
     checked_at: Mapped[dt.datetime]
 
 
@@ -412,6 +416,9 @@ class ListenImport(Base):
     # {"added": n, "existing": n, "skipped": n}
     stats: Mapped[dict[str, Any]] = mapped_column(default=dict)
     error: Mapped[str | None] = mapped_column(Text)
+    # Asked to stop from the app: "stop" (keep what's done) or "cancel" (also take it back,
+    # where that's possible). The job checks between items.
+    stop_requested: Mapped[str | None] = mapped_column(String(8))
 
 
 class Listen(Base):
@@ -592,10 +599,15 @@ class ArtworkJob(Base):
     stats: Mapped[dict[str, Any]] = mapped_column(default=dict)
     error: Mapped[str | None] = mapped_column(Text)
     result_path: Mapped[str | None] = mapped_column(Text)  # export: the zip under DATA_DIR
+    # What it replaced, to put back when it's cancelled (see artwork/undo.py); not shown.
+    undo: Mapped[dict[str, Any]] = mapped_column(default=dict, server_default="{}")
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
     started_at: Mapped[dt.datetime | None]
     finished_at: Mapped[dt.datetime | None]
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    # Asked to stop from the app: "stop" (keep what's done) or "cancel" (also take it back,
+    # where that's possible). The job checks between items.
+    stop_requested: Mapped[str | None] = mapped_column(String(8))
 
 
 class PlaySession(Base):
@@ -947,6 +959,9 @@ class FileScan(Base):
     started_at: Mapped[dt.datetime | None]
     finished_at: Mapped[dt.datetime | None]
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    # Asked to stop from the app: "stop" (keep what's done) or "cancel" (also take it back,
+    # where that's possible). The job checks between items.
+    stop_requested: Mapped[str | None] = mapped_column(String(8))
 
 
 class TrackLyrics(Base):
@@ -1010,6 +1025,9 @@ class TagChangeSet(Base):
     created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
     applied_at: Mapped[dt.datetime | None]
     updated_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+    # Asked to stop from the app: "stop" (keep what's done) or "cancel" (also take it back,
+    # where that's possible). The job checks between items.
+    stop_requested: Mapped[str | None] = mapped_column(String(8))
 
 
 class TagChange(Base):

@@ -142,6 +142,7 @@ class FakeLibrary:
             ]
         }
         self.uploaded: list[tuple[int, bytes]] = []
+        self.selected: list[tuple[int, str]] = []  # (item, poster) selected again
         # /status/sessions: what's playing (each entry needs "User": {"id": ...}).
         self.now_playing: list[dict[str, Any]] = []
         self.rate_fails = False
@@ -315,9 +316,33 @@ class FakeLibrary:
         if request.method == "POST":
             self.uploaded.append((key, request.content))
             self.items[key]["thumb"] = f"/library/metadata/{key}/thumb/{len(self.uploaded)}"
+            # Plex keeps it among the item's posters, selected.
+            listed = self.posters.setdefault(key, [])
+            for poster in listed:
+                poster["selected"] = False
+            n = len(self.uploaded)
+            listed.append({
+                "ratingKey": f"upload://posters/{n}", "key": f"/library/metadata/{key}/file?n={n}",
+                "provider": "upload", "selected": True,
+            })  # fmt: skip
             return httpx.Response(200)
         posters = self.posters.get(key, [])
         return httpx.Response(200, json={"MediaContainer": {"Metadata": posters}})
+
+    def poster_select(self, request: httpx.Request) -> httpx.Response:
+        """PUT .../poster?url=…: select one of the item's posters (by its ratingKey)."""
+        if request.headers.get("X-Plex-Token") != "srv-owner":
+            return httpx.Response(401)
+        key = int(request.url.path.split("/")[3])
+        url = request.url.params.get("url")
+        listed = self.posters.get(key, [])
+        if not any(p.get("ratingKey", p.get("key")) == url for p in listed):
+            return httpx.Response(404)
+        for poster in listed:
+            poster["selected"] = poster.get("ratingKey", poster.get("key")) == url
+        self.selected.append((key, str(url)))
+        self.items[key]["thumb"] = f"/library/metadata/{key}/thumb/selected-{len(self.selected)}"
+        return httpx.Response(200)
 
     def playing(
         self, account: int, key: int, offset_ms: int, session: str, *, lan: bool, address: str
@@ -509,6 +534,9 @@ class FakePlex:
         router.put(f"{SERVER_URI}/:/rate").mock(side_effect=self.library.rate_request)
         router.route(url__regex=rf"{re.escape(SERVER_URI)}/library/metadata/\d+/posters").mock(
             side_effect=self.library.poster_request
+        )
+        router.put(url__regex=rf"{re.escape(SERVER_URI)}/library/metadata/\d+/poster\b").mock(
+            side_effect=self.library.poster_select
         )
         router.get(f"{SERVER_URI}/status/sessions").mock(side_effect=self.library.sessions_list)
         router.get(url__regex=rf"{re.escape(SERVER_URI)}/library/parts/\d+/").mock(

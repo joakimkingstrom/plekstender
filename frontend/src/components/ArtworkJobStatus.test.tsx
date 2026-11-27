@@ -9,6 +9,7 @@ const job = (status: string, progress: object, stats: object = {}) => ({
 })  // prettier-ignore
 let jobs: unknown[] = []
 let lyrics: unknown = null
+let stops: unknown[] = []
 const fetchMock = vi.fn(async (input: Request | string) => {
   const url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost')
   const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
@@ -17,6 +18,12 @@ const fetchMock = vi.fn(async (input: Request | string) => {
   if (url.pathname === '/api/servers/1/artwork/jobs') return json(jobs)
   if (url.pathname === '/api/servers/1/files/lyrics/latest') return json(lyrics)
   if (url.pathname === '/api/notifications') return json({ items: [], unread: 0 })
+  if (url.pathname === '/api/jobs/artwork/7/stop') {
+    const body = await (input as Request).json()
+    stops.push(body)
+    jobs = [{ ...(jobs[0] as object), stop_requested: body.cancel ? 'cancel' : 'stop' }]
+    return json({ status: 'running', error: null, stop_requested: body.cancel ? 'cancel' : 'stop' })
+  }
   return new Response(null, { status: 204 })
 })
 /** Wait until the jobs have been asked for (and the answer handled). */
@@ -28,6 +35,7 @@ const jobsLoaded = async () => {
 beforeEach(() => {
   jobs = []
   lyrics = null
+  stops = []
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -71,6 +79,27 @@ describe('An artwork job in the bell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss: Best album covers applied' }))
     expect(screen.queryByText('Best album covers applied')).not.toBeInTheDocument()
     expect(screen.getByText('Nothing needs a look. Everything\'s working.')).toBeInTheDocument()
+  })
+
+  it('stops or cancels a running job, saying first what cancelling takes back', async () => {
+    jobs = [job('running', { done: 3, total: 10 })]
+    const qc = renderBell()
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications (a job is running)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel the covers job…' }))
+    const dialog = screen.getByRole('dialog', { name: 'Cancel the covers job?' })
+    expect(dialog).toHaveTextContent('The covers it has saved to Plex so far are put back.')
+    // Clicking in the dialog leaves the bell's list open (the job's in it).
+    fireEvent.mouseDown(dialog)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel the covers job' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByText('Cancelling…')).toBeInTheDocument()
+    expect(stops).toEqual([{ cancel: true }])
+
+    // Done: it says it was cancelled, and how.
+    jobs = [{ ...job('failed', { done: 3, total: 10 }), stop_requested: 'cancel', error: 'Cancelled: 3 pictures were put back as they were.' }]
+    await qc.invalidateQueries()
+    expect(await screen.findByText('Applying best album covers: cancelled')).toBeInTheDocument()
+    expect(screen.getByText('Cancelled: 3 pictures were put back as they were.')).toBeInTheDocument()
   })
 
   it('leaves out jobs that finished before this visit', async () => {

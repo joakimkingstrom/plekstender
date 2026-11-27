@@ -1,19 +1,21 @@
 import { useState } from 'react'
 import { useApplyPack, useArtworkJobs, useStartExport, useUploadPack } from '../api/artwork'
 import { errorMessage, type Schemas } from '../api/client'
+import { ArtworkJobStop } from './ArtworkJobStatus'
 import { FilePicker } from './controls'
 import { Button, Card, Notice, Spinner } from './ui'
 
 function JobProgress({ job, label }: { job: Schemas['ArtworkJobOut']; label: string }) {
   const { done = 0, total = 0 } = (job.progress ?? {}) as { done?: number; total?: number }
   return (
-    <div className="space-y-1" aria-live="polite">
+    <div className="space-y-2" aria-live="polite">
       <p className="text-xs">
         {label}… <span className="text-muted tabular-nums">{done} / {total || '?'}</span>
       </p>
       <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
         <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 5}%` }} />
       </div>
+      <ArtworkJobStop job={job} />
     </div>
   )
 }
@@ -126,6 +128,9 @@ export function LogoPackImport({ serverId }: { serverId: number }) {
               </Button>
               {applyPack.isError && <Notice tone="error">{errorMessage(applyPack.error)}</Notice>}
             </div>
+          )}
+          {latestImport?.status === 'failed' && latestImport.stop_requested && !preview && (
+            <p className="text-xs text-muted">Last import: {latestImport.error}</p>
           )}
           {latestImport?.status === 'succeeded' && !preview && (
             <p className="text-xs text-muted">

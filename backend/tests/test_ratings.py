@@ -128,6 +128,25 @@ async def test_queues(app: FastAPI, plex: FakePlex) -> None:
 
 
 @pytest.mark.db
+async def test_known_order_is_any_of_each_artists_best_known(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guess the intro's well-known songs: each artist's top few, at random, so the round
+    isn't always the artist's biggest hit."""
+    from plekstender.ratings import queue as queue_module
+
+    monkeypatch.setattr(queue_module, "KNOWN_TOP", 2)
+    owner, sid = await owner_with_library(app, plex)
+    # Radiohead: Karma Police (2000), Paranoid Android (1000), not Lucky (500, third).
+    firsts = set()
+    for _ in range(30):
+        got = await queue(owner, sid, kind="track", pool="all", order="known", limit=50)
+        assert sorted(got) == [300, 301, 304, 305]
+        firsts.add(next(k for k in got if k in (300, 301)))
+    assert firsts == {300, 301}  # not always the hit first
+
+
+@pytest.mark.db
 async def test_listen_counts_per_item(app: FastAPI, plex: FakePlex) -> None:
     owner, _ = await owner_with_library(app, plex)
     user_id = (await owner.get("/api/auth/me")).json()["id"]

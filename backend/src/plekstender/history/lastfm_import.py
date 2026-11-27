@@ -16,7 +16,8 @@ from plekstender.db.instance import get_lastfm_api_key
 from plekstender.db.models import ListenImport
 from plekstender.history.duplicates import mark_duplicates
 from plekstender.history.lastfm import LastFmClient, LastFmError, RecentTracksPage
-from plekstender.history.store import insert_listens, scrobble_row
+from plekstender.history.store import insert_listens, scrobble_row, stopped_import
+from plekstender.jobs import JobStopped, check_stop
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ async def run_lastfm_import(
         progress = dict(job.progress)
         page = int(progress.get("page", 0)) + 1  # resumes after the last stored page
         while True:
+            await check_stop(db, ListenImport, job.id)
             result = await _fetch_page(client, job, page, sleep)
             rows = [scrobble_row(job.user_id, job.id, "lastfm", s) for s in result.scrobbles]
             added = await insert_listens(db, rows)
@@ -123,6 +125,11 @@ async def run_lastfm_import(
             await sleep(REQUEST_INTERVAL)
         await mark_duplicates(db, job.user_id)
         job.status = "succeeded"
+    except JobStopped as stopped:
+        await db.rollback()
+        job = await db.get(ListenImport, import_id, populate_existing=True) or job
+        job.status = "failed"
+        job.error = await stopped_import(db, job, stopped.cancel)
     except Exception as exc:
         if not isinstance(exc, LastFmError):
             log.exception("listen import %s failed", import_id)

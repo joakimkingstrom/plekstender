@@ -24,6 +24,7 @@ const GROUPS: { label: string; fields: MbField[] }[] = [
   { label: 'Titles and artists', fields: ['title', 'artist', 'album', 'albumartist'] },
   { label: 'Track and disc numbers', fields: ['tracknumber', 'discnumber'] },
   { label: 'Dates and country', fields: ['date', 'originaldate', 'releasecountry'] },
+  { label: 'Genres (Plex’s)', fields: ['genre'] },
   {
     label: 'MusicBrainz IDs',
     fields: [

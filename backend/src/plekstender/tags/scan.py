@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.config import get_settings
 from plekstender.db.models import FileScan, FolderImage, MediaFile, NfoFile, PlexServer, Track
+from plekstender.jobs import JobStopped, check_stop
 from plekstender.tags import embedded_lyrics
 from plekstender.tags.lyrics_kinds import (
     LYRICSFILE,
@@ -332,6 +333,11 @@ async def run_scan(db: AsyncSession, scan_id: int) -> None:
         stats = await _scan(db, scan, server, resolved)
         scan.stats = stats
         scan.status = "succeeded"
+    except JobStopped:
+        await db.rollback()
+        scan = await db.get(FileScan, scan_id, populate_existing=True) or scan
+        scan.status = "failed"
+        scan.error = "Stopped. The files read so far are kept; the next scan reads the rest."
     except Exception as exc:
         if not isinstance(exc, ScanError):
             log.exception("scan %s failed", scan_id)
@@ -380,6 +386,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
     changed = [f for f in files if known.get(f.path) != (f.size, f.mtime, READER)]
     stats["unchanged"] = len(files) - len(changed)
     for start in range(0, len(changed), BATCH):
+        await check_stop(db, FileScan, scan.id)
         batch = changed[start : start + BATCH]
         read = await asyncio.to_thread(_read_all, root, batch, get_settings().data_dir)
         rows = [

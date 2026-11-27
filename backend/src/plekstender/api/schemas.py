@@ -504,6 +504,9 @@ class ListenImportOut(BaseModel):
     progress: dict[str, Any]
     stats: dict[str, Any]
     error: str | None
+    stop_requested: Literal["stop", "cancel"] | None = Field(
+        default=None, description="Asked to stop (or cancel): it does so at its next item."
+    )
 
 
 class ImportStatusOut(BaseModel):
@@ -627,7 +630,7 @@ RateKind = Literal["track", "album", "artist"]
 class RateQueueIn(BaseModel):
     kind: RateKind
     pool: Literal["listened", "unrated", "all"] = "listened"
-    order: Literal["weighted", "plays", "popular", "obscure"] = "weighted"
+    order: Literal["weighted", "plays", "popular", "known", "obscure"] = "weighted"
     exclude: list[int] = Field(default_factory=list, max_length=5000)
     limit: int = Field(default=20, ge=1, le=50)
     tag_id: int | None = Field(default=None, description="Only items with this genre (tag).")
@@ -855,6 +858,9 @@ class ArtworkJobOut(BaseModel):
     created_at: dt.datetime
     finished_at: dt.datetime | None
     download: str | None = Field(default=None, description="Export: where to download it.")
+    stop_requested: Literal["stop", "cancel"] | None = Field(
+        default=None, description="Asked to stop (or cancel): it does so at its next item."
+    )
 
 
 class BestCoversJobIn(BaseModel):
@@ -1319,6 +1325,9 @@ class FileScanOut(BaseModel):
     error: str | None
     created_at: dt.datetime
     finished_at: dt.datetime | None
+    stop_requested: Literal["stop", "cancel"] | None = Field(
+        default=None, description="Asked to stop (or cancel): it does so at its next item."
+    )
 
 
 class FilesSummaryOut(BaseModel):
@@ -1429,7 +1438,12 @@ class LyricsLookupIn(BaseModel):
     albums: list[int] = Field(
         default_factory=list, max_length=1000, description="These albums; none: the library."
     )
-    again: bool = Field(default=False, description="Look up songs looked up before as well.")
+    mode: Literal["new", "missing", "unsynced", "all"] | None = Field(
+        default=None,
+        description="new: songs not looked up before; missing: songs without lyrics; "
+        "unsynced: songs without synced lyrics; all: every song. Left out: from `again`.",
+    )
+    again: bool = Field(default=False, description="Old form of mode=all (False: mode=new).")
     write: LyricsApplyIn | None = Field(
         default=None,
         description="Write lyrics as they're found (one edit), instead of after the lookup.",
@@ -1469,6 +1483,19 @@ class LyricsPlanOut(BaseModel):
     applied_set_id: int | None
 
 
+class JobStopIn(BaseModel):
+    cancel: bool = Field(
+        default=False,
+        description="Also take back what it did, where that's possible (else it's kept).",
+    )
+
+
+class JobStopOut(BaseModel):
+    status: str
+    error: str | None
+    stop_requested: Literal["stop", "cancel"] | None
+
+
 class LyricsStopIn(BaseModel):
     cancel: bool = Field(
         default=False, description="Throw away the lyrics it found (else they're kept)."
@@ -1503,6 +1530,9 @@ class TagChangeSetOut(BaseModel):
     )
     undoable: int = Field(default=0, description="Written changes not undone yet.")
     changes: list[TagChangeOut] = Field(description="The first 200 (big edits are listed in part).")
+    stop_requested: Literal["stop", "cancel"] | None = Field(
+        default=None, description="Asked to stop (or cancel): it does so at its next item."
+    )
 
 
 class TagUndoIn(BaseModel):
@@ -1546,7 +1576,7 @@ class PlexSyncPreviewOut(BaseModel):
 
 MbField = Literal[
     "title", "artist", "album", "albumartist", "tracknumber", "discnumber", "date",
-    "originaldate", "releasecountry", "musicbrainz_trackid", "musicbrainz_releasetrackid",
+    "originaldate", "genre", "releasecountry", "musicbrainz_trackid", "musicbrainz_releasetrackid",
     "musicbrainz_albumid", "musicbrainz_artistid", "musicbrainz_albumartistid",
     "musicbrainz_releasegroupid",
 ]  # fmt: skip

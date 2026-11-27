@@ -15,6 +15,7 @@ import {
 import { formatCount } from '../format'
 import { fieldLabel, showFieldValue, showOld } from '../tags'
 import { Dialog } from './Dialog'
+import { JobStop } from './JobStop'
 import { Segmented } from './Segmented'
 import { Button, Card, Notice, Spinner } from './ui'
 
@@ -124,6 +125,21 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
                     style={total ? { width: `${(done / total) * 100}%` } : undefined}
                   />
                 </div>
+                <div className="pt-1">
+                  <JobStop
+                    kind="files"
+                    jobId={active.id}
+                    requested={active.stop_requested}
+                    what="identifying"
+                    keeps="Stop keeps the matches found so far."
+                    cancel={
+                      <p>
+                        The matches it has found so far are forgotten, and those files are listed as not identified again.
+                        Nothing has been written to the files yet.
+                      </p>
+                    }
+                  />
+                </div>
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
@@ -143,7 +159,9 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
               </div>
             )}
             {start.isError && <Notice tone="error">{errorMessage(start.error)}</Notice>}
-            {last?.status === 'failed' && !active && <Notice tone="error">{last.error}</Notice>}
+            {last?.status === 'failed' &&
+              !active &&
+              (last.stop_requested ? <p className="text-xs text-muted">{last.error}</p> : <Notice tone="error">{last.error}</Notice>)}
             {last?.status === 'succeeded' && !active && <LastRun stats={last.stats} />}
 
             <ul className="divide-y divide-border rounded-lg border border-border">

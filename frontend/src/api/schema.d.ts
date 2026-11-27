@@ -1552,7 +1552,8 @@ export interface paths {
         /**
          * Game Search
          * @description Guess suggestions from the library: artists, albums or songs whose name contains
-         *     `q`. With `artist`, that artist's songs (their most popular ones when `q` is empty).
+         *     `q` (artists and albums: starts with it, for one or two letters: "U2"). With `artist`,
+         *     that artist's songs (their most popular ones when `q` is empty).
          */
         get: operations["game_search_api_servers__server_id__game_search_get"];
         put?: never;
@@ -3804,6 +3805,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{kind}/{job_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Job
+         * @description Stop a job (keeping what it did), or cancel it (taking that back where possible).
+         */
+        post: operations["stop_job_api_jobs__kind___job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/achievements": {
         parameters: {
             query?: never;
@@ -5048,6 +5069,11 @@ export interface components {
              * @description Export: where to download it.
              */
             download?: string | null;
+            /**
+             * Stop Requested
+             * @description Asked to stop (or cancel): it does so at its next item.
+             */
+            stop_requested?: ("stop" | "cancel") | null;
         };
         /** ArtworkStatusIn */
         ArtworkStatusIn: {
@@ -5604,6 +5630,11 @@ export interface components {
             created_at: string;
             /** Finished At */
             finished_at: string | null;
+            /**
+             * Stop Requested
+             * @description Asked to stop (or cancel): it does so at its next item.
+             */
+            stop_requested?: ("stop" | "cancel") | null;
         };
         /** FileTypeCount */
         FileTypeCount: {
@@ -6300,7 +6331,7 @@ export interface components {
             /** Choices */
             choices: components["schemas"]["IdentityChoice"][];
             /** Fields */
-            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
+            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "genre" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
         };
         /** IdentifyFileChanges */
         IdentifyFileChanges: {
@@ -6540,6 +6571,24 @@ export interface components {
             /** Quota Checked At */
             quota_checked_at: string | null;
         };
+        /** JobStopIn */
+        JobStopIn: {
+            /**
+             * Cancel
+             * @description Also take back what it did, where that's possible (else it's kept).
+             * @default false
+             */
+            cancel: boolean;
+        };
+        /** JobStopOut */
+        JobStopOut: {
+            /** Status */
+            status: string;
+            /** Error */
+            error: string | null;
+            /** Stop Requested */
+            stop_requested: ("stop" | "cancel") | null;
+        };
         /** LastFmImportIn */
         LastFmImportIn: {
             /** Username */
@@ -6746,6 +6795,11 @@ export interface components {
             };
             /** Error */
             error: string | null;
+            /**
+             * Stop Requested
+             * @description Asked to stop (or cancel): it does so at its next item.
+             */
+            stop_requested?: ("stop" | "cancel") | null;
         };
         /** ListenOut */
         ListenOut: {
@@ -7166,8 +7220,13 @@ export interface components {
              */
             albums?: number[];
             /**
+             * Mode
+             * @description new: songs not looked up before; missing: songs without lyrics; unsynced: songs without synced lyrics; all: every song. Left out: from `again`.
+             */
+            mode?: ("new" | "missing" | "unsynced" | "all") | null;
+            /**
              * Again
-             * @description Look up songs looked up before as well.
+             * @description Old form of mode=all (False: mode=new).
              * @default false
              */
             again: boolean;
@@ -7314,7 +7373,7 @@ export interface components {
                 [key: string]: string | null;
             } | null;
             /** Fields */
-            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
+            fields?: ("title" | "artist" | "album" | "albumartist" | "tracknumber" | "discnumber" | "date" | "originaldate" | "genre" | "releasecountry" | "musicbrainz_trackid" | "musicbrainz_releasetrackid" | "musicbrainz_albumid" | "musicbrainz_artistid" | "musicbrainz_albumartistid" | "musicbrainz_releasegroupid")[];
         };
         /**
          * MbBestOut
@@ -8234,7 +8293,7 @@ export interface components {
              * @default weighted
              * @enum {string}
              */
-            order: "weighted" | "plays" | "popular" | "obscure";
+            order: "weighted" | "plays" | "popular" | "known" | "obscure";
             /** Exclude */
             exclude?: number[];
             /**
@@ -9427,6 +9486,11 @@ export interface components {
              * @description The first 200 (big edits are listed in part).
              */
             changes: components["schemas"]["TagChangeOut"][];
+            /**
+             * Stop Requested
+             * @description Asked to stop (or cancel): it does so at its next item.
+             */
+            stop_requested?: ("stop" | "cancel") | null;
         };
         /**
          * TagDetail
@@ -16485,6 +16549,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_job_api_jobs__kind___job_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "artwork" | "files" | "edits" | "imports";
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobStopIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobStopOut"];
+                };
             };
             /** @description Validation Error */
             422: {

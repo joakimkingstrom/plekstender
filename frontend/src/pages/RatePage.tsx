@@ -115,14 +115,14 @@ function Rater({ serverId }: { serverId: number }) {
   }
   // The Lists layout shows 15 songs at a time: keep two pages in hand.
   const keep = settings.layout === 'desktop' && settings.kind === 'track' ? SONGS_PER_PAGE * 2 : 6
-  // In Guess the intro, the popularity setting picks the order: well-known first, deep cuts
-  // (least popular first), or your own order ("mixed").
+  // In Guess the intro, the popularity setting picks the order: well-known songs (any of each
+  // artist's best-known, at random), deep cuts (least popular first), or your own ("mixed").
   const gameSettings = useGameSettings()
   const order: RateOrder =
     settings.game && settings.layout === 'swipe' && gameSettings.popularity !== 'mixed'
       ? gameSettings.popularity === 'deep'
         ? 'obscure'
-        : 'popular'
+        : 'known'
       : settings.order
   const queue = useRateQueue(serverId, settings.kind, settings.pool, order, keep, settings.tag)
   const genres = useTags(serverId, 'genre')

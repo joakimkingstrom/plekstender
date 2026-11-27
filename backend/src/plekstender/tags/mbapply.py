@@ -4,6 +4,9 @@ tags would change.
 Files are matched to the release's tracks by disc and track number, title and length (the
 person can change any match before applying). Only tags that differ are changed: "2" already
 is track 2, and a full date isn't replaced by just its year.
+
+Genres come from Plex (MusicBrainz's are free-form tags), so the files agree with the album
+page afterwards. A release without a date gets its first release date, or Plex's year.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from plekstender.tags.write import clean
 
 MB_FIELDS = (
     "title", "artist", "album", "albumartist", "tracknumber", "discnumber", "date",
-    "originaldate", "releasecountry", "musicbrainz_trackid", "musicbrainz_releasetrackid",
+    "originaldate", "genre", "releasecountry", "musicbrainz_trackid", "musicbrainz_releasetrackid",
     "musicbrainz_albumid", "musicbrainz_artistid", "musicbrainz_albumartistid",
     "musicbrainz_releasegroupid",
 )  # fmt: skip
@@ -76,8 +79,14 @@ def match(files: list[AlbumFile], release: Release) -> dict[int, str | None]:
     return out
 
 
-def wanted(release: Release, track: ReleaseTrack) -> dict[str, Any]:
-    """Every tag a release track gives a file."""
+def wanted(
+    release: Release,
+    track: ReleaseTrack,
+    genres: list[str] | None = None,
+    plex_year: int | None = None,
+) -> dict[str, Any]:
+    """Every tag a release track gives a file (genres and, failing the release's dates, the
+    year: Plex's album)."""
     return {
         "title": track.title,
         "artist": track.artist,
@@ -85,8 +94,9 @@ def wanted(release: Release, track: ReleaseTrack) -> dict[str, Any]:
         "albumartist": release.artist,
         "tracknumber": (track.position, release.tracks_on(track.disc)),
         "discnumber": (track.disc, release.discs),
-        "date": release.date,
+        "date": release.date or release.original_date or (str(plex_year) if plex_year else None),
         "originaldate": release.original_date,
+        "genre": list(genres or []),
         "releasecountry": release.country,
         "musicbrainz_trackid": track.recording_id,
         "musicbrainz_releasetrackid": track.id,
@@ -115,6 +125,10 @@ def plan_file(tags: dict[str, Any], values: dict[str, Any], fields: set[str]) ->
             continue
         new = clean(field, values[field])
         if new is None:
+            continue
+        if field == "genre":
+            if sorted(old or []) != sorted(new):
+                out[field] = new
             continue
         if field in ("date", "originaldate") and old and str(old).startswith(str(new)):
             continue  # "1997-05-21" already is 1997

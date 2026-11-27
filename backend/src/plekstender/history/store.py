@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from plekstender.db.models import Listen
+from plekstender.db.models import Listen, ListenImport
 from plekstender.history.lastfm import Scrobble
 from plekstender.sync.parse import normalise_artist, normalise_title
 
@@ -41,3 +42,19 @@ async def insert_listens(db: AsyncSession, rows: list[dict[str, Any]]) -> int:
         .returning(Listen.id)
     )
     return len((await db.execute(stmt)).all())
+
+
+async def stopped_import(db: AsyncSession, job: ListenImport, cancel: bool) -> str:
+    """Wind up an import asked to stop: cancelled, the plays it added are removed again (the
+    ones it found already there stay). What to tell the user. Caller commits."""
+    if not cancel:
+        return "Stopped. What it imported is kept; resuming carries on from there."
+    result = await db.execute(
+        delete(Listen).where(Listen.user_id == job.user_id, Listen.import_id == job.id)
+    )
+    removed = int(getattr(result, "rowcount", 0) or 0)
+    job.stats = {**job.stats, "added": 0}
+    job.progress = {}
+    return (
+        f"Cancelled: the {removed} {'play' if removed == 1 else 'plays'} it imported were removed."
+    )

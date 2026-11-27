@@ -21,7 +21,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from sqlalchemy import delete, func, select, text, update
@@ -38,9 +38,11 @@ from plekstender.db.models import (
     Track,
     TrackLyrics,
 )
+from plekstender.jobs import JobStopped, check_stop
 from plekstender.tags import embedded_lyrics, lrclib
 from plekstender.tags.lyrics_kinds import LYRICSFILE, SIDECARS, best, of_sidecar, of_text
 from plekstender.tags.lyrics_kinds import sidecar_path as sidecar
+from plekstender.tags.read import LYRICS_READER
 from plekstender.tags.rename import MoveError, _within
 
 log = logging.getLogger(__name__)
@@ -48,6 +50,13 @@ log = logging.getLogger(__name__)
 FIELDS = ("lrc", "txt", "lyricsfile", "lyrics")
 MAX_ERRORS = 5  # LRCLIB errors in a row before the job stops (the rest wait for next time)
 LOOK_AGAIN_AFTER = dt.timedelta(days=30)  # songs LRCLIB didn't have
+# Which songs a lookup asks LRCLIB about:
+# - new: never looked up (and, after LOOK_AGAIN_AFTER, those it didn't have);
+# - missing: songs without lyrics, in their files or found before, however recently tried;
+# - unsynced: songs without synced lyrics (plain ones too: LRCLIB may have them synced now);
+# - all: every song.
+LookupMode = Literal["new", "missing", "unsynced", "all"]
+FOUND = ("synced", "plain", "instrumental")  # TrackLyrics statuses with something to write
 MAX_TEXT = 1_000_000  # a word-synced Lyricsfile is long
 
 
@@ -147,13 +156,44 @@ async def _scope(db: AsyncSession, server_id: int, params: dict[str, Any]) -> li
     return list(await db.scalars(query.order_by(MediaFile.path)))
 
 
-def _due(row: tuple[str, dt.datetime] | None, again: bool, now: dt.datetime) -> bool:
-    if row is None or again:
+def _due(
+    row: tuple[str, dt.datetime] | None,
+    mode: LookupMode,
+    now: dt.datetime,
+    has: str | None = None,
+) -> bool:
+    """Whether to ask LRCLIB about a song: `row` is what an earlier lookup found (status,
+    when), `has` the best lyrics the file has already (word, synced, plain, instrumental)."""
+    status = row[0] if row else None
+    if mode == "all":
         return True
-    status, at = row
-    if status == "error":
+    if mode == "missing":
+        return has is None and status not in FOUND
+    if mode == "unsynced":
+        return has not in ("word", "synced", "instrumental") and status not in (
+            "synced",
+            "instrumental",
+        )
+    if row is None or status == "error":
         return True
-    return status in ("none", "untagged") and now - at > LOOK_AGAIN_AFTER
+    return status in ("none", "untagged") and now - row[1] > LOOK_AGAIN_AFTER
+
+
+def lookup_mode(params: dict[str, Any]) -> LookupMode:
+    """A job's mode (jobs from before modes had `again`: every song, or new ones)."""
+    mode = params.get("mode")
+    if mode in ("new", "missing", "unsynced", "all"):
+        return mode  # type: ignore[no-any-return]
+    return "all" if params.get("again") else "new"
+
+
+async def _lyrics_had(root: Path, media: MediaFile) -> str | None:
+    """The best lyrics a file has: as its last scan counted them, or (scanned before lyrics
+    were counted) read now."""
+    if media.reader >= LYRICS_READER:
+        return media.lyrics
+    best_kind, _embedded = await asyncio.to_thread(lyrics_kind, root, media.path)
+    return best_kind
 
 
 WRITE_BATCH = 50  # songs written at a time while looking up
@@ -211,8 +251,12 @@ async def run_lookup(
                 )
             ).all()
         }
-        again = bool(job.params.get("again"))
-        due = {f.id for f in files if _due(known.get(f.id), again, now)}
+        mode = lookup_mode(job.params)
+        due = set()
+        for f in files:
+            has = await _lyrics_had(root, f) if mode in ("missing", "unsynced") else None
+            if _due(known.get(f.id), mode, now, has):
+                due.add(f.id)
         # Writing: every song (those found before are written as they come); else the due ones.
         songs = files if change_set is not None else [f for f in files if f.id in due]
         progress = {"done": 0, "total": len(songs), "looked_up": 0, "written": 0}
@@ -266,6 +310,8 @@ async def run_lookup(
             await db.commit()
         job.status = "succeeded"
     except Exception as exc:
+        if isinstance(exc, JobStopped):  # its edit was stopped from the edit history
+            exc = LookupStopped("Stopped from the edit history. What it found is kept.")
         if not isinstance(exc, LookupStopped):
             log.exception("lyrics lookup %s failed", job_id)
         try:
@@ -405,7 +451,9 @@ async def discard(db: AsyncSession, job: FileScan) -> int:
     return int(getattr(result, "rowcount", 0) or 0)
 
 
-async def undo_edit(db: AsyncSession, set_id: int, user_id: int | None) -> int | None:
+async def undo_edit(
+    db: AsyncSession, set_id: int, user_id: int | None, *, why: str = "a cancelled lyrics lookup"
+) -> int | None:
     """Take out what an edit wrote: a new edit putting back what was there before (like
     undo in the history, but in one statement however big). Returns its id, if anything
     was written."""
@@ -423,8 +471,7 @@ async def undo_edit(db: AsyncSession, set_id: int, user_id: int | None) -> int |
         server_id=original.server_id,
         user_id=user_id,
         kind="undo",
-        description=f"Undid {applied} {'change' if applied == 1 else 'changes'} "
-        "(a cancelled lyrics lookup)",
+        description=f"Undid {applied} {'change' if applied == 1 else 'changes'} ({why})",
     )
     db.add(undo)
     await db.flush()
@@ -690,6 +737,7 @@ async def apply_lyrics(
         )
     )
     for n, change in enumerate(changes, 1):
+        await check_stop(db, TagChangeSet, set_id)
         try:
             if change.field == "lyrics":
                 media = (

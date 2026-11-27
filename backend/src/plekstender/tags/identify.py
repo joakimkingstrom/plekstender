@@ -21,6 +21,7 @@ from plekstender import acoustid
 from plekstender.config import Settings
 from plekstender.db.instance import get_acoustid_api_key
 from plekstender.db.models import FileScan, MediaFile, PlexServer
+from plekstender.jobs import JobStopped, check_stop
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +73,15 @@ async def run_identify(
             raise IdentifyError(f"{root} doesn't exist in the worker container.")
         job.stats = await _identify(db, http, settings, job, root, key)
         job.status = "succeeded"
+    except JobStopped as stopped:
+        await db.rollback()
+        job = await db.get(FileScan, job_id, populate_existing=True) or job
+        job.status = "failed"
+        if stopped.cancel:
+            forgotten = await forget_run(db, job)
+            job.error = f"Cancelled: what it found for {forgotten} files was forgotten."
+        else:
+            job.error = "Stopped. The files identified so far keep their matches."
     except Exception as exc:
         if not isinstance(exc, IdentifyError | acoustid.AcoustIdError):
             log.exception("identify job %s failed", job_id)
@@ -107,6 +117,7 @@ async def _identify(
     await db.commit()
     done = 0
     for start in range(0, len(ids), BATCH):
+        await check_stop(db, FileScan, job.id)
         files = list(
             await db.scalars(
                 select(MediaFile).where(
@@ -131,6 +142,7 @@ async def _identify(
             elif "results" in identity and not again:
                 stats["known"] += 1
             else:
+                await check_stop(db, FileScan, job.id)
                 try:
                     identity["results"] = await acoustid.lookup(
                         http,
@@ -154,6 +166,26 @@ async def _identify(
         job.updated_at = dt.datetime.now(dt.UTC)
         await db.commit()
     return stats
+
+
+async def forget_run(db: AsyncSession, job: FileScan) -> int:
+    """Forget what an identify job found (the matches looked up since it started). Returns
+    how many files'. Caller commits."""
+    if job.started_at is None:
+        return 0
+    ids = [int(i) for i in job.params.get("file_ids", [])]
+    forgotten = 0
+    for start in range(0, len(ids), BATCH):
+        for media in await db.scalars(
+            select(MediaFile).where(
+                MediaFile.server_id == job.server_id, MediaFile.id.in_(ids[start : start + BATCH])
+            )
+        ):
+            at = (media.identity or {}).get("at")
+            if at and dt.datetime.fromisoformat(at) >= job.started_at:
+                media.identity = None
+                forgotten += 1
+    return forgotten
 
 
 # --- choosing a match ------------------------------------------------------------------------

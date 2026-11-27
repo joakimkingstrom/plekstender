@@ -192,6 +192,43 @@ def test_main_colours() -> None:
     assert fam(_cover(((250, 250, 248), 1))) == "white"
     assert family(350, 0.8, 0.5) == "red" and family(10, 0.8, 0.5) == "red"
     assert family(200, 0.05, 0.5) == "grey"
+    # A white sleeve in several shades of white, with a big block of black text, is white.
+    assert (
+        fam(
+            _cover(
+                ((250, 250, 250), 0.22),
+                ((236, 234, 230), 0.2),
+                ((222, 220, 216), 0.2),
+                ((15, 15, 15), 0.38),
+            )
+        )
+        == "white"
+    )
+    # A light cover with one red element (a logo, a dress): white, not red, though the red is
+    # bigger than any one shade of white.
+    assert (
+        fam(
+            _cover(
+                ((248, 248, 246), 0.22),
+                ((228, 228, 224), 0.2),
+                ((205, 205, 200), 0.18),
+                ((200, 25, 30), 0.25),
+                ((20, 20, 20), 0.15),
+            )
+        )
+        == "white"
+    )
+    # A teal cover with a red sofa is teal.
+    assert fam(_cover(((40, 150, 150), 0.3), ((60, 170, 165), 0.3), ((190, 30, 30), 0.4))) == "teal"
+    # Cream and off-white aren't red or orange, even with a little red on them.
+    assert fam(_cover(((240, 222, 205), 1))) == "white"
+    assert fam(_cover(((238, 225, 215), 0.8), ((190, 30, 30), 0.2))) == "white"
+    # Still colourful: a light but clearly pink cover, a dark red one.
+    assert fam(_cover(((245, 160, 190), 1))) == "pink"
+    assert fam(_cover(((110, 20, 20), 1))) == "red"
+    # How light the whole cover is.
+    assert main_colour(_cover(((250, 250, 250), 1))).brightness > 0.9
+    assert main_colour(_cover(((10, 10, 10), 1))).brightness < 0.05
 
 
 async def test_cover_colours(app: FastAPI, plex: FakePlex) -> None:

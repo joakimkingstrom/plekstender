@@ -456,6 +456,9 @@ export function useAlbumIssues(serverId: number, issue: AlbumIssue, q: string, o
   })
 }
 
+/** Which songs a lyrics lookup asks LRCLIB about. */
+export type LyricsLookupMode = NonNullable<Schemas['LyricsLookupIn']['mode']>
+
 /** Plain calls for the bulk actions, which go through albums one at a time. */
 export const bulk = {
   best: (serverId: number, albumKey: number) =>
@@ -508,13 +511,13 @@ export const bulk = {
   lookUpLyrics: (
     serverId: number,
     albums: number[],
-    again: boolean,
+    mode: LyricsLookupMode,
     write: (LyricsDestinations & { overwrite: boolean }) | null = null,
   ) =>
     unwrap(
       api.POST('/api/servers/{server_id}/files/lyrics', {
         params: { path: { server_id: serverId } },
-        body: { albums, again, write },
+        body: { albums, mode, again: mode === 'all', write },
       }),
     ),
   /** Stop a lyrics lookup (keeping what it found), or cancel it (throwing that away, and with

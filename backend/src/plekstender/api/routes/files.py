@@ -142,9 +142,14 @@ def _same(a: Any, b: Any) -> bool:
 
 def differences(plex: dict[str, Any], tags: dict[str, Any]) -> list[str]:
     """Fields where the file and Plex disagree. A missing disc number in a one-disc album
-    isn't a difference; years compare the year of the file's date."""
+    isn't a difference; years compare the year of the file's date, or of its original date
+    (a remaster's files dated 2009 still are Plex's 1997 album)."""
     out = []
-    file_values = {**tags, "year": (tags.get("date") or "")[:4] or None}
+    years = [str(tags.get(k) or "")[:4] for k in ("date", "originaldate")]
+    year = next(
+        (y for y in years if y and plex.get("year") is not None and y == str(plex["year"])), None
+    )
+    file_values = {**tags, "year": year or years[0] or None}
     for field in ("title", "artist", "album", "albumartist", "track", "disc", "year", "genre"):
         mine, theirs = file_values.get(field), plex.get(field)
         if field == "disc" and mine is None and theirs in (None, 1):
@@ -156,6 +161,22 @@ def differences(plex: dict[str, Any], tags: dict[str, Any]) -> list[str]:
         if not _same(mine, theirs):
             out.append(field)
     return out
+
+
+async def _album_genres(db: DbDep, server_id: int, album_key: int) -> list[str]:
+    """An album's genres in Plex."""
+    return list(
+        await db.scalars(
+            select(Tag.name)
+            .join(ItemTag, ItemTag.tag_id == Tag.id)
+            .where(
+                ItemTag.server_id == server_id,
+                ItemTag.rating_key == album_key,
+                Tag.kind == "genre",
+            )
+            .order_by(Tag.name)
+        )
+    )
 
 
 @router.get("/albums/{album_key}", response_model=AlbumFilesOut)
@@ -170,18 +191,7 @@ async def album_files(server_id: int, album_key: int, db: DbDep, user: UserDep) 
         if album.artist_rating_key
         else None
     )
-    genres = list(
-        await db.scalars(
-            select(Tag.name)
-            .join(ItemTag, ItemTag.tag_id == Tag.id)
-            .where(
-                ItemTag.server_id == us.server_id,
-                ItemTag.rating_key == album_key,
-                Tag.kind == "genre",
-            )
-            .order_by(Tag.name)
-        )
-    )
+    genres = await _album_genres(db, us.server_id, album_key)
     rows = (
         await db.execute(
             select(Track, Artist.title, MediaFile)
@@ -383,6 +393,7 @@ async def _sets_out(db: DbDep, sets: list[TagChangeSet]) -> list[TagChangeSetOut
                 counts=set_counts,
                 undoable=set_counts.get("applied", 0) - undone_per_set.get(s.id, 0),
                 changes=by_set.get(s.id, []),
+                stop_requested=s.stop_requested,
             )
         )
     return out
@@ -721,14 +732,15 @@ async def _mb_plan(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, "A track can only be matched to one file."
             )
     fields = set(body.fields)
+    album = await db.get(Album, (server_id, album_key))
+    genres = await _album_genres(db, server_id, album_key) if "genre" in fields else []
     planned = []
     for f in files:
         track_id = mapping.get(f.id)
         if track_id is None:
             continue
-        for field, new in plan_file(
-            f.tags, wanted(release, tracks[track_id]), set[str](fields)
-        ).items():
+        values = wanted(release, tracks[track_id], genres, album.year if album else None)
+        for field, new in plan_file(f.tags, values, set[str](fields)).items():
             planned.append(
                 Planned(
                     f.id,
