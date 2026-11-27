@@ -49,7 +49,6 @@ COPY --from=web /web/dist /app/static
 
 RUN useradd --system --uid 1000 --no-create-home --home-dir /app plekstender \
     && mkdir -p /data && chown plekstender /data
-USER plekstender
 
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
@@ -60,11 +59,14 @@ ENV PATH=/app/.venv/bin:$PATH \
 EXPOSE 8080
 
 # Last, so a new version doesn't invalidate the layers above. Set by the publish workflow;
-# left empty, the app reports its package version marked -dev.
+# left empty, the app reports its package version marked -dev. In a file, not the
+# environment: a deployment's own PLEKSTENDER_VERSION (the image tag it pulls, say "latest")
+# must not change which version the image says it is.
 ARG PLEKSTENDER_VERSION=""
 ARG PLEKSTENDER_COMMIT=""
-ENV PLEKSTENDER_VERSION=$PLEKSTENDER_VERSION \
-    PLEKSTENDER_COMMIT=$PLEKSTENDER_COMMIT
+RUN printf '{"version": "%s", "commit": "%s"}\n' "$PLEKSTENDER_VERSION" "$PLEKSTENDER_COMMIT" \
+    > /app/build.json
+USER plekstender
 
 # The same image runs every service; compose picks the command (web | worker | migrate).
 CMD ["plekstender", "web"]
