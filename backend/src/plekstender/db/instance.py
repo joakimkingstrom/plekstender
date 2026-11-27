@@ -172,6 +172,21 @@ async def set_lastfm_api_key(
 # --- fanart.tv API key --------------------------------------------------------------------
 
 FANART_KEY = "fanart"
+COVER_SOURCES_KEY = "cover_sources"
+# Album cover sources that need nothing set up, and so can only be turned off.
+OPEN_COVER_SOURCES = ("deezer", "itunes", "coverartarchive")
+
+
+async def get_cover_sources_off(db: AsyncSession) -> set[str]:
+    """The open album cover sources an admin turned off (Settings → Services → Artwork)."""
+    stored = await _get(db, COVER_SOURCES_KEY) or {}
+    return {s for s in stored.get("off") or [] if s in OPEN_COVER_SOURCES}
+
+
+async def set_cover_sources_off(db: AsyncSession, off: set[str]) -> None:
+    await _put(db, COVER_SOURCES_KEY, {"off": sorted(s for s in off if s in OPEN_COVER_SOURCES)})
+
+
 FANART_PURPOSE = "instance.fanart_api_key"
 
 

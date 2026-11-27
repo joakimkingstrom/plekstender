@@ -27,6 +27,13 @@ export function countryName(code: string): string {
   }
 }
 
+/** A country's flag as an emoji ("GB" → 🇬🇧): two regional indicator letters. Empty for
+ * anything that isn't a two-letter code. (Windows shows the letters instead of a flag.) */
+export function countryFlag(code: string): string {
+  if (!/^[A-Za-z]{2}$/.test(code)) return ''
+  return String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65))
+}
+
 /** Sequential steps of the chart colour over the surface (one hue, light to dark). */
 export const STEPS = [28, 46, 64, 82, 100]
 

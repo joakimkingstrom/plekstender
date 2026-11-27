@@ -29,6 +29,7 @@ import { TagChips } from '../components/TagChip'
 import { Segmented } from '../components/Segmented'
 import { Card, Notice, Spinner } from '../components/ui'
 import { formatCompact, formatCount, formatDate, formatDuration, formatRelative } from '../format'
+import { countryFlag, countryName } from '../places'
 
 const SORTS: { value: ArtistSort; label: string }[] = [
   { value: 'title', label: 'Name' },
@@ -505,7 +506,16 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
           {(gigs.data?.length ?? 0) > 0 && <GigMarker className="bottom-[6%] right-[6%] size-9" />}
         </div>
         <div className="min-w-0 flex-1 space-y-3">
-          <h1 className="text-3xl font-bold tracking-tight">{a.title}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="min-w-0 text-3xl font-bold tracking-tight">{a.title}</h1>
+            {a.country && countryFlag(a.country) && (
+              <Tooltip content={countryName(a.country)}>
+                <span role="img" aria-label={`From ${countryName(a.country)}`} className="shrink-0 text-3xl leading-tight">
+                  {countryFlag(a.country)}
+                </span>
+              </Tooltip>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             <RateStars serverId={serverId} ratingKey={a.rating_key} value={a.user_rating} label={`Rate the artist ${a.title}`} size="size-5" />
             <Tooltip content="Plex plays or listens in your history, whichever is higher"><span>{formatCount(a.plays)} plays</span></Tooltip>

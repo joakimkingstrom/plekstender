@@ -679,6 +679,11 @@ function SwipeView({
           feedback={round.feedback}
           guessesLeft={round.guessesLeft}
           artistFeedback={gameSettings.artist_feedback}
+          revealedArtist={
+            settings.kind === 'track' && round.reveal.artist && item.artist_key != null
+              ? { rating_key: item.artist_key, kind: 'artist', title: item.subtitle ?? '', subtitle: null, thumb: null }
+              : null
+          }
           onGuess={round.guess}
           onGiveUp={round.giveUp}
         />

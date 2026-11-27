@@ -64,10 +64,30 @@ function TagEditing({ serverId }: { serverId: number }) {
   const page = useAlbumIssues(serverId, issue, q, offset, PAGE)
   const [selected, setSelected] = useState<Map<number, AlbumIssues>>(new Map())
   const [action, setAction] = useState<Action | null>(null)
+  const [batch, setBatch] = useState(0) // a new MusicBrainz dialog for the next albums
+  // Albums offered in MusicBrainz dialogs here: the next batch is albums not offered yet.
+  const offered = useRef<Set<number>>(new Set())
   // Albums fixed here: hidden from the list while the worker writes their files (the list
   // only catches up once they've been read again).
   const [written, setWritten] = useState<Set<number>>(new Set())
   const onWritten = (key: number) => setWritten((w) => new Set(w).add(key))
+  /** The next PAGE albums with this filter and search that haven't been offered or fixed
+   * yet, selected, in a new MusicBrainz dialog. */
+  const nextBatch = async () => {
+    const next: AlbumIssues[] = []
+    for (let from = 0; next.length < PAGE; from += 200) {
+      const found = await bulk.albumIssues(serverId, issue, q, from, 200)
+      for (const a of found.items) {
+        if (next.length < PAGE && !written.has(a.rating_key) && !offered.current.has(a.rating_key)) next.push(a)
+      }
+      if (from + 200 >= found.total) break
+    }
+    if (next.length) {
+      setSelected(new Map(next.map((a) => [a.rating_key, a])))
+      setBatch((b) => b + 1)
+    }
+    return next.length
+  }
   // Closing a dialog lets go of the albums it fixed (not before: its rows stay put).
   const closeAction = () => {
     setSelected((s) => new Map([...s].filter(([key]) => !written.has(key))))
@@ -228,7 +248,16 @@ function TagEditing({ serverId }: { serverId: number }) {
         </div>
       )}
       {action === 'musicbrainz' && (
-        <BulkMusicBrainz serverId={serverId} albums={chosen} canWrite={canWrite} onWritten={onWritten} onClose={closeAction} />
+        <BulkMusicBrainz
+          key={batch}
+          serverId={serverId}
+          albums={chosen}
+          canWrite={canWrite}
+          onWritten={onWritten}
+          onOffered={(keys) => keys.forEach((k) => offered.current.add(k))}
+          onNext={nextBatch}
+          onClose={closeAction}
+        />
       )}
       {action === 'plex' && <BulkPlex serverId={serverId} albums={chosen} canWrite={canWrite} onWritten={onWritten} onClose={closeAction} />}
       {action === 'rename' && <BulkRename serverId={serverId} albums={chosen} canWrite={canWrite} onClose={() => setAction(null)} />}
@@ -344,14 +373,26 @@ function BulkMusicBrainz({
   albums,
   canWrite,
   onWritten,
+  onOffered,
+  onNext,
   onClose,
 }: {
   serverId: number
   albums: AlbumIssues[]
   canWrite: boolean
   onWritten?: (key: number) => void
+  onOffered?: (keys: number[]) => void
+  /** Open the dialog on the next albums (resolves to how many). */
+  onNext?: () => Promise<number>
   onClose: () => void
 }) {
+  useEffect(() => {
+    onOffered?.(albums.map((a) => a.rating_key))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the albums it opened with
+  }, [])
+  const [acceptedAll, setAcceptedAll] = useState(0)
+  const [loadingNext, setLoadingNext] = useState(false)
+  const [noMore, setNoMore] = useState(false)
   const { results } = useEach<MbBest>(albums, (a) => bulk.best(serverId, a.rating_key))
   const { writes, write } = useWrites(onWritten)
   const [skipped, setSkipped] = useState<Set<number>>(new Set())
@@ -383,6 +424,7 @@ function BulkMusicBrainz({
               setAcceptingAll(true)
               for (const a of clear) await accept(a, results[a.rating_key]!.value!)
               setAcceptingAll(false)
+              setAcceptedAll(clear.length)
             }}
           >
             Accept {clear.length || ''} clear {clear.length === 1 ? 'match' : 'matches'}
@@ -393,6 +435,30 @@ function BulkMusicBrainz({
             </span>
           )}
         </div>
+        {acceptedAll > 0 && onNext && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-ok/10 px-3 py-2">
+            <span className="mr-auto">
+              {formatCount(acceptedAll)} {acceptedAll === 1 ? 'album' : 'albums'} queued for writing.
+              {noMore && ' There are no more albums to look at here.'}
+            </span>
+            {!noMore && (
+              <Button
+                size="sm"
+                busy={loadingNext}
+                onClick={async () => {
+                  setLoadingNext(true)
+                  try {
+                    if ((await onNext()) === 0) setNoMore(true)
+                  } finally {
+                    setLoadingNext(false)
+                  }
+                }}
+              >
+                Next {PAGE} albums
+              </Button>
+            )}
+          </div>
+        )}
         <ul className="max-h-[60dvh] divide-y divide-border overflow-y-auto">
           {albums.map((a) => {
             const r = results[a.rating_key]

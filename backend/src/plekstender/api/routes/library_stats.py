@@ -36,7 +36,7 @@ from plekstender.api.schemas import (
 )
 from plekstender.artist_countries import ArtistKey, countries_for
 from plekstender.cover_colours import ORDER, family
-from plekstender.db.models import Album, AlbumColour, Artist, Gig, Track, UserServer
+from plekstender.db.models import Album, AlbumColour, Artist, Gig, MediaFile, Track, UserServer
 from plekstender.gigs.seen_live import seen_live
 from plekstender.library_stats import words
 from plekstender.sync.parse import normalise_artist
@@ -367,21 +367,32 @@ SEEN_LIVE_ARTISTS = 10
 @router.get("/file-types", response_model=list[FileTypeCount])
 async def file_types(server_id: int, db: DbDep, user: UserDep) -> list[FileTypeCount]:
     """The library's songs by type of file (their extension, as Plex has the files), most
-    first."""
+    first, with their size: Plex's (filled in by a full sync), else the scan's."""
     us = await get_user_server(db, user, server_id)
     state, cond, where = visible(Track, user.id, us)
     extension = func.coalesce(
         func.lower(func.substring(Track.file_path, r"\.([A-Za-z0-9]{1,8})$")), ""
     )
+    scanned = (  # one size a song (a song can have more than one file scanned)
+        select(MediaFile.rating_key, func.max(MediaFile.size).label("size"))
+        .where(MediaFile.server_id == us.server_id, MediaFile.rating_key.is_not(None))
+        .group_by(MediaFile.rating_key)
+        .subquery()
+    )
+    size = func.coalesce(Track.file_size, scanned.c.size)
     rows = await db.execute(
-        select(extension, func.count())
+        select(extension, func.count(), func.coalesce(func.sum(size), 0), func.count(size))
         .select_from(Track)
         .join(state, cond)
+        .outerjoin(scanned, scanned.c.rating_key == Track.rating_key)
         .where(*where)
         .group_by(extension)
         .order_by(func.count().desc(), extension)
     )
-    return [FileTypeCount(format=fmt, tracks=n) for fmt, n in rows.all()]
+    return [
+        FileTypeCount(format=fmt, tracks=n, bytes=int(total), sized=sized)
+        for fmt, n, total, sized in rows.all()
+    ]
 
 
 @router.get("/seen-live", response_model=SeenLiveOut)

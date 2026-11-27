@@ -115,6 +115,7 @@ async def test_queues(app: FastAPI, plex: FakePlex) -> None:
         "OK Computer OKNOTOK",
     )
     assert songs[301]["plays"] == 1  # the remaster's listen counts for the song
+    assert songs[303]["artist_key"] == 100  # for Guess the intro: their songs, once shown
     assert songs[300]["user_rating"] == 10
 
     assert sorted(await queue(owner, sid, kind="album", pool="unrated", limit=50)) == [

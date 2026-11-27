@@ -251,6 +251,7 @@ class Track(_LibraryItem, Base):
     artist_key: Mapped[str | None] = mapped_column(Text)
     part_key: Mapped[str | None] = mapped_column(Text)
     file_path: Mapped[str | None] = mapped_column(Text)
+    file_size: Mapped[int | None] = mapped_column(BigInteger)  # bytes, as Plex has the file
 
 
 class Tag(Base):

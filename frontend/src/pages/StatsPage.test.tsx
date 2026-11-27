@@ -81,7 +81,7 @@ describe('StatsPage', () => {
     expect(screen.getByRole('button', { name: '2019' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'By time' }))
-    expect(await screen.findByText('2 h 0 m')).toBeInTheDocument() // Radiohead's listening time
+    expect(await screen.findByText('2 h')).toBeInTheDocument() // Radiohead's listening time
     await vi.waitFor(() =>
       expect(fetch.mock.calls.some(([r]) => new URL(r.url).searchParams.get('by') === 'time')).toBe(true),
     )
@@ -178,7 +178,12 @@ describe('stats formatting', () => {
   it('formats listening time and changes', () => {
     expect(formatListeningTime(90 * 60_000)).toBe('1 h 30 m')
     expect(formatListeningTime(45 * 60_000)).toBe('45 m')
-    expect(formatListeningTime(125 * 3_600_000)).toBe('125 h')
+    expect(formatListeningTime(2 * 3_600_000)).toBe('2 h')
+    expect(formatListeningTime(24 * 3_600_000)).toBe('1 d')
+    expect(formatListeningTime(125 * 3_600_000)).toBe('5 d 5 h')
+    expect(formatListeningTime(17 * 86_400_000)).toBe('2 w 3 d')
+    expect(formatListeningTime(130 * 86_400_000)).toBe('4 mo 1 w')
+    expect(formatListeningTime(430 * 86_400_000)).toBe('1 y 2 mo')
     expect(formatChange(120, 100)).toBe('+20%')
     expect(formatChange(80, 100)).toBe('−20%')
     expect(formatChange(5, 0)).toBeNull()

@@ -287,12 +287,14 @@ async def test_file_types(app: FastAPI, plex: FakePlex) -> None:
     async with get_sessionmaker()() as db:
         await db.execute(update(Track).where(Track.rating_key == 303).values(file_path="/m/x.MP3"))
         await db.execute(update(Track).where(Track.rating_key == 304).values(file_path=None))
+        # Plex's sizes (the fake's: rating key x 1000); one not known (no full sync since).
+        await db.execute(update(Track).where(Track.rating_key == 305).values(file_size=None))
         await db.commit()
     types = (await owner.get(f"/api/servers/{sid}/library/stats/file-types")).json()
     assert types == [
-        {"format": "flac", "tracks": 4},
-        {"format": "", "tracks": 1},
-        {"format": "mp3", "tracks": 1},
+        {"format": "flac", "tracks": 4, "bytes": 300_000 + 301_000 + 302_000, "sized": 3},
+        {"format": "", "tracks": 1, "bytes": 304_000, "sized": 1},
+        {"format": "mp3", "tracks": 1, "bytes": 303_000, "sized": 1},
     ]
     friend, _ = await sign_in(app, plex, "friend-token")
     friend_sid = await connect(friend)

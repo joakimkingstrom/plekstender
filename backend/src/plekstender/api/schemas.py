@@ -31,6 +31,9 @@ class GameSettings(BaseModel):
 
 
 BestCoverSource = Literal["deezer", "itunes", "tidal", "coverartarchive"]
+CoverTab = Literal[
+    "deezer", "itunes", "coverartarchive", "tidal", "fanart", "plex", "search", "upload"
+]  # fmt: skip
 BEST_COVER_SOURCES: tuple[BestCoverSource, ...] = ("deezer", "itunes", "tidal", "coverartarchive")
 
 
@@ -121,6 +124,16 @@ class Preferences(BaseModel):
         min_length=1,
         max_length=4,
         description="Album covers: where a best match may come from.",
+    )
+    cover_tabs: list[CoverTab] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Album covers: the sources' tabs in this order (others after them).",
+    )
+    square_covers: bool = Field(
+        default=False,
+        description="Album covers: crop a cover chosen by hand to a square, unless unticked "
+        "(best matches always are).",
     )
 
 
@@ -430,6 +443,10 @@ class ItemListensOut(BaseModel):
 class ArtistDetail(ArtistSummary):
     summary: str | None
     art: str | None
+    country: str | None = Field(
+        default=None,
+        description="Where they're from: an ISO 3166 code (Plex's, else MusicBrainz's).",
+    )
     tags: list[TagOut]
     similar: list[SimilarArtistOut]
     albums: list[AlbumSummary]
@@ -641,6 +658,9 @@ class RateItemOut(BaseModel):
     kind: RateKind
     title: str
     subtitle: str | None = Field(description="Artist, for songs and albums.")
+    artist_key: int | None = Field(
+        default=None, description="The artist's rating key (songs and albums; artists: itself)."
+    )
     album_title: str | None
     album_rating_key: int | None
     thumb: str | None = Field(description="Album cover for songs.")
@@ -757,6 +777,14 @@ class CataloguePage(BaseModel):
     items: list[CatalogueFont]
     total: int
     available: bool = Field(description="False when Google Fonts couldn't be reached.")
+
+
+class CoverSourcesSettings(BaseModel):
+    """The album cover sources that need nothing set up: on (the default) or off."""
+
+    deezer: bool = True
+    itunes: bool = True
+    coverartarchive: bool = True
 
 
 class FanartKeyOut(BaseModel):
@@ -2371,6 +2399,8 @@ class DecadeCount(BaseModel):
 class FileTypeCount(BaseModel):
     format: str = Field(description='The file extension, lower case ("flac"); "" when unknown.')
     tracks: int
+    bytes: int = Field(description="The files' size, of those whose size is known.")
+    sized: int = Field(description="Songs whose file size is known (Plex's, or the scan's).")
 
 
 class LibraryStatsOut(BaseModel):

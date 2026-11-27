@@ -59,10 +59,11 @@ function Discover({ serverId }: { serverId: number }) {
       ) : (
         <Card>
           <ol className={`-my-2 divide-y divide-border ${found.isPlaceholderData ? 'opacity-70' : ''}`}>
-            {found.data.items.map((artist, i) => (
+            {found.data.items.map((artist, i, all) => (
               <Suggestion
                 key={artist.key}
                 artist={artist}
+                mostPlayed={Math.max(...all.map((a) => a.listens))}
                 rank={i + 1}
                 hidden={view === 'hidden'}
                 busy={hide.isPending && hide.variables?.artist.key === artist.key}
@@ -86,14 +87,40 @@ function Discover({ serverId }: { serverId: number }) {
   )
 }
 
+/** How much you've played an artist (though not in the library): a bar on a log scale
+ * against the most played suggestion, so 3 plays still shows next to 300. */
+function PlaysBar({ plays, most, name }: { plays: number; most: number; name: string }) {
+  const share = most > 0 ? Math.log1p(plays) / Math.log1p(most) : 0
+  return (
+    <div className="flex items-center gap-2 pt-0.5" title={`You've played ${name} ${formatCount(plays)} ${plays === 1 ? 'time' : 'times'}`}>
+      <div
+        className="h-1.5 w-24 overflow-hidden rounded-full bg-surface-2"
+        role="meter"
+        aria-label={`Your plays of ${name}`}
+        aria-valuemin={0}
+        aria-valuemax={most}
+        aria-valuenow={plays}
+      >
+        <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(6, share * 100)}%` }} />
+      </div>
+      <span className="text-[11px] font-medium tabular-nums text-accent">
+        {formatCount(plays)} {plays === 1 ? 'play' : 'plays'}
+      </span>
+    </div>
+  )
+}
+
 function Suggestion({
   artist,
+  mostPlayed,
   rank,
   hidden,
   busy,
   onToggle,
 }: {
   artist: ArtistSuggestion
+  /** The most plays of any suggestion shown: the scale for the plays bar. */
+  mostPlayed: number
   rank: number
   hidden: boolean
   busy: boolean
@@ -109,12 +136,8 @@ function Suggestion({
           <span className="text-xs text-muted">
             similar to {formatCount(artist.similar_to)} of your artists
           </span>
-          {artist.listens > 0 && (
-            <span className="rounded-full bg-accent/15 px-1.5 py-px text-[11px] font-medium text-accent">
-              You've played them {formatCount(artist.listens)}×
-            </span>
-          )}
         </p>
+        {artist.listens > 0 && <PlaysBar plays={artist.listens} most={mostPlayed} name={artist.name} />}
         <p className="text-xs text-muted">
           {artist.sources.map((s, i) => (
             <span key={s.rating_key}>

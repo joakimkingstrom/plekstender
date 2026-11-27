@@ -48,4 +48,18 @@ describe('Select', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(button).toHaveTextContent('Lobster')
   })
+
+  it("opens upwards near the bottom of the window, so the page doesn't jump", async () => {
+    render(<Fonts />)
+    const button = screen.getByRole('button', { name: 'Font' })
+    const at = (top: number) =>
+      (button.getBoundingClientRect = () => ({ top, bottom: top + 36, left: 0, right: 100, width: 100, height: 36, x: 0, y: top, toJSON: () => ({}) }))
+    at(window.innerHeight - 60) // the bottom of the window
+    fireEvent.click(button)
+    expect(await screen.findByRole('listbox')).toHaveClass('bottom-full')
+    fireEvent.click(button)
+    at(20) // the top
+    fireEvent.click(button)
+    expect(await screen.findByRole('listbox')).toHaveClass('top-full')
+  })
 })

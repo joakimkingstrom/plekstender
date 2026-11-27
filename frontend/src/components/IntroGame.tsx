@@ -98,10 +98,12 @@ export function RoundClock({ elapsed, length, loading }: { elapsed: number; leng
 }
 
 /**
- * The guess field. Artists (and albums, in album mode) are suggested from 3 letters. For
+ * The guess field. Artists (and albums, in album mode) are suggested from 2 letters. For
  * songs: pick an artist first and then search their songs, or search songs directly, shown
- * from 5 letters (or 80% of the title for short titles). Suggestions close when you tap
- * elsewhere (to see the artwork), and open again when you type or tap the field.
+ * from 5 letters (or 80% of the title for short titles); once the round shows the artist,
+ * the search is their songs. Suggestions never show covers (blurred or not, they give the
+ * answer away). They close when you tap elsewhere (to see the artwork), and open again when
+ * you type or tap the field.
  */
 export function GuessBox({
   serverId,
@@ -110,11 +112,14 @@ export function GuessBox({
   feedback,
   guessesLeft,
   artistFeedback,
+  revealedArtist = null,
   onGuess,
   onGiveUp,
 }: {
   serverId: number
   mode: GameMode
+  /** Song mode: the card's artist, once the round shows it. */
+  revealedArtist?: GameSearchItem | null
   targetTitle: string
   feedback: Feedback
   guessesLeft: number | null
@@ -128,6 +133,14 @@ export function GuessBox({
   const [checking, setChecking] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const text = q.trim()
+  // Once the artist shows, search their songs (once: clearing it searches everything again).
+  const narrowed = useRef(false)
+  useEffect(() => {
+    if (mode !== 'track' || !revealedArtist || narrowed.current) return
+    narrowed.current = true
+    setArtist((current) => current ?? revealedArtist)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- by the artist, not the object
+  }, [mode, revealedArtist?.rating_key])
   const songsFrom = Math.max(3, Math.min(5, Math.ceil(targetTitle.length * 0.8)))
 
   // Close the suggestions on a tap or click anywhere else.
@@ -171,8 +184,8 @@ export function GuessBox({
   const songResults = mode === 'track' && (artist !== null || text.length >= songsFrom) ? (songs.data ?? []) : []
   const placeholder =
     mode === 'artist' ? 'Which artist is it?' : mode === 'album' ? 'Which album is it?' : artist ? `A song by ${artist.title}…` : 'Artist or song…'
-  // Album and artist modes: no pictures in the suggestions (they'd give the answer away).
-  const pictures = mode === 'track'
+  // No pictures in the suggestions: a cover (even blurred on the card) gives the answer away.
+  const pictures = false
 
   return (
     <div ref={root} className="relative space-y-1.5">

@@ -261,3 +261,39 @@ describe('Playing songs from a card', () => {
     expect(JSON.parse(localStorage.getItem('plekstender.rate')!).autoplay).toBe(false)
   })
 })
+
+describe('The guess box', () => {
+  it("searches the artist's songs once the round shows the artist, without covers", async () => {
+    const { GuessBox } = await import('../components/IntroGame')
+    const props = {
+      serverId: 1,
+      mode: 'track' as const,
+      targetTitle: 'Airbag',
+      feedback: null,
+      guessesLeft: 3,
+      artistFeedback: true,
+      onGuess: async () => ({ correct: false, artistCorrect: null }),
+      onGiveUp: () => {},
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const { rerender, container } = render(
+      <QueryClientProvider client={client}>
+        <GuessBox {...props} revealedArtist={null} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('searchbox', { name: 'Your guess' })).toHaveAttribute('placeholder', 'Artist or song…')
+    rerender(
+      <QueryClientProvider client={client}>
+        <GuessBox {...props} revealedArtist={{ rating_key: 100, kind: 'artist', title: 'Radiohead', subtitle: null, thumb: null }} />
+      </QueryClientProvider>,
+    )
+    const box = screen.getByRole('searchbox', { name: 'Your guess' })
+    expect(box).toHaveAttribute('placeholder', 'A song by Radiohead…')
+    fireEvent.focus(box)
+    expect(await screen.findByRole('button', { name: /Lucky/ })).toBeInTheDocument()
+    expect(container.querySelector('img')).toBeNull() // no covers to give it away
+    // Cleared: every song again (it isn't put back).
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Radiohead' }))
+    expect(box).toHaveAttribute('placeholder', 'Artist or song…')
+  })
+})

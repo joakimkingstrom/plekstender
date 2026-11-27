@@ -106,7 +106,15 @@ def _track(
         "updatedAt": NOW - 10_000,
         "Guid": [{"id": f"mbid://track-{key}"}],
         "Media": [
-            {"Part": [{"key": f"/library/parts/{key}/1/file.flac", "file": f"/m/{key}.flac"}]}
+            {
+                "Part": [
+                    {
+                        "key": f"/library/parts/{key}/1/file.flac",
+                        "file": f"/m/{key}.flac",
+                        "size": key * 1000,
+                    }
+                ]
+            }
         ],
     }
 
