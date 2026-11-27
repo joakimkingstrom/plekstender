@@ -137,6 +137,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         admin,
     ):
         app.include_router(module.router)
+    app.include_router(players.access_router)
     app.include_router(artwork.fonts_router)
     app.include_router(game.stats_router)
     app.include_router(game.sample_router)

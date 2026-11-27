@@ -361,6 +361,14 @@ class PlexServerClient:
         except (ValueError, LookupError, TypeError) as exc:
             raise PlexError("Plex didn't make a play queue") from exc
 
+    async def play_queue(self, queue_id: int, window: int = 50) -> dict[str, Any]:
+        """A play queue (a player's "up next"): its songs around the one playing."""
+        data = await self._get(
+            f"/playQueues/{queue_id}", params={"window": window, "includeBefore": 1}
+        )
+        container: dict[str, Any] = data.get("MediaContainer", {})
+        return container
+
     # --- playlists (always under the token owner's account) ---------------------------
 
     def library_uri(self, machine_id: str, rating_keys: list[int]) -> str:

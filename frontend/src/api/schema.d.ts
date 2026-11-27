@@ -4008,6 +4008,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/players/{player_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Player State
+         * @description What a player is playing, where it is in the song, shuffle and repeat: as the player
+         *     says itself (asked straight).
+         */
+        get: operations["player_state_api_servers__server_id__players__player_id__state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/players/{player_id}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Player Queue
+         * @description A player's queue (the play queue its state names), from the server.
+         */
+        get: operations["player_queue_api_servers__server_id__players__player_id__queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/players/{player_id}/command": {
         parameters: {
             query?: never;
@@ -4019,7 +4060,7 @@ export interface paths {
         put?: never;
         /**
          * Player Command
-         * @description Play, pause, skip: through the server, or (admins) straight to the player.
+         * @description Play, pause, skip, seek, shuffle, repeat, or go to a song in the queue.
          */
         post: operations["player_command_api_servers__server_id__players__player_id__command_post"];
         delete?: never;
@@ -4487,6 +4528,28 @@ export interface paths {
         post?: never;
         /** Remove Font */
         delete: operations["remove_font_api_admin_fonts__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Player Access */
+        get: operations["get_player_access_api_admin_players_get"];
+        /**
+         * Put Player Access
+         * @description Who may control players: admins only (the default), or everyone. Commands go straight
+         *     from Plekstender to the players, on its own network.
+         */
+        put: operations["put_player_access_api_admin_players_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -8530,19 +8593,46 @@ export interface components {
             /** Attribution */
             attribution: string;
         };
+        /** PlayerAccessIn */
+        PlayerAccessIn: {
+            /**
+             * Access
+             * @enum {string}
+             */
+            access: "admins" | "everyone";
+        };
+        /** PlayerAccessOut */
+        PlayerAccessOut: {
+            /**
+             * Access
+             * @description Who may control players (straight to them, on Plekstender's network).
+             * @enum {string}
+             */
+            access: "admins" | "everyone";
+        };
         /** PlayerCommandIn */
         PlayerCommandIn: {
             /**
              * Command
              * @enum {string}
              */
-            command: "play" | "pause" | "next" | "previous" | "stop";
+            command: "play" | "pause" | "next" | "previous" | "stop" | "seek" | "shuffle" | "repeat" | "skip_to";
             /**
              * Route
-             * @default server
+             * @default auto
              * @enum {string}
              */
-            route: "server" | "direct";
+            route: "auto" | "server" | "direct";
+            /**
+             * Value
+             * @description seek: where (ms); shuffle: 0 or 1; repeat: 0 off, 1 the song, 2 all; skip_to: the queue item's id.
+             */
+            value?: number | null;
+            /**
+             * Key
+             * @description skip_to: the song's key.
+             */
+            key?: string | null;
         };
         /** PlayerNowOut */
         PlayerNowOut: {
@@ -8600,10 +8690,17 @@ export interface components {
             rating_key: number;
             /**
              * Route
-             * @default server
+             * @default auto
              * @enum {string}
              */
-            route: "server" | "direct";
+            route: "auto" | "server" | "direct";
+        };
+        /** PlayerQueueOut */
+        PlayerQueueOut: {
+            /** Items */
+            items: components["schemas"]["QueueItemOut"][];
+            /** Current Item Id */
+            current_item_id: number | null;
         };
         /** PlayerSentOut */
         PlayerSentOut: {
@@ -8611,11 +8708,60 @@ export interface components {
             ok: boolean;
             /**
              * Route
+             * @description The way it went.
              * @enum {string}
              */
             route: "server" | "direct";
             /** Detail */
             detail: string;
+        };
+        /**
+         * PlayerStateOut
+         * @description What a player is doing, as it says itself.
+         */
+        PlayerStateOut: {
+            /** Reachable */
+            reachable: boolean;
+            /**
+             * Detail
+             * @description Why it couldn't be reached.
+             */
+            detail: string | null;
+            /**
+             * State
+             * @description playing, paused, buffering or stopped
+             */
+            state: string | null;
+            /** Position Ms */
+            position_ms: number | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Rating Key */
+            rating_key: number | null;
+            /** Queue Id */
+            queue_id: number | null;
+            /** Queue Item Id */
+            queue_item_id: number | null;
+            /** Shuffle */
+            shuffle: boolean;
+            /**
+             * Repeat
+             * @description 0 off, 1 the song, 2 all
+             */
+            repeat: number;
+            /** Controllable */
+            controllable: string[];
+            /** Title */
+            title: string | null;
+            /** Artist */
+            artist: string | null;
+            /** Album */
+            album: string | null;
+            /**
+             * Thumb
+             * @description Plex image path (for /image).
+             */
+            thumb: string | null;
         };
         /** PlayersOut */
         PlayersOut: {
@@ -8623,7 +8769,7 @@ export interface components {
             players: components["schemas"]["PlayerOut"][];
             /**
              * Direct Allowed
-             * @description Sending straight to players (admins only).
+             * @description May send straight to players (admins, or everyone if an admin allows it).
              */
             direct_allowed: boolean;
         };
@@ -9090,6 +9236,25 @@ export interface components {
             name: string;
             /** Is Owner */
             is_owner: boolean;
+        };
+        /** QueueItemOut */
+        QueueItemOut: {
+            /** Item Id */
+            item_id: number;
+            /** Key */
+            key: string;
+            /** Rating Key */
+            rating_key: number | null;
+            /** Title */
+            title: string | null;
+            /** Artist */
+            artist: string | null;
+            /** Album */
+            album: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Thumb */
+            thumb: string | null;
         };
         /** RateItemOut */
         RateItemOut: {
@@ -17770,6 +17935,72 @@ export interface operations {
             };
         };
     };
+    player_state_api_servers__server_id__players__player_id__state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                player_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerStateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    player_queue_api_servers__server_id__players__player_id__queue_get: {
+        parameters: {
+            query: {
+                queue_id: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                player_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerQueueOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     player_command_api_servers__server_id__players__player_id__command_post: {
         parameters: {
             query?: never;
@@ -18839,6 +19070,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FontGroup"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_player_access_api_admin_players_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerAccessOut"];
+                };
+            };
+        };
+    };
+    put_player_access_api_admin_players_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerAccessIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerAccessOut"];
                 };
             };
             /** @description Validation Error */

@@ -15,12 +15,14 @@ Not every player still takes every route: Settings → Players tries them.
 from __future__ import annotations
 
 import itertools
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
+from defusedxml import ElementTree
 
 from plekstender.config import Settings
 from plekstender.plex.server import PlexServerClient
@@ -33,6 +35,12 @@ COMMANDS = {
     "next": "playback/skipNext",
     "previous": "playback/skipPrevious",
     "stop": "playback/stop",
+    # With a value: where to go (ms), shuffle on/off, repeat (0 off, 1 the song, 2 all).
+    "seek": "playback/seekTo",
+    "shuffle": "playback/setParameters",
+    "repeat": "playback/setParameters",
+    # A song in the queue (its key, and its play queue item id).
+    "skip_to": "playback/skipTo",
 }
 DIRECT_TIMEOUT = httpx.Timeout(5.0, connect=3.0)
 
@@ -134,6 +142,73 @@ def _why(exc: Exception) -> str:
     return str(exc)
 
 
+# The address that last answered, per player: tried first next time.
+_answered: dict[str, str] = {}
+
+
+@dataclass
+class Answer:
+    resp: httpx.Response | None
+    tried: list[str]
+    # Nothing answered at all (timeouts, refused connections): a firewall, most likely.
+    silent: bool
+
+
+async def _usable(addresses: list[str]) -> list[str]:
+    """The addresses Plekstender may send to: never this machine or its own services (a
+    player's addresses come from plex.tv, which anyone's devices can write to)."""
+    from plekstender.history.scrobblers import ScrobblerError, check_server_address
+
+    usable = []
+    for address in addresses:
+        try:
+            await check_server_address(address)
+        except ScrobblerError:
+            continue
+        usable.append(address)
+    return usable
+
+
+async def _direct(
+    settings: Settings, http: httpx.AsyncClient, player: Player, path: str,
+    params: dict[str, Any], account_token: str | None,
+) -> Answer:  # fmt: skip
+    """GET a path on the player itself, at each of its addresses until one answers."""
+    headers = plex_headers(settings, player.token or account_token)
+    headers["X-Plex-Target-Client-Identifier"] = player.id
+    addresses = await _usable(player.addresses)
+    if (last := _answered.get(player.id)) in addresses:
+        addresses = [last] + [a for a in addresses if a != last]
+    tried: list[str] = []
+    answered = False
+    for address in addresses:
+        try:
+            resp = await http.get(
+                f"{address.rstrip('/')}{path}",
+                params=params,
+                headers=headers,
+                timeout=DIRECT_TIMEOUT,
+                follow_redirects=False,
+            )
+        except httpx.HTTPError as exc:
+            tried.append(f"{urlsplit(address).netloc}: {_why(exc)}")
+            continue
+        answered = True
+        if resp.is_success:
+            _answered[player.id] = address
+            return Answer(resp, tried, False)
+        tried.append(f"{urlsplit(address).netloc}: HTTP {resp.status_code}")
+    return Answer(None, tried, bool(tried) and not answered)
+
+
+def _silent(player: Player, tried: list[str]) -> str:
+    return (
+        f"No answer from {player.name} ({'; '.join(tried)}). Plexamp listens for remote "
+        "control on port 32500: check that a firewall between Plekstender and the player "
+        "lets it through, and that the player is on."
+    )
+
+
 async def send(
     settings: Settings,
     http: httpx.AsyncClient,
@@ -154,25 +229,117 @@ async def send(
         return Sent(True, route, "The server passed it on.")
     if not player.addresses:
         return Sent(False, route, "Plex lists no address for this player.")
-    headers = plex_headers(settings, player.token or account_token)
-    headers["X-Plex-Target-Client-Identifier"] = player.id
-    tried = []
-    for address in player.addresses:
+    answer = await _direct(settings, http, player, f"/player/{command}", params, account_token)
+    if answer.resp is not None:
+        where = urlsplit(_answered[player.id]).netloc
+        return Sent(True, route, f"The player took it ({where}).")
+    if answer.silent:
+        return Sent(False, route, _silent(player, answer.tried))
+    if not answer.tried:
+        return Sent(False, route, "Plex lists no address Plekstender may send to.")
+    return Sent(False, route, "The player didn't take it: " + "; ".join(answer.tried) + ".")
+
+
+# --- what a player is doing (its timeline) ----------------------------------------------------
+
+
+@dataclass
+class State:
+    reachable: bool
+    detail: str | None = None
+    state: str | None = None  # playing, paused, buffering, stopped
+    position_ms: int | None = None
+    duration_ms: int | None = None
+    rating_key: int | None = None
+    key: str | None = None
+    queue_id: int | None = None
+    queue_item_id: int | None = None
+    shuffle: bool = False
+    repeat: int = 0  # 0 off, 1 the song, 2 all
+    controllable: list[str] = field(default_factory=list)
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    thumb: str | None = None
+
+
+def number(value: Any) -> int | None:
+    """An int from Plex's strings and numbers (None when it isn't one)."""
+    try:
+        return int(float(value))
+    except TypeError, ValueError:
+        return None
+
+
+def parse_timeline(body: bytes, content_type: str) -> State:
+    """The music timeline a player answers `/player/timeline/poll` with (XML, or JSON)."""
+    timelines: list[dict[str, Any]] = []
+    if "json" in content_type:
         try:
-            resp = await http.get(
-                f"{address.rstrip('/')}/player/{command}",
-                params=params,
-                headers=headers,
-                timeout=DIRECT_TIMEOUT,
-                follow_redirects=False,
-            )
-        except httpx.HTTPError as exc:
-            tried.append(f"{urlsplit(address).netloc}: {_why(exc)}")
-            continue
-        if resp.is_success:
-            return Sent(True, route, f"The player took it ({urlsplit(address).netloc}).")
-        tried.append(f"{urlsplit(address).netloc}: HTTP {resp.status_code}")
-    return Sent(False, route, "The player didn't take it: " + "; ".join(tried) + ".")
+            container = json.loads(body).get("MediaContainer", {})
+        except ValueError, AttributeError:
+            container = {}
+        timelines = list(container.get("Timeline") or [])
+    else:
+        try:
+            root = ElementTree.fromstring(body)
+        except ElementTree.ParseError, ValueError:
+            root = None
+        for element in root.iter("Timeline") if root is not None else []:
+            found: dict[str, Any] = dict(element.attrib)
+            song = element.find("Track")
+            if song is not None:
+                found["Track"] = dict(song.attrib)
+            timelines.append(found)
+    music = next((t for t in timelines if t.get("type") == "music"), None)
+    if music is None:
+        return State(reachable=True, state="stopped")
+    track: dict[str, Any] = music.get("Track") or music.get("Metadata") or {}
+    if isinstance(track, list):
+        track = track[0] if track else {}
+    return State(
+        reachable=True,
+        state=music.get("state") or "stopped",
+        position_ms=number(music.get("time")),
+        duration_ms=number(music.get("duration")) or number(track.get("duration")),
+        rating_key=number(music.get("ratingKey")) or number(track.get("ratingKey")),
+        key=music.get("key") or track.get("key"),
+        queue_id=number(music.get("playQueueID")),
+        queue_item_id=number(music.get("playQueueItemID")),
+        shuffle=str(music.get("shuffle", "0")) == "1",
+        repeat=number(music.get("repeat")) or 0,
+        controllable=[c for c in str(music.get("controllable") or "").split(",") if c],
+        title=track.get("title"),
+        artist=track.get("originalTitle") or track.get("grandparentTitle"),
+        album=track.get("parentTitle"),
+        thumb=track.get("parentThumb") or track.get("thumb"),
+    )
+
+
+async def timeline(
+    settings: Settings, http: httpx.AsyncClient, server: PlexServerClient, player: Player,
+    route: Route, account_token: str | None,
+) -> State:  # fmt: skip
+    """What the player is playing now, as it says itself: asked through the server, or
+    straight."""
+    params = {"wait": 0, "includeMetadata": 1, "commandID": next(_command_ids)}
+    if route == "server":
+        try:
+            resp = await server.player_command(player.id, "timeline/poll", params)
+        except (PlexError, httpx.HTTPError) as exc:
+            return State(reachable=False, detail=f"The server couldn't ask it: {_why(exc)}.")
+        return parse_timeline(resp.content, resp.headers.get("content-type", ""))
+    answer = await _direct(settings, http, player, "/player/timeline/poll", params, account_token)
+    if answer.resp is None:
+        detail = (
+            _silent(player, answer.tried)
+            if answer.silent
+            else "The player didn't answer: " + "; ".join(answer.tried) + "."
+            if answer.tried
+            else "Plex lists no address Plekstender may reach it at."
+        )
+        return State(reachable=False, detail=detail)
+    return parse_timeline(answer.resp.content, answer.resp.headers.get("content-type", ""))
 
 
 def play_media_params(

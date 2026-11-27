@@ -38,16 +38,16 @@ it('lists players and sends them commands, saying what happened', async () => {
   expect(within(first).getByText(/Karma Police/)).toBeInTheDocument()
   expect(within(first).getByText('Paused:')).toBeInTheDocument()
   // Only players with an address can be sent to straight.
-  expect(within(second).queryByRole('group')).toBeNull()
+  expect(within(second).queryByRole('button', { name: 'Straight to it' })).toBeNull()
 
   fireEvent.click(within(first).getByRole('button', { name: 'Straight to it' }))
   fireEvent.click(within(first).getByRole('button', { name: 'Pause on Plexamp (Mac)' }))
   expect(await within(first).findByText(/Straight to it: The player didn't take it/)).toBeInTheDocument()
   const sent = fetch.mock.calls.find(([r]) => r.url.endsWith('/players/plexamp-1/command'))![0]
-  expect(await sent.clone().json()).toEqual({ command: 'pause', route: 'direct' })
+  expect(await sent.clone().json()).toEqual({ command: 'pause', route: 'direct', value: null, key: null })
 
   fireEvent.click(await within(second).findByRole('button', { name: 'Play OK Computer' }))
   expect(await within(second).findByText('Through the server: The server passed it on.')).toBeInTheDocument()
   const play = fetch.mock.calls.find(([r]) => r.url.endsWith('/players/iphone/play'))![0]
-  expect(await play.clone().json()).toEqual({ rating_key: 200, route: 'server' })
+  expect(await play.clone().json()).toEqual({ rating_key: 200, route: 'auto' })
 })
