@@ -161,6 +161,7 @@ def track_row(item: Item, server_id: int, section_key: str, seen: dt.datetime) -
         ),
         "part_key": part.get("key"),
         "file_path": part.get("file"),
+        "file_size": _int(part.get("size")),
     }
 
 

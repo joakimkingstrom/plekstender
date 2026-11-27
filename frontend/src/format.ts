@@ -67,6 +67,19 @@ export function formatDate(iso: string): string {
   return dateFormat.format(new Date(iso))
 }
 
+/** 1,234,000,000 → "1.2 GB" (powers of 1000, as macOS and most file managers count). */
+export function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000
+    unit++
+  }
+  const digits = unit === 0 || value >= 100 ? 0 : 1
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: digits })} ${units[unit]}`
+}
+
 const TIME_UNITS: [string, number][] = [
   ['y', 525_960], // minutes in a year of 365.25 days
   ['mo', 43_830], // a twelfth of that

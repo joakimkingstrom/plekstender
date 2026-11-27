@@ -398,7 +398,7 @@ export interface paths {
         /**
          * File Types
          * @description The library's songs by type of file (their extension, as Plex has the files), most
-         *     first.
+         *     first, with their size: Plex's (filled in by a full sync), else the scan's.
          */
         get: operations["file_types_api_servers__server_id__library_stats_file_types_get"];
         put?: never;
@@ -5645,6 +5645,16 @@ export interface components {
             format: string;
             /** Tracks */
             tracks: number;
+            /**
+             * Bytes
+             * @description The files' size, of those whose size is known.
+             */
+            bytes: number;
+            /**
+             * Sized
+             * @description Songs whose file size is known (Plex's, or the scan's).
+             */
+            sized: number;
         };
         /** FilesSummaryOut */
         FilesSummaryOut: {

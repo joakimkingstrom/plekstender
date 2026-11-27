@@ -2371,6 +2371,8 @@ class DecadeCount(BaseModel):
 class FileTypeCount(BaseModel):
     format: str = Field(description='The file extension, lower case ("flac"); "" when unknown.')
     tracks: int
+    bytes: int = Field(description="The files' size, of those whose size is known.")
+    sized: int = Field(description="Songs whose file size is known (Plex's, or the scan's).")
 
 
 class LibraryStatsOut(BaseModel):
