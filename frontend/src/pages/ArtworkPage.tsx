@@ -4,6 +4,7 @@ import { imageUrl } from '../api/library'
 import { Lightbox, Zoomable } from '../components/Lightbox'
 import { ColorPicker, FilePicker, Slider } from '../components/controls'
 import { Select } from '../components/Select'
+import { ResultStrip } from '../components/ResultStrip'
 import { Tooltip } from '../components/Tooltip'
 import { Link, useLocation } from 'react-router'
 import {
@@ -18,6 +19,7 @@ import {
   useSetArtworkStatus,
   useStartFanartJob,
   useUploadImage,
+  type ArtistSort,
   type ArtworkStatus,
   type CandidateSource,
   type SourceSpec,
@@ -31,6 +33,7 @@ import { Button, Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { TabNav } from '../components/TabNav'
 import { AlbumCovers } from './AlbumCoversPage'
+import { useFillHeight } from '../fillHeight'
 import { formatRelative } from '../format'
 
 type Artist = Schemas['ArtworkArtistOut']
@@ -102,8 +105,14 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<ArtworkStatus | null>(null)
   const [selected, setSelected] = useState<Artist | null>(null)
+  const [sort, setSortState] = useState<ArtistSort>(() => (localStorage.getItem('artwork-sort') === 'added' ? 'added' : 'name'))
+  const setSort = (v: ArtistSort) => {
+    localStorage.setItem('artwork-sort', v)
+    setSortState(v)
+  }
   const q = useDeferredValue(query.trim())
-  const artists = useArtworkArtists(serverId, q, status)
+  const artists = useArtworkArtists(serverId, q, status, sort)
+  const { ref: fillRef, style: fillStyle } = useFillHeight<HTMLDivElement>()
   const items = artists.data?.pages.flatMap((p) => p.items) ?? []
   const counts = artists.data?.pages[0]?.counts ?? {}
   const total = Object.values(counts).reduce((a, b) => a + b, 0)
@@ -111,8 +120,17 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
   const current = selected ? (items.find((a) => a.rating_key === selected.rating_key) ?? selected) : null
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
-      <div className={`space-y-3 ${current ? 'hidden lg:block' : ''}`}>
+    // The artists down the left third; the preview and (glued to the bottom of the window)
+    // the images found on the rest.
+    <div
+      ref={fillRef}
+      style={fillStyle}
+      className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:grid-rows-[minmax(0,1fr)]"
+    >
+      <section
+        aria-label="Artists"
+        className={`min-h-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-3 ${current ? 'hidden lg:flex' : 'flex'}`}
+      >
         <BulkFanart serverId={serverId} todo={counts.none ?? 0} />
         <input
           type="search"
@@ -139,13 +157,27 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
             ),
           )}
         </div>
+        <label className="flex items-center justify-between gap-2 text-xs text-muted">
+          Sort
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as ArtistSort)}
+            className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs text-text"
+          >
+            <option value="name">Name</option>
+            <option value="added">Recently added</option>
+          </select>
+        </label>
         <BulkStatus serverId={serverId} todo={counts.none ?? 0} />
         {artists.isPending ? (
           <Spinner small />
         ) : artists.isError ? (
           <Notice tone="error">{errorMessage(artists.error)}</Notice>
         ) : (
-          <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto rounded-2xl border border-border bg-surface">
+          <ul
+            aria-label="Artists"
+            className="max-h-[70vh] min-h-0 flex-1 divide-y divide-border overflow-y-auto border-t border-border lg:max-h-none"
+          >
             {items.map((a) => (
               <li
                 key={a.rating_key}
@@ -157,7 +189,12 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
                   className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3 text-left text-sm"
                 >
                   <Artwork serverId={serverId} path={a.thumb} title={a.title} size={96} round className="size-9 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{a.title}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{a.title}</span>
+                    {sort === 'added' && a.added_at && (
+                      <span className="block truncate text-xs text-muted">Added {formatRelative(a.added_at)}</span>
+                    )}
+                  </span>
                 </button>
                 <StatusDot serverId={serverId} artist={a} />
               </li>
@@ -183,7 +220,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
           </Link>
           .
         </p>
-      </div>
+      </section>
       {current ? (
         <ArtistEditor key={current.rating_key} serverId={serverId} artist={current} isAdmin={isAdmin} onBack={() => setSelected(null)} />
       ) : (
@@ -222,92 +259,79 @@ function ArtistEditor({
   }
 
   return (
-    <div className="min-w-0 space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={onBack} className="text-sm text-muted hover:text-text lg:hidden">
-          ← Artists
-        </button>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-2xl font-bold">
-            <Link to={`/library/artists/${artist.rating_key}`} className="hover:underline">
-              {artist.title}
-            </Link>
-          </h2>
-          {/* Written by the worker a moment after saving. */}
-          {artist.folder_error ? (
-            <p className="truncate text-xs text-danger">artist.jpg not saved: {artist.folder_error}</p>
-          ) : artist.folder ? (
-            <p className="truncate text-xs text-muted">
-              artist.jpg saved{artist.folder_saved_at ? ` ${formatRelative(artist.folder_saved_at)}` : ''} in{' '}
-              {artist.folder.replace(/\/artist\.jpg$/, '')}
-            </p>
-          ) : null}
-        </div>
-        <div className="inline-flex rounded-lg bg-surface-2 p-0.5" role="group" aria-label="Status">
-          {STATUSES.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={artist.status === key}
-              onClick={() => setStatus.mutate({ key: artist.rating_key, status: key })}
-              className={`rounded-md px-3 py-1 text-sm ${artist.status === key ? 'bg-surface font-medium shadow-sm' : 'text-muted hover:text-text'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <Card>
-          <div className="mb-4 flex flex-wrap gap-1 border-b border-border" role="tablist">
-            {TABS.map(([key, label]) => (
+    <div className="flex min-h-0 min-w-0 flex-col gap-4">
+      {/* The artist, the preview and the adjustments: all the room above the results. */}
+      <section aria-label="Preview" className="flex min-h-0 flex-1 flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={onBack} className="text-sm text-muted hover:text-text lg:hidden">
+            ← Artists
+          </button>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-2xl font-bold">
+              <Link to={`/library/artists/${artist.rating_key}`} className="hover:underline">
+                {artist.title}
+              </Link>
+            </h2>
+            {/* Written by the worker a moment after saving. */}
+            {artist.folder_error ? (
+              <p className="truncate text-xs text-danger">artist.jpg not saved: {artist.folder_error}</p>
+            ) : artist.folder ? (
+              <p className="truncate text-xs text-muted">
+                artist.jpg saved
+                {artist.folder_saved_at ? ` ${formatRelative(artist.folder_saved_at)}` : ''} in{' '}
+                {artist.folder.replace(/\/artist\.jpg$/, '')}
+              </p>
+            ) : null}
+          </div>
+          <div className="inline-flex rounded-lg bg-surface-2 p-0.5" role="group" aria-label="Status">
+            {STATUSES.map(([key, label]) => (
               <button
                 key={key}
                 type="button"
-                role="tab"
-                aria-selected={tab === key}
-                onClick={() => setTab(key)}
-                className={`border-b-2 px-3 pb-2 text-sm font-medium ${tab === key ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'}`}
+                aria-pressed={artist.status === key}
+                onClick={() => setStatus.mutate({ key: artist.rating_key, status: key })}
+                className={`rounded-md px-3 py-1 text-sm ${artist.status === key ? 'bg-surface font-medium shadow-sm' : 'text-muted hover:text-text'}`}
               >
                 {label}
               </button>
             ))}
           </div>
-          {tab === 'upload' ? (
-            <UploadTab serverId={serverId} onUploaded={(id) => choose({ kind: 'upload', upload_id: id })} />
-          ) : tab === 'text' ? (
-            <TextTab artist={artist} onChange={(text) => choose({ kind: 'text', text })} />
-          ) : (
-            <CandidateGrid
-              serverId={serverId}
-              artist={artist}
-              source={tab}
-              isAdmin={isAdmin}
-              selected={source?.kind === 'candidate' ? (source.token ?? null) : null}
-              onChoose={(token) => choose({ kind: 'candidate', token })}
-            />
-          )}
-        </Card>
+        </div>
 
-        <div className="space-y-4">
-          <Card title="Preview">
-            <div className="grid grid-cols-2 gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            {/* As big as fits: two squares side by side in the room the preview has. */}
+            <div className="flex min-h-0 flex-1 justify-center gap-6 lg:[container-type:size]">
               <Figure label="Now">
-                <Zoomable image={artist.thumb ? { src: imageUrl(serverId, artist.thumb, 1000)!, alt: `Current image for ${artist.title}` } : null}>
+                <Zoomable
+                  image={
+                    artist.thumb
+                      ? {
+                          src: imageUrl(serverId, artist.thumb, 1000)!,
+                          alt: `Current image for ${artist.title}`,
+                        }
+                      : null
+                  }
+                >
                   <Artwork serverId={serverId} path={artist.thumb} title={artist.title} size={400} className="w-full" />
                 </Zoomable>
               </Figure>
               <Figure label="New">
                 <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
                   {preview.url && (
-                    <Zoomable image={{ src: preview.url, alt: `New image for ${artist.title}` }} className="size-full">
+                    <Zoomable
+                      image={{
+                        src: preview.url,
+                        alt: `New image for ${artist.title}`,
+                      }}
+                      className="size-full"
+                    >
                       <img src={preview.url} alt={`New image for ${artist.title}`} className="size-full object-cover" />
                     </Zoomable>
                   )}
                   {!source && (
                     <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-muted">
-                      Choose an image
+                      Choose an image below
                     </span>
                   )}
                   {preview.loading && (
@@ -332,7 +356,13 @@ function ArtistEditor({
                       onSuccess: (result) => {
                         // The worker writes artist.jpg: look again for how it went.
                         if (result.folder_queued)
-                          window.setTimeout(() => void qc.invalidateQueries({ queryKey: artworkKeys.all(serverId) }), 3000)
+                          window.setTimeout(
+                            () =>
+                              void qc.invalidateQueries({
+                                queryKey: artworkKeys.all(serverId),
+                              }),
+                            3000,
+                          )
                         setNotice(
                           result.folder_queued
                             ? 'Saved to Plex. artist.jpg is being written to the artist folder.'
@@ -363,17 +393,57 @@ function ArtistEditor({
                 {artist.source && ` (${artist.source})`}.
               </p>
             )}
-          </Card>
-          <Adjustments transform={transform} onChange={patch} onReset={() => setTransform(DEFAULT_TRANSFORM)} />
+          </div>
+          <div className="min-h-0 xl:w-72 xl:overflow-y-auto">
+            <Adjustments transform={transform} onChange={patch} onReset={() => setTransform(DEFAULT_TRANSFORM)} />
+          </div>
         </div>
-      </div>
+      </section>
+
+      {/* The images found: one row, glued to the bottom of the window, scrolling sideways. */}
+      <section
+        aria-label="Where from"
+        className="flex h-[17rem] shrink-0 flex-col rounded-2xl border border-border bg-surface px-3 pt-2 pb-3"
+      >
+        <div className="mb-3 flex gap-1 overflow-x-auto border-b border-border" role="tablist">
+          {TABS.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={`border-b-2 px-3 pb-2 text-sm font-medium ${tab === key ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {/* Upload and Text are forms: they scroll in the row when they don't fit. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {tab === 'upload' ? (
+            <UploadTab serverId={serverId} onUploaded={(id) => choose({ kind: 'upload', upload_id: id })} />
+          ) : tab === 'text' ? (
+            <TextTab artist={artist} onChange={(text) => choose({ kind: 'text', text })} />
+          ) : (
+            <CandidateGrid
+              serverId={serverId}
+              artist={artist}
+              source={tab}
+              isAdmin={isAdmin}
+              selected={source?.kind === 'candidate' ? (source.token ?? null) : null}
+              onChoose={(token) => choose({ kind: 'candidate', token })}
+            />
+          )}
+        </div>
+      </section>
     </div>
   )
 }
 
 function Figure({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <figure className="space-y-1">
+    <figure className="w-1/2 space-y-1 lg:w-[min(calc(100cqh-1.5rem),calc(50cqw-0.75rem))]">
       {children}
       <figcaption className="text-center text-xs text-muted">{label}</figcaption>
     </figure>
@@ -396,11 +466,16 @@ function CandidateGrid({
   onChoose: (token: string) => void
 }) {
   const found = useCandidates(serverId, artist.rating_key, source, true)
-  if (found.isPending) return <Spinner small />
+  if (found.isPending)
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Spinner />
+      </div>
+    )
   if (found.isError) return <Notice tone="error">{errorMessage(found.error)}</Notice>
   const { candidates, note } = found.data
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       {note && (
         <Notice>
           {note}{' '}
@@ -411,18 +486,20 @@ function CandidateGrid({
           )}
         </Notice>
       )}
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
+      {candidates.length === 0 && !note && <p className="text-sm text-muted">None found here.</p>}
+      <ResultStrip label="Images found">
         {candidates.map((c) => (
-          <li key={c.token} className="relative">
+          <li key={c.token} className="relative shrink-0">
             <button
               type="button"
               onClick={() => onChoose(c.token)}
-              className={`block w-full rounded-lg border-2 p-1 text-left ${
+              aria-pressed={selected === c.token}
+              className={`block w-56 rounded-lg border-2 p-1 text-left ${
                 selected === c.token ? 'border-accent' : 'border-transparent hover:border-border'
               }`}
             >
               {/* Logos are often transparent: show them on a checkerboard-free dark plate. */}
-              <div className="flex aspect-[3/2] items-center justify-center rounded bg-[#17181c]">
+              <div className="flex h-36 items-center justify-center rounded bg-[#17181c]">
                 <img src={c.thumb} alt="" loading="lazy" className="max-h-full max-w-full object-contain" />
               </div>
               <span className="mt-1 block truncate text-xs text-muted">
@@ -433,7 +510,7 @@ function CandidateGrid({
             <ZoomCandidate src={`${c.thumb}&size=600`} label={c.label ?? 'Candidate'} />
           </li>
         ))}
-      </ul>
+      </ResultStrip>
     </div>
   )
 }
@@ -445,7 +522,11 @@ function UploadTab({ serverId, onUploaded }: { serverId: number; onUploaded: (id
       <FilePicker
         label="Choose an image"
         accept="image/png,image/jpeg,image/webp,image/gif"
-        onFile={(file) => upload.mutate(file, { onSuccess: (data) => onUploaded(data.upload_id) })}
+        onFile={(file) =>
+          upload.mutate(file, {
+            onSuccess: (data) => onUploaded(data.upload_id),
+          })
+        }
       />
       <p className="text-xs text-muted">PNG with transparency works best for logos. Up to 15 MB.</p>
       {upload.isPending && <Spinner small />}
@@ -547,14 +628,13 @@ function Adjustments({
   onReset: () => void
 }) {
   return (
-    <Card
-      title="Adjust"
-      action={
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">Adjust</h3>
         <button type="button" className="text-xs text-muted hover:text-text" onClick={onReset}>
           Reset
         </button>
-      }
-    >
+      </div>
       <div className="space-y-3">
         <Toggle label="Fit with a margin (looks right on phones)" checked={transform.fit ?? true} onChange={(fit) => onChange({ fit })} />
         <Slider label="Zoom" value={transform.zoom ?? 1} min={0.25} max={4} step={0.05} disabled={transform.fit ?? true} onChange={(zoom) => onChange({ zoom })} />
@@ -578,7 +658,7 @@ function Adjustments({
           </span>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -588,7 +668,10 @@ function BulkFanart({ serverId, todo }: { serverId: number; todo: number }) {
   const [confirming, setConfirming] = useState(false)
   const latest = jobs.data?.find((j) => j.kind === 'fanart')
   const running = latest && (latest.status === 'queued' || latest.status === 'running')
-  const { done = 0, total = 0 } = (latest?.progress ?? {}) as { done?: number; total?: number }
+  const { done = 0, total = 0 } = (latest?.progress ?? {}) as {
+    done?: number
+    total?: number
+  }
   const stats = (latest?.stats ?? {}) as Record<string, number>
 
   return (
@@ -666,7 +749,11 @@ function BulkStatus({ serverId, todo }: { serverId: number; todo: number }) {
             <Button
               variant="primary"
               busy={mark.isPending}
-              onClick={() => mark.mutate(confirming, { onSettled: () => setConfirming(null) })}
+              onClick={() =>
+                mark.mutate(confirming, {
+                  onSettled: () => setConfirming(null),
+                })
+              }
             >
               Mark {todo} as {label(confirming)}
             </Button>
@@ -702,7 +789,11 @@ function BulkStatus({ serverId, todo }: { serverId: number; todo: number }) {
   )
 }
 
-const NEXT_STATUS: Record<ArtworkStatus, ArtworkStatus> = { none: 'done', done: 'custom', custom: 'none' }
+const NEXT_STATUS: Record<ArtworkStatus, ArtworkStatus> = {
+  none: 'done',
+  done: 'custom',
+  custom: 'none',
+}
 
 /** The list's status dot: click to cycle To do → Done → Custom. */
 function StatusDot({ serverId, artist }: { serverId: number; artist: Artist }) {
