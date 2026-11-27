@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { useMemo, useState } from 'react'
 import { errorMessage } from '../api/client'
 import { pictureUrl, useEditTags, useTagHistory, useUndoTags, type TagChange, type TagChangeSet, type TrackFile } from '../api/files'
@@ -386,6 +387,13 @@ export function TagHistory({ serverId, album, artist }: { serverId: number; albu
     >
       <div className="space-y-2 text-sm">
         {undo.isError && <Notice tone="error">{errorMessage(undo.error)}</Notice>}
+        <p className="text-xs text-muted">
+          Edits that wrote something. Ones still waiting or being written, and ones that wrote nothing, are on{' '}
+          <Link to="/settings/jobs" className="underline hover:text-text">
+            Settings → Jobs
+          </Link>
+          .
+        </p>
         <ul className="space-y-2">
           {history.data.map((set) => {
             const status = STATUS[set.status]

@@ -193,7 +193,9 @@ async def test_editing_tags_with_history_and_undo(
     async def run(change_set: dict[str, Any]) -> dict[str, Any]:
         await apply_tag_changes.func(set_id=change_set["id"])
         [done] = [
-            s for s in (await owner.get(f"{base}/changes")).json() if s["id"] == change_set["id"]
+            s
+            for s in (await owner.get(f"{base}/changes", params={"everything": True})).json()
+            if s["id"] == change_set["id"]
         ]
         return done
 
@@ -254,15 +256,20 @@ async def test_editing_tags_with_history_and_undo(
     )
     assert again.status_code == 400  # already undone
 
+    # The history: edits that wrote something (not the one that ran into a conflict).
     history = (await owner.get(f"{base}/changes", params={"album": 200})).json()
-    assert [s["description"] for s in history] == [
+    assert [s["description"] for s in history] == ["Undid 1 change", "Fix OK Computer"]
+    everything = (
+        await owner.get(f"{base}/changes", params={"album": 200, "everything": True})
+    ).json()
+    assert [s["description"] for s in everything] == [
         "Undid 1 change",
         "Edited 1 tag in 1 file",
         "Fix OK Computer",
     ]
-    original = {c["id"]: c for c in history[2]["changes"]}
+    original = {c["id"]: c for c in history[1]["changes"]}
     assert original[title_change["id"]]["undone"] is True
-    assert history[2]["user"] == "owner"
+    assert history[1]["user"] == "owner"
     nothing = await owner.post(
         f"{base}/edits",
         json={
@@ -366,7 +373,7 @@ async def test_writing_plex_metadata_in_bulk(app: FastAPI, plex: FakePlex, music
     assert change_set["counts"] == {"pending": 1} and change_set["total"] == 1
     await apply_tag_changes.func(set_id=change_set["id"])
     assert FLAC(music / "301.flac")["title"] == ["Karma Police"]
-    [done] = (await owner.get(f"{base}/changes")).json()
+    [done] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert (done["status"], done["counts"], done["undoable"]) == ("applied", {"applied": 1}, 1)
 
     # Undo the whole edit, by its id (big edits have too many changes to list).
@@ -374,7 +381,7 @@ async def test_writing_plex_metadata_in_bulk(app: FastAPI, plex: FakePlex, music
     assert resp.status_code == 201, resp.text
     await apply_tag_changes.func(set_id=resp.json()["id"])
     assert FLAC(music / "301.flac")["title"] == ["Karma Police (Live)"]
-    history = (await owner.get(f"{base}/changes")).json()
+    history = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert history[1]["undoable"] == 0
     assert (await owner.post(f"{base}/undo", json={}, headers=CSRF)).status_code == 422
 
@@ -1049,7 +1056,7 @@ async def test_tags_an_older_scan_couldnt_read(
 
     resp = await owner.post(f"{base}/albums/200/musicbrainz", json=body, headers=CSRF)
     await apply_tag_changes.func(set_id=resp.json()["id"])
-    [done] = (await owner.get(f"{base}/changes")).json()
+    [done] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert (done["status"], done["counts"]) == ("applied", {"applied": 4})
     assert {c["old_value"] for c in done["changes"]} == {"XW", "old-track"}  # what was there
     assert FLAC(music / "301.flac")["releasecountry"] == ["GB"]
@@ -1244,7 +1251,7 @@ async def test_renaming_files_and_moving_them_back(
         "Radiohead/OK Computer/02 - Paranoid Android.flac",
         "Radiohead/OK Computer/06 - Karma Police (Live).flac",
     }
-    [done] = (await owner.get(f"{base}/changes")).json()
+    [done] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert (done["status"], done["counts"]) == ("applied", {"applied": 3})
 
     # Undo moves them back, and the emptied folders go.
@@ -1266,7 +1273,7 @@ async def test_renaming_files_and_moving_them_back(
     (album / "06 - Karma Police (Live).flac").write_bytes(b"someone else's")
     resp = await owner.post(f"{base}/renames/{job['id']}/apply", headers=CSRF)
     await apply_tag_changes.func(set_id=resp.json()["id"])
-    latest = (await owner.get(f"{base}/changes")).json()[0]
+    latest = (await owner.get(f"{base}/changes", params={"everything": True})).json()[0]
     assert latest["counts"] == {"applied": 2, "conflict": 1}
     assert (album / "06 - Karma Police (Live).flac").read_bytes() == b"someone else's"
     assert (music / "301.flac").exists()
@@ -1491,7 +1498,7 @@ async def test_album_artwork_in_files_and_folders(
     for name in ("300.flac", "301.flac"):
         data, mime = embedded(music / name) or (b"", "")
         assert mime == "image/jpeg" and data != huge
-    [done] = (await owner.get(f"{base}/changes")).json()
+    [done] = (await owner.get(f"{base}/changes", params={"everything": True})).json()
     assert done["counts"] == {"applied": 2}
     undo = await owner.post(f"{base}/undo", json={"set_id": done["id"]}, headers=CSRF)
     await apply_tag_changes.func(set_id=undo.json()["id"])
@@ -1511,7 +1518,7 @@ async def test_album_artwork_in_files_and_folders(
         i["path"] for i in (await owner.get(f"{base}/albums/200/artwork")).json()["folder_images"]
     ]
     assert names == ["cover.jpg", "folder.jpg"]
-    latest = (await owner.get(f"{base}/changes")).json()[0]
+    latest = (await owner.get(f"{base}/changes", params={"everything": True})).json()[0]
     undo = await owner.post(f"{base}/undo", json={"set_id": latest["id"]}, headers=CSRF)
     await apply_tag_changes.func(set_id=undo.json()["id"])
     assert not (music / "folder.jpg").exists()

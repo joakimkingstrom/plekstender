@@ -2152,7 +2152,8 @@ export interface paths {
         };
         /**
          * Tag History
-         * @description Edits (newest first) that touched an album's or an artist's files, or any.
+         * @description Edits (newest first) that changed an album's or an artist's files, or any: only
+         *     those that wrote something, unless `everything` (the others are on Settings → Jobs).
          */
         get: operations["tag_history_api_servers__server_id__files_changes_get"];
         put?: never;
@@ -3883,6 +3884,27 @@ export interface paths {
          * @description Admins: hide one about the instance for every admin.
          */
         post: operations["hide_for_everyone_api_notifications__notification_id__hide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Jobs
+         * @description Your jobs (and those on servers you own): running and waiting ones, each waiting one
+         *     with what it waits for, then the latest finished.
+         */
+        get: operations["list_jobs_api_jobs_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6951,6 +6973,53 @@ export interface components {
             /** Quota Checked At */
             quota_checked_at: string | null;
         };
+        /** JobOut */
+        JobOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "sync" | "artwork" | "files" | "edits" | "imports";
+            /** Id */
+            id: number;
+            /** What */
+            what: string;
+            /**
+             * Subkind
+             * @description scan, identify, lyrics, fanart, lastfm...
+             */
+            subkind: string | null;
+            /**
+             * Status
+             * @description queued, running, succeeded, failed, applied, partial...
+             */
+            status: string;
+            /** Server Id */
+            server_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Progress */
+            progress: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+            /** Stop Requested */
+            stop_requested: string | null;
+            /**
+             * Stoppable
+             * @description Can be stopped from the jobs page.
+             */
+            stoppable: boolean;
+            waiting_for: components["schemas"]["JobWaitingOut"] | null;
+        };
         /** JobStopIn */
         JobStopIn: {
             /**
@@ -6968,6 +7037,32 @@ export interface components {
             error: string | null;
             /** Stop Requested */
             stop_requested: ("stop" | "cancel") | null;
+        };
+        /** JobWaitingOut */
+        JobWaitingOut: {
+            /**
+             * What
+             * @description The job ahead of it, or why it hasn't started.
+             */
+            what: string;
+            /**
+             * Since
+             * @description When that job started.
+             */
+            since: string | null;
+        };
+        /** JobsOut */
+        JobsOut: {
+            /**
+             * Active
+             * @description Running, then waiting (oldest first).
+             */
+            active: components["schemas"]["JobOut"][];
+            /**
+             * Finished
+             * @description The latest finished, newest first.
+             */
+            finished: components["schemas"]["JobOut"][];
         };
         /** LastFmImportIn */
         LastFmImportIn: {
@@ -14320,6 +14415,8 @@ export interface operations {
                 album?: number | null;
                 artist?: number | null;
                 limit?: number;
+                /** @description Also edits that wrote nothing (queued, running, failed). */
+                everything?: boolean;
             };
             header?: never;
             path: {
@@ -17298,6 +17395,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_jobs_api_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsOut"];
                 };
             };
         };
