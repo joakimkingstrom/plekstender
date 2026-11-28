@@ -34,14 +34,23 @@ def performance(n: int, title: str, artist: str, original: bool) -> dict[str, An
     }
 
 
-# What SecondHandSongs knows: search results by title, and covers' pages.
-SEARCH = {
-    "Karma Police": [performance(1, "Karma Police", "Radiohead", True)],
-    "Glory Box": [
-        performance(9, "Glory Box", "Some Tribute Band", False),
-        performance(2, "Glory Box", "Portishead", False),
+# What SecondHandSongs knows: artists (two called Portishead), what they performed, and
+# covers' pages.
+ARTISTS = {
+    "Radiohead": [(100, "Radiohead")],
+    "Portishead": [(101, "Portishead"), (102, "Portishead"), (103, "Portishead Tribute")],
+}
+PERFORMANCES = {
+    100: [
+        performance(1, "Karma Police", "Radiohead", True),
+        performance(3, "Lucky", "Radiohead", False),  # a re-recording of their own
     ],
-    "Lucky": [performance(3, "Lucky", "Radiohead", False)],  # a re-recording of their own
+    101: [performance(5, "Sour Times", "Portishead", True)],  # not the right Portishead
+    102: [
+        performance(2, "Glory Box", "Portishead", False),
+        performance(6, "Roads", "Portishead", True),
+    ],
+    103: [performance(9, "Glory Box", "Portishead Tribute", False)],
 }
 DETAILS = {
     2: performance(20, "Ike's Rap II", "Isaac Hayes", True),
@@ -65,14 +74,18 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
             return httpx.Response(403, json={"error": "bad key"})
         if busy:
             return httpx.Response(429, json={"error": "slow down"})
-        if request.url.path == "/search/performance":
-            title = request.url.params["title"]
-            assert request.url.params["performer"]  # always by performer too
-            found = SEARCH.get(title, [])
-            return httpx.Response(
-                200, json={"totalResults": len(found), "resultPage": found, "skippedResults": 0}
-            )
-        n = int(request.url.path.rsplit("/", 1)[-1])
+        path = request.url.path
+        if path == "/search/performance":  # checking a key
+            return httpx.Response(200, json={"totalResults": 0, "resultPage": []})
+        if path == "/search/artist":
+            found = [
+                {"entityType": "artist", "uri": f"{API}/artist/{n}", "commonName": name}
+                for n, name in ARTISTS.get(request.url.params["commonName"], [])
+            ]
+            return httpx.Response(200, json={"totalResults": len(found), "resultPage": found})
+        if path.endswith("/performances"):
+            return httpx.Response(200, json=PERFORMANCES.get(int(path.split("/")[2]), []))
+        n = int(path.rsplit("/", 1)[-1])
         if n not in DETAILS:
             return httpx.Response(404)
         original = DETAILS[n]
@@ -101,23 +114,55 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
         "musicbrainz": True,
         "api_key": False,
         "per_hour": 90,
+        "per_day": 900,
         "songs": 5,
         "checked": 0,
         "covers": 0,
+        "requests_left": 6,  # three artists, two each (and about 5% covers)
     }
 
     resp = await owner.put("/api/admin/cover-songs", json={"enabled": True}, headers=CSRF)
     assert resp.status_code == 200, resp.text
-    assert await run() == 5  # Karma Police once, for both its releases
+    # A tight budget: Radiohead's songs (Karma Police once, for both its releases), and the
+    # page saying whose song Lucky is waits for the next run, as does Portishead.
+    monkeypatch.setattr(
+        cover_songs, "WITHOUT_KEY", cover_songs.Limits(per_minute=60_000, per_hour=12, per_day=900)
+    )
+    assert await run() == 3
+    async with get_sessionmaker()() as db:
+        lucky = await db.get(SongCover, ("radiohead", "lucky"))
+        assert lucky is not None and (lucky.status, lucky.original_url) == ("cover", None)
+    ok_computer = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
+    assert {t["cover_of"] for t in ok_computer["tracks"]} == {None}  # not yet
+    monkeypatch.setattr(
+        cover_songs, "WITHOUT_KEY", cover_songs.Limits(per_minute=60_000, per_hour=90, per_day=900)
+    )
+    assert await run() == 3
     async with get_sessionmaker()() as db:
         found = {(c.artist_key, c.title_norm): c for c in await db.scalars(select(SongCover))}
-    assert {k: (c.status, c.requests) for k, c in found.items()} == {
-        ("radiohead", "karma police"): ("original", 1),
-        ("radiohead", "paranoid android"): ("unknown", 1),
-        ("radiohead", "lucky"): ("original", 2),  # their own song, recorded again
-        ("portishead", "glory box"): ("cover", 2),  # not the tribute band's version
-        ("secret band", "secret song"): ("unknown", 1),
+    assert {k: (c.status, c.tried) for k, c in found.items()} == {
+        ("radiohead", "karma police"): ("original", "secondhandsongs"),
+        ("radiohead", "paranoid android"): ("unknown", "secondhandsongs"),
+        # Their own song, recorded again.
+        ("radiohead", "lucky"): ("original", "secondhandsongs"),
+        # The Portishead with the song (not their namesake, nor the tribute band).
+        ("portishead", "glory box"): ("cover", "secondhandsongs"),
+        ("secret band", "secret song"): ("unknown", "secondhandsongs"),
     }
+    # An artist search and their list each (both Portisheads' lists), and a cover's page each:
+    # not a request or two per song.
+    paths = sorted(r.url.path for r in asked)
+    assert paths == [
+        "/artist/100/performances",
+        "/artist/101/performances",
+        "/artist/102/performances",
+        "/performance/2",
+        "/performance/3",
+        "/search/artist",
+        "/search/artist",
+        "/search/artist",
+    ]
+    assert sum(c.requests for c in found.values()) == len(asked)
     glory = found[("portishead", "glory box")]
     assert (glory.original_artist, glory.original_title) == ("Isaac Hayes", "Ike's Rap II")
     assert glory.performance_url == "https://secondhandsongs.com/performance/2"
@@ -138,6 +183,8 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
     assert (status["songs"], status["checked"], status["covers"]) == (5, 5, 1)
 
     # Nothing due: nothing asked.
+    status = (await owner.get("/api/admin/cover-songs")).json()
+    assert status["requests_left"] == 0
     asked.clear()
     assert await run() == 0
     assert asked == []
@@ -156,7 +203,7 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
     monkeypatch.setattr(
         cover_songs, "WITHOUT_KEY", cover_songs.Limits(per_minute=60_000, per_hour=6, per_day=900)
     )
-    assert await run() == 0  # 6 requests made in the last hour already
+    assert await run() == 0  # 8 requests made in the last hour already
     monkeypatch.setattr(
         cover_songs, "WITHOUT_KEY", cover_songs.Limits(per_minute=60_000, per_hour=90, per_day=900)
     )
@@ -185,7 +232,7 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
     await due_again()
     asked.clear()
     assert await run() == 1
-    assert [r.headers.get("X-API-Key") for r in asked] == [KEY]
+    assert [r.headers.get("X-API-Key") for r in asked] == [KEY, KEY]
     # Turned off (the key is kept until removed).
     off = await owner.put("/api/admin/cover-songs", json={"enabled": False}, headers=CSRF)
     assert (off.json()["enabled"], off.json()["api_key"]) == (False, True)
