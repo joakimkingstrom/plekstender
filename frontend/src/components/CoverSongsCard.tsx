@@ -4,6 +4,22 @@ import { useCoverSongsSettings, useSetCoverSongs } from "../api/coverSongs";
 import { formatCount } from "../format";
 import { Button, Card, Notice, Spinner } from "./ui";
 
+/** About how long SecondHandSongs takes for the rest: its requests (about two an artist and
+ * one a cover) at the hour's pace, within the day's. */
+function timeLeft(c: {
+  requests_left: number;
+  per_hour: number;
+  per_day: number;
+}): string | null {
+  if (c.requests_left <= 0) return null;
+  const hours = Math.ceil(
+    c.requests_left / Math.max(1, Math.min(c.per_hour, c.per_day / 24)),
+  );
+  if (hours < 48)
+    return `About ${formatCount(hours)} more ${hours === 1 ? "hour" : "hours"} on SecondHandSongs`;
+  return `About ${formatCount(Math.ceil(hours / 24))} more days on SecondHandSongs, at up to ${formatCount(c.per_day)} requests a day`;
+}
+
 const SHS = "https://secondhandsongs.com";
 
 /** Cover songs (admins): turn the lookups on, choose SecondHandSongs and/or MusicBrainz, and
@@ -24,10 +40,7 @@ export function CoverSongsCard() {
     musicbrainz: c.musicbrainz,
     remove_key: false,
   };
-  const hours =
-    c.enabled && c.songs > c.checked
-      ? Math.ceil((c.songs - c.checked) / Math.max(1, c.per_hour * 0.7))
-      : 0;
+  const left = c.enabled && c.secondhandsongs ? timeLeft(c) : null;
   return (
     <Card title="Cover songs">
       <div className="space-y-3 text-sm">
@@ -98,9 +111,7 @@ export function CoverSongsCard() {
           <p className="text-xs text-muted">
             {formatCount(c.checked)} of {formatCount(c.songs)} songs looked up,{" "}
             {formatCount(c.covers)} covers found
-            {hours > 0 &&
-              c.secondhandsongs &&
-              `. About ${formatCount(hours)} more hours at ${formatCount(c.per_hour)} SecondHandSongs requests an hour`}
+            {left && `. ${left}`}
             .
           </p>
         )}

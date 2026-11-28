@@ -5967,6 +5967,11 @@ export interface components {
              */
             per_hour: number;
             /**
+             * Per Day
+             * @description And a day.
+             */
+            per_day: number;
+            /**
              * Songs
              * @description Different songs in the libraries.
              */
@@ -5981,6 +5986,11 @@ export interface components {
              * @description Of those, covers.
              */
             covers: number;
+            /**
+             * Requests Left
+             * @description About how many SecondHandSongs requests looking up the rest takes.
+             */
+            requests_left: number;
         };
         /** CoverSourcesOut */
         CoverSourcesOut: {

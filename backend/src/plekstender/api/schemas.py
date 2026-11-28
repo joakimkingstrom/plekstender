@@ -2344,9 +2344,13 @@ class CoverSongsOut(BaseModel):
     musicbrainz: bool
     api_key: bool = Field(description="A SecondHandSongs API key is saved (higher limits).")
     per_hour: int = Field(description="SecondHandSongs requests an hour Plekstender allows.")
+    per_day: int = Field(description="And a day.")
     songs: int = Field(description="Different songs in the libraries.")
     checked: int = Field(description="Of those, looked up.")
     covers: int = Field(description="Of those, covers.")
+    requests_left: int = Field(
+        description="About how many SecondHandSongs requests looking up the rest takes."
+    )
 
 
 class SetlistFmKeyIn(BaseModel):
