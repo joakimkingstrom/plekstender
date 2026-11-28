@@ -30,6 +30,8 @@ from plekstender.api.schemas import (
     RecentItem,
     SimilarArtistOut,
     SongListens,
+    SongVersion,
+    SongVersionsOut,
     TagAlbum,
     TagDetail,
     TagOut,
@@ -52,7 +54,7 @@ from plekstender.db.models import (
 from plekstender.gigs.seen_live import seen_live, times_seen
 from plekstender.history import stats
 from plekstender.plex.tv import PlexError
-from plekstender.sync.parse import normalise_artist, normalise_title
+from plekstender.sync.parse import core_title, normalise_artist, normalise_title
 from plekstender.tags.lyrics_kinds import Kind, best
 from plekstender.tags.read import LYRICS_READER
 
@@ -816,6 +818,80 @@ async def get_album(
             ),
         ),
         your_listens=_listens_out(listens),
+    )
+
+
+@router.get("/library/tracks/{rating_key}/versions", response_model=SongVersionsOut)
+async def song_versions(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep
+) -> SongVersionsOut:
+    """Every release of the song by the same artist: remasters, live, demo and other
+    versions (the same title without its bracketed or dashed suffix), oldest first."""
+    us = await get_user_server(db, user, server_id)
+    state, cond, where = visible(Track, user.id, us)
+    track = await db.scalar(
+        select(Track).join(state, cond).where(*where, Track.rating_key == rating_key)
+    )
+    if track is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
+    core = core_title(track.title)
+    by_artist = (
+        Track.artist_key == track.artist_key
+        if track.artist_key
+        else Track.artist_rating_key == track.artist_rating_key
+    )
+    rows = [
+        row
+        for row in (
+            await db.execute(
+                select(Track, state.user_rating, plays_of(state), Album)
+                .join(state, cond)
+                .outerjoin(
+                    Album,
+                    and_(
+                        Album.server_id == Track.server_id,
+                        Album.rating_key == Track.album_rating_key,
+                    ),
+                )
+                .where(*where, by_artist)
+            )
+        ).all()
+        if core_title(row[0].title) == core
+    ]
+    types = await _release_types(
+        db, us.server_id, [a.rating_key for _, _, _, a in rows if a is not None]
+    )
+    rows.sort(
+        key=lambda r: (
+            r[3].year if r[3] is not None and r[3].year is not None else 9999,
+            r[3].title if r[3] is not None else "",
+            r[0].disc or 0,
+            r[0].number or 0,
+        )
+    )
+    artist = track.original_title
+    if artist is None and track.artist_rating_key is not None:
+        found = await db.get(Artist, (us.server_id, track.artist_rating_key))
+        artist = found.title if found else None
+    return SongVersionsOut(
+        title=track.title,
+        artist=artist,
+        versions=[
+            SongVersion(
+                rating_key=t.rating_key,
+                title=t.title,
+                album_rating_key=t.album_rating_key,
+                album_title=a.title if a else None,
+                album_thumb=a.thumb if a else None,
+                year=a.year if a else None,
+                release_type=types.get(a.rating_key, "Album") if a else None,
+                duration_ms=t.duration_ms,
+                user_rating=rating,
+                plays=plays,
+                current=t.rating_key == rating_key,
+            )
+            for t, rating, plays, a in rows
+        ],
     )
 
 

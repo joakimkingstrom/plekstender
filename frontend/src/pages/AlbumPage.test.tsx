@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { AlbumPage } from './LibraryPage'
@@ -11,6 +11,15 @@ const summary = (key: number, title: string, year: number, release_type = 'Album
 // As the artist page lists them: albums oldest first, then EPs (an EP older than all the albums too).
 const albums = [summary(200, 'Pablo Honey', 1993), summary(201, 'The Bends', 1995), summary(205, 'Drill', 1992, 'EP')]
 const listens = { listens: 0, first_at: null, last_at: null, years: [], songs: [], artist_keys: [], album_key: null }
+const highAndDry = {
+  rating_key: 2011, title: 'High and Dry', original_title: null, disc: 1, number: 2, duration_ms: 257_000, popularity: 900,
+  user_rating: null, plays: 4, album_rating_key: 201, album_title: 'The Bends', album_thumb: null, listens: 0, seen_live: 0,
+  lyrics: null,
+}
+const version = (key: number, title: string, album: number, album_title: string, year: number, release_type: string, current: boolean) => ({
+  rating_key: key, title, album_rating_key: album, album_title, album_thumb: null, year, release_type, duration_ms: 257_000,
+  user_rating: null, plays: current ? 4 : 0, current,
+})
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -21,8 +30,17 @@ beforeEach(() => {
       const album = url.pathname.match(/^\/api\/servers\/1\/library\/albums\/(\d+)$/)
       if (album) {
         const al = albums.find((a) => a.rating_key === Number(album[1]))!
-        return json({ ...al, summary: null, released: null, studio: null, artist_rating_key: 100, artist_title: 'Radiohead', tags: [], tracks: [], your_listens: listens })
+        const tracks = al.rating_key === 201 ? [highAndDry] : []
+        return json({ ...al, summary: null, released: null, studio: null, artist_rating_key: 100, artist_title: 'Radiohead', tags: [], tracks, your_listens: listens })
       }
+      if (url.pathname === '/api/servers/1/library/tracks/2011/versions')
+        return json({
+          title: 'High and Dry', artist: 'Radiohead',
+          versions: [
+            version(2011, 'High and Dry', 201, 'The Bends', 1995, 'Album', true),
+            version(2091, 'High and Dry (Live)', 209, 'I Might Be Wrong', 2001, 'Live', false),
+          ],
+        })
       if (url.pathname === '/api/servers/1/library/artists/100')
         return json({ ...summary(100, 'Radiohead', 0), album_count: 3, summary: null, art: null, country: null, tags: [], similar: [], albums, top_tracks: [], your_listens: listens })
       if (url.pathname === '/api/servers') return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: false, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
@@ -66,4 +84,26 @@ it('steps through the artist’s releases in the order their page shows them', a
   expect(await screen.findByRole('heading', { name: 'Drill' })).toBeInTheDocument()
   expect(await screen.findByRole('link', { name: 'Previous album: The Bends' })).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: /^Next album/ })).not.toBeInTheDocument() // the last one
+})
+
+it('lists every version of a song when its title is clicked', async () => {
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/library/albums/201']}>
+        <main>
+          <Routes>
+            <Route path="/library/albums/:key" element={<AlbumPage />} />
+          </Routes>
+        </main>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'High and Dry' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(await within(dialog).findByText('Radiohead · 2 versions')).toBeInTheDocument()
+  expect(await within(dialog).findByText('High and Dry (Live)')).toBeInTheDocument()
+  expect(within(dialog).getByRole('link', { name: 'I Might Be Wrong' })).toHaveAttribute('href', '/library/albums/209')
+  expect(within(dialog).getByText(/2001 · Live/)).toBeInTheDocument()
+  expect(within(dialog).getByText('(this one)')).toBeInTheDocument()
+  expect(within(dialog).getAllByRole('button', { name: /Play a preview of/ })).toHaveLength(2)
 })
