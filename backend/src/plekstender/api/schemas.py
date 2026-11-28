@@ -558,16 +558,16 @@ class ArtistDetail(ArtistSummary):
     your_listens: ItemListensOut
 
 
-class LiveSource(BaseModel):
-    """A studio release a live album's songs first came out on."""
+class SongSource(BaseModel):
+    """A release a live album's or a compilation's songs first came out on."""
 
     rating_key: int
     title: str
+    artist: str | None = Field(description="Its album artist.")
     year: int | None
     thumb: str | None
     release_type: str
-    colour: str | None = Field(description="Its cover's main colour (#rrggbb), when known.")
-    songs: int = Field(description="Songs on the live album first released on it.")
+    songs: int = Field(description="Songs on the album first released on it.")
 
 
 class AlbumDetail(AlbumSummary):
@@ -579,13 +579,15 @@ class AlbumDetail(AlbumSummary):
     tags: list[TagOut]
     tracks: list[TrackOut]
     your_listens: ItemListensOut
-    live_sources: list[LiveSource] | None = Field(
+    song_sources: list[SongSource] | None = Field(
         default=None,
-        description="Live albums: the studio releases their songs first came out on, oldest "
-        "first; None for other albums.",
+        description="Live albums and compilations: the releases (albums, EPs, singles) their "
+        "songs first came out on, oldest first; by the album artist for live albums, by each "
+        "song's own artist for compilations. None for other albums.",
     )
-    live_unmatched: int = Field(
-        default=0, description="Live albums: songs not found on any of the artist's releases."
+    sources_unmatched: int = Field(
+        default=0,
+        description="Live albums and compilations: songs not found on any of those releases.",
     )
 
 

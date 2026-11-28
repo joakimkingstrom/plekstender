@@ -5264,16 +5264,16 @@ export interface components {
             tracks: components["schemas"]["TrackOut"][];
             your_listens: components["schemas"]["ItemListensOut"];
             /**
-             * Live Sources
-             * @description Live albums: the studio releases their songs first came out on, oldest first; None for other albums.
+             * Song Sources
+             * @description Live albums and compilations: the releases (albums, EPs, singles) their songs first came out on, oldest first; by the album artist for live albums, by each song's own artist for compilations. None for other albums.
              */
-            live_sources?: components["schemas"]["LiveSource"][] | null;
+            song_sources?: components["schemas"]["SongSource"][] | null;
             /**
-             * Live Unmatched
-             * @description Live albums: songs not found on any of the artist's releases.
+             * Sources Unmatched
+             * @description Live albums and compilations: songs not found on any of those releases.
              * @default 0
              */
-            live_unmatched: number;
+            sources_unmatched: number;
         };
         /** AlbumFilesOut */
         AlbumFilesOut: {
@@ -8236,32 +8236,6 @@ export interface components {
              */
             venues: components["schemas"]["LiveVenueCount"][];
         };
-        /**
-         * LiveSource
-         * @description A studio release a live album's songs first came out on.
-         */
-        LiveSource: {
-            /** Rating Key */
-            rating_key: number;
-            /** Title */
-            title: string;
-            /** Year */
-            year: number | null;
-            /** Thumb */
-            thumb: string | null;
-            /** Release Type */
-            release_type: string;
-            /**
-             * Colour
-             * @description Its cover's main colour (#rrggbb), when known.
-             */
-            colour: string | null;
-            /**
-             * Songs
-             * @description Songs on the live album first released on it.
-             */
-            songs: number;
-        };
         /** LiveStarIn */
         LiveStarIn: {
             /** Ids */
@@ -10504,6 +10478,32 @@ export interface components {
             name: string;
             /** Listens */
             listens: number;
+        };
+        /**
+         * SongSource
+         * @description A release a live album's or a compilation's songs first came out on.
+         */
+        SongSource: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /**
+             * Artist
+             * @description Its album artist.
+             */
+            artist: string | null;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Release Type */
+            release_type: string;
+            /**
+             * Songs
+             * @description Songs on the album first released on it.
+             */
+            songs: number;
         };
         /** SongVersion */
         SongVersion: {

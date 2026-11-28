@@ -30,11 +30,11 @@ from plekstender.api.schemas import (
     CoverOf,
     ItemListensOut,
     LibrarySearchOut,
-    LiveSource,
     RecentItem,
     SearchHit,
     SimilarArtistOut,
     SongListens,
+    SongSource,
     SongVersion,
     SongVersionsOut,
     TagAlbum,
@@ -46,7 +46,6 @@ from plekstender.api.schemas import (
 from plekstender.artist_countries import ArtistKey, artist_country
 from plekstender.db.models import (
     Album,
-    AlbumColour,
     Artist,
     ItemTag,
     MediaFile,
@@ -914,85 +913,103 @@ async def get_artist(
     )
 
 
-# Where a live album's songs first came out: albums and EPs before singles, then the oldest.
+# Where a live album's or a compilation's songs first came out: albums and EPs before singles,
+# then the oldest. (Other compilations, live albums and soundtracks don't count.)
 _SOURCE_TYPES = {"Album": 0, "EP": 0, "Single": 1}
+_VARIOUS = {"various artists", "various", "va"}
 
 
-async def _live_sources(
-    db: DbDep, user_id: int, us: UserServer, album: Album, tracks: list[Track]
-) -> tuple[list[LiveSource], int]:
-    """The artist's studio releases (albums, EPs, singles) each of the live album's songs
-    first came out on (by the title without "(Live)"-style suffixes), with how many songs
-    each, oldest first; and how many songs weren't found on any."""
-    if album.artist_rating_key is None:
-        return [], len(tracks)
+def _is_compilation(release_type: str | None, artist: Artist | None) -> bool:
+    various = artist is not None and artist.title.strip().lower() in _VARIOUS
+    return release_type == "Compilation" or various
+
+
+async def _song_sources(
+    db: DbDep,
+    user_id: int,
+    us: UserServer,
+    album: Album,
+    tracks: list[Track],
+    *,
+    own_artist: bool,
+) -> tuple[list[SongSource], int]:
+    """The releases (albums, EPs, singles) each of the album's songs first came out on, by the
+    title without "(Live)"- or "(Remastered)"-style suffixes, with how many songs each, oldest
+    first; and how many songs weren't found on any. `own_artist` (live albums): the album
+    artist's releases. Otherwise (compilations): each song's own artist's."""
     state, cond, where = visible(Album, user_id, us)
-    albums = {
-        a.rating_key: a
-        for a in await db.scalars(
-            select(Album)
-            .join(state, cond)
-            .where(
-                *where,
-                Album.artist_rating_key == album.artist_rating_key,
-                Album.rating_key != album.rating_key,
-            )
+    query = (
+        select(Track.title, Track.artist_key, Album)
+        .join(
+            Album,
+            and_(Album.server_id == Track.server_id, Album.rating_key == Track.album_rating_key),
         )
-    }
+        .join(state, cond)
+        .where(*where, Track.server_id == us.server_id, Album.rating_key != album.rating_key)
+    )
+    if own_artist:
+        if album.artist_rating_key is None:
+            return [], len(tracks)
+        query = query.where(Album.artist_rating_key == album.artist_rating_key)
+    else:
+        artist_keys = {t.artist_key for t in tracks if t.artist_key}
+        if not artist_keys:
+            return [], len(tracks)
+        query = query.where(Track.artist_key.in_(artist_keys))
+
+    def song(title: str, artist_key: str | None) -> tuple[str | None, str]:
+        return (None if own_artist else artist_key, core_title(title))
+
+    rows = (await db.execute(query)).all()
+    albums = {a.rating_key: a for _, _, a in rows}
     types = await _release_types(db, us.server_id, list(albums))
-    studio = {k: a for k, a in albums.items() if types.get(k, "Album") in _SOURCE_TYPES}
-    first: dict[str, Album] = {}
-    if studio:
-        rows = await db.execute(
-            select(Track.title, Track.album_rating_key).where(
-                Track.server_id == us.server_id, Track.album_rating_key.in_(list(studio))
-            )
-        )
 
-        def rank(a: Album) -> tuple[int, int, int]:
-            return (
-                _SOURCE_TYPES[types.get(a.rating_key, "Album")],
-                a.year if a.year is not None else 9999,
-                a.rating_key,
-            )
+    def kind(a: Album) -> str:
+        return types.get(a.rating_key, "Album")
 
-        for title, album_key in rows.all():
-            if album_key not in studio:
-                continue
-            core, candidate = core_title(title), studio[album_key]
-            if core not in first or rank(candidate) < rank(first[core]):
-                first[core] = candidate
+    def rank(a: Album) -> tuple[int, int, int]:
+        return (_SOURCE_TYPES[kind(a)], a.year if a.year is not None else 9999, a.rating_key)
+
+    first: dict[tuple[str | None, str], Album] = {}
+    for title, artist_key, candidate in rows:
+        if kind(candidate) not in _SOURCE_TYPES:
+            continue
+        key = song(title, artist_key)
+        if key not in first or rank(candidate) < rank(first[key]):
+            first[key] = candidate
     counts: dict[int, int] = {}
     unmatched = 0
     for track in tracks:
-        source = first.get(core_title(track.title))
+        source = first.get(song(track.title, track.artist_key))
         if source is None:
             unmatched += 1
         else:
             counts[source.rating_key] = counts.get(source.rating_key, 0) + 1
-    colours = {
-        key: hex_
-        for key, hex_ in (
+    if not counts:
+        return [], unmatched
+    artist_names = {
+        key: title
+        for key, title in (
             await db.execute(
-                select(AlbumColour.rating_key, AlbumColour.hex).where(
-                    AlbumColour.server_id == us.server_id,
-                    AlbumColour.rating_key.in_(list(counts)),
+                select(Artist.rating_key, Artist.title).where(
+                    Artist.server_id == us.server_id,
+                    Artist.rating_key.in_({albums[k].artist_rating_key for k in counts} - {None}),
                 )
             )
         ).all()
     }
     sources = sorted(
-        (studio[key] for key in counts),
+        (albums[key] for key in counts),
         key=lambda a: (a.year if a.year is not None else 9999, a.title),
     )
     return [
-        LiveSource(
+        SongSource(
             rating_key=a.rating_key,
             title=a.title,
+            artist=artist_names.get(a.artist_rating_key) if a.artist_rating_key else None,
             year=a.year,
             thumb=a.thumb,
-            release_type=types.get(a.rating_key, "Album"),
-            colour=colours.get(a.rating_key),
+            release_type=kind(a),
             songs=counts[a.rating_key],
         )
         for a in sources
@@ -1035,9 +1052,10 @@ async def get_album(
     tracks = [_track_out(t, r, p, album) for t, r, p in track_rows]
     await _with_covers(db, us.server_id, tracks)
     live = found[0].release_type == "Live"
+    compilation = not live and _is_compilation(found[0].release_type, artist)
     sources, unmatched = (
-        await _live_sources(db, user.id, us, album, [t for t, _, _ in track_rows])
-        if live
+        await _song_sources(db, user.id, us, album, [t for t, _, _ in track_rows], own_artist=live)
+        if live or compilation
         else ([], 0)
     )
     found[0].plays = max(found[0].plays, listens.listens)
@@ -1063,8 +1081,8 @@ async def get_album(
             ),
         ),
         your_listens=_listens_out(listens),
-        live_sources=sources if live else None,
-        live_unmatched=unmatched,
+        song_sources=sources if live or compilation else None,
+        sources_unmatched=unmatched,
     )
 
 

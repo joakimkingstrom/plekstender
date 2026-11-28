@@ -5,26 +5,31 @@ import { Artwork } from './library'
 import { Tooltip } from './Tooltip'
 import { Card } from './ui'
 
-/** A live album's songs by the studio release each first came out on: one bar per release,
- * oldest first, in its cover's colour (named by its cover and title, so the colour only
- * decorates), each a link to the album. */
-export function LiveSources({
+/** A live album's or a compilation's songs by the release each first came out on: one bar
+ * per release, oldest first, each a link to the album. A release by another artist than the
+ * album's (a various artists compilation) is named artist first. */
+export function SongSources({
   serverId,
   sources,
   unmatched,
+  albumArtist,
+  compilation,
 }: {
   serverId: number
-  sources: Schemas['LiveSource'][]
+  sources: Schemas['SongSource'][]
   unmatched: number
+  albumArtist: string | null
+  compilation: boolean
 }) {
   if (sources.length === 0) return null
   const max = Math.max(...sources.map((s) => s.songs))
   const total = sources.reduce((n, s) => n + s.songs, 0) + unmatched
   return (
     <Card title="Where the songs come from">
-      <ol className="space-y-1.5" aria-label="Songs by studio release">
+      <ol className="space-y-1.5" aria-label="Songs by release">
         {sources.map((s) => {
-          const label = `${formatCount(s.songs)} ${s.songs === 1 ? 'song' : 'songs'} from ${s.title}${s.year ? ` (${s.year})` : ''}`
+          const name = s.artist && s.artist !== albumArtist ? `${s.artist} · ${s.title}` : s.title
+          const label = `${formatCount(s.songs)} ${s.songs === 1 ? 'song' : 'songs'} from ${name}${s.year ? ` (${s.year})` : ''}`
           return (
             <li key={s.rating_key}>
               <Tooltip content={label} className="block">
@@ -33,7 +38,7 @@ export function LiveSources({
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-2 text-sm">
                       <span className="truncate">
-                        {s.title}
+                        {name}
                         <span className="text-xs text-muted">
                           {[s.year, s.release_type !== 'Album' ? s.release_type : null].filter(Boolean).map((p) => ` · ${p}`).join('')}
                         </span>
@@ -41,10 +46,7 @@ export function LiveSources({
                       <span className="shrink-0 text-xs text-muted tabular-nums">{formatCount(s.songs)}</span>
                     </span>
                     <span className="mt-1 block h-1.5 rounded-full bg-surface-2">
-                      <span
-                        className="block h-full rounded-full ring-1 ring-text/15"
-                        style={{ width: `${(100 * s.songs) / max}%`, background: s.colour ?? 'var(--color-accent)' }}
-                      />
+                      <span className="block h-full rounded-full bg-accent" style={{ width: `${(100 * s.songs) / max}%` }} />
                     </span>
                   </span>
                 </Link>
@@ -55,8 +57,10 @@ export function LiveSources({
       </ol>
       {unmatched > 0 && (
         <p className="mt-3 text-xs text-muted">
-          {formatCount(unmatched)} of {formatCount(total)} songs aren’t on one of the artist’s studio releases in the
-          library (covers, new songs, or releases you don’t have).
+          {formatCount(unmatched)} of {formatCount(total)} songs{' '}
+          {compilation
+            ? 'aren’t on another album, EP or single in the library (only on compilations, or on releases you don’t have).'
+            : 'aren’t on one of the artist’s studio releases in the library (covers, new songs, or releases you don’t have).'}
         </p>
       )}
     </Card>
