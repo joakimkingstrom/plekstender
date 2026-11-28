@@ -6,6 +6,8 @@ import { InstallPrompt } from './InstallPrompt'
 import { UpdateBanner } from './UpdateBanner'
 import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
+import { CoverBackground } from './CoverBackground'
+import { ThemeMenu } from './ThemeMenu'
 import { HeaderSearch } from './HeaderSearch'
 import { SPIN_MS, SPIN_SCALE } from '../brand'
 import { Mark } from './Mark'
@@ -56,7 +58,7 @@ export function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const logout = useLogout()
-  const [theme, setTheme] = useTheme()
+  const [theme, setTheme, themeChoice] = useTheme()
   const accent = me?.preferences?.accent ?? null
   // The user's accent colour, worked out for the current theme.
   useEffect(() => applyAccent(accent, theme), [accent, theme])
@@ -112,6 +114,7 @@ export function Layout() {
   const phoneHidden = focus ? 'max-md:hidden' : ''
   return (
     <div className="flex min-h-dvh flex-col">
+      <CoverBackground theme={theme} settings={me.preferences?.background} />
       <header className={`sticky top-0 z-10 border-b border-border bg-bg/90 pt-[env(safe-area-inset-top)] backdrop-blur ${phoneHidden}`}>
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <NavLink to="/" aria-label="Plekstender home" onClick={(e) => spinPick(e.currentTarget)}>
@@ -126,19 +129,16 @@ export function Layout() {
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <HeaderSearch />
-            <button
-              type="button"
-              onClick={() => {
-                const next = theme === 'dark' ? 'light' : 'dark'
+            <ThemeMenu
+              theme={theme}
+              choice={themeChoice}
+              onChoose={(next) => {
                 setTheme(next)
-                // Saved to the account too when the account has a theme (Profile → Theme).
-                if (savedTheme) savePreferences.mutate({ theme: next })
+                // Saved to the account too when the account has a theme (Profile → Theme);
+                // the system's: this browser follows its device.
+                if (savedTheme) savePreferences.mutate({ theme: next === 'system' ? null : next })
               }}
-              className="rounded-lg px-2 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-text"
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-            >
-              {theme === 'dark' ? '☀' : '☾'}
-            </button>
+            />
             <NotificationBell isAdmin={me.is_admin} />
             <NavLink to="/profile" aria-label="Your profile" className="rounded-full focus-visible:outline-2">
               <Avatar url={me.thumb_url} name={me.username} />

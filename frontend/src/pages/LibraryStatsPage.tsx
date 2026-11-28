@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
+import { useSavePlaylist } from '../api/playlists'
+import { Dialog } from '../components/Dialog'
 import { errorMessage, type Schemas } from '../api/client'
 import {
   useArtistCountries,
@@ -21,7 +23,7 @@ import { AreaChart, ColumnChart, Donut, type DonutSlice } from '../components/ch
 import { Artwork } from '../components/library'
 import { Segmented } from '../components/Segmented'
 import { WordCloud } from '../components/WordCloud'
-import { Card, Notice, Spinner } from '../components/ui'
+import { Button, Card, Notice, Spinner } from '../components/ui'
 import { useLibraryServer } from '../components/useLibraryServer'
 import { formatBytes, formatCount, formatShare } from '../format'
 
@@ -485,6 +487,7 @@ const WORD_KINDS: [WordKind, string][] = [
 
 function Words({ serverId }: { serverId: number }) {
   const [kind, setKind] = useState<WordKind>('track')
+  const [picked, setPicked] = useState<{ word: string; count: number } | null>(null)
   const words = useWords(serverId, kind)
   const shown = words.data ?? []
   const what = WORD_KINDS.find(([k]) => k === kind)![1].toLowerCase()
@@ -497,12 +500,58 @@ function Words({ serverId }: { serverId: number }) {
       ) : shown.length === 0 ? (
         <p className="text-sm text-muted">No words yet.</p>
       ) : (
-        <WordCloud words={shown} label={`The most common words in ${what}' names`} />
+        <WordCloud words={shown} label={`The most common words in ${what}' names`} onPick={kind === 'track' ? setPicked : undefined} />
       )}
       <p className="mt-2 text-xs text-muted">
         The 100 most common words in {what}' names, sized by how many names they're in. Words like "the", "and" or
-        "remastered" are left out (in several languages).
+        "remastered" are left out (in several languages).{kind === 'track' && ' Click a word for a playlist of its songs.'}
       </p>
+      {picked && <SongsAbout serverId={serverId} word={picked.word} count={picked.count} onClose={() => setPicked(null)} />}
     </Card>
+  )
+}
+
+/** "Songs about <word>": a smart playlist of every song with the word in its title (found
+ * again at each weekly refresh), made straight away or adjusted in the builder first. */
+function SongsAbout({ serverId, word, count, onClose }: { serverId: number; word: string; count: number; onClose: () => void }) {
+  const save = useSavePlaylist(serverId, null)
+  const navigate = useNavigate()
+  const name = `Songs about ${word}`
+  return (
+    <Dialog title={name} onClose={onClose}>
+      <div className="space-y-4 text-sm">
+        <p>
+          Make a playlist of the {plural(count, 'song', 'songs')} with “{word}” in the title? It’s refreshed weekly, so
+          new songs with it come in.
+        </p>
+        {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="primary"
+            busy={save.isPending}
+            onClick={() =>
+              save.mutate(
+                {
+                  name,
+                  description: `Every song with “${word}” in the title. Made by Plekstender.`,
+                  schedule: 'weekly',
+                  definition: { title_words: [word], forgotten: false, order: 'random', limit: null },
+                  display: {},
+                },
+                { onSuccess: () => navigate('/library/playlists') },
+              )
+            }
+          >
+            Make the playlist
+          </Button>
+          <Link
+            to={`/library/playlists/new?word=${encodeURIComponent(word)}`}
+            className="inline-flex items-center rounded-lg px-4 py-2 font-semibold text-muted hover:bg-surface-2 hover:text-text"
+          >
+            Adjust it first
+          </Link>
+        </div>
+      </div>
+    </Dialog>
   )
 }

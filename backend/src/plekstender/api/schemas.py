@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field, field_validator
@@ -95,6 +96,30 @@ class GigPlaylistsOut(BaseModel):
     items: list[GigPlaylistOut] = Field(description="The latest, newest gig first.")
 
 
+CoverFamily = Literal[
+    "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "white", "grey", "black"
+]
+
+
+class BackgroundSettings(BaseModel):
+    """Album covers slowly panning behind the pages."""
+
+    mode: Literal["off", "covers", "colour"] = Field(
+        default="off",
+        description="covers: light covers in light mode, dark ones in dark mode; colour: only "
+        "covers of one colour family.",
+    )
+    family: CoverFamily = Field(default="blue", description="The colour, in colour mode.")
+    speed: Literal["slow", "normal", "fast"] = Field(
+        default="normal", description="How long each cover stays (about 30, 22 or 14 s)."
+    )
+
+
+class BackgroundCover(BaseModel):
+    rating_key: int
+    thumb: str
+
+
 class Preferences(BaseModel):
     """Per-user settings, stored on the account so they follow the user across devices."""
 
@@ -122,6 +147,7 @@ class Preferences(BaseModel):
         default=None, description="Light or dark on every device; None: each browser's own choice."
     )
     achievements: bool = Field(default=True, description="Achievements and their pop-ups.")
+    background: BackgroundSettings = Field(default_factory=BackgroundSettings)
     lyrics_icons: bool = Field(
         default=False,
         description="Small icons on song and album rows: what lyrics their files have.",
@@ -532,6 +558,18 @@ class ArtistDetail(ArtistSummary):
     your_listens: ItemListensOut
 
 
+class LiveSource(BaseModel):
+    """A studio release a live album's songs first came out on."""
+
+    rating_key: int
+    title: str
+    year: int | None
+    thumb: str | None
+    release_type: str
+    colour: str | None = Field(description="Its cover's main colour (#rrggbb), when known.")
+    songs: int = Field(description="Songs on the live album first released on it.")
+
+
 class AlbumDetail(AlbumSummary):
     summary: str | None
     released: dt.date | None
@@ -541,6 +579,14 @@ class AlbumDetail(AlbumSummary):
     tags: list[TagOut]
     tracks: list[TrackOut]
     your_listens: ItemListensOut
+    live_sources: list[LiveSource] | None = Field(
+        default=None,
+        description="Live albums: the studio releases their songs first came out on, oldest "
+        "first; None for other albums.",
+    )
+    live_unmatched: int = Field(
+        default=0, description="Live albums: songs not found on any of the artist's releases."
+    )
 
 
 # --- library settings (admin) -------------------------------------------------------------
@@ -968,7 +1014,7 @@ class AcoustIdKeyIn(BaseModel):
 
 class ArtworkJobOut(BaseModel):
     id: int
-    kind: Literal["fanart", "export", "import", "covers"]
+    kind: Literal["fanart", "text", "export", "import", "covers"]
     status: Literal["queued", "running", "succeeded", "failed"]
     progress: dict[str, Any]
     stats: dict[str, Any]
@@ -999,9 +1045,29 @@ class BestCoversJobIn(BaseModel):
 
 class FanartJobIn(BaseModel):
     rating_keys: list[int] | None = Field(default=None, max_length=10000)
-    status: Literal["none", "custom", "done"] = Field(
+    status: Literal["none", "custom", "done", "all"] = Field(
         default="none", description="Without rating_keys: every artist with this status."
     )
+    q: str | None = Field(
+        default=None, max_length=200, description="Without rating_keys: names containing this."
+    )
+
+
+class TextJobIn(FanartJobIn):
+    """Text logos for many artists: each artist's name, in one font and colour, or in one
+    picked at random (per artist) from several."""
+
+    fonts: list[str] = Field(min_length=1, max_length=40)
+    colours: list[str] = Field(min_length=1, max_length=12)
+    case: Literal["none", "upper", "lower"] = "none"
+
+    @field_validator("colours")
+    @classmethod
+    def _colours(cls, value: list[str]) -> list[str]:
+        for colour in value:
+            if not re.fullmatch(r"#[0-9a-fA-F]{6}", colour):
+                raise ValueError(f"not a colour: {colour!r}")
+        return value
 
 
 class FolderSettingsIn(BaseModel):
