@@ -92,7 +92,7 @@ services:
     # data volume has to be listed again: without it /data is read-only in the worker.
     volumes:
       - data:/data
-      - /mnt/music:/music
+      - ${MUSIC_MOUNT}:/music
     depends_on:
       db-init:
         condition: service_completed_successfully
