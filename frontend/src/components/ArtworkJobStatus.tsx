@@ -8,6 +8,7 @@ type Kind = ArtworkJob['kind']
 const KINDS: Record<Kind, { running: string; done: string; page: string }> = {
   covers: { running: 'Applying best album covers', done: 'Best album covers applied', page: '/library/artwork/albums' },
   fanart: { running: 'Applying fanart.tv logos', done: 'fanart.tv logos applied', page: '/library/artwork' },
+  text: { running: 'Making text logos', done: 'Text logos applied', page: '/library/artwork' },
   export: { running: 'Exporting artist logos', done: 'Artist logos exported', page: '/settings/export/logos' },
   import: { running: 'Importing artist logos', done: 'Artist logos imported', page: '/settings/export/logos' },
 }
@@ -24,7 +25,7 @@ export function ArtworkJobStop({ job, compact = false }: { job: ArtworkJob; comp
   return (
     <JobStop
       {...props}
-      what={job.kind === 'covers' ? 'the covers job' : job.kind === 'fanart' ? 'the logos job' : 'the import'}
+      what={job.kind === 'covers' ? 'the covers job' : job.kind === 'fanart' || job.kind === 'text' ? 'the logos job' : 'the import'}
       keeps={`Stop keeps the ${things} saved so far.`}
       cancel={
         <>

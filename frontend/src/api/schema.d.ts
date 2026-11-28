@@ -3433,6 +3433,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/jobs/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Text Job
+         * @description Give the given artists (or those listed) a text logo of their name, in one font and
+         *     colour or a random pick per artist from several.
+         */
+        post: operations["start_text_job_api_servers__server_id__artwork_jobs_text_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/folder": {
         parameters: {
             query?: never;
@@ -5221,6 +5242,17 @@ export interface components {
             /** Tracks */
             tracks: components["schemas"]["TrackOut"][];
             your_listens: components["schemas"]["ItemListensOut"];
+            /**
+             * Live Sources
+             * @description Live albums: the studio releases their songs first came out on, oldest first; None for other albums.
+             */
+            live_sources?: components["schemas"]["LiveSource"][] | null;
+            /**
+             * Live Unmatched
+             * @description Live albums: songs not found on any of the artist's releases.
+             * @default 0
+             */
+            live_unmatched: number;
         };
         /** AlbumFilesOut */
         AlbumFilesOut: {
@@ -5580,7 +5612,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "fanart" | "export" | "import" | "covers";
+            kind: "fanart" | "text" | "export" | "import" | "covers";
             /**
              * Status
              * @enum {string}
@@ -6289,7 +6321,12 @@ export interface components {
              * @default none
              * @enum {string}
              */
-            status: "none" | "custom" | "done";
+            status: "none" | "custom" | "done" | "all";
+            /**
+             * Q
+             * @description Without rating_keys: names containing this.
+             */
+            q?: string | null;
         };
         /** FanartKeyIn */
         FanartKeyIn: {
@@ -8139,6 +8176,32 @@ export interface components {
              * @description Venues with shows, for the filter.
              */
             venues: components["schemas"]["LiveVenueCount"][];
+        };
+        /**
+         * LiveSource
+         * @description A studio release a live album's songs first came out on.
+         */
+        LiveSource: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Release Type */
+            release_type: string;
+            /**
+             * Colour
+             * @description Its cover's main colour (#rrggbb), when known.
+             */
+            colour: string | null;
+            /**
+             * Songs
+             * @description Songs on the live album first released on it.
+             */
+            songs: number;
         };
         /** LiveStarIn */
         LiveStarIn: {
@@ -10836,6 +10899,37 @@ export interface components {
              * @description Median release year per year.
              */
             median_release: (number | null)[];
+        };
+        /**
+         * TextJobIn
+         * @description Text logos for many artists: each artist's name, in one font and colour, or in one
+         *     picked at random (per artist) from several.
+         */
+        TextJobIn: {
+            /** Rating Keys */
+            rating_keys?: number[] | null;
+            /**
+             * Status
+             * @description Without rating_keys: every artist with this status.
+             * @default none
+             * @enum {string}
+             */
+            status: "none" | "custom" | "done" | "all";
+            /**
+             * Q
+             * @description Without rating_keys: names containing this.
+             */
+            q?: string | null;
+            /** Fonts */
+            fonts: string[];
+            /** Colours */
+            colours: string[];
+            /**
+             * Case
+             * @default none
+             * @enum {string}
+             */
+            case: "none" | "upper" | "lower";
         };
         /** TextLogo */
         TextLogo: {
@@ -17108,6 +17202,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["FanartJobIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_text_job_api_servers__server_id__artwork_jobs_text_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TextJobIn"];
             };
         };
         responses: {

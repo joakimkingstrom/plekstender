@@ -46,6 +46,7 @@ from plekstender.api.schemas import (
     ImportEntryOut,
     ImportMatchOut,
     ImportPreviewOut,
+    TextJobIn,
     UploadOut,
 )
 from plekstender.artwork import images, packs
@@ -550,10 +551,34 @@ async def start_fanart_job(
 ) -> ArtworkJobOut:
     """Apply the most-liked fanart.tv logo to the given artists (or all with a status)."""
     us = await owner_server(db, user, server_id)
+    return job_out(server_id, await start_job(db, us, "fanart", _scope(body)))
+
+
+def _scope(body: FanartJobIn) -> dict[str, object]:
+    """Which artists a bulk job covers (the given ones, or those listed), and the transform."""
     params: dict[str, object] = {"status": body.status, "transform": Transform().model_dump()}
+    if body.q:
+        params["q"] = body.q
     if body.rating_keys:
         params["rating_keys"] = body.rating_keys
-    return job_out(server_id, await start_job(db, us, "fanart", params))
+    return params
+
+
+@router.post("/jobs/text", response_model=ArtworkJobOut, status_code=status.HTTP_201_CREATED)
+async def start_text_job(
+    server_id: int, body: TextJobIn, db: DbDep, user: UserDep
+) -> ArtworkJobOut:
+    """Give the given artists (or those listed) a text logo of their name, in one font and
+    colour or a random pick per artist from several."""
+    us = await owner_server(db, user, server_id)
+    offered = {name for names in (await get_fonts(db)).values() for name in names}
+    missing = [f for f in body.fonts if f not in offered]
+    if missing:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"These fonts aren't offered here: {', '.join(missing)}."
+        )
+    params = _scope(body) | {"fonts": body.fonts, "colours": body.colours, "case": body.case}
+    return job_out(server_id, await start_job(db, us, "text", params))
 
 
 # --- saving to artist folders --------------------------------------------------------------

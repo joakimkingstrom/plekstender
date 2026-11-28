@@ -29,6 +29,15 @@ beforeEach(() => {
       const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
       const album = url.pathname.match(/^\/api\/servers\/1\/library\/albums\/(\d+)$/)
       if (album) {
+        if (album[1] === '209')
+          return json({
+            ...summary(209, 'I Might Be Wrong', 2001, 'Live'), summary: null, released: null, studio: null, artist_rating_key: 100,
+            artist_title: 'Radiohead', tags: [], tracks: [], your_listens: listens, live_unmatched: 2,
+            live_sources: [
+              { rating_key: 205, title: 'Drill', year: 1992, thumb: null, release_type: 'EP', colour: null, songs: 1 },
+              { rating_key: 201, title: 'The Bends', year: 1995, thumb: null, release_type: 'Album', colour: '#aa3322', songs: 4 },
+            ],
+          })
         const al = albums.find((a) => a.rating_key === Number(album[1]))!
         const tracks = al.rating_key === 201 ? [highAndDry] : []
         return json({ ...al, summary: null, released: null, studio: null, artist_rating_key: 100, artist_title: 'Radiohead', tags: [], tracks, your_listens: listens })
@@ -106,4 +115,23 @@ it('lists every version of a song when its title is clicked', async () => {
   expect(within(dialog).getByText(/2001 · Live/)).toBeInTheDocument()
   expect(within(dialog).getByText('(this one)')).toBeInTheDocument()
   expect(within(dialog).getAllByRole('button', { name: /Play a preview of/ })).toHaveLength(2)
+})
+
+it('shows where a live album’s songs come from, linking to each release', async () => {
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/library/albums/209']}>
+        <main>
+          <Routes>
+            <Route path="/library/albums/:key" element={<AlbumPage />} />
+          </Routes>
+        </main>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+  const list = await screen.findByRole('list', { name: 'Songs by studio release' })
+  const links = within(list).getAllByRole('link')
+  expect(links.map((l) => l.getAttribute('aria-label'))).toEqual(['1 song from Drill (1992)', '4 songs from The Bends (1995)'])
+  expect(links[1]).toHaveAttribute('href', '/library/albums/201')
+  expect(screen.getByText(/2 of 7 songs aren’t on one of the artist’s studio releases/)).toBeInTheDocument()
 })
