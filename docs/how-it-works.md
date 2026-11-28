@@ -34,6 +34,7 @@ for how it's put together, [architecture.md](architecture.md); for what might co
 | Image search: quality | For well-known artists (Radiohead, The Beatles) the top results are real logos from logo sites, often large PNGs. For smaller artists (Nathaniel Rateliff, St. Paul & The Broken Bones) real logos are mixed with merch (TeePublic, Redbubble, Etsy, Amazon), tour posters and ticket-site banners. | Search is a source of **candidates to pick from**, never used by the bulk "apply automatically" action. Rank candidates: PNG/SVG and "logo" in the title first; merch and ticket sites last. fanart.tv stays the first choice. |
 
 ## Library mirror
+- **Library → Albums (28 Nov):** the library page shows Artists or Albums (`?view=albums`). Albums: every album with its artist (`GET /api/servers/{id}/library/albums`, `TagAlbum` items), searched by album or artist name, filtered by genre, style, or mood (the album's or its artist's) and by release type (Plex's Subformat, else its Format, else Album, worked out in SQL the way `_release_types` does; the page also returns how many of each type the other filters leave, for the chips), and sorted by artist (then year), title, newest, oldest, recently added, your rating, most played, or popularity. Video covers play on hover.
 - Full + incremental sync jobs with progress UI
 - Per-user state sync
 - Basic library browser (needed by later features anyway)

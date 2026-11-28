@@ -440,6 +440,17 @@ class TagAlbum(AlbumSummary):
     artist_title: str | None
 
 
+class AlbumListPage(BaseModel):
+    items: list[TagAlbum] = Field(description="Albums with their artist.")
+    total: int
+    offset: int
+    limit: int
+    types: dict[str, int] = Field(
+        description="Albums of each release type (Album, EP, Compilation, Live…) among those "
+        "the other filters leave, for the type filter."
+    )
+
+
 class TagDetail(BaseModel):
     """A genre's, style's or mood's page."""
 

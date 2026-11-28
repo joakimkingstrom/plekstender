@@ -531,6 +531,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Albums
+         * @description Every album, with its artist: searched (by album or artist), filtered by genre, style,
+         *     or mood (the album's or its artist's) and by release type, and sorted.
+         */
+        get: operations["list_albums_api_servers__server_id__library_albums_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/tags": {
         parameters: {
             query?: never;
@@ -5393,6 +5414,27 @@ export interface components {
              * @default 0
              */
             skipped_hidden: number;
+        };
+        /** AlbumListPage */
+        AlbumListPage: {
+            /**
+             * Items
+             * @description Albums with their artist.
+             */
+            items: components["schemas"]["TagAlbum"][];
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /**
+             * Types
+             * @description Albums of each release type (Album, EP, Compilation, Live…) among those the other filters leave, for the type filter.
+             */
+            types: {
+                [key: string]: number;
+            };
         };
         /** AlbumLyricsOut */
         AlbumLyricsOut: {
@@ -12254,6 +12296,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtistPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_albums_api_servers__server_id__library_albums_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                tag?: number | null;
+                release_type?: string | null;
+                sort?: "artist" | "title" | "newest" | "oldest" | "added" | "rating" | "plays" | "popularity";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumListPage"];
                 };
             };
             /** @description Validation Error */

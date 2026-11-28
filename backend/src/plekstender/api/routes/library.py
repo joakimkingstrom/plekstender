@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
-from sqlalchemy import ColumnElement, and_, func, literal, select, tuple_
+from sqlalchemy import ColumnElement, and_, func, literal, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import aliased
 
@@ -22,6 +22,7 @@ from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.routes.servers import get_user_server, server_client
 from plekstender.api.schemas import (
     AlbumDetail,
+    AlbumListPage,
     AlbumLyricsOut,
     AlbumSummary,
     ArtistDetail,
@@ -72,6 +73,7 @@ from plekstender.tags.scan import video_folder
 router = APIRouter(prefix="/api/servers/{server_id}", tags=["library"])
 
 ArtistSort = Literal["title", "popularity", "plays", "rating", "added"]
+AlbumSort = Literal["artist", "title", "newest", "oldest", "added", "rating", "plays", "popularity"]
 IMAGE_PATH = re.compile(r"^/library/metadata/\d+/(?:thumb|art)(?:/\d+)?$")
 IMAGE_SIZES = (64, 128, 256, 400, 600, 1000)
 
@@ -168,6 +170,130 @@ async def list_artists(
         total=total or 0,
         offset=offset,
         limit=limit,
+    )
+
+
+def _release_type() -> Any:
+    """An album's release type in SQL, as `_release_types` works it out: its Subformat
+    (Compilation, Live…) if Plex set one, else its Format (Album, EP, Single), else Album."""
+
+    def first(kind: str) -> Any:
+        return (
+            select(func.min(Tag.name))
+            .select_from(ItemTag)
+            .join(Tag, ItemTag.tag_id == Tag.id)
+            .where(
+                ItemTag.server_id == Album.server_id,
+                ItemTag.rating_key == Album.rating_key,
+                Tag.kind == kind,
+            )
+            .correlate(Album)
+            .scalar_subquery()
+        )
+
+    return func.coalesce(first("subformat"), first("format"), literal("Album"))
+
+
+def album_has_tag(server_id: int, tag_id: int) -> ColumnElement[bool]:
+    """The album has the tag, or its artist has it."""
+    tagged = select(ItemTag.rating_key).where(
+        ItemTag.server_id == server_id, ItemTag.tag_id == tag_id
+    )
+    return Album.rating_key.in_(tagged) | Album.artist_rating_key.in_(tagged)
+
+
+@router.get("/library/albums", response_model=AlbumListPage)
+async def list_albums(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    q: str | None = Query(default=None, max_length=200),
+    tag: int | None = None,
+    release_type: str | None = Query(default=None, max_length=40),
+    sort: AlbumSort = "artist",
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=60, ge=1, le=200),
+) -> AlbumListPage:
+    """Every album, with its artist: searched (by album or artist), filtered by genre, style,
+    or mood (the album's or its artist's) and by release type, and sorted."""
+    us = await get_user_server(db, user, server_id)
+    state, cond, where = visible(Album, user.id, us)
+    kind = _release_type()
+    filters: list[ColumnElement[bool]] = list(where)
+    if q:
+        like = _like(q)
+        filters.append(
+            or_(Album.title.ilike(like, escape="\\"), Artist.title.ilike(like, escape="\\"))
+        )
+    if tag is not None:
+        filters.append(album_has_tag(us.server_id, tag))
+
+    def query(*columns: Any) -> Any:
+        return (
+            select(*columns)
+            .select_from(Album)
+            .join(state, cond)
+            .outerjoin(
+                Artist,
+                and_(
+                    Artist.server_id == Album.server_id,
+                    Artist.rating_key == Album.artist_rating_key,
+                ),
+            )
+        )
+
+    types = {
+        name: n
+        for name, n in (
+            await db.execute(query(kind, func.count()).where(*filters).group_by(kind))
+        ).all()
+    }
+    if release_type:
+        filters.append(kind == release_type)
+    total = await db.scalar(query(func.count()).where(*filters)) or 0
+    by_title = func.lower(func.coalesce(Album.title_sort, Album.title))
+    orders: dict[str, list[Any]] = {
+        "artist": [
+            func.lower(func.coalesce(Artist.title_sort, Artist.title)),
+            Album.year.nulls_last(),
+            by_title,
+        ],
+        "title": [by_title],
+        "newest": [Album.year.desc().nulls_last(), by_title],
+        "oldest": [Album.year.nulls_last(), by_title],
+        "added": [Album.added_at.desc().nulls_last()],
+        "rating": [state.user_rating.desc().nulls_last(), by_title],
+        "plays": [plays_of(state).desc(), by_title],
+        "popularity": [Album.popularity.desc().nulls_last(), by_title],
+    }
+    rows = (
+        await db.execute(
+            query(Album.rating_key, Artist.rating_key, Artist.title)
+            .where(*filters)
+            .order_by(*orders[sort], Album.rating_key)
+            .offset(offset)
+            .limit(limit)
+        )
+    ).all()
+    keys = [key for key, _, _ in rows]
+    summaries = {
+        a.rating_key: a
+        for a in await _albums_with_lyrics(
+            db, user, us.server_id, await _albums(db, user.id, us, Album.rating_key.in_(keys))
+        )
+    }
+    return AlbumListPage(
+        items=[
+            TagAlbum(
+                **summaries[key].model_dump(), artist_rating_key=artist_key, artist_title=artist
+            )
+            for key, artist_key, artist in rows
+            if key in summaries
+        ],
+        total=total,
+        offset=offset,
+        limit=limit,
+        types=types,
     )
 
 
