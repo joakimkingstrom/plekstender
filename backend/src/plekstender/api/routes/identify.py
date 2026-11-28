@@ -25,6 +25,7 @@ from plekstender.api.schemas import (
     TagChangeSetOut,
     UnknownFileOut,
     UnknownFilesOut,
+    UnknownFolder,
     UnknownKind,
 )
 from plekstender.db.instance import get_acoustid_api_key
@@ -90,22 +91,48 @@ def _popular(files: list[MediaFile]) -> dict[str, int]:
     return counts
 
 
+def _folder() -> Any:
+    """A file's folder (its path up to the last slash; '' for files right in the music folder)."""
+    return func.coalesce(func.substring(MediaFile.path, r"^(.*)/[^/]*$"), "")
+
+
 @router.get("/unknown", response_model=UnknownFilesOut)
 async def unknown_files(
     server_id: int,
     db: DbDep,
     user: UserDep,
     kind: Annotated[UnknownKind, Query()] = "missing",
+    folder: Annotated[str | None, Query(max_length=2000)] = None,
 ) -> UnknownFilesOut:
-    """Files missing tags, not in Plex, or without a MusicBrainz ID, with what identifying them
-    by sound found."""
+    """Files missing tags, not in Plex, or without a MusicBrainz ID, by the folders they're
+    in, with what identifying them by sound found: the files of one folder, when asked for
+    (`folder`), else none."""
     us = await owner_server(db, user, server_id)
     conditions = _unknown(us.server_id, kind)
     total = await db.scalar(select(func.count()).select_from(MediaFile).where(*conditions)) or 0
-    files = list(
-        await db.scalars(
-            select(MediaFile).where(*conditions).order_by(MediaFile.path).limit(LISTED)
+    in_folder = _folder()
+    folders = [
+        UnknownFolder(folder=name, files=n)
+        for name, n in (
+            await db.execute(
+                select(in_folder, func.count())
+                .where(*conditions)
+                .group_by(in_folder)
+                .order_by(in_folder)
+            )
+        ).all()
+    ]
+    files = (
+        list(
+            await db.scalars(
+                select(MediaFile)
+                .where(*conditions, in_folder == folder)
+                .order_by(MediaFile.path)
+                .limit(LISTED)
+            )
         )
+        if folder is not None
+        else []
     )
     popular = _popular(files)
     out = []
@@ -130,7 +157,7 @@ async def unknown_files(
                 else None,
             )
         )
-    return UnknownFilesOut(total=total, files=out)
+    return UnknownFilesOut(total=total, folders=folders, files=out)
 
 
 async def _identify_status(db: DbDep, server_id: int, configured: bool) -> IdentifyStatusOut:

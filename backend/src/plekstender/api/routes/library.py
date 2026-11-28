@@ -1158,7 +1158,13 @@ async def get_artist_covers(
                     ),
                 )
                 .outerjoin(Album, with_album)
-                .where(*t_where, Track.artist_key == key, *decided)
+                # Their songs: on their albums, whoever the track credits ("Elvis Presley & the
+                # Jordanaires"), or credited to them on others' (a compilation).
+                .where(
+                    *t_where,
+                    or_(Track.artist_rating_key == rating_key, Track.artist_key == key),
+                    *decided,
+                )
             )
         ).all(),
         lambda r: r.title_norm,

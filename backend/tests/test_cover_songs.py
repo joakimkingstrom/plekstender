@@ -475,6 +475,34 @@ async def test_choosing_a_covers_original(app: FastAPI, plex: FakePlex) -> None:
     assert refused.status_code == 403
 
 
+async def test_artist_covers_whatever_the_songs_credit(app: FastAPI, plex: FakePlex) -> None:
+    """An artist's covers include the songs on their albums that credit someone with them
+    (Plex's track artist: "Radiohead & Friends"), as album pages show them."""
+    from plekstender.sync.parse import normalise_artist
+    from tests.fakes import _track
+
+    guest = _track(3090, "Guest Song", 200, 100, 13, 10)
+    guest |= {"grandparentTitle": "Radiohead", "originalTitle": "Radiohead & Friends"}
+    plex.library.items[3090] = guest
+    owner, sid = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        db.add(
+            SongCover(
+                artist_key=normalise_artist("Radiohead & Friends"), title_norm="guest song",
+                status="cover", original_artist="Someone", original_title="Guest Song",
+                source="musicbrainz", original_url="https://musicbrainz.org/work/1",
+                tried="musicbrainz", requests=0, checked_at=dt.datetime.now(dt.UTC),
+            )
+        )  # fmt: skip
+        await db.commit()
+    album = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
+    assert next(t for t in album["tracks"] if t["title"] == "Guest Song")["cover_of"]
+    covers = (await owner.get(f"/api/servers/{sid}/library/artists/100/covers")).json()
+    assert [(c["title"], c["cover_of"]["source"]) for c in covers["covers"]] == [
+        ("Guest Song", "musicbrainz")
+    ]
+
+
 # --- MusicBrainz, the second source --------------------------------------------------------
 
 MB = "https://musicbrainz.org/ws/2"

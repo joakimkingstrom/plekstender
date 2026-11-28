@@ -2658,8 +2658,9 @@ export interface paths {
         };
         /**
          * Unknown Files
-         * @description Files missing tags, not in Plex, or without a MusicBrainz ID, with what identifying them
-         *     by sound found.
+         * @description Files missing tags, not in Plex, or without a MusicBrainz ID, by the folders they're
+         *     in, with what identifying them by sound found: the files of one folder, when asked for
+         *     (`folder`), else none.
          */
         get: operations["unknown_files_api_servers__server_id__files_unknown_get"];
         put?: never;
@@ -11643,10 +11644,25 @@ export interface components {
             /** Total */
             total: number;
             /**
+             * Folders
+             * @description The folders the files are in, by path, with how many.
+             */
+            folders?: components["schemas"]["UnknownFolder"][];
+            /**
              * Files
-             * @description The first 200.
+             * @description The first 200 (in the folder asked for, when one was).
              */
             files: components["schemas"]["UnknownFileOut"][];
+        };
+        /** UnknownFolder */
+        UnknownFolder: {
+            /**
+             * Folder
+             * @description Relative to the music folder; '' for files right in it.
+             */
+            folder: string;
+            /** Files */
+            files: number;
         };
         /** UploadOut */
         UploadOut: {
@@ -16333,6 +16349,7 @@ export interface operations {
         parameters: {
             query?: {
                 kind?: "missing" | "unmatched" | "no_mbid";
+                folder?: string | null;
             };
             header?: never;
             path: {
