@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { errorMessage } from '../api/client'
-import { usePlexSync, usePlexSyncPreview, type PlexSyncRequest } from '../api/files'
+import { usePlexSync, usePlexSyncPreview, type PlexSyncPreview, type PlexSyncRequest } from '../api/files'
 import { formatCount } from '../format'
 import { FIELD_LABELS, fieldLabel, showFieldValue, showOld, type TagField } from '../tags'
 import { Button, Notice } from './ui'
@@ -72,37 +72,7 @@ export function PlexSync({
           <Notice>The files already match Plex{fields.size < FIELDS.length ? ' for these tags' : ''}.</Notice>
         ) : (
           <div className="space-y-3">
-            <p>
-              <strong>
-                {formatCount(data.changes)} {data.changes === 1 ? 'change' : 'changes'}
-              </strong>{' '}
-              in {formatCount(data.files)} {data.files === 1 ? 'file' : 'files'}:{' '}
-              {Object.entries(data.by_field)
-                .map(([f, n]) => `${fieldLabel(f)} ${formatCount(n)}`)
-                .join(', ')}
-              .
-            </p>
-            <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
-              <table className="w-full text-xs">
-                <tbody className="divide-y divide-border">
-                  {data.samples.map((c, i) => (
-                    <tr key={i}>
-                      <td className="max-w-56 truncate px-2 py-1 font-mono text-muted" title={c.path}>
-                        {c.path.split('/').at(-1)}
-                      </td>
-                      <td className="px-2 py-1 text-muted">{fieldLabel(c.field)}</td>
-                      <td className="px-2 py-1">
-                        <span className="text-danger line-through decoration-1">{showOld(c)}</span> →{' '}
-                        <span className="text-ok">{showFieldValue(c.field, c.new_value)}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {data.changes > data.samples.length && (
-              <p className="text-xs text-muted">The first {data.samples.length} are shown.</p>
-            )}
+            <PlannedChanges data={data} />
             {canWrite ? (
               <Button
                 variant="primary"
@@ -131,5 +101,45 @@ export function PlexSync({
         </Notice>
       )}
     </div>
+  )
+}
+
+/** What a bulk tag edit would change: how many changes in how many files, by tag, and the
+ * first ones listed (old → new). */
+export function PlannedChanges({ data }: { data: PlexSyncPreview }) {
+  return (
+    <>
+      <p>
+        <strong>
+          {formatCount(data.changes)} {data.changes === 1 ? 'change' : 'changes'}
+        </strong>{' '}
+        in {formatCount(data.files)} {data.files === 1 ? 'file' : 'files'}:{' '}
+        {Object.entries(data.by_field)
+          .map(([f, n]) => `${fieldLabel(f)} ${formatCount(n)}`)
+          .join(', ')}
+        .
+      </p>
+      <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
+        <table className="w-full text-xs">
+          <tbody className="divide-y divide-border">
+            {data.samples.map((c, i) => (
+              <tr key={i}>
+                <td className="max-w-56 truncate px-2 py-1 font-mono text-muted" title={c.path}>
+                  {c.path.split('/').at(-1)}
+                </td>
+                <td className="px-2 py-1 text-muted">{fieldLabel(c.field)}</td>
+                <td className="px-2 py-1">
+                  <span className="text-danger line-through decoration-1">{showOld(c)}</span> →{' '}
+                  <span className="text-ok">{showFieldValue(c.field, c.new_value)}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {data.changes > data.samples.length && (
+        <p className="text-xs text-muted">The first {data.samples.length} are shown.</p>
+      )}
+    </>
   )
 }

@@ -412,3 +412,14 @@ async def release_groups(http: httpx.AsyncClient, artist_mbid: str) -> list[dict
         out.extend(page)
         if not page or len(out) >= int(data.get("release-group-count") or 0):
             return out
+
+
+async def lookup(
+    http: httpx.AsyncClient, entity: str, mbid: str, inc: str | None = None
+) -> dict[str, Any]:
+    """A recording, work, artist... by its MBID, with `inc` (e.g. "work-rels"). Raises
+    NotFound when MusicBrainz has none, MusicBrainzError when it's busy or unreachable."""
+    data = await _get(http, f"/{entity}/{mbid}", {"inc": inc} if inc else {})
+    if not isinstance(data, dict):
+        raise MusicBrainzError("MusicBrainz's answer wasn't readable.")
+    return data
