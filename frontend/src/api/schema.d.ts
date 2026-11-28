@@ -6050,6 +6050,8 @@ export interface components {
              * @default false
              */
             forgotten: boolean;
+            /** @description Also the best songs of albums added lately (picked again at each refresh; the rules still apply). */
+            new_albums?: components["schemas"]["NewAlbums"] | null;
             rules?: components["schemas"]["Rules"];
             /**
              * Limit
@@ -8489,6 +8491,24 @@ export interface components {
             contact: string | null;
             /** Source */
             source: ("settings" | "environment") | null;
+        };
+        /**
+         * NewAlbums
+         * @description The best songs of albums added to the library lately ("Fresh picks").
+         */
+        NewAlbums: {
+            /**
+             * Days
+             * @description Albums added in the last N days.
+             * @default 30
+             */
+            days: number;
+            /**
+             * Per Album
+             * @description Each album's N most popular songs.
+             * @default 3
+             */
+            per_album: number;
         };
         /** NewMusicIn */
         NewMusicIn: {

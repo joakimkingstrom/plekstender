@@ -485,17 +485,23 @@ const RELEASE_HEADINGS: Record<string, string> = {
   Soundtrack: 'Soundtracks',
 }
 
-/** An artist's releases, grouped by type (albums, EPs, singles, live, compilations…). */
-function Releases({ serverId, albums }: { serverId: number; albums: Schemas['AlbumSummary'][] }) {
-  const [size, setSize] = useCoverSize('artist-cover-size')
-  const lyricsIcons = useLyricsIcons()
+/** An artist's releases grouped by type (albums, EPs, singles, live, compilations…), each
+ * group in the order given (oldest first), as the artist page shows them. */
+function releaseGroups(albums: Schemas['AlbumSummary'][]): [string, Schemas['AlbumSummary'][]][] {
   const groups = new Map<string, Schemas['AlbumSummary'][]>()
   for (const al of albums) groups.set(al.release_type ?? 'Album', [...(groups.get(al.release_type ?? 'Album') ?? []), al])
   const rank = (type: string) => {
     const i = RELEASE_ORDER.indexOf(type)
     return i < 0 ? RELEASE_ORDER.length : i
   }
-  const ordered = [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+  return [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+}
+
+/** An artist's releases, grouped by type (albums, EPs, singles, live, compilations…). */
+function Releases({ serverId, albums }: { serverId: number; albums: Schemas['AlbumSummary'][] }) {
+  const [size, setSize] = useCoverSize('artist-cover-size')
+  const lyricsIcons = useLyricsIcons()
+  const ordered = releaseGroups(albums)
   return (
     <>
       {ordered.map(([type, items]) => (
@@ -546,19 +552,31 @@ export function ArtistPage() {
   )
 }
 
-/** Previous and next artist (by name), as subtle arrows in the margins either side of the
- * page, halfway down the window: placed from where the page's content really starts and
- * ends (measured, so nothing wide can end up under them), and left out when the margins are
- * too narrow for them. */
-function ArtistSteps({ serverId, artistKey }: { serverId: number; artistKey: number }) {
-  const found = useArtistNeighbours(serverId, artistKey)
+type Step = { rating_key: number; title: string }
+
+/** Previous and next, as subtle arrows in the margins either side of the page, halfway down
+ * the window: placed from where the page's content really starts and ends (measured, so
+ * nothing wide can end up under them), and left out when the margins are too narrow. */
+function PageSteps({
+  what,
+  path,
+  previous,
+  next,
+}: {
+  /** "artist" or "album": for the labels. */
+  what: string
+  /** Where a step goes, e.g. "/library/artists". */
+  path: string
+  previous: Step | null | undefined
+  next: Step | null | undefined
+}) {
   const margins = usePageMargins()
   const fits = margins !== null && margins.left >= ARROW_ROOM && margins.right >= ARROW_ROOM
-  const step = (to: { rating_key: number; title: string } | null | undefined, side: 'previous' | 'next') =>
+  const step = (to: Step | null | undefined, side: 'previous' | 'next') =>
     to && fits ? (
       <Link
-        to={`/library/artists/${to.rating_key}`}
-        aria-label={`${side === 'previous' ? 'Previous' : 'Next'} artist: ${to.title}`}
+        to={`${path}/${to.rating_key}`}
+        aria-label={`${side === 'previous' ? 'Previous' : 'Next'} ${what}: ${to.title}`}
         title={to.title}
         style={side === 'previous' ? { left: margins.left - ARROW_ROOM + ARROW_GAP } : { right: margins.right - ARROW_ROOM + ARROW_GAP }}
         className="fixed top-1/2 z-20 flex -translate-y-1/2 items-center justify-center rounded-full p-2 text-muted/60 transition-colors hover:bg-surface-2 hover:text-text"
@@ -569,11 +587,27 @@ function ArtistSteps({ serverId, artistKey }: { serverId: number; artistKey: num
       </Link>
     ) : null
   return (
-    <nav aria-label="Other artists">
-      {step(found.data?.previous, 'previous')}
-      {step(found.data?.next, 'next')}
+    <nav aria-label={`Other ${what}s`}>
+      {step(previous, 'previous')}
+      {step(next, 'next')}
     </nav>
   )
+}
+
+/** Previous and next artist, by name as the library lists them. */
+function ArtistSteps({ serverId, artistKey }: { serverId: number; artistKey: number }) {
+  const found = useArtistNeighbours(serverId, artistKey)
+  return <PageSteps what="artist" path="/library/artists" previous={found.data?.previous} next={found.data?.next} />
+}
+
+/** Previous and next of the artist's releases, in the order their page shows them: by type
+ * (albums, EPs, singles…), each oldest first. */
+function AlbumSteps({ serverId, albumKey, artistKey }: { serverId: number; albumKey: number; artistKey: number }) {
+  const artist = useArtist(serverId, artistKey)
+  const order = releaseGroups(artist.data?.albums ?? []).flatMap(([, items]) => items)
+  const i = order.findIndex((al) => al.rating_key === albumKey)
+  if (i < 0) return null
+  return <PageSteps what="album" path="/library/albums" previous={order[i - 1]} next={order[i + 1]} />
 }
 
 const ARROW_GAP = 8 // px between an arrow and the content, and the window's edge
@@ -728,7 +762,10 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
   return (
     <>
       {al.artist_rating_key ? (
-        <BackLink to={`/library/artists/${al.artist_rating_key}`} label={al.artist_title ?? 'Artist'} />
+        <>
+          <BackLink to={`/library/artists/${al.artist_rating_key}`} label={al.artist_title ?? 'Artist'} />
+          <AlbumSteps serverId={serverId} albumKey={al.rating_key} artistKey={al.artist_rating_key} />
+        </>
       ) : (
         <BackLink to="/library" label="Library" />
       )}

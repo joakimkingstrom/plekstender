@@ -32,6 +32,9 @@ import { useLibraryServer } from '../components/useLibraryServer'
 import { formatCount, formatDuration, formatListeningTime, formatRelative } from '../format'
 
 type Order = Definition['order']
+type NewAlbums = { days: number; per_album: number }
+const FRESH_DAYS = [7, 14, 30, 60, 90].map((n) => ({ value: n, label: `${n} days` }))
+const FRESH_SONGS = [1, 2, 3, 5, 10].map((n) => ({ value: n, label: n === 1 ? 'song' : `${n} songs` }))
 type Op = 'AND' | 'OR'
 
 const SCHEDULES: { value: Schedule; label: string }[] = [
@@ -311,6 +314,8 @@ type Draft = {
   tracks: SeedTrack[]
   /** Also your forgotten favourites (found again at each refresh). */
   forgotten: boolean
+  /** Also the best songs of albums added lately ("Fresh picks", found again at each refresh). */
+  newAlbums: NewAlbums | null
   minRating: number | null
   includeUnrated: boolean
   topPercent: number
@@ -335,6 +340,7 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
     artists: p?.seed_artists ?? [],
     tracks: p?.seed_tracks ?? [],
     forgotten: d?.forgotten ?? forgotten,
+    newAlbums: d?.new_albums ? { days: d.new_albums.days ?? 30, per_album: d.new_albums.per_album ?? 3 } : null,
     minRating: d?.rules?.min_rating ?? null,
     includeUnrated: d?.rules?.include_unrated ?? true,
     topPercent: d?.rules?.top_percent ?? 0,
@@ -348,11 +354,12 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
 }
 
 function definitionOf(draft: Draft): Definition | null {
-  if (draft.artists.length === 0 && draft.tracks.length === 0 && !draft.forgotten) return null
+  if (draft.artists.length === 0 && draft.tracks.length === 0 && !draft.forgotten && !draft.newAlbums) return null
   return {
     artists: draft.artists.map((a) => a.rating_key),
     tracks: draft.tracks.map((t) => t.rating_key),
     forgotten: draft.forgotten,
+    new_albums: draft.newAlbums,
     rules: {
       min_rating: draft.minRating,
       include_unrated: draft.includeUnrated,
@@ -449,6 +456,57 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
               </span>
             </span>
           </label>
+          <div className="mt-3 flex items-start gap-2 text-sm">
+            <input
+              id="fresh-picks"
+              type="checkbox"
+              className="mt-0.5"
+              checked={draft.newAlbums !== null}
+              onChange={(e) =>
+                // Fresh picks: named and refreshed weekly unless already chosen otherwise.
+                setDraft((d) =>
+                  e.target.checked
+                    ? {
+                        ...d,
+                        newAlbums: { days: 30, per_album: 3 },
+                        name: d.name.trim() ? d.name : 'Fresh picks',
+                        schedule: d.schedule === 'manual' ? 'weekly' : d.schedule,
+                      }
+                    : { ...d, newAlbums: null },
+                )
+              }
+            />
+            <div>
+              <label htmlFor="fresh-picks" className="font-medium">
+                The best of new albums
+              </label>
+              {draft.newAlbums ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                  <span>Albums added in the last</span>
+                  <Select
+                    size="sm"
+                    label="Albums added in the last"
+                    value={draft.newAlbums.days}
+                    options={FRESH_DAYS}
+                    onChange={(days) => set({ newAlbums: { ...draft.newAlbums!, days } })}
+                  />
+                  <span>· the top</span>
+                  <Select
+                    size="sm"
+                    label="Songs from each album"
+                    value={draft.newAlbums.per_album}
+                    options={FRESH_SONGS}
+                    onChange={(per_album) => set({ newAlbums: { ...draft.newAlbums!, per_album } })}
+                  />
+                  <span>of each, found again at each refresh</span>
+                </div>
+              ) : (
+                <span className="block text-xs text-muted">
+                  Each recently added album's most popular songs, so you hear what's new. Found again at each refresh.
+                </span>
+              )}
+            </div>
+          </div>
           <Chosen draft={draft} serverId={serverId} set={set} />
         </Card>
         {(draft.artists.length > 0 || draft.tracks.length > 0) && (
@@ -665,7 +723,7 @@ function Chip({ children, onRemove, label }: { children: ReactNode; onRemove: ()
 
 function Chosen({ draft, serverId, set }: { draft: Draft; serverId: number; set: (patch: Partial<Draft>) => void }) {
   if (draft.artists.length === 0 && draft.tracks.length === 0)
-    return draft.forgotten ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
+    return draft.forgotten || draft.newAlbums ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
   return (
     <div className="mt-4 space-y-3">
       {draft.artists.length > 0 && (

@@ -26,6 +26,13 @@ class Rules(BaseModel):
     )
 
 
+class NewAlbums(BaseModel):
+    """The best songs of albums added to the library lately ("Fresh picks")."""
+
+    days: int = Field(default=30, ge=1, le=365, description="Albums added in the last N days.")
+    per_album: int = Field(default=3, ge=1, le=20, description="Each album's N most popular songs.")
+
+
 class Definition(BaseModel):
     artists: list[int] = Field(default_factory=list, max_length=500)
     tracks: list[int] = Field(
@@ -36,6 +43,11 @@ class Definition(BaseModel):
         description="Also your forgotten favourites: songs rated 4½ stars or more that you "
         "haven't played for a year (picked again at each refresh; the rules still apply).",
     )
+    new_albums: NewAlbums | None = Field(
+        default=None,
+        description="Also the best songs of albums added lately (picked again at each "
+        "refresh; the rules still apply).",
+    )
     rules: Rules = Field(default_factory=Rules)
     limit: int | None = Field(default=500, ge=1, le=5000)
     # random | most popular first | as listed in `tracks` (gig playlists: setlist order).
@@ -43,6 +55,8 @@ class Definition(BaseModel):
 
     @model_validator(mode="after")
     def _something(self) -> Definition:
-        if not self.artists and not self.tracks and not self.forgotten:
-            raise ValueError("choose at least one artist or song, or your forgotten favourites")
+        if not (self.artists or self.tracks or self.forgotten or self.new_albums):
+            raise ValueError(
+                "choose at least one artist or song, your forgotten favourites or new albums"
+            )
         return self
