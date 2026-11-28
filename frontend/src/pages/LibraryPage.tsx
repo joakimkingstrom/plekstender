@@ -2,6 +2,7 @@ import { useArtistPastGigs } from '../api/gigs'
 import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
+import { VideoCover } from '../components/VideoCover'
 import { AlbumLyricsIcon, SongLyricsIcon } from '../components/LyricsIcon'
 import { useLyricsIcons } from '../api/hooks'
 import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -496,7 +497,9 @@ function Releases({ serverId, albums }: { serverId: number; albums: Schemas['Alb
             {items.map((al) => (
                 <li key={al.rating_key}>
                   <Link to={`/library/albums/${al.rating_key}`} className="group block">
-                    <Artwork serverId={serverId} path={al.thumb} title={al.title} size={COVER_PIXELS[size]} className="w-full group-hover:opacity-85" />
+                    <VideoCover video={al.video}>
+                      <Artwork serverId={serverId} path={al.thumb} title={al.title} size={COVER_PIXELS[size]} className="w-full group-hover:opacity-85" />
+                    </VideoCover>
                     <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
                   </Link>
                   <div className="flex items-center justify-between gap-2 text-xs text-muted">
@@ -753,10 +756,12 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
       )}
       <div className="mb-8 flex flex-col gap-6 sm:flex-row">
         <Zoomable
-          image={al.thumb ? { src: imageUrl(serverId, al.thumb, 1000)!, alt: al.title, caption: al.artist_title ?? undefined } : null}
+          image={al.thumb ? { src: imageUrl(serverId, al.thumb, 1000)!, alt: al.title, caption: al.artist_title ?? undefined, video: al.video ?? undefined } : null}
           className="w-56 shrink-0 self-center sm:self-start"
         >
-          <Artwork serverId={serverId} path={al.thumb} title={al.title} size={600} className="w-full" />
+          <VideoCover video={al.video}>
+            <Artwork serverId={serverId} path={al.thumb} title={al.title} size={600} className="w-full" />
+          </VideoCover>
         </Zoomable>
         <div className="min-w-0 flex-1 space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">{al.title}</h1>
