@@ -29,6 +29,11 @@ def is_video_cover(name: str) -> bool:
     return path.suffix.lower() in VIDEO_EXTENSIONS and path.stem.lower() in VIDEO_COVER_NAMES
 
 
+def is_song_file(name: str) -> bool:
+    """A song by its file name: an audio file, but not a video cover (cover.mp4 isn't one)."""
+    return Path(name).suffix.lower() in AUDIO_EXTENSIONS and not is_video_cover(name)
+
+
 # Easy-interface keys (the same for ID3, MP4 and Vorbis comments) and how they're kept.
 TEXT_FIELDS = (
     "title", "artist", "album", "albumartist", "date", "originaldate", "composer",
