@@ -4,6 +4,7 @@ on, and shown on song rows."""
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -93,9 +94,11 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
     # Off (the default): nothing asked.
     assert await run() == 0
     assert asked == []
-    status = (await owner.get("/api/admin/secondhandsongs")).json()
+    status = (await owner.get("/api/admin/cover-songs")).json()
     assert status == {
         "enabled": False,
+        "secondhandsongs": True,
+        "musicbrainz": True,
         "api_key": False,
         "per_hour": 90,
         "songs": 5,
@@ -103,7 +106,7 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
         "covers": 0,
     }
 
-    resp = await owner.put("/api/admin/secondhandsongs", json={"enabled": True}, headers=CSRF)
+    resp = await owner.put("/api/admin/cover-songs", json={"enabled": True}, headers=CSRF)
     assert resp.status_code == 200, resp.text
     assert await run() == 5  # Karma Police once, for both its releases
     async with get_sessionmaker()() as db:
@@ -127,10 +130,11 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
         "title": "Ike's Rap II",
         "url": "https://secondhandsongs.com/performance/20",
         "cover_url": "https://secondhandsongs.com/performance/2",
+        "source": "secondhandsongs",
     }
     ok_computer = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
     assert {t["cover_of"] for t in ok_computer["tracks"]} == {None}
-    status = (await owner.get("/api/admin/secondhandsongs")).json()
+    status = (await owner.get("/api/admin/cover-songs")).json()
     assert (status["songs"], status["checked"], status["covers"]) == (5, 5, 1)
 
     # Nothing due: nothing asked.
@@ -170,11 +174,11 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
 
     # An API key: checked first, then sent with every request.
     bad = await owner.put(
-        "/api/admin/secondhandsongs", json={"enabled": True, "api_key": "x" * 36}, headers=CSRF
+        "/api/admin/cover-songs", json={"enabled": True, "api_key": "x" * 36}, headers=CSRF
     )
     assert bad.status_code == 400
     good = await owner.put(
-        "/api/admin/secondhandsongs", json={"enabled": True, "api_key": KEY}, headers=CSRF
+        "/api/admin/cover-songs", json={"enabled": True, "api_key": KEY}, headers=CSRF
     )
     assert good.status_code == 200, good.text
     assert (good.json()["api_key"], good.json()["per_hour"]) == (True, 900)
@@ -183,9 +187,211 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
     assert await run() == 1
     assert [r.headers.get("X-API-Key") for r in asked] == [KEY]
     # Turned off (the key is kept until removed).
-    off = await owner.put("/api/admin/secondhandsongs", json={"enabled": False}, headers=CSRF)
+    off = await owner.put("/api/admin/cover-songs", json={"enabled": False}, headers=CSRF)
     assert (off.json()["enabled"], off.json()["api_key"]) == (False, True)
     removed = await owner.put(
-        "/api/admin/secondhandsongs", json={"enabled": False, "remove_key": True}, headers=CSRF
+        "/api/admin/cover-songs", json={"enabled": False, "remove_key": True}, headers=CSRF
     )
     assert removed.json()["api_key"] is False
+
+
+# --- MusicBrainz, the second source --------------------------------------------------------
+
+MB = "https://musicbrainz.org/ws/2"
+REC_GLORY = "10000000-0000-4000-8000-000000000304"
+REC_LUCKY = "10000000-0000-4000-8000-000000000303"
+REC_PARANOID = "10000000-0000-4000-8000-000000000300"
+REC_ORIGINAL = "20000000-0000-4000-8000-000000000001"
+WORK = "30000000-0000-4000-8000-000000000001"
+
+
+def performs(work_title: str, *attributes: str) -> dict[str, Any]:
+    return {
+        "type": "performance",
+        "target-type": "work",
+        "attributes": list(attributes),
+        "work": {"id": WORK, "title": work_title},
+    }
+
+
+async def test_cover_songs_from_musicbrainz(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from plekstender import musicbrainz
+    from plekstender.config import get_settings
+
+    monkeypatch.setattr(musicbrainz, "INTERVAL", 0.0)
+    musicbrainz.clear_cache()
+    asked: list[str] = []
+
+    def mb(request: httpx.Request) -> httpx.Response:
+        asked.append(f"{request.url.path} {request.url.params.get('inc')}")
+        path = request.url.path.removeprefix("/ws/2")
+        recordings = {
+            f"/recording/{REC_GLORY}": {"relations": [performs("Glory Box", "cover")]},
+            f"/recording/{REC_LUCKY}": {"relations": [performs("Lucky")]},
+            f"/recording/{REC_ORIGINAL}": {
+                "artist-credit": [{"name": "Isaac Hayes", "joinphrase": ""}]
+            },
+        }
+        if path in recordings:
+            return httpx.Response(200, json=recordings[path])
+        if path == f"/work/{WORK}":
+            rel = {"type": "performance", "target-type": "recording"}
+            return httpx.Response(
+                200,
+                json={
+                    "title": "Glory Box",
+                    "relations": [
+                        {
+                            **rel,
+                            "attributes": ["live"],
+                            "recording": {"id": "x1", "title": "Glory Box"},
+                        },
+                        {
+                            **rel,
+                            "attributes": ["medley"],
+                            "recording": {"id": "x2", "title": "Box / Glory"},
+                        },
+                        {
+                            **rel,
+                            "attributes": ["cover"],
+                            "recording": {"id": REC_GLORY, "title": "Glory Box"},
+                        },
+                        {
+                            **rel,
+                            "attributes": [],
+                            "recording": {"id": REC_ORIGINAL, "title": "Glory Box"},
+                        },
+                    ],
+                },
+            )
+        return httpx.Response(404, json={"error": "Not Found"})
+
+    plex.router.route(host="musicbrainz.org").mock(side_effect=mb)
+    owner, sid = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        from plekstender.db.models import MediaFile, User, UserServer
+
+        user_id = await db.scalar(select(User.id).where(User.username == "owner"))
+        us = await db.scalar(select(UserServer).where(UserServer.user_id == user_id))
+        assert us is not None
+        for key, mbid in (
+            (304, REC_GLORY),
+            (303, REC_LUCKY),
+            (300, REC_PARANOID),
+            (301, "not-an-id"),
+        ):
+            db.add(
+                MediaFile(
+                    server_id=us.server_id, path=f"{key}.flac", size=1, mtime=1.0,
+                    tags={"musicbrainz_trackid": mbid}, rating_key=key,
+                )
+            )  # fmt: skip
+        await db.commit()
+
+    # MusicBrainz only: the songs with a recording MBID in their files.
+    body = {"enabled": True, "secondhandsongs": False, "musicbrainz": True}
+    assert (await owner.put("/api/admin/cover-songs", json=body, headers=CSRF)).status_code == 200
+    async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
+        assert await cover_songs.run(db, http, get_settings()) == 3
+    async with get_sessionmaker()() as db:
+        found = {c.title_norm: c for c in await db.scalars(select(SongCover))}
+    assert {k: (c.status, c.source, c.tried, c.requests) for k, c in found.items()} == {
+        "glory box": ("cover", "musicbrainz", "musicbrainz", 0),
+        "lucky": ("original", "musicbrainz", "musicbrainz", 0),
+        "paranoid android": ("unknown", "musicbrainz", "musicbrainz", 0),
+    }
+    glory = found["glory box"]
+    assert (glory.original_artist, glory.original_title) == ("Isaac Hayes", "Glory Box")
+    assert glory.original_url == f"https://musicbrainz.org/recording/{REC_ORIGINAL}"
+    assert glory.performance_url == f"https://musicbrainz.org/recording/{REC_GLORY}"
+    # The work's plain recording names the original artist: the live one and the medley don't.
+    assert f"/ws/2/recording/{REC_ORIGINAL} artist-credits" in asked
+    album = (await owner.get(f"/api/servers/{sid}/library/albums/202")).json()
+    assert album["tracks"][0]["cover_of"]["source"] == "musicbrainz"
+
+    # Nothing more to ask; turned off, nothing at all.
+    asked.clear()
+    async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
+        assert await cover_songs.run(db, http, get_settings()) == 0
+    assert asked == []
+
+
+# --- the original artist tag in the files ---------------------------------------------------
+
+
+def test_original_artist_tag_in_every_format(tmp_path: Path) -> None:
+    from mutagen.id3 import ID3
+
+    from plekstender.tags import keys
+    from tests.test_files import make_audio
+
+    for fmt, name in (("mp3", "a.mp3"), ("m4a", "a.m4a"), ("flac", "a.flac")):
+        path = tmp_path / name
+        make_audio(path, fmt if fmt != "m4a" else "aac")
+        audio = keys.open_easy(path)
+        if audio.tags is None:
+            audio.add_tags()
+        audio["originalartist"] = "Isaac Hayes"
+        audio.save()
+        assert keys.open_easy(path)["originalartist"] == ["Isaac Hayes"], fmt
+    assert str(ID3(tmp_path / "a.mp3")["TOPE"]) == "Isaac Hayes"  # the "original artist" frame
+
+
+async def test_writing_cover_tags(app: FastAPI, plex: FakePlex, tmp_path: Path) -> None:
+    from mutagen.flac import FLAC
+
+    from plekstender.worker import apply_tag_changes, scan_music_files
+    from tests.test_files import make_audio, tag_flac
+
+    root = tmp_path / "music"
+    make_audio(root / "304.flac")
+    tag_flac(root / "304.flac", title="Glory Box", artist="Portishead")
+    owner, sid = await owner_with_library(app, plex)
+    base = f"/api/servers/{sid}/files"
+    await owner.put(
+        f"/api/servers/{sid}/artwork/folder",
+        json={"enabled": False, "plex_prefix": "/m", "local_prefix": str(root)},
+        headers=CSRF,
+    )
+    await owner.put(f"{base}/settings", json={"tag_editing": True}, headers=CSRF)
+    scan = (await owner.post(f"{base}/scans", headers=CSRF)).json()
+    await scan_music_files.func(scan_id=scan["id"])
+
+    # No covers known yet: nothing to write.
+    preview = (await owner.post(f"{base}/cover-tags/preview", headers=CSRF)).json()
+    assert (preview["files"], preview["changes"]) == (0, 0)
+    assert (await owner.post(f"{base}/cover-tags", headers=CSRF)).status_code == 400
+
+    async with get_sessionmaker()() as db:
+        db.add(
+            SongCover(
+                artist_key="portishead", title_norm="glory box", status="cover",
+                original_artist="Isaac Hayes", original_title="Ike's Rap II",
+                source="secondhandsongs", tried="secondhandsongs", requests=2,
+                checked_at=dt.datetime.now(dt.UTC),
+            )
+        )  # fmt: skip
+        await db.commit()
+    preview = (await owner.post(f"{base}/cover-tags/preview", headers=CSRF)).json()
+    assert (preview["files"], preview["by_field"]) == (1, {"originalartist": 1})
+    assert preview["samples"][0] == {
+        "path": "304.flac",
+        "field": "originalartist",
+        "old_unknown": False,
+        "old_value": None,
+        "new_value": "Isaac Hayes",
+    }
+    resp = await owner.post(f"{base}/cover-tags", headers=CSRF)
+    assert resp.status_code == 201, resp.text
+    change_set = resp.json()
+    assert change_set["description"] == "Original artists of covers to 1 file"
+    await apply_tag_changes.func(set_id=change_set["id"])
+    assert FLAC(root / "304.flac")["originalartist"] == ["Isaac Hayes"]
+    # Done: nothing left to write. Undone: gone again.
+    assert (await owner.post(f"{base}/cover-tags/preview", headers=CSRF)).json()["changes"] == 0
+    undo = await owner.post(f"{base}/undo", json={"set_id": change_set["id"]}, headers=CSRF)
+    assert undo.status_code == 201, undo.text
+    await apply_tag_changes.func(set_id=undo.json()["id"])
+    assert "originalartist" not in FLAC(root / "304.flac")
