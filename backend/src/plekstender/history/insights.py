@@ -7,14 +7,17 @@ imported plays (Last.fm, ListenBrainz) count as well as Plex's own.
 
 from __future__ import annotations
 
+import calendar
 import datetime as dt
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import text
+from sqlalchemy import and_, extract, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from plekstender.db.models import Gig
 
 # --- on this day ---------------------------------------------------------------------------
 
@@ -35,6 +38,15 @@ class DayTrack:
 
 
 @dataclass
+class DayGig:
+    id: int
+    artists: list[str]  # headliners first, as on the bill
+    venue: str | None
+    city: str | None
+    setlist_url: str | None  # on setlist.fm, when it has a setlist
+
+
+@dataclass
 class DayYear:
     year: int
     listens: int
@@ -43,6 +55,7 @@ class DayYear:
     album: str | None = None
     album_rating_key: int | None = None
     album_thumb: str | None = None
+    gigs: list[DayGig] = field(default_factory=list)
     # Normalised names, to find these in the library.
     artist_keys: list[str] = field(default_factory=list, repr=False)
     album_match: tuple[str, str] | None = field(default=None, repr=False)
@@ -84,6 +97,44 @@ _ALBUM_BY_KEY = text(
     LIMIT 1
     """
 )
+
+
+async def gigs_on_this_day(
+    db: AsyncSession, user_id: int, today: dt.date
+) -> dict[int, list[DayGig]]:
+    """The gigs the user went to on today's date in earlier years, by year."""
+    days = [(today.month, today.day)]
+    if (today.month, today.day) == (2, 28) and not calendar.isleap(today.year):
+        days.append((2, 29))
+    gigs = await db.scalars(
+        select(Gig)
+        .where(
+            Gig.user_id == user_id,
+            Gig.date < dt.date(today.year, 1, 1),
+            or_(
+                *(
+                    and_(extract("month", Gig.date) == m, extract("day", Gig.date) == d)
+                    for m, d in days
+                )
+            ),
+        )
+        .order_by(Gig.date.desc(), Gig.id)
+    )
+    out: dict[int, list[DayGig]] = defaultdict(list)
+    for gig in gigs:
+        url = next(
+            (s.get("url") for s in gig.setlists or [] if s.get("songs") and s.get("url")), None
+        )
+        out[gig.date.year].append(
+            DayGig(
+                id=gig.id,
+                artists=[str(a.get("name")) for a in gig.artists or [] if a.get("name")],
+                venue=gig.venue,
+                city=gig.city,
+                setlist_url=url,
+            )
+        )
+    return out
 
 
 def _most(names: list[str]) -> str:
