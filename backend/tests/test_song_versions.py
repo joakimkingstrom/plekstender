@@ -44,12 +44,6 @@ async def test_song_versions(app: FastAPI, plex: FakePlex) -> None:
 @pytest.mark.db
 async def test_live_album_sources(app: FastAPI, plex: FakePlex) -> None:
     """A live album's songs, by the studio release each first came out on."""
-    import datetime as dt
-
-    from sqlalchemy import select
-
-    from plekstender.db import get_sessionmaker
-    from plekstender.db.models import AlbumColour, User, UserServer
     from tests.fakes import _album, _tags, _track
 
     lib = plex.library
@@ -68,28 +62,68 @@ async def test_live_album_sources(app: FastAPI, plex: FakePlex) -> None:
     lib.details[206] = {"Format": _tags("Album"), "Subformat": _tags("Live")}
     lib.details[207] = {"Format": _tags("Single")}
     owner, sid = await owner_with_library(app, plex)
-    async with get_sessionmaker()() as db:
-        user_id = await db.scalar(select(User.id).where(User.username == "owner"))
-        us = await db.scalar(select(UserServer).where(UserServer.user_id == user_id))
-        assert us is not None
-        db.add(
-            AlbumColour(
-                server_id=us.server_id, rating_key=200, thumb="t", hex="#aa3322",
-                checked_at=dt.datetime.now(dt.UTC),
-            )
-        )  # fmt: skip
-        await db.commit()
 
     live = (await owner.get(f"/api/servers/{sid}/library/albums/206")).json()
     assert live["release_type"] == "Live"
     # Lucky is on OKNOTOK too, but that's a compilation: the single is its studio release.
     assert [
-        (s["rating_key"], s["title"], s["release_type"], s["colour"], s["songs"])
-        for s in live["live_sources"]
+        (s["rating_key"], s["title"], s["release_type"], s["songs"]) for s in live["song_sources"]
     ] == [
-        (207, "Lucky", "Single", None, 1),
-        (200, "OK Computer", "Album", "#aa3322", 2),
+        (207, "Lucky", "Single", 1),
+        (200, "OK Computer", "Album", 2),
     ]
-    assert live["live_unmatched"] == 1  # Like Spinning Plates: no studio version here
+    # Each with its songs, as the live album has them, in its order.
+    assert [[t["title"] for t in s["tracks"]] for s in live["song_sources"]] == [
+        ["Lucky (Live)"],
+        ["Paranoid Android (Live)", "Karma Police - Live in Oslo"],
+    ]
+    assert live["sources_unmatched"] == 1  # Like Spinning Plates: no studio version here
     studio = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
-    assert (studio["live_sources"], studio["live_unmatched"]) == (None, 0)
+    assert (studio["song_sources"], studio["sources_unmatched"]) == (None, 0)
+
+
+@pytest.mark.db
+async def test_compilation_sources(app: FastAPI, plex: FakePlex) -> None:
+    """A compilation's songs, by the release each first came out on: the artist's own for
+    their best-of, each song's own artist's for a various artists one."""
+    from tests.fakes import _album, _artist, _tags, _track
+
+    lib = plex.library
+    for item in (
+        _artist(104, "Various Artists"),
+        _album(208, "Trip-Hop Classics", 104, 2005),
+        _track(3081, "Glory Box", 208, 104, 1, 50),
+        _track(3082, "Paranoid Android (Radio Edit)", 208, 104, 2, 40),
+        _track(3083, "Teardrop", 208, 104, 3, 30),
+        _track(3084, "Karma Police", 208, 104, 4, 20),  # someone else's song of that name
+    ):
+        lib.items[int(item["ratingKey"])] = item
+    for key, artist in (
+        (3081, "Portishead"),
+        (3082, "Radiohead"),
+        (3083, "Massive Attack"),
+        (3084, "Some Tribute Band"),
+    ):
+        lib.items[key] |= {"grandparentTitle": "Various Artists", "originalTitle": artist}
+    for key in (300, 301, 302, 303):
+        lib.items[key]["grandparentTitle"] = "Radiohead"
+    lib.items[304]["grandparentTitle"] = "Portishead"
+    lib.details[208] = {"Format": _tags("Album")}  # Plex didn't say compilation: its artist does
+    owner, sid = await owner_with_library(app, plex)
+
+    best_of = (await owner.get(f"/api/servers/{sid}/library/albums/201")).json()
+    assert best_of["release_type"] == "Compilation"
+    assert [(s["rating_key"], s["artist"], s["songs"]) for s in best_of["song_sources"]] == [
+        (200, "Radiohead", 1)  # Karma Police; not the remaster itself
+    ]
+    assert best_of["sources_unmatched"] == 1  # Lucky: only on the compilation
+
+    various = (await owner.get(f"/api/servers/{sid}/library/albums/208")).json()
+    assert [
+        (s["rating_key"], s["title"], s["artist"], s["release_type"], s["songs"])
+        for s in various["song_sources"]
+    ] == [
+        (202, "Dummy", "Portishead", "EP", 1),
+        (200, "OK Computer", "Radiohead", "Album", 1),
+    ]
+    assert various["sources_unmatched"] == 2  # Teardrop, and the other Karma Police

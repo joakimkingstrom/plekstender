@@ -2,7 +2,7 @@ import { useArtistPastGigs } from '../api/gigs'
 import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
-import { LiveSources } from '../components/LiveSources'
+import { SongSources } from '../components/SongSources'
 import { SongVersions } from '../components/SongVersions'
 import { VideoCover } from '../components/VideoCover'
 import { AlbumLyricsIcon, SongLyricsIcon } from '../components/LyricsIcon'
@@ -820,8 +820,14 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           ))}
         </Card>
         <div className="space-y-6">
-          {al.live_sources && (
-            <LiveSources serverId={serverId} sources={al.live_sources} unmatched={al.live_unmatched ?? 0} />
+          {al.song_sources && (
+            <SongSources
+              serverId={serverId}
+              sources={al.song_sources}
+              unmatched={al.sources_unmatched ?? 0}
+              albumArtist={al.artist_title}
+              compilation={al.release_type !== 'Live'}
+            />
           )}
           <YourListens listens={al.your_listens} showSongs={false} name={al.title} />
         </div>
