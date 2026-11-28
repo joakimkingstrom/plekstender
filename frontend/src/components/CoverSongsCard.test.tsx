@@ -42,6 +42,14 @@ it('turns cover song lookups on, shows progress, and saves an optional key', asy
   // Settling a song's other versions from its page: on to start with.
   const other = screen.getByRole('checkbox', { name: /Use songs’ other versions/ })
   expect(other).toBeChecked()
+  // With an example of the requests it saves, as a tooltip.
+  const example = screen.getByRole('button', { name: 'An example of the requests it saves' })
+  fireEvent.focus(example)
+  expect(await screen.findByText(/takes 4 requests\s+instead of 8/)).toBeInTheDocument()
+  const saves = puts.length
+  fireEvent.click(example)
+  expect(other).toBeChecked() // the icon doesn't untick the box
+  expect(puts).toHaveLength(saves)
   // 4,000 requests (two an artist, one a cover) at 900 a day.
   expect(screen.getByText(/About 5 more days on SecondHandSongs, at up to 900 requests a day/)).toBeInTheDocument()
 

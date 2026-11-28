@@ -2,6 +2,7 @@ import { useState } from "react";
 import { errorMessage } from "../api/client";
 import { useCoverSongsSettings, useSetCoverSongs } from "../api/coverSongs";
 import { formatCount } from "../format";
+import { Tooltip } from "./Tooltip";
 import { Button, Card, Notice, Spinner } from "./ui";
 
 /** About how long SecondHandSongs takes for the rest: its requests (about two an artist and
@@ -100,7 +101,30 @@ export function CoverSongsCard() {
               }
             />
             <span>
-              <span className="font-medium">Use songs’ other versions</span>
+              <span className="flex items-center gap-1">
+                <span className="font-medium">Use songs’ other versions</span>
+                <Tooltip
+                  content={
+                    <>
+                      For example, with three versions of “Hurt” in the library
+                      (Johnny Cash’s, Nine Inch Nails’ original, and
+                      Sevendust’s), looking them all up takes 4 requests
+                      instead of 8: Johnny Cash’s list and his cover’s page,
+                      then the song’s page settles the other two, so Nine Inch
+                      Nails and Sevendust aren’t asked about at all.
+                    </>
+                  }
+                >
+                  {/* A button, so clicking it doesn't tick the box. */}
+                  <button
+                    type="button"
+                    aria-label="An example of the requests it saves"
+                    className="flex size-4 items-center justify-center rounded-full border border-current text-[10px] font-semibold leading-none text-muted hover:text-text"
+                  >
+                    i
+                  </button>
+                </Tooltip>
+              </span>
               <span className="block text-xs text-muted">
                 A cover’s song on SecondHandSongs lists every version of it, so
                 one more request settles the library’s other versions of it
