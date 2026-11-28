@@ -22,6 +22,8 @@ from plekstender.api.schemas import (
     AdminUserOut,
     CatalogueFont,
     CataloguePage,
+    CoverSongsIn,
+    CoverSongsOut,
     CoverSourcesSettings,
     DataThistleOut,
     DataThistleTokensIn,
@@ -37,8 +39,6 @@ from plekstender.api.schemas import (
     MusicBrainzContactIn,
     MusicBrainzContactOut,
     PopularityPreviewItem,
-    SecondHandSongsIn,
-    SecondHandSongsOut,
     SetlistFmKeyIn,
     SetlistFmKeyOut,
     SpotifyAppIn,
@@ -54,11 +54,12 @@ from plekstender.artwork.text import FontError, check_font
 from plekstender.auth.sessions import end_sessions_without_access
 from plekstender.db.instance import (
     OPEN_COVER_SOURCES,
+    CoverSongsSettings,
     DataThistleTokens,
     LibrarySettings,
-    SecondHandSongsSettings,
     get_access_settings,
     get_acoustid_api_key,
+    get_cover_songs,
     get_cover_sources_off,
     get_datathistle_tokens,
     get_datathistle_usage,
@@ -70,7 +71,6 @@ from plekstender.db.instance import (
     get_lastfm_shared_secret,
     get_library_settings,
     get_musicbrainz_contact,
-    get_secondhandsongs,
     get_setlistfm_api_key,
     get_spotify_app,
     get_ticketmaster_api_key,
@@ -80,6 +80,7 @@ from plekstender.db.instance import (
     save_jambase_quota,
     set_access_settings,
     set_acoustid_api_key,
+    set_cover_songs,
     set_cover_sources_off,
     set_datathistle_tokens,
     set_fanart_api_key,
@@ -88,7 +89,6 @@ from plekstender.db.instance import (
     set_lastfm_api_key,
     set_library_settings,
     set_musicbrainz_contact,
-    set_secondhandsongs,
     set_setlistfm_api_key,
     set_spotify_app,
     set_ticketmaster_api_key,
@@ -567,31 +567,31 @@ async def delete_datathistle(db: DbDep, _: AdminDep, settings: SettingsDep) -> D
     return await _datathistle_out(db, settings)
 
 
-async def _secondhandsongs_out(db: DbDep, settings: SettingsDep) -> SecondHandSongsOut:
-    chosen = await get_secondhandsongs(db, settings)
+async def _cover_songs_out(db: DbDep, settings: SettingsDep) -> CoverSongsOut:
+    chosen = await get_cover_songs(db, settings)
     limits = cover_songs.WITH_KEY if chosen.api_key else cover_songs.WITHOUT_KEY
-    return SecondHandSongsOut(
+    return CoverSongsOut(
         enabled=chosen.enabled,
+        secondhandsongs=chosen.secondhandsongs,
+        musicbrainz=chosen.musicbrainz,
         api_key=chosen.api_key is not None,
         per_hour=limits.per_hour,
         **await cover_songs.progress(db),
     )
 
 
-@router.get("/secondhandsongs", response_model=SecondHandSongsOut)
-async def get_secondhandsongs_settings(
-    db: DbDep, _: AdminDep, settings: SettingsDep
-) -> SecondHandSongsOut:
-    return await _secondhandsongs_out(db, settings)
+@router.get("/cover-songs", response_model=CoverSongsOut)
+async def get_cover_songs_settings(db: DbDep, _: AdminDep, settings: SettingsDep) -> CoverSongsOut:
+    return await _cover_songs_out(db, settings)
 
 
-@router.put("/secondhandsongs", response_model=SecondHandSongsOut)
-async def put_secondhandsongs_settings(
-    body: SecondHandSongsIn, db: DbDep, _: AdminDep, settings: SettingsDep, http: HttpDep
-) -> SecondHandSongsOut:
-    """Turn cover song lookups on or off, and set (after one small search) or forget the
-    optional API key."""
-    chosen = await get_secondhandsongs(db, settings)
+@router.put("/cover-songs", response_model=CoverSongsOut)
+async def put_cover_songs_settings(
+    body: CoverSongsIn, db: DbDep, _: AdminDep, settings: SettingsDep, http: HttpDep
+) -> CoverSongsOut:
+    """Turn cover song lookups on or off, choose the sources, and set (after one small search)
+    or forget SecondHandSongs' optional API key."""
+    chosen = await get_cover_songs(db, settings)
     key = None if body.remove_key else chosen.api_key
     if body.api_key:
         client = cover_songs.Client(http, body.api_key, cover_songs.WITH_KEY)
@@ -607,11 +607,18 @@ async def put_secondhandsongs_settings(
                 status.HTTP_400_BAD_REQUEST, "SecondHandSongs didn't accept the key."
             ) from exc
         key = body.api_key
-    await set_secondhandsongs(
-        db, settings, SecondHandSongsSettings(enabled=body.enabled, api_key=key)
+    await set_cover_songs(
+        db,
+        settings,
+        CoverSongsSettings(
+            enabled=body.enabled,
+            secondhandsongs=body.secondhandsongs,
+            musicbrainz=body.musicbrainz,
+            api_key=key,
+        ),
     )
     await db.commit()
-    return await _secondhandsongs_out(db, settings)
+    return await _cover_songs_out(db, settings)
 
 
 @router.get("/setlistfm", response_model=SetlistFmKeyOut)

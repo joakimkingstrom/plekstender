@@ -841,7 +841,8 @@ async def enqueue_discover_art() -> None:
 @app.task(queue="maintenance", queueing_lock="cover-songs", lock="cover-songs")
 async def find_cover_songs(timestamp: int | None = None) -> None:
     """Every ten minutes, when an admin turned it on: whether library songs are covers, from
-    SecondHandSongs, a few at a time within its rate limits (see plekstender.cover_songs)."""
+    SecondHandSongs and MusicBrainz, a few at a time within their limits (see
+    plekstender.cover_songs)."""
     from plekstender import cover_songs
 
     async with (
@@ -850,7 +851,7 @@ async def find_cover_songs(timestamp: int | None = None) -> None:
     ):
         done = await cover_songs.run(db, http, get_settings())
     if done:
-        log.info("Looked up %d songs on SecondHandSongs", done)
+        log.info("Looked up whether %d songs are covers", done)
 
 
 @app.periodic(cron="*/15 * * * *", periodic_id="cover-colours")

@@ -426,8 +426,9 @@ class TagDetail(BaseModel):
 class CoverOf(BaseModel):
     artist: str | None
     title: str | None
-    url: str | None = Field(description="The original on SecondHandSongs.")
-    cover_url: str | None = Field(description="This recording on SecondHandSongs.")
+    url: str | None = Field(description="The original on the source.")
+    cover_url: str | None = Field(description="This recording on the source.")
+    source: str = Field(description="secondhandsongs | musicbrainz")
 
 
 class TrackOut(BaseModel):
@@ -2278,20 +2279,26 @@ class SetlistFmImportIn(BaseModel):
     username: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.\-]+$")
 
 
-class SecondHandSongsIn(BaseModel):
-    enabled: bool = Field(description="Look library songs up on SecondHandSongs.")
+class CoverSongsIn(BaseModel):
+    enabled: bool = Field(description="Look library songs up for covers.")
+    secondhandsongs: bool = Field(default=True, description="Ask SecondHandSongs.")
+    musicbrainz: bool = Field(
+        default=True, description="Ask MusicBrainz (songs with a recording MBID)."
+    )
     api_key: str | None = Field(
         default=None,
         pattern=r"^[A-Za-z0-9\-]{20,64}$",
-        description="A new API key (checked first); None keeps the one saved.",
+        description="A new SecondHandSongs API key (checked first); None keeps the one saved.",
     )
     remove_key: bool = Field(default=False, description="Forget the saved API key.")
 
 
-class SecondHandSongsOut(BaseModel):
+class CoverSongsOut(BaseModel):
     enabled: bool
-    api_key: bool = Field(description="An API key is saved (higher rate limits).")
-    per_hour: int = Field(description="Requests an hour Plekstender allows itself.")
+    secondhandsongs: bool
+    musicbrainz: bool
+    api_key: bool = Field(description="A SecondHandSongs API key is saved (higher limits).")
+    per_hour: int = Field(description="SecondHandSongs requests an hour Plekstender allows.")
     songs: int = Field(description="Different songs in the libraries.")
     checked: int = Field(description="Of those, looked up.")
     covers: int = Field(description="Of those, covers.")

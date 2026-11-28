@@ -749,8 +749,9 @@ class HiddenSuggestion(Base):
 
 
 class SongCover(Base):
-    """Whether a song is a cover, and of whose song (SecondHandSongs): looked up once per
-    song, by its normalised artist and title, whichever releases and servers have it."""
+    """Whether a song is a cover, and of whose song (SecondHandSongs, then MusicBrainz): looked
+    up once per song, by its normalised artist and title, whichever releases and servers have
+    it."""
 
     __tablename__ = "song_covers"
     __table_args__ = (
@@ -765,12 +766,15 @@ class SongCover(Base):
     status: Mapped[str] = mapped_column(String(12))
     original_artist: Mapped[str | None] = mapped_column(Text)
     original_title: Mapped[str | None] = mapped_column(Text)
-    # SecondHandSongs pages: this recording, and the original's.
+    # Pages on the source: this recording, and the original's.
     performance_url: Mapped[str | None] = mapped_column(Text)
     original_url: Mapped[str | None] = mapped_column(Text)
+    # Where the answer came from: secondhandsongs | musicbrainz (for unknown, the last tried).
     source: Mapped[str] = mapped_column(String(24), default="secondhandsongs")
-    # Requests the lookup took, counted against SecondHandSongs' limits.
-    requests: Mapped[int] = mapped_column(SmallInteger, default=1)
+    # The sources asked, comma-separated ("secondhandsongs,musicbrainz").
+    tried: Mapped[str] = mapped_column(String(64), default="")
+    # Requests made to SecondHandSongs for it, counted against its limits.
+    requests: Mapped[int] = mapped_column(SmallInteger, default=0)
     error: Mapped[str | None] = mapped_column(Text)
     checked_at: Mapped[dt.datetime]
 

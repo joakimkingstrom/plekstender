@@ -14,7 +14,7 @@ const gloryBox = {
   rating_key: 304, title: 'Glory Box', original_title: null, disc: 1, number: 11, duration_ms: 300_000,
   popularity: 800, user_rating: null, plays: 3, album_rating_key: 202, album_title: 'Dummy', album_thumb: null,
   listens: 0, seen_live: 0, lyrics: null,
-  cover_of: { artist: 'Isaac Hayes', title: "Ike's Rap II", url: 'https://secondhandsongs.com/performance/20', cover_url: null },
+  cover_of: { artist: 'Isaac Hayes', title: "Ike's Rap II", url: 'https://secondhandsongs.com/performance/20', cover_url: null, source: 'secondhandsongs' },
 }
 
 const artist = (key: number, title: string) => ({

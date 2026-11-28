@@ -632,8 +632,8 @@ def _with_listens(
 
 
 async def _with_covers(db: DbDep, server_id: int, tracks: list[TrackOut]) -> None:
-    """Marks the songs that are covers (SecondHandSongs: looked up by the worker when an
-    admin turned it on), with whose song they are."""
+    """Marks the songs that are covers (SecondHandSongs or MusicBrainz: looked up by the
+    worker when an admin turned it on), with whose song they are."""
     if not tracks:
         return
     rows = await db.execute(
@@ -658,6 +658,7 @@ async def _with_covers(db: DbDep, server_id: int, tracks: list[TrackOut]) -> Non
                 title=cover.original_title,
                 url=cover.original_url,
                 cover_url=cover.performance_url,
+                source=cover.source,
             )
 
 

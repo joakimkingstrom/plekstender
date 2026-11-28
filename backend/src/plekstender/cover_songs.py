@@ -1,16 +1,25 @@
-"""Cover songs, from SecondHandSongs (https://secondhandsongs.com): whether a song in the
-library is a cover, and of whose song ("Cover of Hurt by Nine Inch Nails").
+"""Cover songs: whether a song in the library is a cover, and of whose song ("Cover of Nine
+Inch Nails · Hurt"), from SecondHandSongs (https://secondhandsongs.com) and MusicBrainz.
 
-An admin turns it on (Settings → Services → Cover songs); an API key is optional and only
-raises the rate limits. The worker looks songs up gently, every ten minutes, within a budget
-of requests per minute, hour and day: songs people play and rate first, then the rest by
-popularity. A song is looked up once (by its normalised artist and title, so other releases
-of it cost nothing); one not on SecondHandSongs is tried again after half a year, one that
-failed the next day.
+An admin turns it on (Settings → Services → Cover songs) and picks the sources; a
+SecondHandSongs API key is optional and only raises its rate limits. The worker looks songs
+up gently, every ten minutes: songs people play and rate first, then the rest by popularity.
+A song is looked up once (by its normalised artist and title, so other releases of it cost
+nothing); one neither source knows is tried again after half a year, one that failed the
+next day, and one only SecondHandSongs was asked about gets MusicBrainz's answer too once
+MusicBrainz is turned on.
 
-A lookup is a search by title and performer (one request); for a match that isn't the
-original recording, its page names the original (a second request). A re-recording of the
-artist's own song counts as an original, not a cover.
+SecondHandSongs, within a budget of requests per minute, hour and day: a search by title and
+performer (one request); for a match that isn't the original recording, its page names the
+original (a second request).
+
+MusicBrainz, for songs it doesn't know, when the files (or Plex) have the recording's
+MusicBrainz ID: the recording's link to its song (the "work") says whether it's a cover; for
+one that is, the work's plain recordings of the same title (not covers, live, medleys or
+instrumentals) are the original artist's, and one of them names them (three requests, at
+MusicBrainz's pace).
+
+A re-recording of the artist's own song counts as an original, not a cover.
 """
 
 from __future__ import annotations
@@ -18,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -27,8 +37,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plekstender import musicbrainz
 from plekstender.config import Settings
-from plekstender.db.instance import get_secondhandsongs
+from plekstender.db.instance import CoverSongsSettings, get_cover_songs
 from plekstender.db.models import SongCover
 from plekstender.sync.parse import normalise_artist, normalise_title, without_suffixes
 
@@ -39,6 +50,9 @@ SITE = "https://secondhandsongs.com"
 UNKNOWN_AGAIN = dt.timedelta(days=180)
 ERROR_AGAIN = dt.timedelta(days=1)
 PAGE_SIZE = 20
+MB_SITE = "https://musicbrainz.org"
+MB_PER_RUN = 40  # songs asked about on MusicBrainz in one run (up to three requests each)
+_MBID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 @dataclass(frozen=True)
@@ -62,12 +76,13 @@ class Busy(Exception):
 @dataclass
 class Found:
     status: str  # cover | original | unknown | error
-    requests: int
+    requests: int  # to SecondHandSongs
     original_artist: str | None = None
     original_title: str | None = None
     performance_url: str | None = None
     original_url: str | None = None
     error: str | None = None
+    source: str = "secondhandsongs"
 
 
 def site_url(uri: str | None) -> str | None:
@@ -170,32 +185,114 @@ async def look_up(client: Client, artist: str, title: str) -> Found:
         return Found("error", client.requests - before, error=str(exc)[:500])
 
 
+# --- MusicBrainz -----------------------------------------------------------------------------
+
+
+def _attributes(relation: dict[str, Any]) -> set[str]:
+    return {str(a) for a in relation.get("attributes") or []}
+
+
+async def look_up_musicbrainz(http: httpx.AsyncClient, mbid: str, artist: str) -> Found:
+    """Whether the recording is a cover, by MusicBrainz's link to its song. Raises
+    MusicBrainzError (not NotFound) when MusicBrainz is busy or unreachable."""
+    page = f"{MB_SITE}/recording/{mbid}"
+    try:
+        recording = await musicbrainz.lookup(http, "recording", mbid, "work-rels")
+    except musicbrainz.NotFound:
+        return Found("unknown", 0, source="musicbrainz")
+    performances = [
+        r
+        for r in recording.get("relations") or []
+        if r.get("type") == "performance" and isinstance(r.get("work"), dict)
+    ]
+    if not performances:
+        return Found("unknown", 0, source="musicbrainz")
+    cover = next((r for r in performances if "cover" in _attributes(r)), None)
+    if cover is None:
+        return Found("original", 0, performance_url=page, source="musicbrainz")
+    work = cover["work"]
+    title = str(work.get("title") or "") or None
+    found = Found(
+        "cover",
+        0,
+        original_title=title,
+        performance_url=page,
+        original_url=f"{MB_SITE}/work/{work.get('id')}",
+        source="musicbrainz",
+    )
+    try:
+        song = await musicbrainz.lookup(http, "work", str(work.get("id")), "recording-rels")
+    except musicbrainz.NotFound:
+        return found
+    # The original artist's own recordings: plain ones of the song (not a cover, live, a
+    # medley or an instrumental), under its own title.
+    plain = [
+        r["recording"]
+        for r in song.get("relations") or []
+        if r.get("type") == "performance"
+        and isinstance(r.get("recording"), dict)
+        and not _attributes(r)
+        and r["recording"].get("id") != mbid
+        and normalise_title(str(r["recording"].get("title") or "")) == normalise_title(title or "")
+    ]
+    if not plain:
+        return found
+    try:
+        original = await musicbrainz.lookup(
+            http, "recording", str(plain[0]["id"]), "artist-credits"
+        )
+    except musicbrainz.NotFound:
+        return found
+    name = musicbrainz.credit(original.get("artist-credit")) or None
+    if name and normalise_artist(name) == normalise_artist(artist):
+        return Found("original", 0, performance_url=page, source="musicbrainz")
+    found.original_artist = name
+    found.original_url = f"{MB_SITE}/recording/{plain[0]['id']}"
+    return found
+
+
 # --- the worker's runs -----------------------------------------------------------------------
 
 # Songs not looked up yet (or due again), people's played and rated ones first, then the most
-# popular. One row per song: its artist and title as the library has them.
+# popular. One row per song: its artist and title as the library has them, a recording MBID
+# (the files' tag first, then Plex's), and whether it's due for every source ("stale") or
+# only for MusicBrainz (asked SecondHandSongs before MusicBrainz was turned on).
 _DUE = text(
     """
-    SELECT t.artist_key, t.title_norm,
-           min(coalesce(t.original_title, ar.title)) AS artist, min(t.title) AS title
-    FROM tracks t
-    LEFT JOIN artists ar ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
-    LEFT JOIN user_item_state s ON s.server_id = t.server_id AND s.rating_key = t.rating_key
-    LEFT JOIN song_covers c ON c.artist_key = t.artist_key AND c.title_norm = t.title_norm
-    WHERE t.artist_key IS NOT NULL AND t.artist_key <> ''
-      AND coalesce(t.original_title, ar.title) IS NOT NULL
-      AND lower(btrim(coalesce(t.original_title, ar.title)))
-          NOT IN ('various artists', 'various', 'va', 'unknown artist')
-      AND (c.artist_key IS NULL
-           OR (c.status = 'error' AND c.checked_at < :error_before)
-           OR (c.status = 'unknown' AND c.checked_at < :unknown_before))
-    GROUP BY t.artist_key, t.title_norm
-    ORDER BY (max(coalesce(s.user_rating, 0)) > 0
-              OR max(greatest(s.view_count, s.listens)) > 0) DESC NULLS LAST,
-             sum(greatest(s.view_count, s.listens)) DESC NULLS LAST,
-             max(s.user_rating) DESC NULLS LAST,
-             max(t.popularity) DESC NULLS LAST,
-             t.artist_key, t.title_norm
+    SELECT artist_key, title_norm, artist, title, mbid, stale FROM (
+        SELECT t.artist_key, t.title_norm,
+               min(coalesce(t.original_title, ar.title)) AS artist, min(t.title) AS title,
+               (array_agg(m.tags ->> 'musicbrainz_trackid') FILTER (
+                    WHERE m.tags ->> 'musicbrainz_trackid' ~ :uuid))[1]
+                   AS file_mbid,
+               (array_agg(t.mbid) FILTER (WHERE t.mbid ~ :uuid))[1] AS plex_mbid,
+               bool_or(c.artist_key IS NULL OR c.status = 'error'
+                       OR c.checked_at < :unknown_before) AS stale,
+               max(coalesce(s.user_rating, 0)) AS rating,
+               max(greatest(s.view_count, s.listens)) AS played,
+               sum(greatest(s.view_count, s.listens)) AS plays,
+               max(t.popularity) AS popularity
+        FROM tracks t
+        LEFT JOIN artists ar
+          ON ar.server_id = t.server_id AND ar.rating_key = t.artist_rating_key
+        LEFT JOIN user_item_state s ON s.server_id = t.server_id AND s.rating_key = t.rating_key
+        LEFT JOIN media_files m ON m.server_id = t.server_id AND m.rating_key = t.rating_key
+        LEFT JOIN song_covers c ON c.artist_key = t.artist_key AND c.title_norm = t.title_norm
+        WHERE t.artist_key IS NOT NULL AND t.artist_key <> ''
+          AND coalesce(t.original_title, ar.title) IS NOT NULL
+          AND lower(btrim(coalesce(t.original_title, ar.title)))
+              NOT IN ('various artists', 'various', 'va', 'unknown artist')
+          AND (c.artist_key IS NULL
+               OR (c.status = 'error' AND c.checked_at < :error_before)
+               OR (c.status = 'unknown' AND c.checked_at < :unknown_before)
+               OR (:musicbrainz AND c.status = 'unknown'
+                   AND c.tried NOT LIKE '%musicbrainz%'))
+        GROUP BY t.artist_key, t.title_norm
+    ) songs
+    CROSS JOIN LATERAL (SELECT coalesce(file_mbid, plex_mbid) AS mbid) id
+    WHERE (stale AND :secondhandsongs) OR (:musicbrainz AND mbid IS NOT NULL)
+    ORDER BY (rating > 0 OR played > 0) DESC NULLS LAST, plays DESC NULLS LAST,
+             rating DESC NULLS LAST, popularity DESC NULLS LAST, artist_key, title_norm
     LIMIT :limit
     """
 )
@@ -209,15 +306,21 @@ async def requests_since(db: AsyncSession, since: dt.datetime) -> int:
 
 
 async def budget(db: AsyncSession, limits: Limits, now: dt.datetime) -> int:
-    """Requests this run may make: a share of the hour's, within what's left of the hour's
-    and the day's."""
+    """SecondHandSongs requests this run may make: a share of the hour's, within what's left
+    of the hour's and the day's."""
     hour = limits.per_hour - await requests_since(db, now - dt.timedelta(hours=1))
     day = limits.per_day - await requests_since(db, now - dt.timedelta(days=1))
     return max(0, min(hour, day, -(-limits.per_hour // RUNS_PER_HOUR)))
 
 
 async def _save(
-    db: AsyncSession, artist_key: str, title_norm: str, found: Found, now: dt.datetime
+    db: AsyncSession,
+    artist_key: str,
+    title_norm: str,
+    found: Found,
+    tried: list[str],
+    shs_requests: int,
+    now: dt.datetime,
 ) -> None:
     values = {
         "status": found.status,
@@ -225,8 +328,9 @@ async def _save(
         "original_title": found.original_title,
         "performance_url": found.performance_url,
         "original_url": found.original_url,
-        "source": "secondhandsongs",
-        "requests": max(1, found.requests),
+        "source": found.source,
+        "tried": ",".join(tried),
+        "requests": shs_requests,
         "error": found.error,
         "checked_at": now,
     }
@@ -238,43 +342,80 @@ async def _save(
     await db.commit()
 
 
+def _limits(chosen: CoverSongsSettings) -> Limits:
+    return WITH_KEY if chosen.api_key else WITHOUT_KEY
+
+
 async def run(
     db: AsyncSession,
     http: httpx.AsyncClient,
     settings: Settings,
     now: dt.datetime | None = None,
 ) -> int:
-    """Look up the songs due, within this run's budget. Returns how many were looked up."""
-    chosen = await get_secondhandsongs(db, settings)
-    if not chosen.enabled:
+    """Look up the songs due, within this run's budgets. Returns how many were looked up."""
+    chosen = await get_cover_songs(db, settings)
+    use_shs, use_mb = chosen.secondhandsongs, chosen.musicbrainz
+    if not chosen.enabled or not (use_shs or use_mb):
         return 0
-    limits = WITH_KEY if chosen.api_key else WITHOUT_KEY
+    limits = _limits(chosen)
     now = now or dt.datetime.now(dt.UTC)
-    allowed = await budget(db, limits, now)
-    if allowed <= 0:
+    allowed = await budget(db, limits, now) if use_shs else 0
+    if use_shs and allowed <= 0 and not use_mb:
         return 0
-    # A cover takes two requests, anything else one.
     rows = (
         await db.execute(
             _DUE,
             {
-                "limit": allowed,
+                "limit": max(allowed, MB_PER_RUN if use_mb else 0),
                 "error_before": now - ERROR_AGAIN,
                 "unknown_before": now - UNKNOWN_AGAIN,
+                "uuid": _MBID.pattern,
+                "secondhandsongs": use_shs,
+                "musicbrainz": use_mb,
             },
         )
     ).all()
     client = Client(http, chosen.api_key, limits)
-    done = 0
+    done = mb_asked = 0
     for row in rows:
-        if client.requests + 2 > allowed:
-            break
-        try:
-            found = await look_up(client, row.artist, row.title)
-        except Busy as exc:
-            log.info("cover songs paused: %s", exc)
-            break
-        await _save(db, row.artist_key, row.title_norm, found, dt.datetime.now(dt.UTC))
+        before = client.requests
+        found: Found | None = None
+        # Asked SecondHandSongs before, when only MusicBrainz is due.
+        tried = [] if row.stale else ["secondhandsongs"]
+        if row.stale and chosen.secondhandsongs:
+            # SecondHandSongs first; out of budget (or told to slow down): the next run.
+            if not use_shs or client.requests + 2 > allowed:
+                continue
+            try:
+                found = await look_up(client, row.artist, row.title)
+            except Busy as exc:
+                log.info("cover songs on SecondHandSongs paused: %s", exc)
+                use_shs = False
+                continue
+            tried.append("secondhandsongs")
+        decided = found is not None and found.status in ("cover", "original")
+        if not decided and use_mb and row.mbid and mb_asked < MB_PER_RUN:
+            mb_asked += 1
+            try:
+                mb = await look_up_musicbrainz(http, row.mbid, row.artist)
+            except musicbrainz.MusicBrainzError as exc:
+                log.info("cover songs on MusicBrainz paused: %s", exc)
+                use_mb = False
+            else:
+                tried.append("musicbrainz")
+                if found is None or mb.status != "unknown":
+                    found = mb
+        if found is None or ("musicbrainz" not in tried and not row.stale):
+            continue  # nothing asked (a source paused): the next run
+        await _save(
+            db,
+            row.artist_key,
+            row.title_norm,
+            found,
+            tried,
+            client.requests - before,
+            dt.datetime.now(dt.UTC),
+        )
         done += 1
     return done
 

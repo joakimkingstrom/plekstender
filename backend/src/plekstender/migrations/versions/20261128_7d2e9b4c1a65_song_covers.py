@@ -1,4 +1,4 @@
-"""song covers: whether songs are covers, and of whose song (SecondHandSongs)
+"""song covers: whether songs are covers, and of whose song (SecondHandSongs, MusicBrainz)
 
 Revision ID: 7d2e9b4c1a65
 Revises: c5e8a1f3d920
@@ -27,6 +27,7 @@ def upgrade() -> None:
         sa.Column("performance_url", sa.Text(), nullable=True),
         sa.Column("original_url", sa.Text(), nullable=True),
         sa.Column("source", sa.String(length=24), nullable=False),
+        sa.Column("tried", sa.String(length=64), nullable=False),
         sa.Column("requests", sa.SmallInteger(), nullable=False),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("checked_at", sa.DateTime(timezone=True), nullable=False),

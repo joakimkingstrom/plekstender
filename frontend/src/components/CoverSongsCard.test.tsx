@@ -7,7 +7,7 @@ let state: Record<string, unknown>
 let puts: unknown[]
 
 beforeEach(() => {
-  state = { enabled: false, api_key: false, per_hour: 90, songs: 5000, checked: 0, covers: 0 }
+  state = { enabled: false, secondhandsongs: true, musicbrainz: true, api_key: false, per_hour: 90, songs: 5000, checked: 0, covers: 0 }
   puts = []
   vi.stubGlobal(
     'fetch',
@@ -16,7 +16,7 @@ beforeEach(() => {
       if (input.method === 'PUT') {
         const body = await input.clone().json()
         puts.push(body)
-        state = { ...state, enabled: body.enabled, api_key: body.remove_key ? false : Boolean(body.api_key) || state.api_key, per_hour: 900, checked: 120, covers: 7 }
+        state = { ...state, enabled: body.enabled, secondhandsongs: body.secondhandsongs, musicbrainz: body.musicbrainz, api_key: body.remove_key ? false : Boolean(body.api_key) || state.api_key, per_hour: 900, checked: 120, covers: 7 }
       }
       return json(state)
     }),
@@ -36,15 +36,19 @@ it('turns cover song lookups on, shows progress, and saves an optional key', asy
   const on = await screen.findByRole('checkbox', { name: /Look up cover songs/ })
   expect(on).not.toBeChecked()
   fireEvent.click(on)
-  await vi.waitFor(() => expect(puts).toEqual([{ enabled: true, remove_key: false }]))
+  await vi.waitFor(() => expect(puts).toEqual([{ enabled: true, secondhandsongs: true, musicbrainz: true, remove_key: false }]))
   expect(await screen.findByText(/120 of 5,000 songs looked up, 7 covers found/)).toBeInTheDocument()
 
-  fireEvent.change(screen.getByLabelText(/API key/), { target: { value: 'ed0a8c61-4520-4317-9b95-7a260260b4c0' } })
+  fireEvent.change(screen.getByLabelText(/SecondHandSongs API key/), { target: { value: 'ed0a8c61-4520-4317-9b95-7a260260b4c0' } })
   fireEvent.click(screen.getByRole('button', { name: 'Check and save' }))
   await vi.waitFor(() =>
-    expect(puts[1]).toEqual({ enabled: true, api_key: 'ed0a8c61-4520-4317-9b95-7a260260b4c0', remove_key: false }),
+    expect(puts[1]).toEqual({ enabled: true, secondhandsongs: true, musicbrainz: true, api_key: 'ed0a8c61-4520-4317-9b95-7a260260b4c0', remove_key: false }),
   )
   expect(await screen.findByText(/SecondHandSongs accepted the key/)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
-  await vi.waitFor(() => expect(puts[2]).toEqual({ enabled: true, remove_key: true }))
+  await vi.waitFor(() => expect(puts[2]).toEqual({ enabled: true, secondhandsongs: true, musicbrainz: true, remove_key: true }))
+  // MusicBrainz only: no SecondHandSongs key to give.
+  fireEvent.click(screen.getByRole('checkbox', { name: /^SecondHandSongs/ }))
+  await vi.waitFor(() => expect(puts[3]).toMatchObject({ secondhandsongs: false, musicbrainz: true }))
+  await vi.waitFor(() => expect(screen.queryByLabelText(/SecondHandSongs API key/)).not.toBeInTheDocument())
 })

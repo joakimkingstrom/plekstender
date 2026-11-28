@@ -288,14 +288,14 @@ function TrackList({
   )
 }
 
-/** Whose song a cover is (SecondHandSongs), artist first; links to the original there. */
+/** Whose song a cover is (SecondHandSongs or MusicBrainz), artist first; links to the original there. */
 function CoverOf({ cover }: { cover: NonNullable<Schemas['TrackOut']['cover_of']> }) {
   const what = [cover.artist, cover.title].filter(Boolean).join(' · ')
   return (
     <span className="block truncate text-xs text-muted">
       Cover of{' '}
       {cover.url ? (
-        <a href={cover.url} target="_blank" rel="noreferrer" className="hover:text-text hover:underline" title="On SecondHandSongs">
+        <a href={cover.url} target="_blank" rel="noreferrer" className="hover:text-text hover:underline" title={cover.source === 'musicbrainz' ? 'On MusicBrainz' : 'On SecondHandSongs'}>
           {what}
         </a>
       ) : (
