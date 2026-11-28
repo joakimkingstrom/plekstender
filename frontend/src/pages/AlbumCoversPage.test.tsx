@@ -125,7 +125,31 @@ describe('Album covers', () => {
     expect(await screen.findByText('Applying best matches…')).toBeInTheDocument()
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
     const [started] = requests('/api/servers/1/artwork/albums/best')
-    expect(await (started[0] as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['deezer', 'itunes', 'tidal', 'coverartarchive'] })
+    expect(await (started[0] as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['deezer', 'itunes', 'tidal', 'coverartarchive'], rating_keys: null })
+  })
+
+  it('applies the best match to the ticked albums, and upgrades the fine ones', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <AlbumCovers serverId={1} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    // Shift-click: a range.
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Dummy' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select OK Computer OKNOTOK' }), { shiftKey: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply best match to 2 ticked' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to 2' }))
+    await vi.waitFor(() => expect(requests('/api/servers/1/artwork/albums/best')).toHaveLength(1))
+    const [ticked] = requests('/api/servers/1/artwork/albums/best')
+    expect(await (ticked[0] as Request).clone().json()).toMatchObject({ rating_keys: [202, 201] })
+    expect(await screen.findByText('Applying best matches…')).toBeInTheDocument()
+
+    // Fine covers: an upgrade, where a bigger one is found.
+    jobs = []
+    fireEvent.click(screen.getByRole('button', { name: /^Fine/ }))
+    expect(await screen.findByRole('button', { name: 'Upgrade to the biggest found' }, { timeout: 4000 })).toBeInTheDocument()
   })
 
   it('opens albums on the source chosen, and remembers the sources for best matches', async () => {
@@ -154,7 +178,7 @@ describe('Album covers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply to 2' }))
     await vi.waitFor(() => expect(requests('/api/servers/1/artwork/albums/best')).toHaveLength(1))
     const [started] = requests('/api/servers/1/artwork/albums/best')[0]
-    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['itunes', 'tidal', 'coverartarchive'] })
+    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['itunes', 'tidal', 'coverartarchive'], rating_keys: null })
     await vi.waitFor(async () => {
       const [put] = requests('/api/auth/me/preferences').at(-1) ?? []
       expect(await (put as Request).clone().json()).toMatchObject({ cover_source: 'coverartarchive', best_cover_sources: ['itunes', 'tidal', 'coverartarchive'] })
@@ -177,12 +201,12 @@ describe('Album covers', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply best matches' }))
-    expect(screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Deezer', 'iTunes', 'Cover Art Archive'])
+    expect(within(screen.getByRole('group', { name: 'Look on' })).getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Deezer', 'iTunes', 'Cover Art Archive'])
     fireEvent.click(screen.getByRole('checkbox', { name: 'Deezer' }))
     fireEvent.click(screen.getByRole('button', { name: 'Apply to 2' }))
     await vi.waitFor(() => expect(requests('/api/servers/1/artwork/albums/best')).toHaveLength(1))
     const [started] = requests('/api/servers/1/artwork/albums/best')[0]
-    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['itunes', 'coverartarchive'] })
+    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['itunes', 'coverartarchive'], rating_keys: null })
     // Tidal stays chosen for when it's set up.
     await vi.waitFor(async () => {
       const [put] = requests('/api/auth/me/preferences').at(-1) ?? []

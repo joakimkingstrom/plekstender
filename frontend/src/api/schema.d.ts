@@ -3124,8 +3124,9 @@ export interface paths {
         put?: never;
         /**
          * Start Best
-         * @description Apply the best match to every album the list shows with this filter and search (in
-         *     the background, a few seconds an album).
+         * @description Apply the best match to every album the list shows with this filter and search, or to
+         *     the ticked ones (in the background, a few seconds an album). A cover is only replaced by
+         *     a bigger one, so "ok" upgrades the fine ones where a bigger version is found.
          */
         post: operations["start_best_api_servers__server_id__artwork_albums_best_post"];
         delete?: never;
@@ -5579,11 +5580,16 @@ export interface components {
         BestCoversJobIn: {
             /**
              * Show
-             * @description The albums listed with this filter (and search).
+             * @description The albums listed with this filter (and search); ok: upgrade covers that are fine (a cover is only replaced by a bigger one).
              * @default needs
              * @enum {string}
              */
-            show: "needs" | "missing" | "low";
+            show: "needs" | "missing" | "low" | "ok";
+            /**
+             * Rating Keys
+             * @description These albums instead (the ticked ones).
+             */
+            rating_keys?: number[] | null;
             /** Q */
             q?: string | null;
             /**
@@ -16138,7 +16144,7 @@ export interface operations {
     list_covers_api_servers__server_id__artwork_albums_get: {
         parameters: {
             query?: {
-                show?: "needs" | "missing" | "low" | "all";
+                show?: "needs" | "missing" | "low" | "ok" | "all";
                 q?: string | null;
                 low_px?: number;
                 sort?: ("name" | "added" | "changed" | "smallest") | null;
