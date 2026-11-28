@@ -1994,9 +1994,19 @@ class UnknownFileOut(BaseModel):
     suggestion: IdentityChoice | None
 
 
+class UnknownFolder(BaseModel):
+    folder: str = Field(description="Relative to the music folder; '' for files right in it.")
+    files: int
+
+
 class UnknownFilesOut(BaseModel):
     total: int
-    files: list[UnknownFileOut] = Field(description="The first 200.")
+    folders: list[UnknownFolder] = Field(
+        default_factory=list, description="The folders the files are in, by path, with how many."
+    )
+    files: list[UnknownFileOut] = Field(
+        description="The first 200 (in the folder asked for, when one was)."
+    )
 
 
 class IdentifyApplyIn(BaseModel):

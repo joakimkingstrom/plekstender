@@ -242,13 +242,17 @@ export function useStartIdentify(serverId: number) {
   })
 }
 
-export function useUnknownFiles(serverId: number, kind: UnknownKind) {
+/** Unknown files of a kind: how many, and the folders they're in; with `folder`, the files
+ * in that folder ('' for the music folder itself). */
+export function useUnknownFiles(serverId: number, kind: UnknownKind, folder: string | null = null) {
   return useQuery({
-    queryKey: identifyKeys.unknown(serverId, kind),
+    queryKey: [...identifyKeys.unknown(serverId, kind), folder],
     placeholderData: keepPreviousData,
     queryFn: () =>
       unwrap(
-        api.GET('/api/servers/{server_id}/files/unknown', { params: { path: { server_id: serverId }, query: { kind } } }),
+        api.GET('/api/servers/{server_id}/files/unknown', {
+          params: { path: { server_id: serverId }, query: { kind, folder: folder ?? undefined } },
+        }),
       ),
   })
 }

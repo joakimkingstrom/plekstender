@@ -63,22 +63,13 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
   const files = useUnknownFiles(serverId, kind)
   const status = useIdentifyStatus(serverId)
   const start = useStartIdentify(serverId)
-  // Picked matches per file (file id -> "recording|track"); "" leaves the file alone.
-  const [picked, setPicked] = useState<Record<number, string>>({})
-  const [reviewing, setReviewing] = useState<IdentityChoice[] | null>(null)
+  // The folder whose files are shown (one at a time: an album's folder is fixed in one go).
+  const [open, setOpen] = useState<string | null>(null)
 
   const active = status.data?.active
   const last = status.data?.last
   const { done = 0, total = 0 } = (active?.progress ?? {}) as { done?: number; total?: number }
-  const list = files.data?.files ?? []
-  const choice = (f: UnknownFile) => picked[f.file_id] ?? (f.suggestion ? choiceValue(f.suggestion) : '')
-  const choices: IdentityChoice[] = list.flatMap((f) => {
-    const value = f.status === 'identified' ? choice(f) : ''
-    if (!value) return []
-    const [recording_id, track_id] = value.split('|')
-    return [{ file_id: f.file_id, recording_id, track_id: track_id || null }]
-  })
-  const unidentified = list.filter((f) => f.status === 'new' || f.status === 'error').length
+  const folders = files.data?.folders ?? []
 
   return (
     <Card title="Unknown files">
@@ -86,7 +77,16 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
         <p className="text-muted">
           Find out what songs are by how they sound (AcoustID and MusicBrainz), then write their tags.
         </p>
-        <Segmented value={kind} options={KINDS} onChange={setKind} label="Which files" className="w-full" />
+        <Segmented
+          value={kind}
+          options={KINDS}
+          onChange={(k) => {
+            setKind(k)
+            setOpen(null)
+          }}
+          label="Which files"
+          className="w-full"
+        />
         {files.isError && <Notice tone="error">{errorMessage(files.error)}</Notice>}
         {files.data && files.data.total === 0 && <p className="text-muted">None. {EMPTY[kind]}</p>}
 
@@ -146,7 +146,7 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
                 <span>
                   {formatCount(files.data.total)} {files.data.total === 1 ? 'file' : 'files'}
                 </span>
-                {unidentified > 0 || files.data.total > list.length ? (
+                {files.data.total > 0 ? (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -164,42 +164,89 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
               (last.stop_requested ? <p className="text-xs text-muted">{last.error}</p> : <Notice tone="error">{last.error}</Notice>)}
             {last?.status === 'succeeded' && !active && <LastRun stats={last.stats} />}
 
-            {/* At the top: with up to 200 files listed, the bottom is a long way down. */}
-            {choices.length > 0 &&
-              (canWrite ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button variant="primary" onClick={() => setReviewing(choices)}>
-                    Check the changes for {choices.length} {choices.length === 1 ? 'file' : 'files'}
-                  </Button>
-                  <span className="text-xs text-muted">The matches chosen below.</span>
-                </div>
-              ) : (
-                <Notice>
-                  Allow changing files (
-                  <Link to="/settings/files/scan" className="underline">
-                    Settings → Music files → Tags in your files
-                  </Link>
-                  ) to write the matches into the files.
-                </Notice>
-              ))}
-            <ul className="divide-y divide-border rounded-lg border border-border">
-              {list.map((f) => (
-                <FileRow
-                  key={f.file_id}
-                  file={f}
-                  value={choice(f)}
-                  onChange={(value) => setPicked((p) => ({ ...p, [f.file_id]: value }))}
-                />
-              ))}
+            <ul className="divide-y divide-border rounded-lg border border-border" aria-label="Folders">
+              {folders.map(({ folder, files: n }) => {
+                const shown = open === folder
+                return (
+                  <li key={folder}>
+                    <button
+                      type="button"
+                      aria-expanded={shown}
+                      onClick={() => setOpen(shown ? null : folder)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-surface-2/60"
+                    >
+                      <svg viewBox="0 0 24 24" className={`size-4 shrink-0 text-muted transition-transform ${shown ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                      <span className="min-w-0 flex-1 truncate">{folder || 'The music folder itself'}</span>
+                      <span className="shrink-0 text-xs text-muted tabular-nums">
+                        {formatCount(n)} {n === 1 ? 'file' : 'files'}
+                      </span>
+                    </button>
+                    {shown && <FolderFiles serverId={serverId} kind={kind} folder={folder} canWrite={canWrite} />}
+                  </li>
+                )
+              })}
             </ul>
-            {files.data.total > list.length && (
-              <p className="text-xs text-muted">The first {list.length} are listed; write these, and the next ones show.</p>
-            )}
           </>
         )}
       </div>
-      {reviewing && <Review serverId={serverId} choices={reviewing} onClose={() => setReviewing(null)} />}
     </Card>
+  )
+}
+
+/** One folder's unknown files: the matches found for each, picked (the suggestion to start
+ * with), checked, and written. */
+function FolderFiles({ serverId, kind, folder, canWrite }: { serverId: number; kind: UnknownKind; folder: string; canWrite: boolean }) {
+  const files = useUnknownFiles(serverId, kind, folder)
+  // Picked matches per file (file id -> "recording|track"); "" leaves the file alone.
+  const [picked, setPicked] = useState<Record<number, string>>({})
+  const [reviewing, setReviewing] = useState<IdentityChoice[] | null>(null)
+  if (files.isPending) return <div className="px-3 pb-3"><Spinner small /></div>
+  if (files.isError) return <div className="px-3 pb-3"><Notice tone="error">{errorMessage(files.error)}</Notice></div>
+  const list = files.data.files
+  const choice = (f: UnknownFile) => picked[f.file_id] ?? (f.suggestion ? choiceValue(f.suggestion) : '')
+  const choices: IdentityChoice[] = list.flatMap((f) => {
+    const value = f.status === 'identified' ? choice(f) : ''
+    if (!value) return []
+    const [recording_id, track_id] = value.split('|')
+    return [{ file_id: f.file_id, recording_id, track_id: track_id || null }]
+  })
+  const inFolder = (files.data.folders ?? []).find((f) => f.folder === folder)?.files ?? list.length
+  return (
+    <div className="space-y-3 border-t border-border bg-surface-2/30 px-3 py-3">
+      {choices.length > 0 &&
+        (canWrite ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="primary" size="sm" onClick={() => setReviewing(choices)}>
+              Check the changes for {choices.length} {choices.length === 1 ? 'file' : 'files'}
+            </Button>
+            <span className="text-xs text-muted">The matches chosen below.</span>
+          </div>
+        ) : (
+          <Notice>
+            Allow changing files (
+            <Link to="/settings/files/scan" className="underline">
+              Settings → Music files → Folder scan
+            </Link>
+            ) to write the matches into the files.
+          </Notice>
+        ))}
+      <ul className="divide-y divide-border rounded-lg border border-border bg-surface" aria-label={`Files in ${folder || 'the music folder'}`}>
+        {list.map((f) => (
+          <FileRow
+            key={f.file_id}
+            file={f}
+            value={choice(f)}
+            onChange={(value) => setPicked((p) => ({ ...p, [f.file_id]: value }))}
+          />
+        ))}
+      </ul>
+      {inFolder > list.length && (
+        <p className="text-xs text-muted">The first {list.length} are listed; write these, and the next ones show.</p>
+      )}
+      {reviewing && <Review serverId={serverId} choices={reviewing} onClose={() => setReviewing(null)} />}
+    </div>
   )
 }
 
