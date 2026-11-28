@@ -50,6 +50,7 @@ from plekstender.db.models import (
     User,
     UserServer,
 )
+from plekstender.tags.cover_tags import plan as plan_cover_tags
 from plekstender.tags.lyrics import FIELDS as LYRICS_FIELDS
 from plekstender.tags.mbapply import AlbumFile, match, plan_file, wanted
 from plekstender.tags.plexsync import Planned
@@ -550,19 +551,7 @@ async def tag_history(
 # --- Plex's metadata into the files (in bulk) ------------------------------------------------
 
 
-async def _plan(db: DbDep, us: UserServer, body: PlexSyncIn) -> list[Planned]:
-    if body.scope != "library" and body.key is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Which artist or album?")
-    return await plan_sync(db, us.server_id, body.scope, body.key, set(body.fields), us.user_id)
-
-
-@router.post("/plex-sync/preview", response_model=PlexSyncPreviewOut)
-async def plex_sync_preview(
-    server_id: int, body: PlexSyncIn, db: DbDep, user: UserDep
-) -> PlexSyncPreviewOut:
-    """What writing Plex's metadata to the files would change (nothing is written)."""
-    us = await owner_server(db, user, server_id)
-    planned = await _plan(db, us, body)
+def _preview(planned: list[Planned]) -> PlexSyncPreviewOut:
     by_field: dict[str, int] = {}
     for p in planned:
         by_field[p.field] = by_field.get(p.field, 0) + 1
@@ -583,6 +572,21 @@ async def plex_sync_preview(
     )
 
 
+async def _plan(db: DbDep, us: UserServer, body: PlexSyncIn) -> list[Planned]:
+    if body.scope != "library" and body.key is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Which artist or album?")
+    return await plan_sync(db, us.server_id, body.scope, body.key, set(body.fields), us.user_id)
+
+
+@router.post("/plex-sync/preview", response_model=PlexSyncPreviewOut)
+async def plex_sync_preview(
+    server_id: int, body: PlexSyncIn, db: DbDep, user: UserDep
+) -> PlexSyncPreviewOut:
+    """What writing Plex's metadata to the files would change (nothing is written)."""
+    us = await owner_server(db, user, server_id)
+    return _preview(await _plan(db, us, body))
+
+
 @router.post("/plex-sync", response_model=TagChangeSetOut, status_code=status.HTTP_201_CREATED)
 async def plex_sync(server_id: int, body: PlexSyncIn, db: DbDep, user: UserDep) -> TagChangeSetOut:
     """Write Plex's metadata to the files: recorded as one edit (undo it as a whole)."""
@@ -598,6 +602,54 @@ async def plex_sync(server_id: int, body: PlexSyncIn, db: DbDep, user: UserDep) 
         kind="edit",
         description=(body.description or "").strip()
         or f"Plex's metadata to {files} {'file' if files == 1 else 'files'} ({where})",
+    )
+    db.add(change_set)
+    await db.flush()
+    rows = [
+        {
+            "change_set_id": change_set.id,
+            "media_file_id": p.media_file_id,
+            "path": p.path,
+            "rating_key": p.rating_key,
+            "field": p.field,
+            "old_value": p.old_value,
+            "new_value": p.new_value,
+            "status": "pending",
+        }
+        for p in planned
+    ]
+    for start in range(0, len(rows), 2000):
+        await db.execute(insert(TagChange).values(rows[start : start + 2000]))
+    await db.commit()
+    await enqueue_tag_changes(change_set)
+    [out] = await _sets_out(db, [change_set])
+    return out
+
+
+# --- cover songs into the files ---------------------------------------------------------------
+
+
+@router.post("/cover-tags/preview", response_model=PlexSyncPreviewOut)
+async def cover_tags_preview(server_id: int, db: DbDep, user: UserDep) -> PlexSyncPreviewOut:
+    """Which files would get the original artist of the cover they are (nothing is written)."""
+    us = await owner_server(db, user, server_id)
+    return _preview(await plan_cover_tags(db, us.server_id))
+
+
+@router.post("/cover-tags", response_model=TagChangeSetOut, status_code=status.HTTP_201_CREATED)
+async def cover_tags(server_id: int, db: DbDep, user: UserDep) -> TagChangeSetOut:
+    """Write the original artist into the files of covers: recorded as one edit (undo it as a
+    whole)."""
+    us, server = await _editable(db, user, server_id)
+    planned = await plan_cover_tags(db, us.server_id)
+    if not planned:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The covers' files already say so.")
+    files = len({p.media_file_id for p in planned})
+    change_set = TagChangeSet(
+        server_id=server.id,
+        user_id=user.id,
+        kind="edit",
+        description=f"Original artists of covers to {files} {'file' if files == 1 else 'files'}",
     )
     db.add(change_set)
     await db.flush()

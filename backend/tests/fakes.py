@@ -181,6 +181,13 @@ class FakeLibrary:
             _track(304, "Glory Box", 202, 101, 11, 800),
             _track(305, "Secret Song", 203, 102, 1, 10),
         ):
+            if item["type"] == "track":  # as Plex sends them: the album artist's name too
+                artist = int(item["grandparentRatingKey"])
+                item["grandparentTitle"] = {
+                    100: "Radiohead",
+                    101: "Portishead",
+                    102: "Secret Band",
+                }[artist]
             self.items[int(item["ratingKey"])] = item
 
         self.details = {
