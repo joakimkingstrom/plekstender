@@ -2,6 +2,7 @@ import { useState } from "react";
 import { errorMessage } from "../api/client";
 import { useCoverSongsSettings, useSetCoverSongs } from "../api/coverSongs";
 import { formatCount } from "../format";
+import { Tooltip } from "./Tooltip";
 import { Button, Card, Notice, Spinner } from "./ui";
 
 /** About how long SecondHandSongs takes for the rest: its requests (about two an artist and
@@ -38,6 +39,7 @@ export function CoverSongsCard() {
     enabled: c.enabled,
     secondhandsongs: c.secondhandsongs,
     musicbrainz: c.musicbrainz,
+    song_versions: c.song_versions,
     remove_key: false,
   };
   const left = c.enabled && c.secondhandsongs ? timeLeft(c) : null;
@@ -88,6 +90,49 @@ export function CoverSongsCard() {
               </span>
             </span>
           </label>
+          <label className="flex items-start gap-2 pl-6">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={c.song_versions}
+              disabled={!c.secondhandsongs}
+              onChange={(e) =>
+                save.mutate({ ...settings, song_versions: e.target.checked })
+              }
+            />
+            <span>
+              <span className="flex items-center gap-1">
+                <span className="font-medium">Use songs’ other versions</span>
+                <Tooltip
+                  content={
+                    <>
+                      For example, with three versions of “Hurt” in the library
+                      (Johnny Cash’s, Nine Inch Nails’ original, and
+                      Sevendust’s), looking them all up takes 4 requests
+                      instead of 8: Johnny Cash’s list and his cover’s page,
+                      then the song’s page settles the other two, so Nine Inch
+                      Nails and Sevendust aren’t asked about at all.
+                    </>
+                  }
+                >
+                  {/* A button, so clicking it doesn't tick the box. */}
+                  <button
+                    type="button"
+                    aria-label="An example of the requests it saves"
+                    className="flex size-4 items-center justify-center rounded-full border border-current text-[10px] font-semibold leading-none text-muted hover:text-text"
+                  >
+                    i
+                  </button>
+                </Tooltip>
+              </span>
+              <span className="block text-xs text-muted">
+                A cover’s song on SecondHandSongs lists every version of it, so
+                one more request settles the library’s other versions of it
+                too. Only asked for when two or more of them are waiting, so it
+                saves requests in libraries with several versions of songs.
+              </span>
+            </span>
+          </label>
           <label className="flex items-start gap-2">
             <input
               type="checkbox"
@@ -109,8 +154,10 @@ export function CoverSongsCard() {
         </fieldset>
         {c.songs > 0 && (
           <p className="text-xs text-muted">
-            {formatCount(c.checked)} of {formatCount(c.songs)} songs looked up,{" "}
-            {formatCount(c.covers)} covers found
+            {formatCount(c.checked)} of {formatCount(c.songs)} songs looked up
+            {(c.by_versions ?? 0) > 0 &&
+              ` (${formatCount(c.by_versions ?? 0)} through another version of the same song)`}
+            , {formatCount(c.covers)} covers found
             {left && `. ${left}`}
             .
           </p>

@@ -6167,6 +6167,12 @@ export interface components {
              */
             musicbrainz: boolean;
             /**
+             * Song Versions
+             * @description Settle the library's other versions of a cover's song from its page on SecondHandSongs (one request, only when the library has two or more of them).
+             * @default true
+             */
+            song_versions: boolean;
+            /**
              * Api Key
              * @description A new SecondHandSongs API key (checked first); None keeps the one saved.
              */
@@ -6186,6 +6192,8 @@ export interface components {
             secondhandsongs: boolean;
             /** Musicbrainz */
             musicbrainz: boolean;
+            /** Song Versions */
+            song_versions: boolean;
             /**
              * Api Key
              * @description A SecondHandSongs API key is saved (higher limits).
@@ -6216,6 +6224,12 @@ export interface components {
              * @description Of those, covers.
              */
             covers: number;
+            /**
+             * By Versions
+             * @description Of those looked up, settled from a song's other versions.
+             * @default 0
+             */
+            by_versions: number;
             /**
              * Requests Left
              * @description About how many SecondHandSongs requests looking up the rest takes.

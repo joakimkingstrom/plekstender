@@ -112,12 +112,14 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
         "enabled": False,
         "secondhandsongs": True,
         "musicbrainz": True,
+        "song_versions": True,
         "api_key": False,
         "per_hour": 90,
         "per_day": 900,
         "songs": 5,
         "checked": 0,
         "covers": 0,
+        "by_versions": 0,
         "requests_left": 6,  # three artists, two each (and about 5% covers)
     }
 
@@ -245,6 +247,108 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
         "/api/admin/cover-songs", json={"enabled": False, "remove_key": True}, headers=CSRF
     )
     assert removed.json()["api_key"] is False
+
+
+@pytest.mark.parametrize("versions", [True, False])
+async def test_a_songs_other_versions(
+    app: FastAPI, plex: FakePlex, monkeypatch: pytest.MonkeyPatch, versions: bool
+) -> None:
+    """A cover's song page lists every version of it: the library's other versions are
+    settled from it (one request instead of one or more each), when that's turned on."""
+    from tests.fakes import _album, _artist, _track
+
+    monkeypatch.setattr(
+        cover_songs, "WITHOUT_KEY", cover_songs.Limits(per_minute=60_000, per_hour=90, per_day=900)
+    )
+    # Three versions of Hurt: Johnny Cash's (looked up first: the most popular), Nine Inch
+    # Nails' original, and Sevendust's.
+    lib = plex.library
+    for item in (
+        _artist(110, "Johnny Cash"),
+        _artist(111, "Nine Inch Nails"),
+        _artist(112, "Sevendust"),
+        _album(210, "American IV", 110, 2002),
+        _album(211, "The Downward Spiral", 111, 1994),
+        _album(212, "Hurt Tribute", 112, 2004),
+        _track(3100, "Hurt", 210, 110, 1, 5000),
+        _track(3110, "Hurt", 211, 111, 1, 400),
+        _track(3120, "Hurt", 212, 112, 1, 300),
+    ):
+        if item["type"] == "track":
+            item["grandparentTitle"] = {
+                110: "Johnny Cash",
+                111: "Nine Inch Nails",
+                112: "Sevendust",
+            }[int(item["grandparentRatingKey"])]
+        lib.items[int(item["ratingKey"])] = item
+    cash, nin, sevendust = (performance(n, "Hurt", a, n == 61) for n, a in (
+        (50, "Johnny Cash"), (61, "Nine Inch Nails"), (52, "Sevendust"),
+    ))  # fmt: skip
+    asked: list[str] = []
+
+    def shs(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        asked.append(path)
+        ids = {"Johnny Cash": 110, "Nine Inch Nails": 111, "Sevendust": 112}
+        if path == "/search/artist":
+            name = request.url.params["commonName"]
+            found = (
+                [{"uri": f"{API}/artist/{ids[name]}", "commonName": name}] if name in ids else []
+            )
+            return httpx.Response(200, json={"totalResults": len(found), "resultPage": found})
+        if path.endswith("/performances"):
+            mine = {110: [cash], 111: [nin], 112: [sevendust]}
+            return httpx.Response(200, json=mine.get(int(path.split("/")[2]), []))
+        work = {"entityType": "work", "uri": f"{API}/work/60", "title": "Hurt"}
+        if path in ("/performance/50", "/performance/52"):
+            return httpx.Response(200, json={"originals": [{**work, "original": nin}]})
+        if path == "/work/60":
+            other = performance(53, "Hurt", "Someone Else", False)
+            return httpx.Response(
+                200, json={**work, "original": nin, "versions": [cash, nin, sevendust, other]}
+            )
+        return httpx.Response(404)
+
+    plex.router.route(host="api.secondhandsongs.com").mock(side_effect=shs)
+    owner, _sid = await owner_with_library(app, plex)
+    body = {"enabled": True, "musicbrainz": False, "song_versions": versions}
+    saved = (await owner.put("/api/admin/cover-songs", json=body, headers=CSRF)).json()
+    assert saved["song_versions"] is versions
+    async with get_sessionmaker()() as db, httpx.AsyncClient() as http:
+        from plekstender.config import get_settings
+
+        await cover_songs.run(db, http, get_settings())
+    async with get_sessionmaker()() as db:
+        hurt = {
+            c.artist_key: c
+            for c in await db.scalars(select(SongCover).where(SongCover.title_norm == "hurt"))
+        }
+    assert {k: (c.status, c.original_artist) for k, c in hurt.items()} == {
+        "johnny cash": ("cover", "Nine Inch Nails"),
+        "nine inch nails": ("original", None),
+        "sevendust": ("cover", "Nine Inch Nails"),
+    }
+    if versions:
+        # Cash's list and his cover's page, then the song's page settles the other two: their
+        # artists aren't asked about at all.
+        assert "/work/60" in asked
+        assert not any("/artist/111" in p or "/artist/112" in p for p in asked)
+        assert hurt["sevendust"].tried == "secondhandsongs,versions"
+        assert hurt["sevendust"].performance_url == "https://secondhandsongs.com/performance/52"
+        assert hurt["johnny cash"].requests == 4  # search, list, cover's page, song's page
+        status = (await owner.get("/api/admin/cover-songs")).json()
+        assert status["by_versions"] == 2
+        # Three searches that find nothing (Radiohead, Portishead, Secret Band), and Cash's 4.
+        assert len(asked) == 7
+    else:
+        assert "/work/60" not in asked
+        assert "/performance/52" in asked  # Sevendust's own cover page
+        assert hurt["sevendust"].tried == "secondhandsongs"
+        # The same searches, and Cash's 3, Nine Inch Nails' 2, Sevendust's 3: 4 more.
+        assert len(asked) == 11
+    # Every request counted against a song (for the hour's and the day's budgets).
+    async with get_sessionmaker()() as db:
+        assert sum(c.requests for c in await db.scalars(select(SongCover))) == len(asked)
 
 
 async def test_covers_link_to_the_library(app: FastAPI, plex: FakePlex) -> None:
