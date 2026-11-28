@@ -6250,6 +6250,12 @@ export interface components {
              * @description Also every song with one of these words in its title (whole words, any case, bracketed parts left out, as the word cloud counts them; found again at each refresh, and the rules still apply).
              */
             title_words?: string[];
+            /**
+             * All Covers
+             * @description Also every cover song in the library (found by Cover songs, again at each refresh; the rules still apply).
+             * @default false
+             */
+            all_covers: boolean;
             rules?: components["schemas"]["Rules"];
             /**
              * Limit

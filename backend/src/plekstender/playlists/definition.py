@@ -67,6 +67,11 @@ class Definition(BaseModel):
         "case, bracketed parts left out, as the word cloud counts them; found again at each "
         "refresh, and the rules still apply).",
     )
+    all_covers: bool = Field(
+        default=False,
+        description="Also every cover song in the library (found by Cover songs, again at each "
+        "refresh; the rules still apply).",
+    )
     rules: Rules = Field(default_factory=Rules)
     limit: int | None = Field(default=500, ge=1, le=5000)
     # random | most popular first | as listed in `tracks` (gig playlists: setlist order).
@@ -75,10 +80,15 @@ class Definition(BaseModel):
     @model_validator(mode="after")
     def _something(self) -> Definition:
         if not (
-            self.artists or self.tracks or self.forgotten or self.new_albums or self.title_words
+            self.artists
+            or self.tracks
+            or self.forgotten
+            or self.new_albums
+            or self.title_words
+            or self.all_covers
         ):
             raise ValueError(
-                "choose at least one artist or song, a word, your forgotten favourites or new "
-                "albums"
+                "choose at least one artist or song, a word, your forgotten favourites, new "
+                "albums, or every cover song"
             )
         return self

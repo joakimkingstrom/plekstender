@@ -331,6 +331,8 @@ type Draft = {
   titleWords: string[]
   /** Also the best songs of albums added lately ("Fresh picks", found again at each refresh). */
   newAlbums: NewAlbums | null
+  /** Also every cover song in the library (found again at each refresh). */
+  allCovers: boolean
   minRating: number | null
   includeUnrated: boolean
   topPercent: number
@@ -359,6 +361,7 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
     forgotten: d?.forgotten ?? forgotten,
     titleWords: d?.title_words ?? [],
     newAlbums: d?.new_albums ? { days: d.new_albums.days ?? 30, per_album: d.new_albums.per_album ?? 3 } : null,
+    allCovers: d?.all_covers ?? false,
     minRating: d?.rules?.min_rating ?? null,
     includeUnrated: d?.rules?.include_unrated ?? true,
     topPercent: d?.rules?.top_percent ?? 0,
@@ -373,15 +376,25 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
   }
 }
 
+/** Something to pick songs from: artists, songs, or a rule that finds them. */
+function hasSource(draft: Draft) {
+  return draft.artists.length > 0 || draft.tracks.length > 0 || hasFinder(draft)
+}
+
+/** A rule that finds songs by itself (forgotten favourites, new albums, title words, covers). */
+function hasFinder(draft: Draft) {
+  return draft.forgotten || draft.newAlbums !== null || draft.titleWords.length > 0 || draft.allCovers
+}
+
 function definitionOf(draft: Draft): Definition | null {
-  if (draft.artists.length === 0 && draft.tracks.length === 0 && !draft.forgotten && !draft.newAlbums && draft.titleWords.length === 0)
-    return null
+  if (!hasSource(draft)) return null
   return {
     artists: draft.artists.map((a) => a.rating_key),
     tracks: draft.tracks.map((t) => t.rating_key),
     forgotten: draft.forgotten,
     new_albums: draft.newAlbums,
     title_words: draft.titleWords,
+    all_covers: draft.allCovers,
     rules: {
       min_rating: draft.minRating,
       include_unrated: draft.includeUnrated,
@@ -535,6 +548,25 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
               )}
             </div>
           </div>
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={draft.allCovers}
+              onChange={(e) =>
+                setDraft((d) =>
+                  e.target.checked ? { ...d, allCovers: true, name: d.name.trim() ? d.name : 'Covers' } : { ...d, allCovers: false },
+                )
+              }
+            />
+            <span>
+              <span className="font-medium">Every cover song</span>
+              <span className="block text-xs text-muted">
+                Every song in the library that's a cover of someone else's (Settings → Services → Cover songs finds them).
+                Found again at each refresh, so newly found covers come in.
+              </span>
+            </span>
+          </label>
           {draft.titleWords.length > 0 && (
             <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Words in the title">
               {draft.titleWords.map((w) => (
@@ -760,7 +792,7 @@ function Chip({ children, onRemove, label }: { children: ReactNode; onRemove: ()
 
 function Chosen({ draft, serverId, set }: { draft: Draft; serverId: number; set: (patch: Partial<Draft>) => void }) {
   if (draft.artists.length === 0 && draft.tracks.length === 0)
-    return draft.forgotten || draft.newAlbums || draft.titleWords.length ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
+    return hasFinder(draft) ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
   return (
     <div className="mt-4 space-y-3">
       {draft.artists.length > 0 && (

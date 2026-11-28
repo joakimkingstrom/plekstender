@@ -535,7 +535,7 @@ function SongsAbout({ serverId, word, count, onClose }: { serverId: number; word
                   name,
                   description: `Every song with “${word}” in the title. Made by Plekstender.`,
                   schedule: 'weekly',
-                  definition: { title_words: [word], forgotten: false, order: 'random', limit: null },
+                  definition: { title_words: [word], forgotten: false, all_covers: false, order: 'random', limit: null },
                   display: {},
                 },
                 { onSuccess: () => navigate('/library/playlists') },
