@@ -3,7 +3,7 @@ import { errorMessage } from '../api/client'
 import { useSetTicketmasterKey, useTicketmasterKey } from '../api/live'
 import { Button, Card, Notice, Spinner } from './ui'
 
-/** The instance's Ticketmaster key (admins), Live's second source, and today's requests. */
+/** The instance's Ticketmaster key (admins), upcoming gigs' second source, and today's requests. */
 export function TicketmasterKeyCard() {
   const key = useTicketmasterKey(true)
   const save = useSetTicketmasterKey()
@@ -14,7 +14,7 @@ export function TicketmasterKeyCard() {
     <Card title="Ticketmaster API key">
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          A second source for the Live tab: all gigs near each person are read and matched against their artists.
+          A second source for Gigs → Upcoming: all gigs near each person are read and matched against their artists.
           Create a free app at{' '}
           <a href="https://developer.ticketmaster.com" target="_blank" rel="noreferrer" className="text-accent underline">
             developer.ticketmaster.com

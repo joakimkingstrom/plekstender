@@ -212,7 +212,7 @@ function PlanView({
             </div>
           </div>
         ) : (
-          <Notice>Turn on "Allow changing files" (Settings → Music files → Tags in your files) to move files.</Notice>
+          <Notice>Turn on "Allow changing files" (Settings → Music files → Folder scan) to move files.</Notice>
         ))}
     </div>
   )

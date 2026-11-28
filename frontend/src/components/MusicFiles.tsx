@@ -24,10 +24,11 @@ export function ScanCard({ serverId }: { serverId: number }) {
   const active = s.active
   const { done = 0, total = 0, step } = (active?.progress ?? {}) as { done?: number; total?: number; step?: string }
   return (
-    <Card title="Tags in your files">
+    <Card title="Folder scan">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          The worker reads the tags of every music file, so album pages can show them next to Plex's. Nothing is
+          The worker reads the music folder: every music file's tags (so album pages can show them next to
+          Plex's), and the lyrics, .nfo files, cover and artist images, and video covers beside them. Nothing is
           changed in the files. Later scans only read new and changed files.
         </p>
         {!s.mapped ? (
@@ -203,7 +204,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
         <p className="text-sm text-muted">
           Scan your music folder (
           <Link to="/settings/files/scan" className="text-accent underline">
-            Settings → Music files → Tags in your files
+            Settings → Music files → Folder scan
           </Link>
           ) to see the tags in these songs' files.
         </p>
@@ -267,7 +268,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
                 {' '}
                 To edit tags, allow it in{' '}
                 <Link to="/settings/files/scan" className="underline">
-                  Settings → Music files → Tags in your files
+                  Settings → Music files → Folder scan
                 </Link>
                 .
               </>
