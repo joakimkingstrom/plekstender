@@ -12,10 +12,21 @@ const SECONDS: Record<NonNullable<BackgroundSettings['speed']>, number> = { slow
 const FADE = 2.5
 const SIZE = 1000 // px: the Plex image proxy's size for a full-window cover
 
-/** Where a cover's slow pan starts and ends (percent), different for each one shown. */
+/** Where a cover's slow pan starts and ends (percent), and whether it zooms in or out (about
+ * half of them each way), different for each one shown. */
 function drift(n: number) {
   const at = (k: number) => ((Math.sin(n * 12.9898 + k * 78.233) * 43758.5453) % 1) * 4
-  return { '--kb-x0': `${at(1)}%`, '--kb-y0': `${at(2)}%`, '--kb-x1': `${-at(3)}%`, '--kb-y1': `${-at(4)}%` }
+  // The hash's fractional part, not its sign (which runs in streaks from cover to cover).
+  const hash = Math.sin(n * 12.9898 + 5 * 78.233) * 43758.5453
+  const zoomOut = hash - Math.floor(hash) < 0.5
+  return {
+    '--kb-x0': `${at(1)}%`,
+    '--kb-y0': `${at(2)}%`,
+    '--kb-x1': `${-at(3)}%`,
+    '--kb-y1': `${-at(4)}%`,
+    '--kb-s0': zoomOut ? '1.22' : '1.08',
+    '--kb-s1': zoomOut ? '1.08' : '1.22',
+  }
 }
 
 /**
