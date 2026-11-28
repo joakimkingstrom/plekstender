@@ -83,6 +83,7 @@ export function LibraryPage() {
       prefix="Show"
       value={view}
       options={VIEWS}
+      className={SWITCH_WIDTH}
       onChange={(v) => setParams(v === 'albums' ? { view: v } : {}, { replace: true })}
     />
   )
@@ -113,10 +114,14 @@ function Toolbar({ left, search }: { left: ReactNode; search: ReactNode }) {
   )
 }
 
+/** "Show Artists | Albums" and "Genres | Styles | Moods" are one above the other: the same
+ * width (on windows wide enough for both; their buttons share it). */
+const SWITCH_WIDTH = 'sm:w-56'
+
 /** Genres, styles, or moods: which the chips under the search row are. */
 function TagKindSwitch({ value, onChange }: { value: TagKind; onChange: (kind: TagKind) => void }) {
   // Not on narrow windows, like the chips: too little room for them to be of use.
-  return <Segmented label="Filter by" value={value} options={FILTER_KINDS} onChange={onChange} className="max-sm:hidden" />
+  return <Segmented label="Filter by" value={value} options={FILTER_KINDS} onChange={onChange} className={`max-sm:hidden ${SWITCH_WIDTH}`} />
 }
 
 function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: ReactNode }) {
