@@ -820,6 +820,7 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
           ))}
         </Card>
         <div className="space-y-6">
+          <YourListens listens={al.your_listens} showSongs={false} name={al.title} />
           {al.song_sources && (
             <SongSources
               serverId={serverId}
@@ -829,7 +830,6 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
               compilation={al.release_type !== 'Live'}
             />
           )}
-          <YourListens listens={al.your_listens} showSongs={false} name={al.title} />
         </div>
       </div>
     </>
