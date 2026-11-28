@@ -17,8 +17,9 @@ function canvasMeasure(): Measure {
 
 const TIER_CLASS = ['text-muted', 'text-text', 'text-text'] as const
 
-/** A word cloud sized to its container. Hover a word for how many names it's in. */
-export function WordCloud({ words, label }: { words: CloudWord[]; label: string }) {
+/** A word cloud sized to its container. Hover a word for how many names it's in; with
+ * `onPick`, the words are buttons. */
+export function WordCloud({ words, label, onPick }: { words: CloudWord[]; label: string; onPick?: (word: CloudWord) => void }) {
   const ref = useRef<HTMLUListElement>(null)
   const [width, setWidth] = useState(0)
   const [measure, setMeasure] = useState<Measure>(canvasMeasure)
@@ -58,8 +59,17 @@ export function WordCloud({ words, label }: { words: CloudWord[]; label: string 
             transform: `translate(-50%, -50%)${p.vertical ? ' rotate(-90deg)' : ''}`,
           }}
         >
-          {p.word}
-          <span className="sr-only">: {formatCount(p.count)}</span>
+          {onPick ? (
+            <button type="button" onClick={() => onPick(p)} className="leading-none hover:text-accent hover:underline">
+              {p.word}
+              <span className="sr-only">: {formatCount(p.count)}</span>
+            </button>
+          ) : (
+            <>
+              {p.word}
+              <span className="sr-only">: {formatCount(p.count)}</span>
+            </>
+          )}
         </li>
       ))}
     </ul>

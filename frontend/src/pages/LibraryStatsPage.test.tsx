@@ -71,6 +71,37 @@ afterEach(() => {
 })
 
 describe('Library stats', () => {
+  it('makes a playlist of the songs with a word in the title, from the word cloud', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <LibraryStatsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Love: 40' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Songs about Love' })
+    expect(within(dialog).getByText(/the 40 songs with “Love” in the title/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('link', { name: 'Adjust it first' })).toHaveAttribute('href', '/library/playlists/new?word=Love')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make the playlist' }))
+    const posted = async () =>
+      Promise.all(
+        (vi.mocked(fetch).mock.calls as [Request | string][])
+          .map(([r]) => r)
+          .filter((r): r is Request => typeof r !== 'string' && r.method === 'POST' && new URL(r.url).pathname === '/api/servers/1/playlists')
+          .map((r) => r.clone().json()),
+      )
+    await vi.waitFor(async () =>
+      expect(await posted()).toEqual([
+        expect.objectContaining({
+          name: 'Songs about Love',
+          schedule: 'weekly',
+          definition: { title_words: ['Love'], forgotten: false, order: 'random', limit: null },
+        }),
+      ]),
+    )
+  })
+
   it('shows totals, growth, decades down to months, and words', async () => {
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>

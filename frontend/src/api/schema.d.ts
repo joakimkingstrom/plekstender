@@ -6170,6 +6170,11 @@ export interface components {
             forgotten: boolean;
             /** @description Also the best songs of albums added lately (picked again at each refresh; the rules still apply). */
             new_albums?: components["schemas"]["NewAlbums"] | null;
+            /**
+             * Title Words
+             * @description Also every song with one of these words in its title (whole words, any case, bracketed parts left out, as the word cloud counts them; found again at each refresh, and the rules still apply).
+             */
+            title_words?: string[];
             rules?: components["schemas"]["Rules"];
             /**
              * Limit
