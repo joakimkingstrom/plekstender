@@ -176,6 +176,11 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
         "url": "https://secondhandsongs.com/performance/20",
         "cover_url": "https://secondhandsongs.com/performance/2",
         "source": "secondhandsongs",
+        # Isaac Hayes isn't in the library.
+        "artist_rating_key": None,
+        "original_rating_key": None,
+        "original_album_rating_key": None,
+        "original_versions": 0,
     }
     ok_computer = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
     assert {t["cover_of"] for t in ok_computer["tracks"]} == {None}
@@ -240,6 +245,64 @@ async def test_cover_songs(app: FastAPI, plex: FakePlex, monkeypatch: pytest.Mon
         "/api/admin/cover-songs", json={"enabled": False, "remove_key": True}, headers=CSRF
     )
     assert removed.json()["api_key"] is False
+
+
+async def test_covers_link_to_the_library(app: FastAPI, plex: FakePlex) -> None:
+    """A cover's original artist and song in the library (one release: its album; more: the
+    versions), and both sides on artist pages: their covers, and their songs covered."""
+    owner, sid = await owner_with_library(app, plex)
+    now = dt.datetime.now(dt.UTC)
+    async with get_sessionmaker()() as db:
+        for artist_key, title_norm, artist, title in (
+            # Say Glory Box were Portishead's cover of Karma Police (on two Radiohead albums),
+            ("portishead", "glory box", "Radiohead", "Karma Police"),
+            # and Lucky a cover of someone not in the library.
+            ("radiohead", "lucky", "The Unknowns", "Lucky Day"),
+        ):
+            db.add(
+                SongCover(
+                    artist_key=artist_key, title_norm=title_norm, status="cover",
+                    original_artist=artist, original_title=title, source="secondhandsongs",
+                    original_url="https://secondhandsongs.com/performance/1",
+                    performance_url=f"https://secondhandsongs.com/performance/{title_norm}",
+                    tried="secondhandsongs", requests=0, checked_at=now,
+                )
+            )  # fmt: skip
+        await db.commit()
+
+    dummy = (await owner.get(f"/api/servers/{sid}/library/albums/202")).json()
+    assert dummy["tracks"][0]["cover_of"] == {
+        "artist": "Radiohead",
+        "title": "Karma Police",
+        "url": "https://secondhandsongs.com/performance/1",
+        "cover_url": "https://secondhandsongs.com/performance/glory box",
+        "source": "secondhandsongs",
+        "artist_rating_key": 100,
+        "original_rating_key": 301,  # OK Computer's, the oldest of the two
+        "original_album_rating_key": 200,
+        "original_versions": 2,
+    }
+    oknotok = (await owner.get(f"/api/servers/{sid}/library/albums/201")).json()
+    lucky = next(t for t in oknotok["tracks"] if t["title"] == "Lucky")["cover_of"]
+    in_library = ("artist_rating_key", "original_rating_key", "original_versions")
+    assert [lucky[k] for k in in_library] == [None, None, 0]
+
+    radiohead = (await owner.get(f"/api/servers/{sid}/library/artists/100/covers")).json()
+    assert [(c["rating_key"], c["cover_of"]["artist"]) for c in radiohead["covers"]] == [
+        (303, "The Unknowns")
+    ]
+    assert [
+        (c["rating_key"], c["artist"], c["artist_rating_key"], c["original_title"],
+         c["original_rating_key"], c["original_versions"])
+        for c in radiohead["covered"]
+    ] == [(304, "Portishead", 101, "Karma Police", 301, 2)]  # fmt: skip
+    portishead = (await owner.get(f"/api/servers/{sid}/library/artists/101/covers")).json()
+    assert [(c["title"], c["cover_of"]["artist_rating_key"]) for c in portishead["covers"]] == [
+        ("Glory Box", 100)
+    ]
+    assert portishead["covered"] == []
+    missing = await owner.get(f"/api/servers/{sid}/library/artists/999/covers")
+    assert missing.status_code == 404
 
 
 # --- MusicBrainz, the second source --------------------------------------------------------

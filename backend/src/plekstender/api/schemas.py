@@ -459,6 +459,17 @@ class CoverOf(BaseModel):
     url: str | None = Field(description="The original on the source.")
     cover_url: str | None = Field(description="This recording on the source.")
     source: str = Field(description="secondhandsongs | musicbrainz")
+    artist_rating_key: int | None = Field(
+        default=None, description="The original artist, when they're in the library."
+    )
+    original_rating_key: int | None = Field(
+        default=None,
+        description="The original song in the library (its oldest release), when it's there.",
+    )
+    original_album_rating_key: int | None = Field(default=None, description="Its album.")
+    original_versions: int = Field(
+        default=0, description="Releases of the original song in the library."
+    )
 
 
 class TrackOut(BaseModel):
@@ -546,6 +557,45 @@ class ItemListensOut(BaseModel):
     songs: list[SongListens]
     artist_keys: list[str] = Field(description="Filters for /api/listens: these artists…")
     album_key: str | None = Field(description="…and, for an album, this album.")
+
+
+class ArtistCover(BaseModel):
+    """A song by the artist that's a cover (its oldest release in the library)."""
+
+    rating_key: int
+    title: str
+    album_rating_key: int | None
+    album_title: str | None
+    year: int | None
+    cover_of: CoverOf
+
+
+class CoveredSong(BaseModel):
+    """The artist's song, covered by someone else in the library (the cover's oldest
+    release)."""
+
+    rating_key: int
+    title: str
+    artist: str | None = Field(description="Who covered it.")
+    artist_rating_key: int | None
+    album_rating_key: int | None
+    album_title: str | None
+    year: int | None
+    original_title: str | None = Field(description="The song as the artist recorded it.")
+    original_rating_key: int | None = Field(
+        default=None, description="The artist's own recording in the library (oldest release)."
+    )
+    original_album_rating_key: int | None = None
+    original_versions: int = Field(default=0, description="Releases of it in the library.")
+    cover_url: str | None = Field(description="The cover on its source.")
+    source: str
+
+
+class ArtistCoversOut(BaseModel):
+    covers: list[ArtistCover] = Field(description="Their covers, oldest first.")
+    covered: list[CoveredSong] = Field(
+        description="Their songs covered by others in the library, oldest cover first."
+    )
 
 
 class ArtistDetail(ArtistSummary):

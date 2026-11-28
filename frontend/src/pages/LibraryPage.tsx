@@ -3,6 +3,7 @@ import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
 import { SongSources } from '../components/SongSources'
+import { ArtistCovers, CoverOf } from '../components/Covers'
 import { SongVersions } from '../components/SongVersions'
 import { VideoCover } from '../components/VideoCover'
 import { AlbumLyricsIcon, SongLyricsIcon } from '../components/LyricsIcon'
@@ -280,7 +281,7 @@ function TrackList({
                 {[t.original_title, showAlbum ? t.album_title : null].filter(Boolean).join(' · ')}
               </span>
             )}
-            {t.cover_of && <CoverOf cover={t.cover_of} />}
+            {t.cover_of && <CoverOf serverId={serverId} cover={t.cover_of} />}
           </span>
           <Tooltip content="Last.fm listeners" className="hidden w-14 justify-end sm:inline-flex">
             <span className="text-xs text-muted tabular-nums">{formatCompact(t.popularity)}</span>
@@ -296,23 +297,6 @@ function TrackList({
       ))}
     </ol>
     </>
-  )
-}
-
-/** Whose song a cover is (SecondHandSongs or MusicBrainz), artist first; links to the original there. */
-function CoverOf({ cover }: { cover: NonNullable<Schemas['TrackOut']['cover_of']> }) {
-  const what = [cover.artist, cover.title].filter(Boolean).join(' · ')
-  return (
-    <span className="block truncate text-xs text-muted">
-      Cover of{' '}
-      {cover.url ? (
-        <a href={cover.url} target="_blank" rel="noreferrer" className="hover:text-text hover:underline" title={cover.source === 'musicbrainz' ? 'On MusicBrainz' : 'On SecondHandSongs'}>
-          {what}
-        </a>
-      ) : (
-        what
-      )}
-    </span>
   )
 }
 
@@ -721,6 +705,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
         </div>
         <div className="space-y-6">
         <YourListens listens={a.your_listens} showSongs name={a.title} />
+        <ArtistCovers serverId={serverId} artistKey={a.rating_key} />
         {a.similar.length > 0 && (
           <Card title="Similar artists">
             <ul className="flex flex-wrap gap-2">
