@@ -64,7 +64,7 @@ function LibraryExportCard() {
     <Card title="Library, with your ratings and plays">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          Every song with its album and artist, your rating and play count. The JSON file also has artists and albums
+          Every song with its album and artist, your rating, and play count. The JSON file also has artists and albums
           with their genres and your ratings.
         </p>
         {withLibrary.length === 0 ? (

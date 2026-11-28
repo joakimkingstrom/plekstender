@@ -211,7 +211,7 @@ function Rater({ serverId }: { serverId: number }) {
           className={`${optionsOpen ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2 md:flex md:w-auto`}
         >
           <Select
-            label="Genre, style or mood"
+            label="Genre, style, or mood"
             value={settings.tag ?? 0}
             onChange={(tag) => update({ tag: tag || null })}
             options={[
@@ -524,7 +524,7 @@ function SwipeView({
       )}
       {game && unplayable >= MAX_UNPLAYABLE && (
         <Notice tone="warn">
-          The last {MAX_UNPLAYABLE} cards couldn't be played (silent intros, very short titles or no file in Plex). Try
+          The last {MAX_UNPLAYABLE} cards couldn't be played (silent intros, very short titles, or no file in Plex). Try
           another selection, or{' '}
           <button type="button" className="underline" onClick={keepGoing}>
             keep going

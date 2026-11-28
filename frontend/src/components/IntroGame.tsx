@@ -71,7 +71,7 @@ export function GameIntro({
         </Button>
       </div>
       <p className="text-xs text-muted">
-        Round length, guesses and more:{' '}
+        Round length, guesses, and more:{' '}
         <Link to="/settings/game" className="underline hover:text-text">
           Settings → Guess the intro
         </Link>

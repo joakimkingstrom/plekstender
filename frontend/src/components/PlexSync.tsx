@@ -57,7 +57,7 @@ export function PlexSync({
           <span>
             Your ratings
             <span className="block text-xs text-muted">
-              The songs you've rated, as POPM in MP3s and RATING (0–100) in FLAC, Ogg and M4A files, which most
+              The songs you've rated, as POPM in MP3s and RATING (0–100) in FLAC, Ogg, and M4A files, which most
               players read.
             </span>
           </span>

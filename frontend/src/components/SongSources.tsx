@@ -103,7 +103,7 @@ export function SongSources({
         <p className="mt-3 text-xs text-muted">
           {formatCount(unmatched)} of {formatCount(total)} songs{' '}
           {compilation
-            ? 'aren’t on another album, EP or single in the library (only on compilations, or on releases you don’t have).'
+            ? 'aren’t on another album, EP, or single in the library (only on compilations, or on releases you don’t have).'
             : 'aren’t on one of the artist’s studio releases in the library (covers, new songs, or releases you don’t have).'}
         </p>
       )}

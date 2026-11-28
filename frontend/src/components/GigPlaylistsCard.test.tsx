@@ -78,7 +78,7 @@ it('deletes them some time after the gig, if asked', async () => {
   await vi.waitFor(() =>
     expect(preferences).toMatchObject({ gig_playlists: { after: true, delete_after: 2, delete_unit: 'weeks' } }),
   )
-  fireEvent.click(await screen.findByRole('button', { name: /Days, weeks or months/ }))
+  fireEvent.click(await screen.findByRole('button', { name: /Days, weeks, or months/ }))
   fireEvent.click(await screen.findByRole('option', { name: 'months' }))
   await vi.waitFor(() => expect(preferences).toMatchObject({ gig_playlists: { delete_after: 2, delete_unit: 'months' } }))
 

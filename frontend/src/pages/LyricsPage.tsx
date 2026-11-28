@@ -83,7 +83,7 @@ function Coverage({ serverId }: { serverId: number }) {
         center={{ value: formatShare(withLyrics, checked), label: 'have lyrics' }}
       />
       <p className="mt-4 text-xs text-muted">
-        Lyrics next to each song (.lrc, .txt or .lyricsfile.yaml) or in its tags, as of the last scan of the music folder;
+        Lyrics next to each song (.lrc, .txt, or .lyricsfile.yaml) or in its tags, as of the last scan of the music folder;
         a song counts by the best it has.
         {c.unchecked > 0 &&
           ` ${songs(c.unchecked)} haven't been looked at since lyrics were counted: they're read at the next scan.`}

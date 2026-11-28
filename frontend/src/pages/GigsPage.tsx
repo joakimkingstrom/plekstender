@@ -78,7 +78,7 @@ export function GigsPage() {
         <GigList gigs={gigs.data.gigs} />
       )}
       <p className="text-xs text-muted">
-        Bring gigs in from setlist.fm, a CSV or a calendar file, or take them with you, in{' '}
+        Bring gigs in from setlist.fm, a CSV, or a calendar file, or take them with you, in{' '}
         <Link to="/settings/export/gigs" className="underline hover:text-text">
           Settings → Export &amp; import
         </Link>
@@ -426,7 +426,7 @@ function GigDialog({ gig, onClose }: { gig?: Gig; onClose: () => void }) {
       </Dialog>
     )
   return (
-    <Dialog title="Add a gig" subtitle="Find it on setlist.fm to fill in the night, the bill and what was played." onClose={onClose}>
+    <Dialog title="Add a gig" subtitle="Find it on setlist.fm to fill in the night, the bill, and what was played." onClose={onClose}>
       <GigFinder onFound={setFound} onByHand={() => setByHand(true)} />
     </Dialog>
   )
@@ -642,7 +642,7 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
           <p className="text-xs text-muted">
             {lookup.isPending
               ? 'Looking it up on setlist.fm…'
-              : filled ?? 'Paste a setlist.fm link to fill in the rest: the date, the venue, everyone on the bill and what they played.'}
+              : filled ?? 'Paste a setlist.fm link to fill in the rest: the date, the venue, everyone on the bill, and what they played.'}
           </p>
           {lookup.isError && <Notice tone="error">{errorMessage(lookup.error)}</Notice>}
         </div>

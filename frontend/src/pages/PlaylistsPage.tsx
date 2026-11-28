@@ -82,7 +82,7 @@ export function PlaylistsPage() {
   return (
     <>
       <p className="mb-4 text-sm text-muted">
-        Playlists built from artists, songs and genres, saved to Plex under your own account.
+        Playlists built from artists, songs, and genres, saved to Plex under your own account.
       </p>
       {blocker ?? (
         <div className="space-y-6">
@@ -161,9 +161,9 @@ function PlaylistList({ serverId }: { serverId: number }) {
           <div className="space-y-2 text-sm">
             <p className="font-semibold">No playlists yet</p>
             <p className="text-muted">
-              Start from a few artists, songs or a genre, add similar artists, then keep only what you rate highly or each
+              Start from a few artists, songs, or a genre, add similar artists, then keep only what you rate highly or each
               artist's best-known songs. Playlists are saved to Plex, so they show up in Plexamp, and can refresh
-              themselves daily, weekly or monthly.
+              themselves daily, weekly, or monthly.
             </p>
           </div>
         </Card>
@@ -652,7 +652,7 @@ function StartFrom({
   const [loadingGenre, setLoadingGenre] = useState(false)
 
   const tagOptions = [
-    { value: 0, label: 'Add a genre, style or mood’s top artists…' },
+    { value: 0, label: 'Add a genre, style, or mood’s top artists…' },
     ...(genres.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Genres' })),
     ...(styles.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Styles' })),
     ...(moods.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Moods' })),
@@ -686,7 +686,7 @@ function StartFrom({
           aria-label="Search artists and songs"
           className="min-w-0 flex-1 basis-56 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
         />
-        <Select label="Genre, style or mood" className="max-w-full" value={0} options={tagOptions} onChange={(id) => void pickTag(id)} />
+        <Select label="Genre, style, or mood" className="max-w-full" value={0} options={tagOptions} onChange={(id) => void pickTag(id)} />
         {loadingGenre && <Spinner small />}
       </div>
       {genreError && <Notice tone="warn">{genreError}</Notice>}
@@ -1061,7 +1061,7 @@ function TagRule({ serverId, tags, onChange }: { serverId: number; tags: RuleTag
         </span>
       ))}
       <Select
-        label="Only songs with a genre, style or mood"
+        label="Only songs with a genre, style, or mood"
         size="sm"
         value={0}
         onChange={(id) => {
@@ -1069,7 +1069,7 @@ function TagRule({ serverId, tags, onChange }: { serverId: number; tags: RuleTag
           if (t) onChange([...tags, { id: t.id, name: t.name, kind: t.kind }])
         }}
         options={[
-          { value: 0, label: tags.length ? 'Or…' : 'Any genre, style or mood' },
+          { value: 0, label: tags.length ? 'Or…' : 'Any genre, style, or mood' },
           ...all.map((t) => ({ value: t.id, label: t.name, group: t.group })),
         ]}
       />

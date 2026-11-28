@@ -133,7 +133,7 @@ export function ProfilePage() {
               )
             }
           >
-            A small icon on songs (plain, synced or word-synced lyrics, or none) and on albums (all, some or none of
+            A small icon on songs (plain, synced, or word-synced lyrics, or none) and on albums (all, some, or none of
             their songs), from what the music files have. Needs the music folder read on Settings → Music files.
           </Toggle>
         </Card>

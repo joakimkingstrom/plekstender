@@ -89,7 +89,7 @@ export function ScanCard({ serverId }: { serverId: number }) {
                 disabled={setEditing.isPending}
                 onChange={(e) => setEditing.mutate(e.target.checked)}
               />
-              Allow changing files (tags, names and folders)
+              Allow changing files (tags, names, and folders)
             </label>
             <p className="text-xs text-muted">
               Lets Plekstender change your music files: edit tags, write Plex's metadata or a MusicBrainz release into

@@ -9,7 +9,7 @@ export const SERVICE_KINDS = [
   {
     slug: 'musicbrainz',
     title: 'MusicBrainz',
-    about: 'Releases, where artists are from, album covers and the tag editor all look things up on MusicBrainz.',
+    about: 'Releases, where artists are from, album covers, and the tag editor all look things up on MusicBrainz.',
   },
 ] as const
 
@@ -19,7 +19,7 @@ export type ServiceKind = (typeof SERVICE_KINDS)[number]['slug']
 export const EXPORT_PARTS = [
   { slug: 'history', title: 'History', about: 'Bring your plays in from Last.fm or ListenBrainz, or take them all out in one file.', owners: false },
   { slug: 'library', title: 'Library', about: 'Your library with your ratings and play counts, to keep or to use elsewhere.', owners: false },
-  { slug: 'gigs', title: 'Gigs', about: 'The gigs you’ve been to: in from setlist.fm, a spreadsheet or a calendar, and out again.', owners: false },
+  { slug: 'gigs', title: 'Gigs', about: 'The gigs you’ve been to: in from setlist.fm, a spreadsheet, or a calendar, and out again.', owners: false },
   { slug: 'logos', title: 'Artist logos', about: 'Logo packs: the logos you’ve picked, to move to another server or share.', owners: true },
 ] as const
 
