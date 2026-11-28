@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtistPage } from './LibraryPage'
@@ -26,7 +26,7 @@ const radioheadCovers = {
   covers: [
     {
       rating_key: 303, title: 'Lucky', album_rating_key: 201, album_title: 'OKNOTOK', year: 2017,
-      cover_of: { artist: 'The Unknowns', title: 'Lucky Day', url: null, cover_url: 'https://secondhandsongs.com/performance/3', source: 'secondhandsongs', artist_rating_key: null, original_rating_key: null, original_album_rating_key: null, original_versions: 0 },
+      cover_of: { artist: null, title: 'Lucky Day', url: null, cover_url: 'https://musicbrainz.org/recording/3', source: 'musicbrainz', artist_rating_key: null, original_rating_key: null, original_album_rating_key: null, original_versions: 0 },
     },
   ],
   covered: [
@@ -45,7 +45,12 @@ const artist = (key: number, title: string) => ({
   your_listens: { listens: 0, first_at: null, last_at: null, years: [], songs: [], artist_keys: [], album_key: null },
 })
 
+let chose: unknown[] = []
+let original: number | null = null
+
 beforeEach(() => {
+  chose = []
+  original = null
   localStorage.removeItem('artist-cover-size')
   vi.stubGlobal(
     'fetch',
@@ -61,6 +66,17 @@ beforeEach(() => {
         return json({ previous: at(order[i - 1]), next: at(order[i + 1]) })
       }
       if (url.pathname === '/api/servers/1/library/artists/100/covers') return json(radioheadCovers)
+      if (url.pathname.startsWith('/api/servers/1/library/tracks/303/original')) {
+        if ((input as Request).method === 'PUT') {
+          const body = await (input as Request).clone().json()
+          chose.push(body)
+          original = body.rating_key
+        }
+        return json({
+          title: 'Lucky Day', can_choose: true,
+          songs: [{ rating_key: 3200, title: 'Lucky Day', artist: 'The Unknowns', artist_rating_key: 120, album_rating_key: 220, album_title: 'Early', album_thumb: null, year: 1970, original: original === 3200 }],
+        })
+      }
       if (url.pathname === '/api/servers/1/library/tracks/301/versions') return json({ title: 'Karma Police', artist: 'Radiohead', versions: [] })
       if (m) return json(artist(Number(m[1]), { 99: 'Portishead', 100: 'Radiohead', 101: 'Sigur Rós' }[Number(m[1])] ?? '?'))
       if (url.pathname === '/api/servers') return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: false, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
@@ -125,7 +141,7 @@ describe('Artist page', () => {
     renderArtist(100)
     const theirs = await screen.findByRole('list', { name: 'Their covers' })
     expect(theirs).toHaveTextContent('Lucky · 2017')
-    expect(theirs).toHaveTextContent('Cover of The Unknowns · Lucky Day') // not in the library: no links
+    expect(theirs).toHaveTextContent('Cover of Lucky Day') // MusicBrainz's: no original artist
     const covered = screen.getByRole('list', { name: 'Covered by others' })
     expect(covered).toHaveTextContent('Portishead · Glory Box · 1994')
     expect(covered).toHaveTextContent('Their version: Karma Police')
@@ -133,6 +149,18 @@ describe('Artist page', () => {
     // Two releases of their version: every version, in the dialog.
     fireEvent.click(screen.getByRole('button', { name: 'Karma Police' }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('lists the songs a cover with no original artist may be of, to choose the original', async () => {
+    renderArtist(100)
+    const theirs = await screen.findByRole('list', { name: 'Their covers' })
+    // No original artist (as MusicBrainz's covers): the title opens the library's songs of it.
+    fireEvent.click(within(theirs).getByRole('button', { name: 'Lucky Day' }))
+    const songs = await screen.findByRole('list', { name: 'Songs with this title' })
+    expect(songs).toHaveTextContent('The Unknowns · Lucky Day')
+    fireEvent.click(within(songs).getByRole('button', { name: 'This is the original' }))
+    await vi.waitFor(() => expect(chose).toEqual([{ rating_key: 3200 }]))
+    expect(await within(songs).findByText('The original')).toBeInTheDocument()
   })
 
   it('steps to the previous and next artist by name', async () => {

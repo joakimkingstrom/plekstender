@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { type Schemas } from '../api/client'
-import { useArtistCovers } from '../api/library'
+import { errorMessage, type Schemas } from '../api/client'
+import { useArtistCovers, useChooseOriginal, useCoverOriginals } from '../api/library'
 import { formatCount } from '../format'
 import { SongVersions } from './SongVersions'
 import { Tooltip } from './Tooltip'
-import { Card } from './ui'
+import { Dialog } from './Dialog'
+import { Artwork } from './library'
+import { Button, Card, Notice, Spinner } from './ui'
 
 type Cover = Schemas['CoverOf']
 
@@ -73,26 +75,101 @@ function SourceLink({ url, source }: { url: string | null | undefined; source: s
 }
 
 /** "Cover of Nine Inch Nails · Hurt", artist first: the artist's page and the song (its album,
- * or its versions) when they're in the library, and an icon to the cover on its source. */
-export function CoverOf({ serverId, cover }: { serverId: number; cover: Cover }) {
+ * or its versions) when they're in the library, and an icon to the cover on its source. With
+ * no original artist (MusicBrainz doesn't name one), the song's title opens the library's
+ * songs of that title, to choose the original from. */
+export function CoverOf({ serverId, trackKey, cover }: { serverId: number; trackKey: number; cover: Cover }) {
+  const [choosing, setChoosing] = useState(false)
   return (
     <span className="flex min-w-0 items-center gap-1 text-xs text-muted">
       <span className="truncate">
         Cover of{' '}
         {cover.artist && <ArtistLink name={cover.artist} ratingKey={cover.artist_rating_key} />}
         {cover.artist && cover.title && ' · '}
-        {cover.title && (
-          <SongLink
-            serverId={serverId}
-            title={cover.title}
-            ratingKey={cover.original_rating_key}
-            albumKey={cover.original_album_rating_key}
-            versions={cover.original_versions ?? 0}
-          />
-        )}
+        {cover.title &&
+          (cover.artist ? (
+            <SongLink
+              serverId={serverId}
+              title={cover.title}
+              ratingKey={cover.original_rating_key}
+              albumKey={cover.original_album_rating_key}
+              versions={cover.original_versions ?? 0}
+            />
+          ) : (
+            <button type="button" onClick={() => setChoosing(true)} className="hover:text-text hover:underline" title="Songs with this title in the library">
+              {cover.title}
+            </button>
+          ))}
       </span>
       <SourceLink url={cover.cover_url ?? cover.url} source={cover.source} />
+      {choosing && <Originals serverId={serverId} trackKey={trackKey} onClose={() => setChoosing(false)} />}
     </span>
+  )
+}
+
+/** The library's songs with a cover's song title, by other artists: each links to its album,
+ * and admins can mark the one it's a cover of (for everyone). */
+function Originals({ serverId, trackKey, onClose }: { serverId: number; trackKey: number; onClose: () => void }) {
+  const found = useCoverOriginals(serverId, trackKey)
+  const choose = useChooseOriginal(serverId, trackKey)
+  const title = found.data?.title ?? ''
+  const songs = found.data?.songs ?? []
+  const chosen = songs.some((s) => s.original)
+  return (
+    <Dialog
+      title={title ? `Songs called “${title}”` : 'Songs with this title'}
+      subtitle={found.data?.can_choose ? 'In the library, by other artists: choose the one this is a cover of.' : 'In the library, by other artists.'}
+      onClose={onClose}
+    >
+      {found.isPending ? (
+        <Spinner />
+      ) : found.isError ? (
+        <Notice tone="error">{errorMessage(found.error)}</Notice>
+      ) : songs.length === 0 ? (
+        <p className="text-sm text-muted">No other artist’s song with this title in the library.</p>
+      ) : (
+        <div className="space-y-3">
+          <ul className="divide-y divide-border" aria-label="Songs with this title">
+            {songs.map((s) => (
+              <li key={s.rating_key} className="flex items-center gap-3 py-2 text-sm">
+                <Artwork serverId={serverId} path={s.album_thumb} title={s.album_title ?? s.title} size={96} className="size-10 shrink-0 rounded" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">
+                    {s.artist && (
+                      <>
+                        <ArtistLink name={s.artist} ratingKey={s.artist_rating_key} />
+                        {' · '}
+                      </>
+                    )}
+                    {s.title}
+                  </span>
+                  {s.album_rating_key && (
+                    <Link to={`/library/albums/${s.album_rating_key}`} className="block truncate text-xs text-muted hover:text-text hover:underline">
+                      {[s.album_title, s.year].filter(Boolean).join(' · ')}
+                    </Link>
+                  )}
+                </span>
+                {s.original ? (
+                  <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">The original</span>
+                ) : (
+                  found.data.can_choose && (
+                    <Button size="xs" variant="ghost" busy={choose.isPending && choose.variables === s.rating_key} onClick={() => choose.mutate(s.rating_key)}>
+                      This is the original
+                    </Button>
+                  )
+                )}
+              </li>
+            ))}
+          </ul>
+          {chosen && found.data.can_choose && (
+            <Button size="xs" variant="ghost" busy={choose.isPending && choose.variables === null} onClick={() => choose.mutate(null)}>
+              None of these
+            </Button>
+          )}
+          {choose.isError && <Notice tone="error">{errorMessage(choose.error)}</Notice>}
+        </div>
+      )}
+    </Dialog>
   )
 }
 
@@ -123,7 +200,7 @@ export function ArtistCovers({ serverId, artistKey }: { serverId: number; artist
                     <SongLink serverId={serverId} title={c.title} ratingKey={c.rating_key} albumKey={c.album_rating_key} versions={1} />
                     {year(c.year)}
                   </span>
-                  <CoverOf serverId={serverId} cover={c.cover_of} />
+                  <CoverOf serverId={serverId} trackKey={c.rating_key} cover={c.cover_of} />
                 </li>
               ))}
             </ul>

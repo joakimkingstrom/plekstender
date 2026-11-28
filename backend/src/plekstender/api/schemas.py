@@ -532,6 +532,33 @@ class SongVersion(BaseModel):
     current: bool = Field(description="The song the dialog was opened from.")
 
 
+class SameTitleSong(BaseModel):
+    """A song in the library with the title a cover is of, by another artist (its oldest
+    release)."""
+
+    rating_key: int
+    title: str
+    artist: str | None
+    artist_rating_key: int | None
+    album_rating_key: int | None
+    album_title: str | None
+    album_thumb: str | None
+    year: int | None
+    original: bool = Field(description="Chosen as the cover's original.")
+
+
+class CoverOriginalsOut(BaseModel):
+    title: str = Field(description="The song the cover is of.")
+    songs: list[SameTitleSong] = Field(description="Oldest first.")
+    can_choose: bool = Field(description="The user may choose the original (admins).")
+
+
+class CoverOriginalIn(BaseModel):
+    rating_key: int | None = Field(
+        description="The library song that's the original; None: none of them (no artist)."
+    )
+
+
 class SongVersionsOut(BaseModel):
     title: str
     artist: str | None

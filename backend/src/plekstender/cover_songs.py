@@ -16,10 +16,10 @@ Each cover found then costs one more request: its page names the original. So a 
 takes about two requests per artist plus one per cover, not one or two per song.
 
 MusicBrainz, for songs it doesn't know, when the files (or Plex) have the recording's
-MusicBrainz ID: the recording's link to its song (the "work") says whether it's a cover; for
-one that is, the work's plain recordings of the same title (not covers, live, medleys or
-instrumentals) are the original artist's, and one of them names them (three requests, at
-MusicBrainz's pace).
+MusicBrainz ID: the recording's link to its song (the "work") says whether it's a cover (one
+request, at MusicBrainz's pace). It doesn't say whose recording is the original, so a
+MusicBrainz cover has the song's title but no original artist, until someone chooses one
+among the library's songs of that title.
 
 A re-recording of the artist's own song counts as an original, not a cover.
 """
@@ -271,8 +271,11 @@ def _attributes(relation: dict[str, Any]) -> set[str]:
     return {str(a) for a in relation.get("attributes") or []}
 
 
-async def look_up_musicbrainz(http: httpx.AsyncClient, mbid: str, artist: str) -> Found:
-    """Whether the recording is a cover, by MusicBrainz's link to its song. Raises
+async def look_up_musicbrainz(http: httpx.AsyncClient, mbid: str) -> Found:
+    """Whether the recording is a cover, by MusicBrainz's link to its song (one request). A
+    cover gets the song's title, but no original artist: MusicBrainz doesn't say which of a
+    song's recordings is the first, and guessing named the wrong one for songs with many
+    (someone can choose the original among the library's songs of that title). Raises
     MusicBrainzError (not NotFound) when MusicBrainz is busy or unreachable."""
     page = f"{MB_SITE}/recording/{mbid}"
     try:
@@ -290,44 +293,14 @@ async def look_up_musicbrainz(http: httpx.AsyncClient, mbid: str, artist: str) -
     if cover is None:
         return Found("original", 0, performance_url=page, source="musicbrainz")
     work = cover["work"]
-    title = str(work.get("title") or "") or None
-    found = Found(
+    return Found(
         "cover",
         0,
-        original_title=title,
+        original_title=str(work.get("title") or "") or None,
         performance_url=page,
         original_url=f"{MB_SITE}/work/{work.get('id')}",
         source="musicbrainz",
     )
-    try:
-        song = await musicbrainz.lookup(http, "work", str(work.get("id")), "recording-rels")
-    except musicbrainz.NotFound:
-        return found
-    # The original artist's own recordings: plain ones of the song (not a cover, live, a
-    # medley or an instrumental), under its own title.
-    plain = [
-        r["recording"]
-        for r in song.get("relations") or []
-        if r.get("type") == "performance"
-        and isinstance(r.get("recording"), dict)
-        and not _attributes(r)
-        and r["recording"].get("id") != mbid
-        and normalise_title(str(r["recording"].get("title") or "")) == normalise_title(title or "")
-    ]
-    if not plain:
-        return found
-    try:
-        original = await musicbrainz.lookup(
-            http, "recording", str(plain[0]["id"]), "artist-credits"
-        )
-    except musicbrainz.NotFound:
-        return found
-    name = musicbrainz.credit(original.get("artist-credit")) or None
-    if name and normalise_artist(name) == normalise_artist(artist):
-        return Found("original", 0, performance_url=page, source="musicbrainz")
-    found.original_artist = name
-    found.original_url = f"{MB_SITE}/recording/{plain[0]['id']}"
-    return found
 
 
 # --- the worker's runs -----------------------------------------------------------------------
@@ -606,7 +579,7 @@ async def run(
         rows = (await db.execute(_MB_DUE, params | {"limit": MB_PER_RUN})).all()
         for row in rows:
             try:
-                found = await look_up_musicbrainz(http, row.mbid, row.artist)
+                found = await look_up_musicbrainz(http, row.mbid)
             except musicbrainz.MusicBrainzError as exc:
                 log.info("cover songs on MusicBrainz paused: %s", exc)
                 break
