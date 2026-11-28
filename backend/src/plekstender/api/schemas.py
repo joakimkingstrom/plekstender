@@ -448,6 +448,14 @@ class TagDetail(BaseModel):
     related: list[TagOut] = Field(description="Tags often on the same artists and albums.")
 
 
+class CoverOf(BaseModel):
+    artist: str | None
+    title: str | None
+    url: str | None = Field(description="The original on the source.")
+    cover_url: str | None = Field(description="This recording on the source.")
+    source: str = Field(description="secondhandsongs | musicbrainz")
+
+
 class TrackOut(BaseModel):
     rating_key: int
     title: str
@@ -463,6 +471,9 @@ class TrackOut(BaseModel):
     album_thumb: str | None
     listens: int = Field(default=0, description="Your listens of this song (all sources).")
     seen_live: int = Field(default=0, description="Gigs you've been to where it was played.")
+    cover_of: CoverOf | None = Field(
+        default=None, description="Whose song it is, when it's a cover (SecondHandSongs)."
+    )
     lyrics: LyricsKind | None = Field(
         default=None,
         description="The best lyrics its files have (word-synced, synced, plain, instrumental "
@@ -2291,6 +2302,31 @@ class GigImportOut(BaseModel):
 
 class SetlistFmImportIn(BaseModel):
     username: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.\-]+$")
+
+
+class CoverSongsIn(BaseModel):
+    enabled: bool = Field(description="Look library songs up for covers.")
+    secondhandsongs: bool = Field(default=True, description="Ask SecondHandSongs.")
+    musicbrainz: bool = Field(
+        default=True, description="Ask MusicBrainz (songs with a recording MBID)."
+    )
+    api_key: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9\-]{20,64}$",
+        description="A new SecondHandSongs API key (checked first); None keeps the one saved.",
+    )
+    remove_key: bool = Field(default=False, description="Forget the saved API key.")
+
+
+class CoverSongsOut(BaseModel):
+    enabled: bool
+    secondhandsongs: bool
+    musicbrainz: bool
+    api_key: bool = Field(description="A SecondHandSongs API key is saved (higher limits).")
+    per_hour: int = Field(description="SecondHandSongs requests an hour Plekstender allows.")
+    songs: int = Field(description="Different songs in the libraries.")
+    checked: int = Field(description="Of those, looked up.")
+    covers: int = Field(description="Of those, covers.")
 
 
 class SetlistFmKeyIn(BaseModel):

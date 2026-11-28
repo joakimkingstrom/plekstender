@@ -2225,6 +2225,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/files/cover-tags/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cover Tags Preview
+         * @description Which files would get the original artist of the cover they are (nothing is written).
+         */
+        post: operations["cover_tags_preview_api_servers__server_id__files_cover_tags_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/files/cover-tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cover Tags
+         * @description Write the original artist into the files of covers: recorded as one edit (undo it as a
+         *     whole).
+         */
+        post: operations["cover_tags_api_servers__server_id__files_cover_tags_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/files/musicbrainz/search": {
         parameters: {
             query?: never;
@@ -4375,6 +4416,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/cover-songs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Cover Songs Settings */
+        get: operations["get_cover_songs_settings_api_admin_cover_songs_get"];
+        /**
+         * Put Cover Songs Settings
+         * @description Turn cover song lookups on or off, choose the sources, and set (after one small search)
+         *     or forget SecondHandSongs' optional API key.
+         */
+        put: operations["put_cover_songs_settings_api_admin_cover_songs_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/setlistfm": {
         parameters: {
             query?: never;
@@ -5802,6 +5865,28 @@ export interface components {
             /** Listening Ms */
             listening_ms: number;
         };
+        /** CoverOf */
+        CoverOf: {
+            /** Artist */
+            artist: string | null;
+            /** Title */
+            title: string | null;
+            /**
+             * Url
+             * @description The original on the source.
+             */
+            url: string | null;
+            /**
+             * Cover Url
+             * @description This recording on the source.
+             */
+            cover_url: string | null;
+            /**
+             * Source
+             * @description secondhandsongs | musicbrainz
+             */
+            source: string;
+        };
         /** CoverRenderIn */
         CoverRenderIn: {
             source: components["schemas"]["SourceSpec"];
@@ -5810,6 +5895,71 @@ export interface components {
              * @default false
              */
             square: boolean;
+        };
+        /** CoverSongsIn */
+        CoverSongsIn: {
+            /**
+             * Enabled
+             * @description Look library songs up for covers.
+             */
+            enabled: boolean;
+            /**
+             * Secondhandsongs
+             * @description Ask SecondHandSongs.
+             * @default true
+             */
+            secondhandsongs: boolean;
+            /**
+             * Musicbrainz
+             * @description Ask MusicBrainz (songs with a recording MBID).
+             * @default true
+             */
+            musicbrainz: boolean;
+            /**
+             * Api Key
+             * @description A new SecondHandSongs API key (checked first); None keeps the one saved.
+             */
+            api_key?: string | null;
+            /**
+             * Remove Key
+             * @description Forget the saved API key.
+             * @default false
+             */
+            remove_key: boolean;
+        };
+        /** CoverSongsOut */
+        CoverSongsOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Secondhandsongs */
+            secondhandsongs: boolean;
+            /** Musicbrainz */
+            musicbrainz: boolean;
+            /**
+             * Api Key
+             * @description A SecondHandSongs API key is saved (higher limits).
+             */
+            api_key: boolean;
+            /**
+             * Per Hour
+             * @description SecondHandSongs requests an hour Plekstender allows.
+             */
+            per_hour: number;
+            /**
+             * Songs
+             * @description Different songs in the libraries.
+             */
+            songs: number;
+            /**
+             * Checked
+             * @description Of those, looked up.
+             */
+            checked: number;
+            /**
+             * Covers
+             * @description Of those, covers.
+             */
+            covers: number;
         };
         /** CoverSourcesOut */
         CoverSourcesOut: {
@@ -9807,6 +9957,20 @@ export interface components {
              * @description Only songs whose album or artist has one of these genres, styles or moods (always applies, whatever `op` says).
              */
             tags?: number[];
+            /**
+             * Covers
+             * @description Only covers, or no covers (Cover songs must be on; always applies).
+             * @default any
+             * @enum {string}
+             */
+            covers: "any" | "only" | "none";
+            /**
+             * Lyrics
+             * @description Only songs whose files have lyrics: any, synced (word-synced too), or word-synced (always applies).
+             * @default any
+             * @enum {string}
+             */
+            lyrics: "any" | "with" | "synced" | "word";
         };
         /** ScrobbleTargetIn */
         ScrobbleTargetIn: {
@@ -10773,6 +10937,8 @@ export interface components {
              * @default 0
              */
             seen_live: number;
+            /** @description Whose song it is, when it's a cover (SecondHandSongs). */
+            cover_of?: components["schemas"]["CoverOf"] | null;
             /**
              * Lyrics
              * @description The best lyrics its files have (word-synced, synced, plain, instrumental or none); None: the lyrics icons preference is off, or its files haven't been read.
@@ -14844,6 +15010,68 @@ export interface operations {
             };
         };
     };
+    cover_tags_preview_api_servers__server_id__files_cover_tags_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlexSyncPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cover_tags_api_servers__server_id__files_cover_tags_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagChangeSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     musicbrainz_search_api_servers__server_id__files_musicbrainz_search_get: {
         parameters: {
             query: {
@@ -18751,6 +18979,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataThistleOut"];
+                };
+            };
+        };
+    };
+    get_cover_songs_settings_api_admin_cover_songs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverSongsOut"];
+                };
+            };
+        };
+    };
+    put_cover_songs_settings_api_admin_cover_songs_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverSongsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverSongsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
