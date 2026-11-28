@@ -67,9 +67,9 @@ class Limits:
     per_day: int
 
 
-# Without a key SecondHandSongs reports 10 a minute and 100 an hour, and no daily limit: a
-# little under those, and 2000 a day (90 an hour around the clock would be 2160).
-WITHOUT_KEY = Limits(per_minute=9, per_hour=90, per_day=2000)
+# Without a key SecondHandSongs reports 10 a minute and 100 an hour: a little under those,
+# and 1000 a day to stay well within what it allows over a day.
+WITHOUT_KEY = Limits(per_minute=9, per_hour=90, per_day=1000)
 WITH_KEY = Limits(per_minute=60, per_hour=900, per_day=9000)
 RUNS_PER_HOUR = 6  # the worker's schedule: every ten minutes
 
