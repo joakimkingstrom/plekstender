@@ -24,6 +24,15 @@ class Rules(BaseModel):
         description="Only songs whose album or artist has one of these genres, styles or "
         "moods (always applies, whatever `op` says).",
     )
+    covers: Literal["any", "only", "none"] = Field(
+        default="any",
+        description="Only covers, or no covers (Cover songs must be on; always applies).",
+    )
+    lyrics: Literal["any", "with", "synced", "word"] = Field(
+        default="any",
+        description="Only songs whose files have lyrics: any, synced (word-synced too), or "
+        "word-synced (always applies).",
+    )
 
 
 class NewAlbums(BaseModel):

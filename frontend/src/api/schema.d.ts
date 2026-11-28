@@ -9901,6 +9901,20 @@ export interface components {
              * @description Only songs whose album or artist has one of these genres, styles or moods (always applies, whatever `op` says).
              */
             tags?: number[];
+            /**
+             * Covers
+             * @description Only covers, or no covers (Cover songs must be on; always applies).
+             * @default any
+             * @enum {string}
+             */
+            covers: "any" | "only" | "none";
+            /**
+             * Lyrics
+             * @description Only songs whose files have lyrics: any, synced (word-synced too), or word-synced (always applies).
+             * @default any
+             * @enum {string}
+             */
+            lyrics: "any" | "with" | "synced" | "word";
         };
         /** ScrobbleTargetIn */
         ScrobbleTargetIn: {
