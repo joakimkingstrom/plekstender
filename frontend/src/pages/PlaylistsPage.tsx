@@ -33,6 +33,19 @@ import { formatCount, formatDuration, formatListeningTime, formatRelative } from
 
 type Order = Definition['order']
 type NewAlbums = { days: number; per_album: number }
+type CoversRule = NonNullable<Schemas['Rules']['covers']>
+type LyricsRule = NonNullable<Schemas['Rules']['lyrics']>
+const COVERS: { value: CoversRule; label: string }[] = [
+  { value: 'any', label: 'Covers or not' },
+  { value: 'only', label: 'Only covers' },
+  { value: 'none', label: 'No covers' },
+]
+const LYRICS: { value: LyricsRule; label: string }[] = [
+  { value: 'any', label: 'With or without lyrics' },
+  { value: 'with', label: 'Only songs with lyrics' },
+  { value: 'synced', label: 'Only synced lyrics' },
+  { value: 'word', label: 'Only word-synced lyrics' },
+]
 const FRESH_DAYS = [7, 14, 30, 60, 90].map((n) => ({ value: n, label: `${n} days` }))
 const FRESH_SONGS = [1, 2, 3, 5, 10].map((n) => ({ value: n, label: n === 1 ? 'song' : `${n} songs` }))
 type Op = 'AND' | 'OR'
@@ -327,6 +340,8 @@ type Draft = {
   genres: string[]
   /** Only songs whose album or artist has one of these. */
   tags: RuleTag[]
+  covers: CoversRule
+  lyrics: LyricsRule
 }
 
 type RuleTag = { id: number; name: string; kind: string }
@@ -353,6 +368,8 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
     genres: display.genres ?? [],
     // Names come from the display copy; a tag without one still filters.
     tags: ruleTags.map((id) => display.tags?.find((t) => t.id === id) ?? { id, name: `#${id}`, kind: 'genre' }),
+    covers: d?.rules?.covers ?? 'any',
+    lyrics: d?.rules?.lyrics ?? 'any',
   }
 }
 
@@ -371,6 +388,8 @@ function definitionOf(draft: Draft): Definition | null {
       top_percent: draft.topPercent || null,
       op: draft.op,
       tags: draft.tags.map((t) => t.id),
+      covers: draft.covers,
+      lyrics: draft.lyrics,
     },
     limit: draft.limit || null,
     order: draft.order,
@@ -928,6 +947,18 @@ function Rules({ draft, set, serverId }: { draft: Draft; set: (patch: Partial<Dr
             label: p === 0 ? 'All songs' : `Each artist's top ${p}%`,
           }))}
         />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="w-40 font-medium">Covers</span>
+        <Select label="Covers" value={draft.covers} onChange={(covers) => set({ covers })} options={COVERS} />
+        {draft.covers !== 'any' && (
+          <span className="text-xs text-muted">Songs found to be covers (Settings → Services → Cover songs).</span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="w-40 font-medium">Lyrics</span>
+        <Select label="Lyrics" value={draft.lyrics} onChange={(lyrics) => set({ lyrics })} options={LYRICS} />
+        {draft.lyrics !== 'any' && <span className="text-xs text-muted">In the songs’ files (or next to them).</span>}
       </div>
       {both && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">

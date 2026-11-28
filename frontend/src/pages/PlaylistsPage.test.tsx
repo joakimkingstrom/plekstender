@@ -158,7 +158,7 @@ describe('Playlists', () => {
             forgotten: false,
             new_albums: null,
             title_words: [],
-            rules: { min_rating: null, include_unrated: true, top_percent: null, op: 'AND', tags: [] },
+            rules: { min_rating: null, include_unrated: true, top_percent: null, op: 'AND', tags: [], covers: 'any', lyrics: 'any' },
             limit: 100,
             order: 'random',
           },
@@ -213,5 +213,20 @@ describe('Playlists', () => {
     await vi.waitFor(async () => expect(await posted('/api/servers/1/playlists')).toHaveLength(1))
     const [saved] = await posted('/api/servers/1/playlists')
     expect(saved).toMatchObject({ name: 'Songs about Love', schedule: 'weekly', definition: { title_words: ['Love'] } })
+  })
+
+  it('keeps only covers, or only songs with lyrics of a kind', async () => {
+    renderAt('/playlists/new')
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'The best of new albums' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Covers/ }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Only covers' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Lyrics/ }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Only synced lyrics' }))
+    // The preview asks with them.
+    await vi.waitFor(async () => expect((await posted('/api/servers/1/playlists/preview')).at(-1)).toMatchObject({ rules: { covers: 'only', lyrics: 'synced' } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create in Plex' }))
+    await vi.waitFor(async () => expect(await posted('/api/servers/1/playlists')).toHaveLength(1))
+    const [saved] = await posted('/api/servers/1/playlists')
+    expect(saved.definition.rules).toMatchObject({ covers: 'only', lyrics: 'synced' })
   })
 })

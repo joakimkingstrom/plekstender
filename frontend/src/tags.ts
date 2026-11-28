@@ -27,6 +27,7 @@ export const FIELD_LABELS: Record<TagField, string> = {
 /** Every tag Plekstender writes (MusicBrainz's too), for history and previews. */
 const MORE_LABELS: Record<string, string> = {
   originaldate: 'Original date',
+  originalartist: 'Original artist',
   releasecountry: 'Release country',
   musicbrainz_trackid: 'MusicBrainz recording ID',
   musicbrainz_releasetrackid: 'MusicBrainz track ID',
