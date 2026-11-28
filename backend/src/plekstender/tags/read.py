@@ -15,6 +15,19 @@ AUDIO_EXTENSIONS = {
     ".flac", ".mp3", ".m4a", ".mp4", ".aac", ".alac", ".ogg", ".oga", ".opus",
     ".wav", ".aif", ".aiff", ".wv", ".ape", ".wma", ".dsf",
 }  # fmt: skip
+# Video covers in an album's folder (cover.mp4, animated.webm...): by name, not songs.
+VIDEO_EXTENSIONS = {".mp4", ".m4v", ".mov", ".webm"}
+VIDEO_COVER_NAMES = {
+    "cover", "folder", "front", "album", "animated", "animated_cover", "cover_animated",
+    "animated-cover", "cover-animated", "motion", "video_cover",
+}  # fmt: skip
+
+
+def is_video_cover(name: str) -> bool:
+    """A video cover by its file name (cover.mp4, Folder.webm, animated.mov...)."""
+    path = Path(name)
+    return path.suffix.lower() in VIDEO_EXTENSIONS and path.stem.lower() in VIDEO_COVER_NAMES
+
 
 # Easy-interface keys (the same for ID3, MP4 and Vorbis comments) and how they're kept.
 TEXT_FIELDS = (

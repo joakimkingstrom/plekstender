@@ -7,11 +7,13 @@ their own Plex account can access, in the music libraries they selected.
 from __future__ import annotations
 
 import re
+from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal, cast
 from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi.responses import FileResponse
 from sqlalchemy import ColumnElement, and_, func, literal, select, tuple_
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import aliased
@@ -48,6 +50,7 @@ from plekstender.db.models import (
     Album,
     AlbumColour,
     Artist,
+    FolderVideo,
     ItemTag,
     MediaFile,
     SimilarArtist,
@@ -64,6 +67,7 @@ from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import core_title, normalise_artist, normalise_title
 from plekstender.tags.lyrics_kinds import Kind, best
 from plekstender.tags.read import LYRICS_READER
+from plekstender.tags.scan import video_folder
 
 router = APIRouter(prefix="/api/servers/{server_id}", tags=["library"])
 
@@ -460,6 +464,49 @@ async def _release_types(db: DbDep, server_id: int, keys: list[int]) -> dict[int
     }
 
 
+VIDEO_TYPES = {
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+}
+
+
+async def album_videos(db: DbDep, server_id: int, album_keys: list[int]) -> dict[int, FolderVideo]:
+    """Each album's video cover (copied by the scan): one in the folder its songs are in, else
+    in the folder above (an album split into CD1, CD2...)."""
+    if not album_keys:
+        return {}
+    videos: dict[str, FolderVideo] = {}
+    for video in await db.scalars(
+        select(FolderVideo).where(
+            FolderVideo.server_id == server_id, FolderVideo.stored.is_not(None)
+        )
+    ):
+        videos.setdefault(str(PurePosixPath(video.path).parent), video)
+    if not videos:
+        return {}
+    rows = await db.execute(
+        select(Track.album_rating_key, MediaFile.path)
+        .join(
+            Track,
+            and_(Track.server_id == MediaFile.server_id, Track.rating_key == MediaFile.rating_key),
+        )
+        .where(MediaFile.server_id == server_id, Track.album_rating_key.in_(album_keys))
+    )
+    found: dict[int, FolderVideo] = {}
+    for album_key, path in rows.all():
+        if album_key is None or album_key in found:
+            continue
+        folder = PurePosixPath(path).parent
+        match = videos.get(str(folder)) or (
+            videos.get(str(folder.parent)) if str(folder.parent) != "." else None
+        )
+        if match is not None:
+            found[album_key] = match
+    return found
+
+
 async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> list[AlbumSummary]:
     state, cond, where = visible(Album, user_id, us)
     rows = await db.execute(
@@ -470,6 +517,7 @@ async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> lis
     )
     found = rows.all()
     types = await _release_types(db, us.server_id, [a.rating_key for a, _, _ in found])
+    videos = await album_videos(db, us.server_id, [a.rating_key for a, _, _ in found])
     return [
         AlbumSummary(
             rating_key=a.rating_key,
@@ -482,6 +530,11 @@ async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> lis
             user_rating=rating,
             plays=plays,
             release_type=types.get(a.rating_key, "Album"),
+            video=(
+                f"/api/servers/{us.id}/library/albums/{a.rating_key}/video"
+                if a.rating_key in videos
+                else None
+            ),
         )
         for a, rating, plays in found
     ]
@@ -1139,6 +1192,33 @@ async def song_versions(
             )
             for t, rating, plays, a in rows
         ],
+    )
+
+
+@router.get(
+    "/library/albums/{rating_key}/video",
+    response_class=FileResponse,
+    responses={200: {"content": {"video/mp4": {}}}},
+)
+async def album_video(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep, settings: SettingsDep
+) -> FileResponse:
+    """The album's video cover (a copy the scan keeps), streamed with range requests."""
+    us = await get_user_server(db, user, server_id)
+    if not await _albums(db, user.id, us, Album.rating_key == rating_key):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Album not found")
+    video = (await album_videos(db, us.server_id, [rating_key])).get(rating_key)
+    path = (
+        video_folder(settings.data_dir, us.server_id) / video.stored
+        if video is not None and video.stored
+        else None
+    )
+    if path is None or not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No video cover")
+    return FileResponse(
+        path,
+        media_type=VIDEO_TYPES.get(path.suffix.lower(), "video/mp4"),
+        headers={"Cache-Control": "private, max-age=86400"},
     )
 
 

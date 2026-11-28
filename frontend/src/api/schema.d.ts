@@ -690,6 +690,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/albums/{rating_key}/video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Album Video
+         * @description The album's video cover (a copy the scan keeps), streamed with range requests.
+         */
+        get: operations["album_video_api_servers__server_id__library_albums__rating_key__video_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/image": {
         parameters: {
             query?: never;
@@ -5246,6 +5266,11 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /**
+             * Video
+             * @description Its video cover (cover.mp4 in its folder), to play: an API path.
+             */
+            video?: string | null;
             /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
             lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
             /** Summary */
@@ -5408,6 +5433,11 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /**
+             * Video
+             * @description Its video cover (cover.mp4 in its folder), to play: an API path.
+             */
+            video?: string | null;
             /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
             lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
         };
@@ -10772,6 +10802,11 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /**
+             * Video
+             * @description Its video cover (cover.mp4 in its folder), to play: an API path.
+             */
+            video?: string | null;
             /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
             lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
             /** Artist Rating Key */
@@ -12469,6 +12504,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SongVersionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    album_video_api_servers__server_id__library_albums__rating_key__video_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": unknown;
                 };
             };
             /** @description Validation Error */

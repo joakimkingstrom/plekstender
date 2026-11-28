@@ -124,6 +124,7 @@ async def test_scan_and_compare(app: FastAPI, plex: FakePlex, music: Path) -> No
         "lyrics": 0,
         "nfo": 0,
         "images": 0,
+        "videos": 0,
         "errors": 1,
         "matched": 2,
     }

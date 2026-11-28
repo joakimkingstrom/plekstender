@@ -424,6 +424,10 @@ class AlbumSummary(BaseModel):
         default="Album",
         description="Album, EP, Single, Compilation, Live, Soundtrack… (from Plex's tags).",
     )
+    video: str | None = Field(
+        default=None,
+        description="Its video cover (cover.mp4 in its folder), to play: an API path.",
+    )
     lyrics: AlbumLyricsOut | None = Field(
         default=None,
         description="How many of its songs have lyrics in their files; None: the lyrics icons "

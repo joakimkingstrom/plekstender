@@ -985,6 +985,23 @@ class FolderImage(Base):
     error: Mapped[str | None] = mapped_column(Text)
 
 
+class FolderVideo(Base):
+    """A video cover in the music folder (cover.mp4, animated.webm...), kept as a copy under
+    DATA_DIR/video-covers by the worker (the web app never reads the music folder)."""
+
+    __tablename__ = "folder_videos"
+    __table_args__ = (UniqueConstraint("server_id", "path"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    path: Mapped[str] = mapped_column(Text)  # relative to the mapped folder
+    size: Mapped[int] = mapped_column(BigInteger)
+    mtime: Mapped[float]
+    # The copy's file name under DATA_DIR/video-covers/<server>; None: not copied (too big).
+    stored: Mapped[str | None] = mapped_column(String(80))
+    error: Mapped[str | None] = mapped_column(Text)
+
+
 class FileScan(Base):
     """A worker job over a server's music folder: a scan, or identifying files by sound."""
 
