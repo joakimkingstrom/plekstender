@@ -62,6 +62,21 @@ def normalise_title(title: str) -> str:
     return fold(without_suffixes(title)) or title.strip().lower()
 
 
+# Any bracketed or dashed suffix: "Song (Live)", "Song - Live at Wembley", "Song [Demo]".
+_ANY_SUFFIX = re.compile(r"\s*(?:[\(\[][^\)\]]*[\)\]]|\s[-\u2013]\s.*)$")
+
+
+def core_title(title: str) -> str:
+    """Key for every version of a song (live, demo, acoustic, remastered...): the title
+    without any bracketed or dashed suffix, folded."""
+    text = title.translate(_PUNCT)
+    previous = None
+    while previous != text:
+        previous = text
+        text = _ANY_SUFFIX.sub("", text)
+    return fold(text) or normalise_title(title)
+
+
 def normalise_artist(name: str) -> str:
     """Key for matching artist names across sources: "The Beatles" == "beatles"."""
     text = fold(name)

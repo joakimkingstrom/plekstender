@@ -627,6 +627,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/tracks/{rating_key}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Song Versions
+         * @description Every release of the song by the same artist: remasters, live, demo and other
+         *     versions (the same title without its bracketed or dashed suffix), oldest first.
+         */
+        get: operations["song_versions_api_servers__server_id__library_tracks__rating_key__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/image": {
         parameters: {
             query?: never;
@@ -10301,6 +10322,49 @@ export interface components {
             /** Listens */
             listens: number;
         };
+        /** SongVersion */
+        SongVersion: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Album Title */
+            album_title: string | null;
+            /** Album Thumb */
+            album_thumb: string | null;
+            /** Year */
+            year: number | null;
+            /**
+             * Release Type
+             * @description Album, Live, Compilation… (its album's).
+             */
+            release_type: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** User Rating */
+            user_rating: number | null;
+            /** Plays */
+            plays: number;
+            /**
+             * Current
+             * @description The song the dialog was opened from.
+             */
+            current: boolean;
+        };
+        /** SongVersionsOut */
+        SongVersionsOut: {
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string | null;
+            /**
+             * Versions
+             * @description Oldest release first.
+             */
+            versions: components["schemas"]["SongVersion"][];
+        };
         /**
          * SourceSpec
          * @description The image to start from.
@@ -12091,6 +12155,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    song_versions_api_servers__server_id__library_tracks__rating_key__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SongVersionsOut"];
                 };
             };
             /** @description Validation Error */
