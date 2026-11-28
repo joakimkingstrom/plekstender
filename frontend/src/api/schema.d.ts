@@ -5861,6 +5861,19 @@ export interface components {
             rating_key: number;
             /** Thumb */
             thumb: string;
+            /**
+             * Title
+             * @description The album's.
+             * @default
+             */
+            title: string;
+            /**
+             * Artist
+             * @description Its album artist.
+             */
+            artist?: string | null;
+            /** Artist Rating Key */
+            artist_rating_key?: number | null;
         };
         /**
          * BackgroundSettings

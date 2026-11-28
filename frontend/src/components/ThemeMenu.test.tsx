@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useTheme } from '../theme'
 import { CoverBackground } from './CoverBackground'
@@ -36,8 +37,8 @@ beforeEach(() => {
         return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: true, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
       if (url.pathname === '/api/servers/1/library/stats/backgrounds')
         return json([
-          { rating_key: 200, thumb: '/library/metadata/200/thumb/1' },
-          { rating_key: 201, thumb: '/library/metadata/201/thumb/1' },
+          { rating_key: 200, thumb: '/library/metadata/200/thumb/1', title: 'Riot!', artist: 'Paramore', artist_rating_key: 100 },
+          { rating_key: 201, thumb: '/library/metadata/201/thumb/1', title: 'Dummy', artist: 'Portishead', artist_rating_key: 101 },
         ])
       return json([])
     }),
@@ -49,7 +50,9 @@ afterEach(() => {
 })
 
 const wrap = (ui: React.ReactNode) => (
-  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>
+  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <MemoryRouter>{ui}</MemoryRouter>
+  </QueryClientProvider>
 )
 
 it('chooses light, dark or the system’s, and the covers behind the pages', async () => {
@@ -76,6 +79,13 @@ it('shows covers behind the pages, unless the system asks for less motion', asyn
   expect(img.getAttribute('src')).toContain('size=1000')
   const asked = (vi.mocked(fetch).mock.calls as [Request][]).map(([r]) => new URL(r.url)).find((u) => u.pathname.endsWith('/backgrounds'))!
   expect(Object.fromEntries(asked.searchParams)).toMatchObject({ mode: 'covers', theme: 'light' })
+  // A button in the corner says what's showing, artist first, with links.
+  fireEvent.click(screen.getByRole('button', { name: 'What’s in the background?' }))
+  const about = screen.getByRole('dialog', { name: 'The background' })
+  expect(within(about).getByRole('link', { name: 'Paramore' })).toHaveAttribute('href', '/library/artists/100')
+  expect(within(about).getAllByRole('link', { name: 'Riot!' })[0]).toHaveAttribute('href', '/library/albums/200')
+  fireEvent.click(within(about).getByRole('button', { name: 'Close' }))
+  expect(screen.queryByRole('dialog', { name: 'The background' })).not.toBeInTheDocument()
   unmount()
 
   reducedMotion = true

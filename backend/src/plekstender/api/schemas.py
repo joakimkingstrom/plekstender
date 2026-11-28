@@ -118,6 +118,9 @@ class BackgroundSettings(BaseModel):
 class BackgroundCover(BaseModel):
     rating_key: int
     thumb: str
+    title: str = Field(default="", description="The album's.")
+    artist: str | None = Field(default=None, description="Its album artist.")
+    artist_rating_key: int | None = None
 
 
 class Preferences(BaseModel):
