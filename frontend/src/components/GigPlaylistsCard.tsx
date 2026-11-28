@@ -103,7 +103,7 @@ export function GigPlaylistsCard() {
                   />
                   <Select
                     size="sm"
-                    label="Days, weeks or months"
+                    label="Days, weeks, or months"
                     value={chosen.delete_unit}
                     options={UNITS}
                     onChange={(delete_unit) => set({ delete_unit })}

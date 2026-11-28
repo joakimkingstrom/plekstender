@@ -93,6 +93,28 @@ _WORDS = """
 """
 
 
+# Every song that's a cover (by Cover songs).
+_COVERS = """
+    SELECT t.rating_key
+    FROM tracks t
+    JOIN user_item_state s
+      ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
+    JOIN song_covers c
+      ON c.artist_key = t.artist_key AND c.title_norm = t.title_norm AND c.status = 'cover'
+    WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
+"""
+
+
+async def cover_keys(
+    db: AsyncSession, user_id: int, server_id: int, sections: list[str]
+) -> list[int]:
+    """Every cover song in the libraries."""
+    rows = await db.scalars(
+        text(_COVERS), {"user_id": user_id, "server_id": server_id, "sections": sections}
+    )
+    return list(rows)
+
+
 async def title_word_keys(
     db: AsyncSession, user_id: int, server_id: int, sections: list[str], wanted: list[str]
 ) -> list[int]:
@@ -192,6 +214,7 @@ async def matching_songs(
     fresh = (
         await new_album_keys(db, user_id, server_id, sections, d.new_albums) if d.new_albums else []
     )
+    covers = await cover_keys(db, user_id, server_id, sections) if d.all_covers else []
     rows = await db.execute(
         text(_SONGS),
         {
@@ -200,7 +223,7 @@ async def matching_songs(
             "sections": sections,
             "artists": d.artists,
             "tracks": d.tracks,
-            "found": found + worded,
+            "found": found + worded + covers,
             "fresh": fresh,
             "tags": d.rules.tags,
             "lyrics_reader": LYRICS_READER,

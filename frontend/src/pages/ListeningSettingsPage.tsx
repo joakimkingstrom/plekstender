@@ -497,7 +497,7 @@ function DeleteHistoryCard() {
     <Card title="Your history">
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Deleting removes listens from Plekstender only. Last.fm, ListenBrainz and Plex keep their own
+          Deleting removes listens from Plekstender only. Last.fm, ListenBrainz, and Plex keep their own
           copies.
         </p>
         <div className="flex flex-wrap gap-4">

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { useLogout, useMe, useSetPreferences } from '../api/hooks'
+import { useLogout, useMe } from '../api/hooks'
 import { useOnline } from '../online'
 import { InstallPrompt } from './InstallPrompt'
 import { UpdateBanner } from './UpdateBanner'
@@ -58,7 +58,7 @@ export function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const logout = useLogout()
-  const [theme, setTheme, themeChoice] = useTheme()
+  const [theme, setTheme] = useTheme()
   const accent = me?.preferences?.accent ?? null
   // The user's accent colour, worked out for the current theme.
   useEffect(() => applyAccent(accent, theme), [accent, theme])
@@ -68,7 +68,6 @@ export function Layout() {
   useEffect(() => {
     if (savedTheme) setTheme(savedTheme)
   }, [savedTheme, setTheme])
-  const savePreferences = useSetPreferences()
 
   if (isPending) {
     return <PageLoader />
@@ -129,16 +128,7 @@ export function Layout() {
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <HeaderSearch />
-            <ThemeMenu
-              theme={theme}
-              choice={themeChoice}
-              onChoose={(next) => {
-                setTheme(next)
-                // Saved to the account too when the account has a theme (Profile → Theme);
-                // the system's: this browser follows its device.
-                if (savedTheme) savePreferences.mutate({ theme: next === 'system' ? null : next })
-              }}
-            />
+            <ThemeMenu />
             <NotificationBell isAdmin={me.is_admin} />
             <NavLink to="/profile" aria-label="Your profile" className="rounded-full focus-visible:outline-2">
               <Avatar url={me.thumb_url} name={me.username} />

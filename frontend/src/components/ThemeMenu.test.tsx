@@ -8,14 +8,16 @@ import { ThemeMenu } from './ThemeMenu'
 let preferences: Record<string, unknown>
 let reducedMotion = false
 let systemLight = false
+let wide = true
 
 beforeEach(() => {
   preferences = {}
   reducedMotion = false
   systemLight = false
+  wide = true
   localStorage.clear()
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('reduced-motion') ? reducedMotion : query.includes('light') ? systemLight : false,
+    matches: query.includes('reduced-motion') ? reducedMotion : query.includes('min-width') ? wide : query.includes('light') ? systemLight : false,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
   }))
@@ -51,11 +53,10 @@ const wrap = (ui: React.ReactNode) => (
 )
 
 it('chooses light, dark or the system’s, and the covers behind the pages', async () => {
-  const chosen: string[] = []
-  render(wrap(<ThemeMenu theme="dark" choice="dark" onChoose={(c) => chosen.push(c)} />))
+  render(wrap(<ThemeMenu />))
   fireEvent.click(screen.getByRole('button', { name: 'Theme and background' }))
   fireEvent.click(screen.getByRole('button', { name: 'System' }))
-  expect(chosen).toEqual(['system'])
+  expect(localStorage.getItem('theme')).toBe('system')
   fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
   await vi.waitFor(() => expect(preferences).toMatchObject({ background: { mode: 'colour', family: 'blue', speed: 'normal' } }))
   fireEvent.click(await screen.findByRole('radio', { name: 'Red' }))
@@ -81,6 +82,19 @@ it('shows covers behind the pages, unless the system asks for less motion', asyn
   render(wrap(<CoverBackground theme="light" settings={settings} />))
   await new Promise((r) => setTimeout(r, 50))
   expect(screen.queryByTestId('cover-background')).not.toBeInTheDocument()
+})
+
+it('has no covers behind the pages on a phone, nor the option', async () => {
+  wide = false
+  const settings = { mode: 'covers' as const, family: 'blue' as const, speed: 'normal' as const }
+  render(wrap(<CoverBackground theme="light" settings={settings} />))
+  render(wrap(<ThemeMenu />))
+  fireEvent.click(screen.getByRole('button', { name: 'Theme and background' }))
+  expect(screen.getByRole('group', { name: 'Theme' })).toBeInTheDocument()
+  expect(screen.queryByRole('group', { name: 'Background' })).not.toBeInTheDocument()
+  await new Promise((r) => setTimeout(r, 50))
+  expect(screen.queryByTestId('cover-background')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'What’s in the background?' })).not.toBeInTheDocument()
 })
 
 it('follows the system’s light or dark mode when chosen', () => {

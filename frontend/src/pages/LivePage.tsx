@@ -333,7 +333,7 @@ function SetupCard({ settings, onDone, onCancel }: { settings: LiveSettings; onD
             <Button
               variant="ghost"
               busy={forget.isPending}
-              onClick={() => window.confirm('Forget your place, the gigs and your starred gigs?') && forget.mutate(undefined, { onSuccess: onDone })}
+              onClick={() => window.confirm('Forget your place, the gigs, and your starred gigs?') && forget.mutate(undefined, { onSuccess: onDone })}
             >
               Forget my place
             </Button>
@@ -530,7 +530,7 @@ function CalendarCard() {
     <Card title="Your calendar">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          Star gigs (☆) to keep them and add them to a calendar you subscribe to once in Apple Calendar, Google Calendar
+          Star gigs (☆) to keep them and add them to a calendar you subscribe to once in Apple Calendar, Google Calendar,
           or Outlook. It stays up to date by itself.
         </p>
         {status.isPending ? (

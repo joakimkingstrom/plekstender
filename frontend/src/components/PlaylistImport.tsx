@@ -21,7 +21,7 @@ export function PlaylistImport({ serverId }: { serverId: number }) {
     <Card title="Import a playlist">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          From a CSV (e.g. Exportify or TuneMyMusic, for Spotify, Apple Music, Tidal and more), an M3U or a JSPF file. Its
+          From a CSV (e.g. Exportify or TuneMyMusic, for Spotify, Apple Music, Tidal, and more), an M3U or a JSPF file. Its
           songs are matched to your library; you choose which go in, and it’s made in Plex under your account. Or paste a
           public Spotify or Tidal playlist’s link.
         </p>
