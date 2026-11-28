@@ -2,6 +2,7 @@ import { useArtistPastGigs } from '../api/gigs'
 import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
+import { SongVersions } from '../components/SongVersions'
 import { VideoCover } from '../components/VideoCover'
 import { AlbumLyricsIcon, SongLyricsIcon } from '../components/LyricsIcon'
 import { useLyricsIcons } from '../api/hooks'
@@ -253,7 +254,12 @@ function TrackList({
   showListens?: boolean
 }) {
   const lyricsIcons = useLyricsIcons()
+  const [versionsOf, setVersionsOf] = useState<Schemas['TrackOut'] | null>(null)
   return (
+    <>
+    {versionsOf && (
+      <SongVersions serverId={serverId} ratingKey={versionsOf.rating_key} title={versionsOf.title} onClose={() => setVersionsOf(null)} />
+    )}
     <ol className="divide-y divide-border">
       {tracks.map((t, i) => (
         <li key={t.rating_key} className="flex items-center gap-3 py-2 text-sm">
@@ -262,7 +268,9 @@ function TrackList({
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
-              <span className="truncate">{t.title}</span>
+              <button type="button" onClick={() => setVersionsOf(t)} className="truncate text-left hover:underline" title="Every version of this song">
+                {t.title}
+              </button>
               {t.seen_live > 0 && <SeenLive times={t.seen_live} />}
               {lyricsIcons && <SongLyricsIcon kind={t.lyrics} />}
             </span>
@@ -286,6 +294,7 @@ function TrackList({
         </li>
       ))}
     </ol>
+    </>
   )
 }
 

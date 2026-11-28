@@ -460,6 +460,26 @@ class TrackOut(BaseModel):
     )
 
 
+class SongVersion(BaseModel):
+    rating_key: int
+    title: str
+    album_rating_key: int | None
+    album_title: str | None
+    album_thumb: str | None
+    year: int | None
+    release_type: str | None = Field(description="Album, Live, Compilation… (its album's).")
+    duration_ms: int | None
+    user_rating: float | None
+    plays: int
+    current: bool = Field(description="The song the dialog was opened from.")
+
+
+class SongVersionsOut(BaseModel):
+    title: str
+    artist: str | None
+    versions: list[SongVersion] = Field(description="Oldest release first.")
+
+
 class SimilarArtistOut(BaseModel):
     name: str
     rating_key: int | None  # set when the artist is in your library
