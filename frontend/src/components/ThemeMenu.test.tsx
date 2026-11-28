@@ -66,13 +66,18 @@ it('chooses light, dark or the system’s, and the covers behind the pages', asy
   await vi.waitFor(() => expect(preferences).toMatchObject({ background: { mode: 'colour', family: 'red' } }))
   fireEvent.click(screen.getByRole('button', { name: 'Slow' }))
   await vi.waitFor(() => expect(preferences).toMatchObject({ background: { speed: 'slow' } }))
+  // The blur behind the page: at once while dragging, saved a moment later.
+  fireEvent.change(screen.getByRole('slider', { name: /Blur behind the page/ }), { target: { value: '12' } })
+  expect(document.documentElement.style.getPropertyValue('--page-blur')).toBe('12px')
+  expect(screen.getByText('12 px')).toBeInTheDocument()
+  await vi.waitFor(() => expect(preferences).toMatchObject({ background: { blur: 12 } }))
   // Escape closes it.
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 
 it('shows covers behind the pages, unless the system asks for less motion', async () => {
-  const settings = { mode: 'covers' as const, family: 'blue' as const, speed: 'normal' as const }
+  const settings = { mode: 'covers' as const, family: 'blue' as const, speed: 'normal' as const, blur: 0 }
   const { unmount } = render(wrap(<CoverBackground theme="light" settings={settings} />))
   const layer = await screen.findByTestId('cover-background')
   const img = layer.querySelector('img')!
@@ -96,7 +101,7 @@ it('shows covers behind the pages, unless the system asks for less motion', asyn
 
 it('has no covers behind the pages on a phone, nor the option', async () => {
   wide = false
-  const settings = { mode: 'covers' as const, family: 'blue' as const, speed: 'normal' as const }
+  const settings = { mode: 'covers' as const, family: 'blue' as const, speed: 'normal' as const, blur: 0 }
   render(wrap(<CoverBackground theme="light" settings={settings} />))
   render(wrap(<ThemeMenu />))
   fireEvent.click(screen.getByRole('button', { name: 'Theme and background' }))

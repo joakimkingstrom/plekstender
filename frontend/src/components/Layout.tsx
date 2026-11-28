@@ -6,6 +6,7 @@ import { InstallPrompt } from './InstallPrompt'
 import { UpdateBanner } from './UpdateBanner'
 import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
+import { useRoomForBackgrounds } from '../motion'
 import { CoverBackground } from './CoverBackground'
 import { ThemeMenu } from './ThemeMenu'
 import { HeaderSearch } from './HeaderSearch'
@@ -59,6 +60,13 @@ export function Layout() {
   const navigate = useNavigate()
   const logout = useLogout()
   const [theme, setTheme] = useTheme()
+  const room = useRoomForBackgrounds()
+  const background = me?.preferences?.background
+  // The blur behind the page's content, when there are covers behind it.
+  const blurred = room && (background?.mode ?? 'off') !== 'off'
+  useEffect(() => {
+    document.documentElement.style.setProperty('--page-blur', `${background?.blur ?? 0}px`)
+  }, [background?.blur])
   const accent = me?.preferences?.accent ?? null
   // The user's accent colour, worked out for the current theme.
   useEffect(() => applyAccent(accent, theme), [accent, theme])
@@ -158,10 +166,15 @@ export function Layout() {
         </div>
       )}
       <main
-        className={`mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:pb-6 ${
+        className={`relative mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:pb-6 ${
           focus ? 'max-md:pb-[calc(env(safe-area-inset-bottom)+1rem)] max-md:pt-[calc(env(safe-area-inset-top)+0.5rem)]' : 'pb-24'
         }`}
       >
+        {blurred && (
+          // Behind the content, over the covers: past the content's sides on wide windows (the
+          // fade happens outside the cards), within them on narrower ones (nothing to scroll).
+          <div aria-hidden className="page-blur pointer-events-none absolute inset-x-0 -inset-y-2 -z-[5] xl:-inset-x-16" />
+        )}
         <Outlet />
       </main>
       <AchievementCelebration enabled={me.preferences?.achievements !== false} />

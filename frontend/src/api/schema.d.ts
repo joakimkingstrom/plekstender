@@ -5901,6 +5901,12 @@ export interface components {
              * @enum {string}
              */
             speed: "slow" | "normal" | "fast";
+            /**
+             * Blur
+             * @description How much the covers are blurred behind the page's content (px; 0: not at all), fading out towards its edges.
+             * @default 0
+             */
+            blur: number;
         };
         /** BestCoversJobIn */
         BestCoversJobIn: {

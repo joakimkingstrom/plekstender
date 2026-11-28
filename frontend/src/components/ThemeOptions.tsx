@@ -1,4 +1,5 @@
 import { useMe, useSetPreferences } from '../api/hooks'
+import { useEffect, useRef, useState } from 'react'
 import { useReducedMotion, useRoomForBackgrounds } from '../motion'
 import { useTheme, type ThemeChoice } from '../theme'
 import type { BackgroundSettings } from './CoverBackground'
@@ -18,7 +19,7 @@ const FAMILIES: [Family, string, string][] = [
   ['grey', 'Grey', '#8b8a85'],
   ['black', 'Black', '#1c1d21'],
 ]
-const DEFAULT: Required<BackgroundSettings> = { mode: 'off', family: 'blue', speed: 'normal' }
+const DEFAULT: Required<BackgroundSettings> = { mode: 'off', family: 'blue', speed: 'normal', blur: 0 }
 
 /** Light, dark or the system's theme, and album covers behind the pages (off, covers, or one
  * colour's) with their speed: in the header's menu and on the profile. A theme chosen here is
@@ -101,11 +102,45 @@ export function ThemeOptions() {
               className="w-full"
             />
           )}
+          {background.mode !== 'off' && <BlurSlider value={background.blur} onChange={(blur) => set({ blur })} />}
           {background.mode !== 'off' && reduced && (
             <p className="text-xs text-muted">Your system asks for less motion, so no covers are shown.</p>
           )}
         </div>
       )}
     </div>
+  )
+}
+
+const MAX_BLUR = 24 // px
+
+/** How much the covers are blurred behind the page's content: shown straight away while
+ * dragging, and saved a moment after. */
+function BlurSlider({ value, onChange }: { value: number; onChange: (blur: number) => void }) {
+  const [blur, setBlur] = useState(value)
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  return (
+    <label className="block space-y-1">
+      <span className="flex justify-between text-xs text-muted">
+        <span>Blur behind the page</span>
+        <span className="tabular-nums">{blur === 0 ? 'Off' : `${blur} px`}</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={MAX_BLUR}
+        step={1}
+        value={blur}
+        onChange={(e) => {
+          const next = Number(e.target.value)
+          setBlur(next)
+          document.documentElement.style.setProperty('--page-blur', `${next}px`)
+          window.clearTimeout(timer.current)
+          timer.current = window.setTimeout(() => onChange(next), 400)
+        }}
+        className="w-full accent-[var(--color-accent)]"
+      />
+    </label>
   )
 }
