@@ -51,11 +51,10 @@ const wrap = (ui: React.ReactNode) => (
 )
 
 it('chooses light, dark or the system’s, and the covers behind the pages', async () => {
-  const chosen: string[] = []
-  render(wrap(<ThemeMenu theme="dark" choice="dark" onChoose={(c) => chosen.push(c)} />))
+  render(wrap(<ThemeMenu />))
   fireEvent.click(screen.getByRole('button', { name: 'Theme and background' }))
   fireEvent.click(screen.getByRole('button', { name: 'System' }))
-  expect(chosen).toEqual(['system'])
+  expect(localStorage.getItem('theme')).toBe('system')
   fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
   await vi.waitFor(() => expect(preferences).toMatchObject({ background: { mode: 'colour', family: 'blue', speed: 'normal' } }))
   fireEvent.click(await screen.findByRole('radio', { name: 'Red' }))
