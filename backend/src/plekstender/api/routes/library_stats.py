@@ -8,6 +8,7 @@ see in the libraries they picked.
 from __future__ import annotations
 
 import datetime as dt
+import random
 from collections import Counter
 from typing import Literal
 
@@ -21,9 +22,11 @@ from plekstender.api.schemas import (
     AlbumColourOut,
     ArtistCountriesOut,
     ArtistSummary,
+    BackgroundCover,
     ColourFamily,
     ColoursOut,
     CountryArtists,
+    CoverFamily,
     DecadeCount,
     FileTypeCount,
     GrowthPoint,
@@ -267,9 +270,7 @@ async def country_artists(
     return [_artist_summary(r) for r in rows.all()]
 
 
-ColourName = Literal[
-    "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "white", "grey", "black"
-]
+ColourName = CoverFamily
 Coloured = tuple[str, float, float, str, int, str, str | None, str | None]
 
 
@@ -358,6 +359,50 @@ async def colour_family(
         for fam, _hue, _light, hex_, key, title, thumb, artist in coloured
         if fam == name
     ][:400]
+
+
+BACKGROUNDS = 40  # covers a batch (the page asks again when it has shown them)
+LIGHT_COVER = 0.55  # how light the whole cover is (0-1), at least, for light mode
+DARK_COVER = 0.3  # at most, for dark mode
+
+
+@router.get("/backgrounds", response_model=list[BackgroundCover])
+async def backgrounds(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    mode: Literal["covers", "colour"] = "covers",
+    theme: Literal["dark", "light"] = "dark",
+    family: CoverFamily = "blue",
+) -> list[BackgroundCover]:
+    """Covers to show behind the pages, in random order: light ones in light mode and dark
+    ones in dark mode, or (colour) those of one colour family."""
+    us = await get_user_server(db, user, server_id)
+    if mode == "colour":
+        coloured, _waiting = await _coloured(db, user.id, us)
+        found = [(key, thumb) for fam, *_rest, key, _t, thumb, _a in coloured if fam == family]
+        picked = random.sample(found, min(BACKGROUNDS, len(found)))
+        return [BackgroundCover(rating_key=k, thumb=t) for k, t in picked if t]
+    state, cond, where = visible(Album, user.id, us)
+    light = (
+        AlbumColour.brightness >= LIGHT_COVER
+        if theme == "light"
+        else AlbumColour.brightness <= DARK_COVER
+    )
+    rows = await db.execute(
+        select(Album.rating_key, Album.thumb)
+        .join(state, cond)
+        .join(
+            AlbumColour,
+            (AlbumColour.server_id == Album.server_id)
+            & (AlbumColour.rating_key == Album.rating_key)
+            & (AlbumColour.thumb == Album.thumb),
+        )
+        .where(*where, Album.thumb.is_not(None), light)
+        .order_by(func.random())
+        .limit(BACKGROUNDS)
+    )
+    return [BackgroundCover(rating_key=k, thumb=t) for k, t in rows.all() if t]
 
 
 SEEN_LIVE_MIN_TRACKS = 5  # fewer, and one song seen live is already a big share

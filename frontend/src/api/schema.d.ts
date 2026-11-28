@@ -388,6 +388,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/stats/backgrounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Backgrounds
+         * @description Covers to show behind the pages, in random order: light ones in light mode and dark
+         *     ones in dark mode, or (colour) those of one colour family.
+         */
+        get: operations["backgrounds_api_servers__server_id__library_stats_backgrounds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/stats/file-types": {
         parameters: {
             query?: never;
@@ -564,6 +585,27 @@ export interface paths {
          *     most often found with it.
          */
         get: operations["get_tag_api_servers__server_id__library_tags__tag_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Library
+         * @description Artists, albums and songs whose names contain the text (names starting with it first,
+         *     then the most popular), for the header's search.
+         */
+        get: operations["search_library_api_servers__server_id__library_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3412,6 +3454,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/jobs/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Text Job
+         * @description Give the given artists (or those listed) a text logo of their name, in one font and
+         *     colour or a random pick per artist from several.
+         */
+        post: operations["start_text_job_api_servers__server_id__artwork_jobs_text_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/folder": {
         parameters: {
             query?: never;
@@ -5200,6 +5263,17 @@ export interface components {
             /** Tracks */
             tracks: components["schemas"]["TrackOut"][];
             your_listens: components["schemas"]["ItemListensOut"];
+            /**
+             * Live Sources
+             * @description Live albums: the studio releases their songs first came out on, oldest first; None for other albums.
+             */
+            live_sources?: components["schemas"]["LiveSource"][] | null;
+            /**
+             * Live Unmatched
+             * @description Live albums: songs not found on any of the artist's releases.
+             * @default 0
+             */
+            live_unmatched: number;
         };
         /** AlbumFilesOut */
         AlbumFilesOut: {
@@ -5559,7 +5633,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "fanart" | "export" | "import" | "covers";
+            kind: "fanart" | "text" | "export" | "import" | "covers";
             /**
              * Status
              * @enum {string}
@@ -5637,6 +5711,40 @@ export interface components {
             connected: boolean;
             /** Allowed */
             allowed: boolean;
+        };
+        /** BackgroundCover */
+        BackgroundCover: {
+            /** Rating Key */
+            rating_key: number;
+            /** Thumb */
+            thumb: string;
+        };
+        /**
+         * BackgroundSettings
+         * @description Album covers slowly panning behind the pages.
+         */
+        BackgroundSettings: {
+            /**
+             * Mode
+             * @description covers: light covers in light mode, dark ones in dark mode; colour: only covers of one colour family.
+             * @default off
+             * @enum {string}
+             */
+            mode: "off" | "covers" | "colour";
+            /**
+             * Family
+             * @description The colour, in colour mode.
+             * @default blue
+             * @enum {string}
+             */
+            family: "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink" | "white" | "grey" | "black";
+            /**
+             * Speed
+             * @description How long each cover stays (about 30, 22 or 14 s).
+             * @default normal
+             * @enum {string}
+             */
+            speed: "slow" | "normal" | "fast";
         };
         /** BestCoversJobIn */
         BestCoversJobIn: {
@@ -6107,6 +6215,11 @@ export interface components {
             forgotten: boolean;
             /** @description Also the best songs of albums added lately (picked again at each refresh; the rules still apply). */
             new_albums?: components["schemas"]["NewAlbums"] | null;
+            /**
+             * Title Words
+             * @description Also every song with one of these words in its title (whole words, any case, bracketed parts left out, as the word cloud counts them; found again at each refresh, and the rules still apply).
+             */
+            title_words?: string[];
             rules?: components["schemas"]["Rules"];
             /**
              * Limit
@@ -6258,7 +6371,12 @@ export interface components {
              * @default none
              * @enum {string}
              */
-            status: "none" | "custom" | "done";
+            status: "none" | "custom" | "done" | "all";
+            /**
+             * Q
+             * @description Without rating_keys: names containing this.
+             */
+            q?: string | null;
         };
         /** FanartKeyIn */
         FanartKeyIn: {
@@ -7456,6 +7574,15 @@ export interface components {
             /** Plays */
             plays: number;
         };
+        /** LibrarySearchOut */
+        LibrarySearchOut: {
+            /** Artists */
+            artists: components["schemas"]["SearchHit"][];
+            /** Albums */
+            albums: components["schemas"]["SearchHit"][];
+            /** Songs */
+            songs: components["schemas"]["SearchHit"][];
+        };
         /**
          * LibrarySettings
          * @description Instance-wide library tuning, editable by admins on the Settings page.
@@ -8108,6 +8235,32 @@ export interface components {
              * @description Venues with shows, for the filter.
              */
             venues: components["schemas"]["LiveVenueCount"][];
+        };
+        /**
+         * LiveSource
+         * @description A studio release a live album's songs first came out on.
+         */
+        LiveSource: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Release Type */
+            release_type: string;
+            /**
+             * Colour
+             * @description Its cover's main colour (#rrggbb), when known.
+             */
+            colour: string | null;
+            /**
+             * Songs
+             * @description Songs on the live album first released on it.
+             */
+            songs: number;
         };
         /** LiveStarIn */
         LiveStarIn: {
@@ -9247,6 +9400,7 @@ export interface components {
              * @default true
              */
             achievements: boolean;
+            background?: components["schemas"]["BackgroundSettings"];
             /**
              * Lyrics Icons
              * @description Small icons on song and album rows: what lyrics their files have.
@@ -10030,6 +10184,25 @@ export interface components {
             /** Error */
             error: string | null;
         };
+        /** SearchHit */
+        SearchHit: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+            /**
+             * Subtitle
+             * @description Albums and songs: the artist (songs: · album).
+             */
+            subtitle: string | null;
+            /**
+             * Album Rating Key
+             * @description Songs: their album.
+             */
+            album_rating_key?: number | null;
+        };
         /** SectionOut */
         SectionOut: {
             /** Key */
@@ -10804,6 +10977,37 @@ export interface components {
              * @description Median release year per year.
              */
             median_release: (number | null)[];
+        };
+        /**
+         * TextJobIn
+         * @description Text logos for many artists: each artist's name, in one font and colour, or in one
+         *     picked at random (per artist) from several.
+         */
+        TextJobIn: {
+            /** Rating Keys */
+            rating_keys?: number[] | null;
+            /**
+             * Status
+             * @description Without rating_keys: every artist with this status.
+             * @default none
+             * @enum {string}
+             */
+            status: "none" | "custom" | "done" | "all";
+            /**
+             * Q
+             * @description Without rating_keys: names containing this.
+             */
+            q?: string | null;
+            /** Fonts */
+            fonts: string[];
+            /** Colours */
+            colours: string[];
+            /**
+             * Case
+             * @default none
+             * @enum {string}
+             */
+            case: "none" | "upper" | "lower";
         };
         /** TextLogo */
         TextLogo: {
@@ -11777,6 +11981,41 @@ export interface operations {
             };
         };
     };
+    backgrounds_api_servers__server_id__library_stats_backgrounds_get: {
+        parameters: {
+            query?: {
+                mode?: "covers" | "colour";
+                theme?: "dark" | "light";
+                family?: "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink" | "white" | "grey" | "black";
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackgroundCover"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     file_types_api_servers__server_id__library_stats_file_types_get: {
         parameters: {
             query?: never;
@@ -12063,6 +12302,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_library_api_servers__server_id__library_search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibrarySearchOut"];
                 };
             };
             /** @description Validation Error */
@@ -17041,6 +17313,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["FanartJobIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_text_job_api_servers__server_id__artwork_jobs_text_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TextJobIn"];
             };
         };
         responses: {

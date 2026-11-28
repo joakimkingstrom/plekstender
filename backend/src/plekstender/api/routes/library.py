@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import ColumnElement, and_, func, literal, select, tuple_
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import aliased
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
@@ -28,7 +29,10 @@ from plekstender.api.schemas import (
     ArtistSummary,
     CoverOf,
     ItemListensOut,
+    LibrarySearchOut,
+    LiveSource,
     RecentItem,
+    SearchHit,
     SimilarArtistOut,
     SongListens,
     SongVersion,
@@ -42,6 +46,7 @@ from plekstender.api.schemas import (
 from plekstender.artist_countries import ArtistKey, artist_country
 from plekstender.db.models import (
     Album,
+    AlbumColour,
     Artist,
     ItemTag,
     MediaFile,
@@ -687,6 +692,119 @@ async def _title_norms(db: DbDep, server_id: int, keys: list[int]) -> dict[int, 
     return {k: t for k, t in rows.all()}
 
 
+SEARCH_EACH = 6  # results of each kind
+
+
+@router.get("/library/search", response_model=LibrarySearchOut)
+async def search_library(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    q: Annotated[str, Query(min_length=1, max_length=200)],
+) -> LibrarySearchOut:
+    """Artists, albums and songs whose names contain the text (names starting with it first,
+    then the most popular), for the header's search."""
+    us = await get_user_server(db, user, server_id)
+    like = _like(q.strip())
+    starts = f"{like[1:]}"  # the text, then anything
+
+    def ranked(column: Any, popularity: Any) -> tuple[Any, ...]:
+        return (
+            (func.lower(column) == q.strip().lower()).desc(),
+            column.ilike(starts, escape="\\").desc(),
+            popularity.desc().nulls_last(),
+            column,
+        )
+
+    a_state, a_cond, a_where = visible(Artist, user.id, us)
+    artists = (
+        await db.scalars(
+            select(Artist)
+            .join(a_state, a_cond)
+            .where(*a_where, Artist.title.ilike(like, escape="\\"))
+            .order_by(*ranked(Artist.title, Artist.popularity))
+            .limit(SEARCH_EACH)
+        )
+    ).all()
+    owner = aliased(Artist)
+    al_state, al_cond, al_where = visible(Album, user.id, us)
+    albums = (
+        await db.execute(
+            select(Album, owner.title)
+            .join(al_state, al_cond)
+            .outerjoin(
+                owner,
+                and_(
+                    owner.server_id == Album.server_id, owner.rating_key == Album.artist_rating_key
+                ),
+            )
+            .where(*al_where, Album.title.ilike(like, escape="\\"))
+            .order_by(*ranked(Album.title, Album.popularity))
+            .limit(SEARCH_EACH)
+        )
+    ).all()
+    t_state, t_cond, t_where = visible(Track, user.id, us)
+    song_artist = aliased(Artist)
+    song_album = aliased(Album)
+    # One release a song (the most popular).
+    songs = (
+        await db.execute(
+            select(Track, song_artist.title, song_album)
+            .ext(distinct_on(Track.artist_key, Track.title_norm))
+            .join(t_state, t_cond)
+            .outerjoin(
+                song_artist,
+                and_(
+                    song_artist.server_id == Track.server_id,
+                    song_artist.rating_key == Track.artist_rating_key,
+                ),
+            )
+            .outerjoin(
+                song_album,
+                and_(
+                    song_album.server_id == Track.server_id,
+                    song_album.rating_key == Track.album_rating_key,
+                ),
+            )
+            .where(*t_where, Track.title.ilike(like, escape="\\"))
+            .order_by(Track.artist_key, Track.title_norm, Track.popularity.desc().nulls_last())
+            .limit(200)
+        )
+    ).all()
+    songs = sorted(
+        songs,
+        key=lambda r: (
+            r[0].title.lower() != q.strip().lower(),
+            not r[0].title.lower().startswith(q.strip().lower()),
+            -(r[0].popularity or 0),
+            r[0].title,
+        ),
+    )[:SEARCH_EACH]
+    return LibrarySearchOut(
+        artists=[
+            SearchHit(rating_key=a.rating_key, title=a.title, thumb=a.thumb, subtitle=None)
+            for a in artists
+        ],
+        albums=[
+            SearchHit(rating_key=a.rating_key, title=a.title, thumb=a.thumb, subtitle=artist)
+            for a, artist in albums
+        ],
+        songs=[
+            SearchHit(
+                rating_key=t.rating_key,
+                title=t.title,
+                thumb=album.thumb if album else None,
+                subtitle=" · ".join(
+                    x for x in (t.original_title or artist, album.title if album else None) if x
+                )
+                or None,
+                album_rating_key=t.album_rating_key,
+            )
+            for t, artist, album in songs
+        ],
+    )
+
+
 @router.get("/library/artists/{rating_key}/neighbours", response_model=ArtistNeighboursOut)
 async def artist_neighbours(
     server_id: int, rating_key: int, db: DbDep, user: UserDep
@@ -796,6 +914,91 @@ async def get_artist(
     )
 
 
+# Where a live album's songs first came out: albums and EPs before singles, then the oldest.
+_SOURCE_TYPES = {"Album": 0, "EP": 0, "Single": 1}
+
+
+async def _live_sources(
+    db: DbDep, user_id: int, us: UserServer, album: Album, tracks: list[Track]
+) -> tuple[list[LiveSource], int]:
+    """The artist's studio releases (albums, EPs, singles) each of the live album's songs
+    first came out on (by the title without "(Live)"-style suffixes), with how many songs
+    each, oldest first; and how many songs weren't found on any."""
+    if album.artist_rating_key is None:
+        return [], len(tracks)
+    state, cond, where = visible(Album, user_id, us)
+    albums = {
+        a.rating_key: a
+        for a in await db.scalars(
+            select(Album)
+            .join(state, cond)
+            .where(
+                *where,
+                Album.artist_rating_key == album.artist_rating_key,
+                Album.rating_key != album.rating_key,
+            )
+        )
+    }
+    types = await _release_types(db, us.server_id, list(albums))
+    studio = {k: a for k, a in albums.items() if types.get(k, "Album") in _SOURCE_TYPES}
+    first: dict[str, Album] = {}
+    if studio:
+        rows = await db.execute(
+            select(Track.title, Track.album_rating_key).where(
+                Track.server_id == us.server_id, Track.album_rating_key.in_(list(studio))
+            )
+        )
+
+        def rank(a: Album) -> tuple[int, int, int]:
+            return (
+                _SOURCE_TYPES[types.get(a.rating_key, "Album")],
+                a.year if a.year is not None else 9999,
+                a.rating_key,
+            )
+
+        for title, album_key in rows.all():
+            if album_key not in studio:
+                continue
+            core, candidate = core_title(title), studio[album_key]
+            if core not in first or rank(candidate) < rank(first[core]):
+                first[core] = candidate
+    counts: dict[int, int] = {}
+    unmatched = 0
+    for track in tracks:
+        source = first.get(core_title(track.title))
+        if source is None:
+            unmatched += 1
+        else:
+            counts[source.rating_key] = counts.get(source.rating_key, 0) + 1
+    colours = {
+        key: hex_
+        for key, hex_ in (
+            await db.execute(
+                select(AlbumColour.rating_key, AlbumColour.hex).where(
+                    AlbumColour.server_id == us.server_id,
+                    AlbumColour.rating_key.in_(list(counts)),
+                )
+            )
+        ).all()
+    }
+    sources = sorted(
+        (studio[key] for key in counts),
+        key=lambda a: (a.year if a.year is not None else 9999, a.title),
+    )
+    return [
+        LiveSource(
+            rating_key=a.rating_key,
+            title=a.title,
+            year=a.year,
+            thumb=a.thumb,
+            release_type=types.get(a.rating_key, "Album"),
+            colour=colours.get(a.rating_key),
+            songs=counts[a.rating_key],
+        )
+        for a in sources
+    ], unmatched
+
+
 @router.get("/library/albums/{rating_key}", response_model=AlbumDetail)
 async def get_album(
     server_id: int, rating_key: int, db: DbDep, user: UserDep, tz: TzQuery = "UTC"
@@ -831,6 +1034,12 @@ async def get_album(
     )
     tracks = [_track_out(t, r, p, album) for t, r, p in track_rows]
     await _with_covers(db, us.server_id, tracks)
+    live = found[0].release_type == "Live"
+    sources, unmatched = (
+        await _live_sources(db, user.id, us, album, [t for t, _, _ in track_rows])
+        if live
+        else ([], 0)
+    )
     found[0].plays = max(found[0].plays, listens.listens)
     return AlbumDetail(
         **found[0].model_dump(),
@@ -854,6 +1063,8 @@ async def get_album(
             ),
         ),
         your_listens=_listens_out(listens),
+        live_sources=sources if live else None,
+        live_unmatched=unmatched,
     )
 
 

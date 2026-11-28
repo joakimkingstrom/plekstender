@@ -7,6 +7,8 @@ import { ArtworkPage } from './ArtworkPage'
 import { ExportPage } from './ExportPage'
 
 const radiohead = { rating_key: 100, title: 'Radiohead', thumb: null, status: 'none', source: null, applied_at: null, has_mbid: true }
+const portishead = { ...radiohead, rating_key: 101, title: 'Portishead' }
+const sigur = { ...radiohead, rating_key: 102, title: 'Sigur Rós' }
 let owner = true
 let fetchMock: ReturnType<typeof vi.fn<(input: Request | string, init?: RequestInit) => Promise<Response>>>
 
@@ -25,7 +27,12 @@ beforeEach(() => {
       case '/api/servers/1/sync':
         return json({ active: null, last: null, last_sync_at: null, counts: { artists: 1, albums: 1, tracks: 2, rated_tracks: 0, plays: 0 }, incremental_minutes: 30, full_days: 7 })
       case '/api/servers/1/artwork/artists':
-        return json({ items: [radiohead], total: 1, counts: { none: 1 } })
+        return json({ items: [radiohead, portishead, sigur], total: 3, counts: { none: 3 } })
+      case '/api/artwork/fonts':
+        return json([{ name: 'Sans serif', fonts: ['Anton', 'Oswald'] }])
+      case '/api/servers/1/artwork/jobs/text':
+      case '/api/servers/1/artwork/jobs/fanart':
+        return json({ id: 6, kind: url.pathname.endsWith('text') ? 'text' : 'fanart', status: 'queued', progress: {}, stats: {}, error: null, created_at: '2026-11-28T00:00:00Z', finished_at: null, download: null }, 201)
       case '/api/servers/1/artwork/artists/100/candidates':
         return json({
           candidates: [{ token: 'tok-1', thumb: '/api/servers/1/artwork/image?t=tok-1', label: 'HD logo · 30 likes', likes: 30, width: null, height: null }],
@@ -124,6 +131,33 @@ describe('ArtworkPage', () => {
     })
   })
 
+  it('gives the ticked (or listed) artists text logos, a random pick of fonts and colours', async () => {
+    renderPage()
+    // Shift-click: a range.
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Radiohead' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Portishead' }), { shiftKey: true })
+    fireEvent.click(screen.getByRole('button', { name: /Logos for the 2 ticked artists/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Text logos' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Anton' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Oswald' }))
+    expect(screen.getByText(/Each artist gets a random pick/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to 2' }))
+    const sent = async () =>
+      Promise.all(
+        fetchMock.mock.calls
+          .map(([input]) => input)
+          .filter((input): input is Request => typeof input !== 'string' && new URL(input.url).pathname === '/api/servers/1/artwork/jobs/text')
+          .map((r) => r.clone().json()),
+      )
+    await vi.waitFor(async () =>
+      expect(await sent()).toEqual([
+        { rating_keys: [100, 101], status: 'all', q: null, fonts: ['Anton', 'Oswald'], colours: ['#ffffff'], case: 'none' },
+      ]),
+    )
+    // Started: the ticks are cleared, so the button is for every artist listed again.
+    expect(await screen.findByRole('button', { name: /Logos for the 3 listed artists/ })).toBeInTheDocument()
+  })
+
   it('cycles an artist’s status from its dot', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Radiohead: To do. Change to Done' }))
@@ -136,8 +170,8 @@ describe('ArtworkPage', () => {
   it('marks every “To do” artist as Custom after asking', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Custom' }))
-    expect(screen.getByText(/Mark all 1 "To do" artists as Custom\?/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Mark 1 as Custom' }))
+    expect(screen.getByText(/Mark all 3 "To do" artists as Custom\?/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Mark 3 as Custom' }))
     expect(await screen.findByText('Marked 1 artist as Custom.')).toBeInTheDocument()
     const call = fetchMock.mock.calls.find(([input]) => typeof input !== 'string' && input.url.endsWith('/artists/bulk-status'))
     expect(await (call![0] as Request).clone().json()).toEqual({ status: 'custom' })
