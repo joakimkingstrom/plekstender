@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { api, errorMessage, unwrap } from '../api/client'
 import { useMe, useSetPreferences } from '../api/hooks'
@@ -30,6 +30,7 @@ export function ProfilePage() {
   const me = useMe()
   const profile = useProfile()
   const save = useSetPreferences()
+  const qc = useQueryClient()
   if (profile.isPending || me.isPending) return <Spinner />
   if (profile.isError) return <Notice tone="error">{errorMessage(profile.error)}</Notice>
   const p = profile.data
@@ -119,6 +120,22 @@ export function ProfilePage() {
               </Toggle>
             )}
           </div>
+        </Card>
+        <Card title="Lyrics icons">
+          <Toggle
+            label="Show which songs have lyrics"
+            checked={prefs?.lyrics_icons ?? false}
+            onChange={(lyrics_icons) =>
+              save.mutate(
+                { lyrics_icons },
+                // Artist and album pages already open fetch them again, with the lyrics.
+                { onSuccess: () => void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'servers' && q.queryKey[2] === 'library' }) },
+              )
+            }
+          >
+            A small icon on songs (plain, synced or word-synced lyrics, or none) and on albums (all, some or none of
+            their songs), from what the music files have. Needs the music folder read on Settings → Music files.
+          </Toggle>
         </Card>
         <Card title="Achievements">
           <Toggle label="Achievements" checked={prefs?.achievements ?? true} onChange={(achievements) => save.mutate({ achievements })}>

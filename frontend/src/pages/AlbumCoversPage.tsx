@@ -13,7 +13,9 @@ import {
   type BestOutcome,
   type BestSource,
   type CoverFilter,
+  type CoverSort,
   type CoverSource,
+  type LowPx,
 } from '../api/albumCovers'
 import { useArtworkJobs, useUploadImage, type SourceSpec } from '../api/artwork'
 import { useMe, useSetPreferences } from '../api/hooks'
@@ -23,8 +25,11 @@ import { FilePicker } from '../components/controls'
 import { Artwork } from '../components/library'
 import { Zoomable } from '../components/Lightbox'
 import { ArtworkJobStop } from '../components/ArtworkJobStatus'
+import { ResultStrip } from '../components/ResultStrip'
 import { ScrollTabs } from '../components/ScrollTabs'
+import { Segmented } from '../components/Segmented'
 import { Button, Card, Notice, Spinner } from '../components/ui'
+import { useFillHeight } from '../fillHeight'
 import { formatCount, formatRelative } from '../format'
 
 type Tab = CoverSource | 'upload'
@@ -76,13 +81,42 @@ function CoverBadge({ cover }: { cover: AlbumCover }) {
   return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums ${tone}`}>{cover.kept ? `Kept · ${text}` : text}</span>
 }
 
-/** Library → Artwork → Album covers (server owners). */
+const LOW_LIMITS: LowPx[] = [600, 1000, 1500]
+const SORTS: [CoverSort, string][] = [
+  ['smallest', 'Smallest cover first'],
+  ['added', 'Recently added'],
+  ['changed', 'Recently changed'],
+  ['name', 'Artist'],
+]
+
+/** A choice kept in this browser between visits. */
+function useKept<T extends string | number>(key: string, initial: T, allowed: readonly T[]): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    const stored = localStorage.getItem(key)
+    const found = allowed.find((a) => String(a) === stored)
+    return found ?? initial
+  })
+  return [
+    value,
+    (v: T) => {
+      localStorage.setItem(key, String(v))
+      setValue(v)
+    },
+  ]
+}
+
+/** Library → Artwork → Album covers (server owners): the albums down the left third, the
+ * preview and (glued to the bottom of the window) the covers found on the rest. */
 export function AlbumCovers({ serverId }: { serverId: number }) {
   const [show, setShow] = useState<CoverFilter>('needs')
   const [query, setQuery] = useState('')
+  const [lowPx, setLowPx] = useKept<LowPx>('cover-low-px', 600, LOW_LIMITS)
+  const [chosenSort, setSort] = useKept<CoverSort | 'auto'>('cover-sort', 'auto', ['auto', 'smallest', 'added', 'changed', 'name'])
+  const sort: CoverSort = chosenSort === 'auto' ? (show === 'all' ? 'name' : 'smallest') : chosenSort
   const [selected, setSelected] = useState<AlbumCover | null>(null)
   const q = useDeferredValue(query.trim())
-  const albums = useAlbumCovers(serverId, show, q)
+  const albums = useAlbumCovers(serverId, show, q, lowPx, sort)
+  const { ref: fillRef, style: fillStyle } = useFillHeight<HTMLDivElement>()
   const items = albums.data?.pages.flatMap((p) => p.items) ?? []
   const counts = albums.data?.pages[0]?.counts ?? {}
   const n = (k: string) => counts[k] ?? 0
@@ -95,8 +129,11 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
   const current = selected ? (items.find((a) => a.rating_key === selected.rating_key) ?? selected) : null
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
-      <div className={`space-y-3 ${current ? 'hidden lg:block' : ''}`}>
+    <div ref={fillRef} style={fillStyle} className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:grid-rows-[minmax(0,1fr)]">
+      <section
+        aria-label="Albums"
+        className={`min-h-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-3 ${current ? 'hidden lg:flex' : 'flex'}`}
+      >
         <input
           type="search"
           value={query}
@@ -120,7 +157,37 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
             </button>
           ))}
         </div>
-        {show !== 'all' && (albums.data?.pages[0]?.total ?? 0) > 0 && <BestMatches serverId={serverId} show={show} q={q} count={albums.data?.pages[0]?.total ?? 0} />}
+        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 text-xs text-muted">
+          <div className="space-y-1">
+            <span className="block" aria-hidden>
+              Low resolution: under
+            </span>
+            <Segmented<string>
+              label="Low resolution: under"
+              value={String(lowPx)}
+              onChange={(v) => setLowPx(Number(v) as LowPx)}
+              options={LOW_LIMITS.map((px) => [String(px), `${px} px`])}
+              size="sm"
+            />
+          </div>
+          <label className="space-y-1">
+            <span className="block">Sort</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as CoverSort)}
+              className="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs text-text"
+            >
+              {SORTS.map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {show !== 'all' && (albums.data?.pages[0]?.total ?? 0) > 0 && (
+          <BestMatches serverId={serverId} show={show} q={q} lowPx={lowPx} count={albums.data?.pages[0]?.total ?? 0} />
+        )}
         {n('unchecked') > 0 && (
           <p className="flex items-center gap-2 text-xs text-muted">
             <Spinner small /> Measuring {formatCount(n('unchecked'))} covers…
@@ -133,14 +200,20 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
         ) : albums.isError ? (
           <Notice tone="error">{errorMessage(albums.error)}</Notice>
         ) : (
-          <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto rounded-2xl border border-border bg-surface" aria-label="Albums">
+          <ul className="max-h-[70vh] min-h-0 flex-1 divide-y divide-border overflow-y-auto border-t border-border lg:max-h-none" aria-label="Albums">
             {items.map((a) => (
-              <li key={a.rating_key} className={current?.rating_key === a.rating_key ? 'bg-surface-2' : 'hover:bg-surface-2'}>
-                <button type="button" onClick={() => setSelected(a)} className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm">
+              <li key={a.rating_key} className={`rounded-lg ${current?.rating_key === a.rating_key ? 'bg-surface-2' : 'hover:bg-surface-2'}`}>
+                <button type="button" onClick={() => setSelected(a)} className="flex w-full items-center gap-3 px-2 py-2 text-left text-sm">
                   <Artwork serverId={serverId} path={a.thumb} title={a.title} size={96} className="size-10 shrink-0" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{a.title}</span>
-                    <span className="block truncate text-xs text-muted">{[a.artist, a.year].filter(Boolean).join(' · ')}</span>
+                    <span className="block truncate text-xs text-muted">
+                      {sort === 'added' && a.added_at
+                        ? [a.artist, `added ${formatRelative(a.added_at)}`].filter(Boolean).join(' · ')
+                        : sort === 'changed' && a.applied_at
+                          ? [a.artist, `changed ${formatRelative(a.applied_at)}`].filter(Boolean).join(' · ')
+                          : [a.artist, a.year].filter(Boolean).join(' · ')}
+                    </span>
                   </span>
                   <CoverBadge cover={a} />
                 </button>
@@ -160,8 +233,8 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
             )}
           </ul>
         )}
-        <p className="px-1 text-xs text-muted">Low resolution: under 600 pixels on the shorter side.</p>
-      </div>
+        <p className="px-1 text-xs text-muted">Low resolution: under {lowPx} pixels on the shorter side.</p>
+      </section>
       {current ? (
         <CoverEditor key={current.rating_key} serverId={serverId} album={current} onBack={() => setSelected(null)} onSaved={setSelected} />
       ) : (
@@ -216,152 +289,150 @@ function CoverEditor({
   const now = size(album.width, album.height)
   const wide = preview.width && preview.height && preview.width !== preview.height
 
+  const results =
+    tab === 'upload' ? (
+      <CoverUpload serverId={serverId} onUploaded={(id) => choose({ kind: 'upload', upload_id: id })} />
+    ) : tab === 'search' ? (
+      <WebSearch
+        serverId={serverId}
+        album={album}
+        selected={source?.kind === 'candidate' ? (source.token ?? null) : null}
+        onChoose={(token) => choose({ kind: 'candidate', token })}
+      />
+    ) : (
+      <CoverGrid
+        serverId={serverId}
+        album={album}
+        source={tab}
+        selected={source?.kind === 'candidate' ? (source.token ?? null) : null}
+        onChoose={(token) => choose({ kind: 'candidate', token })}
+      />
+    )
+
   return (
-    <div className="min-w-0 space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={onBack} className="text-sm text-muted hover:text-text lg:hidden">
-          ← Albums
-        </button>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-2xl font-bold">
-            <Link to={`/library/albums/${album.rating_key}`} className="hover:underline">
-              {album.title}
-            </Link>
-          </h2>
-          <p className="truncate text-sm text-muted">{[album.artist, album.year].filter(Boolean).join(' · ')}</p>
-        </div>
-        <Button
-          variant="secondary"
-          busy={best.isPending}
-          title="The biggest cover of this very album on Deezer, iTunes, Tidal or the Cover Art Archive, if it’s at least 1000 × 1000"
-          onClick={() =>
-            best.mutate(album.rating_key, {
-              onSuccess: (out) => {
-                setFound(out)
-                if (out.outcome === 'applied' && out.cover) {
-                  setSource(null)
-                  onSaved(out.cover)
-                }
-              },
-            })
-          }
-        >
-          Apply best match
-        </Button>
-        {album.state !== 'ok' && album.state !== 'unchecked' && (
-          <Button
-            variant="ghost"
-            busy={keep.isPending}
-            onClick={() => keep.mutate({ key: album.rating_key, kept: !album.kept }, { onSuccess: () => onSaved({ ...album, kept: !album.kept }) })}
-          >
-            {album.kept ? 'Show it in the list again' : 'It’s fine as it is'}
-          </Button>
-        )}
-      </div>
-      {best.isError && <Notice tone="error">{errorMessage(best.error)}</Notice>}
-      {found && <Notice>{bestText(found)}</Notice>}
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
-        <Card>
-          <ScrollTabs
-            label="Where from"
-            className="mb-4 border-b border-border"
-            order={tabOrder}
-            onReorder={(order) => savePreferences.mutate({ cover_tabs: order })}
-            renderTab={(key) => (
-              // The star: the default source (filled), or make this one the default.
-              <span
-                role="presentation"
-                className={`group flex items-center border-b-2 pb-2 ${tab === key ? 'border-accent' : 'border-transparent'}`}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === key}
-                  onClick={() => setTab(key)}
-                  className={`pl-3 text-sm font-medium ${key === 'upload' ? 'pr-3' : 'pr-1'} ${tab === key ? 'text-text' : 'text-muted hover:text-text'}`}
-                >
-                  {TAB_NAME[key]}
-                </button>
-                {key !== 'upload' &&
-                  (key === opensOn ? (
-                    <span className="pr-3 text-sm text-accent" title="Default source" aria-label="Default source">
-                      ★
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => savePreferences.mutate({ cover_source: key })}
-                      title="Set as default source"
-                      aria-label={`Set ${TAB_NAME[key]} as default source`}
-                      className={`pr-3 text-sm text-muted hover:text-accent focus-visible:opacity-100 ${tab === key ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                    >
-                      ☆
-                    </button>
-                  ))}
-              </span>
-            )}
-          />
-          <p className="-mt-3 mb-3 text-[11px] text-muted">Drag to scroll; hold a tab for a second to move it.</p>
-          {tab === 'upload' ? (
-            <CoverUpload serverId={serverId} onUploaded={(id) => choose({ kind: 'upload', upload_id: id })} />
-          ) : tab === 'search' ? (
-            <WebSearch
-              serverId={serverId}
-              album={album}
-              selected={source?.kind === 'candidate' ? (source.token ?? null) : null}
-              onChoose={(token) => choose({ kind: 'candidate', token })}
-            />
-          ) : (
-            <CoverGrid
-              serverId={serverId}
-              album={album}
-              source={tab}
-              selected={source?.kind === 'candidate' ? (source.token ?? null) : null}
-              onChoose={(token) => choose({ kind: 'candidate', token })}
-            />
-          )}
-        </Card>
-
-        {/* Next to the covers found on a wide screen, and kept in view while scrolling them. */}
-        <Card title="Preview" className="xl:sticky xl:top-[4.5rem] xl:max-h-[calc(100dvh-5.5rem)] xl:overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-1">
-            <figure className="space-y-1">
-              <Zoomable image={album.thumb ? { src: imageUrl(serverId, album.thumb, 1000)!, alt: `Current cover of ${album.title}` } : null}>
-                <Artwork serverId={serverId} path={album.thumb} title={album.title} size={1000} className="w-full" />
-              </Zoomable>
-              <figcaption className="text-center text-sm text-muted">
-                Now{now && <span className={sizeTone(album.width, album.height)}> · {now}</span>}
-              </figcaption>
-            </figure>
-            <figure className="space-y-1">
-              <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
-                {preview.url && (
-                  <Zoomable image={{ src: preview.url, alt: `New cover for ${album.title}` }} className="size-full">
-                    <img src={preview.url} alt={`New cover for ${album.title}`} className="size-full object-contain" />
-                  </Zoomable>
-                )}
-                {!source && (
-                  <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-sm text-muted">Choose a cover above</span>
-                )}
-                {preview.loading && (
-                  <span className="absolute inset-0 flex items-center justify-center bg-bg/40">
-                    <Spinner />
-                  </span>
-                )}
-              </div>
-              <figcaption className="text-center text-sm text-muted">
-                New{preview.width ? <span className={sizeTone(preview.width, preview.height)}> · {size(preview.width, preview.height)}</span> : ''}
-              </figcaption>
-            </figure>
+    <div className="flex min-h-0 min-w-0 flex-col gap-4">
+      {/* The album and the preview: all the room above the results. */}
+      <section aria-label="Preview" className="flex min-h-0 flex-1 flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={onBack} className="text-sm text-muted hover:text-text lg:hidden">
+            ← Albums
+          </button>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-2xl font-bold">
+              <Link to={`/library/albums/${album.rating_key}`} className="hover:underline">
+                {album.title}
+              </Link>
+            </h2>
+            <p className="truncate text-sm text-muted">{[album.artist, album.year].filter(Boolean).join(' · ')}</p>
           </div>
-          {preview.error && (
-            <div className="mt-3">
-              <Notice tone="error">{preview.error}</Notice>
-            </div>
+          <Button
+            variant="secondary"
+            busy={best.isPending}
+            title="The biggest cover of this very album on Deezer, iTunes, Tidal or the Cover Art Archive, if it’s at least 1000 × 1000"
+            onClick={() =>
+              best.mutate(album.rating_key, {
+                onSuccess: (out) => {
+                  setFound(out)
+                  if (out.outcome === 'applied' && out.cover) {
+                    setSource(null)
+                    onSaved(out.cover)
+                  }
+                },
+              })
+            }
+          >
+            Apply best match
+          </Button>
+          {album.state !== 'ok' && album.state !== 'unchecked' && (
+            <Button
+              variant="ghost"
+              busy={keep.isPending}
+              onClick={() => keep.mutate({ key: album.rating_key, kept: !album.kept }, { onSuccess: () => onSaved({ ...album, kept: !album.kept }) })}
+            >
+              {album.kept ? 'Show it in the list again' : 'It’s fine as it is'}
+            </Button>
           )}
+        </div>
+        {best.isError && <Notice tone="error">{errorMessage(best.error)}</Notice>}
+        {found && <Notice>{bestText(found)}</Notice>}
+
+        {/* As big as fits: two squares side by side in the room the preview has. */}
+        <div className="flex min-h-0 flex-1 justify-center gap-6 lg:[container-type:size]">
+          <figure className="w-1/2 space-y-1 lg:w-[min(calc(100cqh-1.75rem),calc(50cqw-0.75rem))]">
+            <Zoomable
+              image={
+                album.thumb
+                  ? {
+                      src: imageUrl(serverId, album.thumb, 1000)!,
+                      alt: `Current cover of ${album.title}`,
+                    }
+                  : null
+              }
+            >
+              <Artwork serverId={serverId} path={album.thumb} title={album.title} size={1000} className="w-full" />
+            </Zoomable>
+            <figcaption className="text-center text-sm text-muted">
+              Now
+              {now && <span className={sizeTone(album.width, album.height)}> · {now}</span>}
+            </figcaption>
+          </figure>
+          <figure className="w-1/2 space-y-1 lg:w-[min(calc(100cqh-1.75rem),calc(50cqw-0.75rem))]">
+            <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
+              {preview.url && (
+                <Zoomable
+                  image={{
+                    src: preview.url,
+                    alt: `New cover for ${album.title}`,
+                  }}
+                  className="size-full"
+                >
+                  <img src={preview.url} alt={`New cover for ${album.title}`} className="size-full object-contain" />
+                </Zoomable>
+              )}
+              {!source && (
+                <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-sm text-muted">Choose a cover below</span>
+              )}
+              {preview.loading && (
+                <span className="absolute inset-0 flex items-center justify-center bg-bg/40">
+                  <Spinner />
+                </span>
+              )}
+            </div>
+            <figcaption className="text-center text-sm text-muted">
+              New
+              {preview.width ? <span className={sizeTone(preview.width, preview.height)}> · {size(preview.width, preview.height)}</span> : ''}
+            </figcaption>
+          </figure>
+        </div>
+        {preview.error && (
+          <div className="mt-3">
+            <Notice tone="error">{preview.error}</Notice>
+          </div>
+        )}
+        {/* Save, with how the cover is cropped beside it. */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <Button
+            variant="primary"
+            disabled={!source || Boolean(preview.error)}
+            busy={apply.isPending}
+            onClick={() =>
+              source &&
+              apply.mutate(
+                { key: album.rating_key, source, square },
+                {
+                  onSuccess: (saved) => {
+                    setNotice('Saved to Plex.')
+                    setSource(null)
+                    onSaved(saved)
+                  },
+                },
+              )
+            }
+          >
+            Save to Plex
+          </Button>
           {(wide || square) && (
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <>
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)} className="accent-[var(--color-accent)]" />
                 Crop to a square
@@ -379,45 +450,64 @@ function CoverEditor({
                 />
                 Always (for every album)
               </label>
-            </div>
+            </>
           )}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              variant="primary"
-              disabled={!source || Boolean(preview.error)}
-              busy={apply.isPending}
-              onClick={() =>
-                source &&
-                apply.mutate(
-                  { key: album.rating_key, source, square },
-                  {
-                    onSuccess: (saved) => {
-                      setNotice('Saved to Plex.')
-                      setSource(null)
-                      onSaved(saved)
-                    },
-                  },
-                )
-              }
-            >
-              Save to Plex
-            </Button>
+        </div>
+        {apply.isError && (
+          <div className="mt-3">
+            <Notice tone="error">{errorMessage(apply.error)}</Notice>
           </div>
-          {apply.isError && (
-            <div className="mt-3">
-              <Notice tone="error">{errorMessage(apply.error)}</Notice>
-            </div>
+        )}
+        {notice && <p className="mt-3 text-sm text-ok">{notice}</p>}
+        {album.applied_at && (
+          <p className="mt-2 text-xs text-muted">
+            Last changed {formatRelative(album.applied_at)}
+            {album.source && ` (from ${SOURCE_NAME[album.source] ?? album.source})`}.
+          </p>
+        )}
+        <p className="mt-3 text-xs text-muted">Saved to Plex for everyone using the server. Covers over 3000 pixels are scaled down.</p>
+      </section>
+
+      {/* The covers found: one row, glued to the bottom of the window, scrolling sideways. */}
+      <section aria-label="Where from" className="flex h-[19rem] shrink-0 flex-col rounded-2xl border border-border bg-surface px-3 pt-2 pb-3">
+        <ScrollTabs
+          label="Where from"
+          className="mb-3 border-b border-border"
+          order={tabOrder}
+          onReorder={(order) => savePreferences.mutate({ cover_tabs: order })}
+          renderTab={(key) => (
+            // The star: the default source (filled), or make this one the default.
+            <span role="presentation" className={`group flex items-center border-b-2 pb-2 ${tab === key ? 'border-accent' : 'border-transparent'}`}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`pl-3 text-sm font-medium ${key === 'upload' ? 'pr-3' : 'pr-1'} ${tab === key ? 'text-text' : 'text-muted hover:text-text'}`}
+              >
+                {TAB_NAME[key]}
+              </button>
+              {key !== 'upload' &&
+                (key === opensOn ? (
+                  <span className="pr-3 text-sm text-accent" title="Default source" aria-label="Default source">
+                    ★
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => savePreferences.mutate({ cover_source: key })}
+                    title="Set as default source"
+                    aria-label={`Set ${TAB_NAME[key]} as default source`}
+                    className={`pr-3 text-sm text-muted hover:text-accent focus-visible:opacity-100 ${tab === key ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                  >
+                    ☆
+                  </button>
+                ))}
+            </span>
           )}
-          {notice && <p className="mt-3 text-sm text-ok">{notice}</p>}
-          {album.applied_at && (
-            <p className="mt-2 text-xs text-muted">
-              Last changed {formatRelative(album.applied_at)}
-              {album.source && ` (from ${SOURCE_NAME[album.source] ?? album.source})`}.
-            </p>
-          )}
-          <p className="mt-3 text-xs text-muted">Saved to Plex for everyone using the server. Covers over 3000 pixels are scaled down.</p>
-        </Card>
-      </div>
+        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{results}</div>
+      </section>
     </div>
   )
 }
@@ -446,7 +536,19 @@ function useUsableSources(serverId: number): CoverSource[] {
   return useCoverSources(serverId).data?.sources ?? OPEN_SOURCES
 }
 
-function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exclude<CoverFilter, 'all'>; q: string; count: number }) {
+function BestMatches({
+  serverId,
+  show,
+  q,
+  lowPx,
+  count,
+}: {
+  serverId: number
+  show: Exclude<CoverFilter, 'all'>
+  q: string
+  lowPx: LowPx
+  count: number
+}) {
   const jobs = useArtworkJobs(serverId)
   const start = useStartBestCovers(serverId)
   const me = useMe()
@@ -460,7 +562,10 @@ function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exc
   const [confirming, setConfirming] = useState(false)
   const latest = jobs.data?.find((j) => j.kind === 'covers')
   const running = latest && (latest.status === 'queued' || latest.status === 'running')
-  const { done = 0, total = 0 } = (latest?.progress ?? {}) as { done?: number; total?: number }
+  const { done = 0, total = 0 } = (latest?.progress ?? {}) as {
+    done?: number
+    total?: number
+  }
   const stats = (latest?.stats ?? {}) as Record<string, number>
   return (
     <div className="space-y-2 rounded-2xl border border-border bg-surface p-3 text-sm">
@@ -506,7 +611,7 @@ function BestMatches({ serverId, show, q, count }: { serverId: number; show: Exc
                 // Ones not set up now keep their saved choice, for when they are.
                 const keep = BEST_SOURCES.map(([k]) => k).filter((k) => (usable.includes(k) ? sources.includes(k) : saved.includes(k)))
                 if (chosen && keep.join() !== saved.join()) savePreferences.mutate({ best_cover_sources: keep })
-                start.mutate({ show, q: q || undefined, sources }, { onSettled: () => setConfirming(false) })
+                start.mutate({ show, q: q || undefined, low_px: lowPx, sources }, { onSettled: () => setConfirming(false) })
               }}
             >
               Apply to {formatCount(count)}
@@ -546,6 +651,7 @@ function CoverGrid({
   album,
   source,
   query = '',
+  tile = 'size-44',
   selected,
   onChoose,
 }: {
@@ -553,13 +659,15 @@ function CoverGrid({
   album: AlbumCover
   source: CoverSource
   query?: string
+  /** The covers' size in the row (the web search's are smaller, under its search box). */
+  tile?: string
   selected: string | null
   onChoose: (token: string) => void
 }) {
   const found = useCoverCandidates(serverId, album.rating_key, source, query)
   if (found.isPending)
     return (
-      <div className="flex min-h-56 flex-col items-center justify-center gap-3 text-sm text-muted">
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted">
         <Spinner large />
         <p>{source === 'search' ? 'Searching the web…' : `Looking on ${source === 'coverartarchive' ? 'the Cover Art Archive' : SOURCE_NAME[source]}…`}</p>
       </div>
@@ -567,31 +675,35 @@ function CoverGrid({
   if (found.isError) return <Notice tone="error">{errorMessage(found.error)}</Notice>
   const { candidates, note } = found.data
   return (
-    <div className="space-y-3">
-      {note && <Notice>{note}</Notice>}
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4" aria-label="Covers found">
-        {candidates.map((c) => {
-          const dims = size(c.width, c.height) ?? (c.up_to ? `up to ${c.up_to} px` : null)
-          return (
-            <li key={c.token}>
-              <button
-                type="button"
-                onClick={() => onChoose(c.token)}
-                aria-pressed={selected === c.token}
-                className={`block w-full rounded-lg border-2 p-1 text-left ${selected === c.token ? 'border-accent' : 'border-transparent hover:border-border'}`}
-              >
-                <div className="aspect-square overflow-hidden rounded bg-surface-2">
-                  <img src={c.thumb} alt="" loading="lazy" className="size-full object-cover" />
-                </div>
-                <span className="mt-1 block truncate text-xs" title={c.label ?? undefined}>
-                  {c.label ?? 'Cover'}
-                </span>
-                {dims && <span className={`block text-[11px] tabular-nums ${sizeTone(c.width, c.height)}`}>{dims}</span>}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {note && <p className="text-xs text-muted">{note}</p>}
+      {candidates.length === 0 ? (
+        <p className="text-sm text-muted">None found here.</p>
+      ) : (
+        <ResultStrip label="Covers found">
+          {candidates.map((c) => {
+            const dims = size(c.width, c.height) ?? (c.up_to ? `up to ${c.up_to} px` : null)
+            return (
+              <li key={c.token} className="shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onChoose(c.token)}
+                  aria-pressed={selected === c.token}
+                  className={`block rounded-lg border-2 p-1 text-left ${selected === c.token ? 'border-accent' : 'border-transparent hover:border-border'}`}
+                >
+                  <div className={`${tile} overflow-hidden rounded bg-surface-2`}>
+                    <img src={c.thumb} alt="" loading="lazy" className="size-full object-cover" />
+                  </div>
+                  <span className="mt-1 block max-w-44 truncate text-xs" title={c.label ?? undefined}>
+                    {c.label ?? 'Cover'}
+                  </span>
+                  {dims && <span className={`block text-[11px] tabular-nums ${sizeTone(c.width, c.height)}`}>{dims}</span>}
+                </button>
+              </li>
+            )
+          })}
+        </ResultStrip>
+      )}
     </div>
   )
 }
@@ -611,7 +723,7 @@ function WebSearch({
   const [text, setText] = useState(start)
   const [query, setQuery] = useState(start)
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       <form
         className="flex gap-2"
         role="search"
@@ -624,13 +736,21 @@ function WebSearch({
           aria-label="Search the web for a cover"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm"
         />
-        <Button type="submit" variant="secondary" disabled={!text.trim()} className="shrink-0">
+        <Button type="submit" variant="secondary" size="sm" disabled={!text.trim()} className="shrink-0">
           Search
         </Button>
       </form>
-      <CoverGrid serverId={serverId} album={album} source="search" query={query === start ? '' : query} selected={selected} onChoose={onChoose} />
+      <CoverGrid
+        serverId={serverId}
+        album={album}
+        source="search"
+        query={query === start ? '' : query}
+        tile="size-32"
+        selected={selected}
+        onChoose={onChoose}
+      />
     </div>
   )
 }
@@ -638,7 +758,7 @@ function WebSearch({
 function CoverUpload({ serverId, onUploaded }: { serverId: number; onUploaded: (id: string) => void }) {
   const upload = useUploadImage(serverId)
   return (
-    <div className="space-y-3">
+    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
       <FilePicker
         accept="image/png,image/jpeg,image/webp,image/gif"
         label="An image file"

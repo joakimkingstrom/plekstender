@@ -11,7 +11,7 @@ from fastapi.responses import Response as RawResponse
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 
-from plekstender import musicbrainz, releases
+from plekstender import musicbrainz, release_covers, releases
 from plekstender.api.deps import DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.ratelimit import rate_limit
 from plekstender.api.routes.auth import load_preferences
@@ -26,9 +26,6 @@ from plekstender.api.schemas import (
     ReleaseKind,
     ReleaseOut,
 )
-from plekstender.artwork import images
-from plekstender.artwork.fetch import FetchError, fetch
-from plekstender.artwork.images import ImageError
 from plekstender.db.models import HiddenRelease
 
 router = APIRouter(prefix="/api/servers/{server_id}/releases", tags=["releases"])
@@ -170,19 +167,17 @@ async def release_cover(
     http: HttpDep,
     size: Annotated[int, Query(description="250 or 500 pixels.")] = 250,
 ) -> RawResponse:
-    """A release group's front cover from the Cover Art Archive, 250 or 500 pixels, fetched
-    by the server (the page only loads images from here)."""
+    """A release group's front cover from the Cover Art Archive, 250 or 500 pixels: kept on
+    the server for recent and upcoming releases (see plekstender.release_covers), else
+    fetched by it (the page only loads images from here)."""
     if size not in COVER_SIZES:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "size: 250 or 500")
-    url = (
-        f"{settings.coverartarchive_url.rstrip('/')}/release-group/{_check_mbid(mbid)}/front-{size}"
-    )
-    try:
-        data, _ = await fetch(http, url, max_bytes=5 * 1024 * 1024)
-        body, content_type = images.thumbnail(data, size)
-    except FetchError, ImageError:
+    body = await release_covers.cover(http, settings, _check_mbid(mbid), size)
+    if body is None:
         # Most often there's no cover; let the browser remember that for a while too.
         return RawResponse(status_code=404, headers={"Cache-Control": "private, max-age=86400"})
     return RawResponse(
-        body, media_type=content_type, headers={"Cache-Control": "private, max-age=604800"}
+        body,
+        media_type=release_covers.media_type(body),
+        headers={"Cache-Control": "private, max-age=604800"},
     )

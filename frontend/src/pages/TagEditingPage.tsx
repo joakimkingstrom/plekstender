@@ -571,7 +571,7 @@ function BulkMusicBrainz({
               <li key={a.rating_key} className="space-y-1 py-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <Link to={`/library/albums/${a.rating_key}`} className="min-w-0 truncate font-medium hover:underline">
-                    {a.title} <span className="font-normal text-muted">· {a.artist_title}</span>
+                    <span className="font-normal text-muted">{a.artist_title} ·</span> {a.title}
                   </Link>
                   <WriteState state={writes[a.rating_key]} />
                 </div>
@@ -685,7 +685,7 @@ function BulkPlex({
               <li key={a.rating_key} className="flex items-center justify-between gap-2 py-2">
                 <div className="min-w-0">
                   <p className="truncate font-medium">
-                    {a.title} <span className="font-normal text-muted">· {a.artist_title}</span>
+                    <span className="font-normal text-muted">{a.artist_title} ·</span> {a.title}
                   </p>
                   <p className="text-xs text-muted">
                     {!r || r.busy
@@ -812,7 +812,7 @@ function BulkRename({
                   <li key={a.rating_key} className="space-y-1 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <p className="min-w-0 truncate font-medium">
-                        {a.title} <span className="font-normal text-muted">· {a.artist_title}</span>
+                        <span className="font-normal text-muted">{a.artist_title} ·</span> {a.title}
                       </p>
                       <WriteState state={writes[a.rating_key]} />
                     </div>

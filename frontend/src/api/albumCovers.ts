@@ -9,26 +9,30 @@ export type AlbumCover = Schemas['AlbumCoverOut']
 export type CoverFilter = NonNullable<
   NonNullable<paths['/api/servers/{server_id}/artwork/albums']['get']['parameters']['query']>['show']
 >
+// Low resolution: under this many pixels on the shorter side.
+export type LowPx = 600 | 1000 | 1500
+export type CoverSort = 'name' | 'added' | 'changed' | 'smallest'
 export type CoverSource = 'coverartarchive' | 'deezer' | 'itunes' | 'tidal' | 'fanart' | 'plex' | 'search'
 
 const keys = {
   all: (serverId: number) => ['servers', serverId, 'artwork', 'albums'] as const,
-  list: (serverId: number, show: CoverFilter, q: string) => ['servers', serverId, 'artwork', 'albums', 'list', { show, q }] as const,
+  list: (serverId: number, show: CoverFilter, q: string, lowPx: LowPx, sort: CoverSort | null) =>
+    ['servers', serverId, 'artwork', 'albums', 'list', { show, q, lowPx, sort }] as const,
   candidates: (serverId: number, key: number, source: CoverSource, q: string) =>
     ['servers', serverId, 'artwork', 'albums', 'candidates', key, source, q] as const,
   tidal: ['admin', 'tidal'] as const,
 }
 
 /** Albums and their covers: by default the ones most in need of a better cover. */
-export function useAlbumCovers(serverId: number, show: CoverFilter, q: string) {
+export function useAlbumCovers(serverId: number, show: CoverFilter, q: string, lowPx: LowPx = 600, sort: CoverSort | null = null) {
   return useInfiniteQuery({
-    queryKey: keys.list(serverId, show, q),
+    queryKey: keys.list(serverId, show, q, lowPx, sort),
     initialPageParam: 0,
     placeholderData: keepPreviousData,
     queryFn: ({ pageParam }) =>
       unwrap(
         api.GET('/api/servers/{server_id}/artwork/albums', {
-          params: { path: { server_id: serverId }, query: { show, q: q || undefined, offset: pageParam, limit: 60 } },
+          params: { path: { server_id: serverId }, query: { show, q: q || undefined, low_px: lowPx, sort: sort ?? undefined, offset: pageParam, limit: 60 } },
         }),
       ),
     getNextPageParam: (last, pages) => {

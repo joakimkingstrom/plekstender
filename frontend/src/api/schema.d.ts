@@ -2998,7 +2998,8 @@ export interface paths {
         /**
          * List Covers
          * @description Albums and their covers: by default those that most need a better one (no cover
-         *     first, then the smallest), leaving out ones marked as fine.
+         *     first, then the smallest), leaving out ones marked as fine. Low resolution is under
+         *     `low_px` (600, 1000 or 1500) on the shorter side; `sort` orders them otherwise.
          */
         get: operations["list_covers_api_servers__server_id__artwork_albums_get"];
         put?: never;
@@ -3160,7 +3161,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Artists */
+        /**
+         * List Artists
+         * @description The artists and their artwork, by name, the newest in Plex first (`added`), or those
+         *     whose artwork was changed here most recently first (`changed`).
+         */
         get: operations["list_artists_api_servers__server_id__artwork_artists_get"];
         put?: never;
         post?: never;
@@ -3987,6 +3992,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/new-music": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get New Music */
+        get: operations["get_new_music_api_servers__server_id__new_music_get"];
+        /**
+         * Put New Music
+         * @description Choose what's done for new artists and albums, after each library sync. Only what's
+         *     added from now on counts as new.
+         */
+        put: operations["put_new_music_api_servers__server_id__new_music_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/access": {
         parameters: {
             query?: never;
@@ -4431,6 +4458,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/discover-art/{mbid}/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover Artwork
+         * @description A suggested artist's fanart.tv background, banner or logo, as kept by Plekstender.
+         */
+        get: operations["discover_artwork_api_discover_art__mbid___kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/artwork/fonts": {
         parameters: {
             query?: never;
@@ -4560,8 +4607,9 @@ export interface paths {
         };
         /**
          * Release Cover
-         * @description A release group's front cover from the Cover Art Archive, 250 or 500 pixels, fetched
-         *     by the server (the page only loads images from here).
+         * @description A release group's front cover from the Cover Art Archive, 250 or 500 pixels: kept on
+         *     the server for recent and upcoming releases (see plekstender.release_covers), else
+         *     fetched by it (the page only loads images from here).
          */
         get: operations["release_cover_api_releases__mbid__cover_get"];
         put?: never;
@@ -4992,7 +5040,7 @@ export interface components {
             height: number | null;
             /**
              * State
-             * @description missing: no cover (or one that can't be read); low: under 600 px on its shorter side; unchecked: not measured yet.
+             * @description missing: no cover (or one that can't be read); low: under low_px (600 by default) on its shorter side; unchecked: not measured yet.
              * @enum {string}
              */
             state: "missing" | "low" | "ok" | "unchecked";
@@ -5005,6 +5053,11 @@ export interface components {
             source: string | null;
             /** Applied At */
             applied_at: string | null;
+            /**
+             * Added At
+             * @description Added to Plex.
+             */
+            added_at?: string | null;
         };
         /** AlbumCoverPage */
         AlbumCoverPage: {
@@ -5046,6 +5099,8 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
+            lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
             /** Summary */
             summary: string | null;
             /** Released */
@@ -5156,6 +5211,19 @@ export interface components {
              */
             skipped_hidden: number;
         };
+        /** AlbumLyricsOut */
+        AlbumLyricsOut: {
+            /**
+             * Songs
+             * @description Songs on the album.
+             */
+            songs: number;
+            /**
+             * With Lyrics
+             * @description Of those, songs whose files have lyrics (or are marked instrumental).
+             */
+            with_lyrics: number;
+        };
         /** AlbumSummary */
         AlbumSummary: {
             /** Rating Key */
@@ -5182,6 +5250,8 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
+            lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
         };
         /** AppTimeIn */
         AppTimeIn: {
@@ -5288,6 +5358,8 @@ export interface components {
              * @description Your listens to it (scrobbles count too).
              */
             listens: number;
+            /** @description The top suggestions' artwork, once looked up (if any). */
+            art?: components["schemas"]["SuggestionArtOut"] | null;
         };
         /** ArtistSuggestionsOut */
         ArtistSuggestionsOut: {
@@ -5358,6 +5430,11 @@ export interface components {
              * @default false
              */
             folder_queued: boolean;
+            /**
+             * Added At
+             * @description Added to Plex.
+             */
+            added_at?: string | null;
         };
         /** ArtworkArtistPage */
         ArtworkArtistPage: {
@@ -5488,6 +5565,12 @@ export interface components {
             show: "needs" | "missing" | "low";
             /** Q */
             q?: string | null;
+            /**
+             * Low Px
+             * @description Low resolution: under this many pixels (600, 1000 or 1500).
+             * @default 600
+             */
+            low_px: number;
             /**
              * Sources
              * @description Where matches may come from; None: the user's preference.
@@ -5817,6 +5900,8 @@ export interface components {
              * @default false
              */
             forgotten: boolean;
+            /** @description Also the best songs of albums added lately (picked again at each refresh; the rules still apply). */
+            new_albums?: components["schemas"]["NewAlbums"] | null;
             rules?: components["schemas"]["Rules"];
             /**
              * Limit
@@ -6536,6 +6621,19 @@ export interface components {
              * @default false
              */
             after: boolean;
+            /**
+             * Delete After
+             * @description Delete gig playlists this many units after the gig; 0: keep them.
+             * @default 0
+             */
+            delete_after: number;
+            /**
+             * Delete Unit
+             * @description The unit of delete_after.
+             * @default weeks
+             * @enum {string}
+             */
+            delete_unit: "days" | "weeks" | "months";
         };
         /** GigPlaylistsOut */
         GigPlaylistsOut: {
@@ -8244,6 +8342,111 @@ export interface components {
             /** Source */
             source: ("settings" | "environment") | null;
         };
+        /**
+         * NewAlbums
+         * @description The best songs of albums added to the library lately ("Fresh picks").
+         */
+        NewAlbums: {
+            /**
+             * Days
+             * @description Albums added in the last N days.
+             * @default 30
+             */
+            days: number;
+            /**
+             * Per Album
+             * @description Each album's N most popular songs.
+             * @default 3
+             */
+            per_album: number;
+        };
+        /** NewMusicIn */
+        NewMusicIn: {
+            /**
+             * Logos
+             * @description fanart.tv's most liked logo for new artists.
+             */
+            logos: boolean;
+            /**
+             * Covers
+             * @description The best cover match for new albums.
+             */
+            covers: boolean;
+            /**
+             * Lyrics
+             * @description Look up lyrics for new albums' songs.
+             */
+            lyrics: boolean;
+            /** @description Where found lyrics are written (tag editing on); none: only looked up. */
+            lyrics_write?: components["schemas"]["NewMusicLyricsWrite"] | null;
+        };
+        /** NewMusicLyricsWrite */
+        NewMusicLyricsWrite: {
+            /**
+             * Sidecar
+             * @description A .lrc (synced) or .txt next to each song.
+             * @default true
+             */
+            sidecar: boolean;
+            /**
+             * Lyricsfile
+             * @description A .lyricsfile.yaml next to each song.
+             * @default false
+             */
+            lyricsfile: boolean;
+            /**
+             * Embedded
+             * @description The plain lyrics in each song's tags.
+             * @default false
+             */
+            embedded: boolean;
+            /**
+             * Overwrite
+             * @description Replace lyrics the files already have.
+             * @default false
+             */
+            overwrite: boolean;
+        };
+        /** NewMusicOut */
+        NewMusicOut: {
+            /**
+             * Logos
+             * @description fanart.tv's most liked logo for new artists.
+             */
+            logos: boolean;
+            /**
+             * Covers
+             * @description The best cover match for new albums.
+             */
+            covers: boolean;
+            /**
+             * Lyrics
+             * @description Look up lyrics for new albums' songs.
+             */
+            lyrics: boolean;
+            /** @description Where found lyrics are written (tag editing on); none: only looked up. */
+            lyrics_write?: components["schemas"]["NewMusicLyricsWrite"] | null;
+            /**
+             * Since
+             * @description Added to Plex after this counts as new.
+             */
+            since: string | null;
+            /**
+             * Fanart Ready
+             * @description fanart.tv has an API key (logos need one).
+             */
+            fanart_ready: boolean;
+            /**
+             * Folder Ready
+             * @description The music folder is set up (lyrics need it).
+             */
+            folder_ready: boolean;
+            /**
+             * Tag Editing
+             * @description Tag editing is on (writing lyrics needs it).
+             */
+            tag_editing: boolean;
+        };
         /** NewReleaseOut */
         NewReleaseOut: {
             /**
@@ -8839,6 +9042,12 @@ export interface components {
              * @default true
              */
             achievements: boolean;
+            /**
+             * Lyrics Icons
+             * @description Small icons on song and album rows: what lyrics their files have.
+             * @default false
+             */
+            lyrics_icons: boolean;
             /**
              * Instance Notifications
              * @description Admins: notifications about this Plekstender's services.
@@ -10019,6 +10228,18 @@ export interface components {
             /** Tracks */
             tracks: number;
         };
+        /**
+         * SuggestionArtOut
+         * @description fanart.tv artwork of a top suggestion (kept by Plekstender): where to load each.
+         */
+        SuggestionArtOut: {
+            /** Background */
+            background: string | null;
+            /** Banner */
+            banner: string | null;
+            /** Logo */
+            logo: string | null;
+        };
         /** SuggestionSourceOut */
         SuggestionSourceOut: {
             /** Name */
@@ -10116,6 +10337,8 @@ export interface components {
              * @default Album
              */
             release_type: string;
+            /** @description How many of its songs have lyrics in their files; None: the lyrics icons preference is off, or none of its files have been read. */
+            lyrics?: components["schemas"]["AlbumLyricsOut"] | null;
             /** Artist Rating Key */
             artist_rating_key: number | null;
             /** Artist Title */
@@ -10494,6 +10717,11 @@ export interface components {
              * @default 0
              */
             seen_live: number;
+            /**
+             * Lyrics
+             * @description The best lyrics its files have (word-synced, synced, plain, instrumental or none); None: the lyrics icons preference is off, or its files haven't been read.
+             */
+            lyrics?: ("word" | "synced" | "plain" | "instrumental" | "none") | null;
         };
         /**
          * Transform
@@ -15855,6 +16083,8 @@ export interface operations {
             query?: {
                 show?: "needs" | "missing" | "low" | "all";
                 q?: string | null;
+                low_px?: number;
+                sort?: ("name" | "added" | "changed" | "smallest") | null;
                 offset?: number;
                 limit?: number;
             };
@@ -16131,6 +16361,7 @@ export interface operations {
             query?: {
                 q?: string | null;
                 status?: ("none" | "custom" | "done") | null;
+                sort?: "name" | "added" | "changed";
                 offset?: number;
                 limit?: number;
             };
@@ -17581,6 +17812,72 @@ export interface operations {
             };
         };
     };
+    get_new_music_api_servers__server_id__new_music_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewMusicOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_new_music_api_servers__server_id__new_music_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewMusicIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewMusicOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_access_api_admin_access_get: {
         parameters: {
             query?: never;
@@ -18579,6 +18876,46 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FontGroup"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discover_artwork_api_discover_art__mbid___kind__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mbid: string;
+                kind: "background" | "banner" | "logo";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

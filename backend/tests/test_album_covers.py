@@ -179,6 +179,16 @@ async def test_album_covers(
     )
     assert (wide["width"], wide["height"], wide["state"]) == (1200, 800, "ok")  # 800 px is fine
 
+    # Low resolution can start higher: under 1000 px, the 1200 x 800 cover is low too.
+    strict = (await owner.get(base, params={"low_px": 1000})).json()
+    assert 203 in [a["rating_key"] for a in strict["items"]]
+    assert strict["counts"]["low"] > needs["counts"]["low"]
+    assert (await owner.get(base, params={"low_px": 700})).status_code == 422
+    # Newest in Plex first.
+    added = (await owner.get(base, params={"show": "all", "sort": "added"})).json()["items"]
+    assert [a["rating_key"] for a in added] == [203, 202, 201, 200]
+    assert added[0]["added_at"] is not None
+
     # Sources: Deezer (the matching album first, 1000 px), iTunes (up to 3000 px), the Cover
     # Art Archive (release group found on MusicBrainz by name; front first).
     album = f"{base}/201"
@@ -250,6 +260,10 @@ async def test_album_covers(
     )
     assert plex.library.uploaded[-1][0] == 201
     assert [a["title"] for a in (await owner.get(base)).json()["items"]] == ["Dummy"]
+    # Recently changed: the one just saved first, the rest by name.
+    changed = (await owner.get(base, params={"show": "all", "sort": "changed"})).json()["items"]
+    assert changed[0]["rating_key"] == 201 and changed[0]["applied_at"] is not None
+    assert all(a["applied_at"] is None for a in changed[1:])
 
     # A wide image cropped to a square.
     async def upload(data: bytes) -> str:

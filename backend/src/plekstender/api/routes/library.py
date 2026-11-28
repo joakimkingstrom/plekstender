@@ -7,7 +7,7 @@ their own Plex account can access, in the music libraries they selected.
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -19,6 +19,7 @@ from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.routes.servers import get_user_server, server_client
 from plekstender.api.schemas import (
     AlbumDetail,
+    AlbumLyricsOut,
     AlbumSummary,
     ArtistDetail,
     ArtistNeighbourOut,
@@ -40,9 +41,11 @@ from plekstender.db.models import (
     Album,
     Artist,
     ItemTag,
+    MediaFile,
     SimilarArtist,
     Tag,
     Track,
+    User,
     UserItemState,
     UserServer,
 )
@@ -50,6 +53,8 @@ from plekstender.gigs.seen_live import seen_live, times_seen
 from plekstender.history import stats
 from plekstender.plex.tv import PlexError
 from plekstender.sync.parse import normalise_artist, normalise_title
+from plekstender.tags.lyrics_kinds import Kind, best
+from plekstender.tags.read import LYRICS_READER
 
 router = APIRouter(prefix="/api/servers/{server_id}", tags=["library"])
 
@@ -473,6 +478,75 @@ async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> lis
     ]
 
 
+# --- which songs have lyrics (a preference: small icons on rows) ---------------------------
+
+# The music files that have been read for lyrics (the same as the Lyrics page counts).
+_READ_FOR_LYRICS = (MediaFile.reader >= LYRICS_READER, MediaFile.error.is_(None))
+
+
+def wants_lyrics_icons(user: User) -> bool:
+    return (user.preferences or {}).get("lyrics_icons") is True
+
+
+async def _with_lyrics(
+    db: DbDep, user: User, server_id: int, tracks: list[TrackOut]
+) -> list[TrackOut]:
+    """Marks each song with the best lyrics its files have (when the user wants the icons).
+    Songs without a file read for lyrics are left unmarked."""
+    if not tracks or not wants_lyrics_icons(user):
+        return tracks
+    rows = await db.execute(
+        select(MediaFile.rating_key, MediaFile.lyrics).where(
+            MediaFile.server_id == server_id,
+            MediaFile.rating_key.in_([t.rating_key for t in tracks]),
+            *_READ_FOR_LYRICS,
+        )
+    )
+    found: dict[int, Kind | None] = {}
+    for key, kind in rows.all():
+        if key is not None:
+            found[key] = best(found.get(key), cast("Kind | None", kind))
+    for track in tracks:
+        if track.rating_key in found:
+            track.lyrics = found[track.rating_key] or "none"
+    return tracks
+
+
+async def _albums_with_lyrics(
+    db: DbDep, user: User, server_id: int, albums: list[AlbumSummary]
+) -> list[AlbumSummary]:
+    """How many of each album's songs have lyrics in their files (when the user wants the
+    icons). Albums none of whose files have been read are left unmarked."""
+    if not albums or not wants_lyrics_icons(user):
+        return albums
+    read = (
+        select(MediaFile.rating_key, func.bool_or(MediaFile.lyrics.is_not(None)).label("has"))
+        .where(MediaFile.server_id == server_id, *_READ_FOR_LYRICS)
+        .group_by(MediaFile.rating_key)
+        .subquery()
+    )
+    rows = await db.execute(
+        select(
+            Track.album_rating_key,
+            func.count(),
+            func.count(read.c.rating_key),
+            func.count().filter(read.c.has),
+        )
+        .outerjoin(read, read.c.rating_key == Track.rating_key)
+        .where(
+            Track.server_id == server_id,
+            Track.album_rating_key.in_([a.rating_key for a in albums]),
+        )
+        .group_by(Track.album_rating_key)
+    )
+    counts = {key: (songs, known, has) for key, songs, known, has in rows.all()}
+    for album in albums:
+        songs, known, has = counts.get(album.rating_key, (0, 0, 0))
+        if known:
+            album.lyrics = AlbumLyricsOut(songs=songs, with_lyrics=has)
+    return albums
+
+
 def _track_out(track: Track, rating: float | None, plays: int, album: Album | None) -> TrackOut:
     return TrackOut(
         rating_key=track.rating_key,
@@ -667,9 +741,19 @@ async def get_artist(
         ),
         tags=await _tags_for(db, us.server_id, rating_key),
         similar=[SimilarArtistOut(name=n, rating_key=in_library.get(n.lower())) for n in names],
-        albums=await _albums(db, user.id, us, Album.artist_rating_key == rating_key),
-        top_tracks=await _with_seen_live(
-            db, user.id, _with_listens(top_tracks, titles, listens), artist.title
+        albums=await _albums_with_lyrics(
+            db,
+            user,
+            us.server_id,
+            await _albums(db, user.id, us, Album.artist_rating_key == rating_key),
+        ),
+        top_tracks=await _with_lyrics(
+            db,
+            user,
+            us.server_id,
+            await _with_seen_live(
+                db, user.id, _with_listens(top_tracks, titles, listens), artist.title
+            ),
         ),
         your_listens=_listens_out(listens),
     )
@@ -680,7 +764,9 @@ async def get_album(
     server_id: int, rating_key: int, db: DbDep, user: UserDep, tz: TzQuery = "UTC"
 ) -> AlbumDetail:
     us = await get_user_server(db, user, server_id)
-    found = await _albums(db, user.id, us, Album.rating_key == rating_key)
+    found = await _albums_with_lyrics(
+        db, user, us.server_id, await _albums(db, user.id, us, Album.rating_key == rating_key)
+    )
     if not found:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Album not found")
     album = await db.get(Album, (us.server_id, rating_key))
@@ -716,11 +802,18 @@ async def get_album(
         artist_rating_key=album.artist_rating_key,
         artist_title=artist.title if artist else None,
         tags=await _tags_for(db, us.server_id, rating_key),
-        tracks=await _with_seen_live(
+        tracks=await _with_lyrics(
             db,
-            user.id,
-            _with_listens(tracks, {t.rating_key: t.title_norm for t, _, _ in track_rows}, listens),
-            artist.title if artist else None,
+            user,
+            us.server_id,
+            await _with_seen_live(
+                db,
+                user.id,
+                _with_listens(
+                    tracks, {t.rating_key: t.title_norm for t, _, _ in track_rows}, listens
+                ),
+                artist.title if artist else None,
+            ),
         ),
         your_listens=_listens_out(listens),
     )

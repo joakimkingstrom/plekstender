@@ -39,15 +39,15 @@ function options(file: UnknownFile): { value: string; label: string }[] {
   for (const result of file.results) {
     const score = `${Math.round(result.score * 100)}%`
     for (const rec of result.recordings) {
-      const song = `${rec.title} · ${rec.artist}`
+      // Big to small: the artist, the release, the song.
       for (const rel of rec.releases) {
         const facts = [rel.date?.slice(0, 4), rel.country, rel.format].filter(Boolean).join(', ')
         out.push({
           value: choiceValue({ recording_id: rec.id, track_id: rel.track_id }),
-          label: `${song} · ${rel.title}${facts ? ` (${facts})` : ''} · ${score}`,
+          label: `${rec.artist} · ${rel.title}${facts ? ` (${facts})` : ''} · ${rec.title} · ${score}`,
         })
       }
-      out.push({ value: choiceValue({ recording_id: rec.id }), label: `${song} · just the song · ${score}` })
+      out.push({ value: choiceValue({ recording_id: rec.id }), label: `${rec.artist} · ${rec.title} (just the song) · ${score}` })
     }
   }
   return out

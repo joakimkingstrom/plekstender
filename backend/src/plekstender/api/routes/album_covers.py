@@ -20,11 +20,13 @@ from plekstender.api.routes.library import _like, visible
 from plekstender.api.routes.servers import server_client
 from plekstender.api.routes.statuses import searxng_healthy
 from plekstender.api.schemas import (
+    LOW_RESOLUTIONS,
     AlbumBestOut,
     AlbumCoverFilter,
     AlbumCoverKeepIn,
     AlbumCoverOut,
     AlbumCoverPage,
+    AlbumCoverSort,
     ArtworkJobOut,
     BestCoversJobIn,
     CandidatesOut,
@@ -58,8 +60,9 @@ class CoverRenderIn(BaseModel):
     square: bool = False
 
 
-def _columns() -> tuple[Any, Any, Any]:
-    """The cover's state, as SQL: missing, low, ok or unchecked."""
+def _columns(low: int = LOW) -> tuple[Any, Any, Any]:
+    """The cover's state, as SQL: missing, low (under `low` px on its shorter side), ok or
+    unchecked."""
     cover = AlbumCover
     stale = or_(cover.thumb.is_(None), cover.thumb != Album.thumb, cover.checked_at.is_(None))
     shorter = func.least(cover.width, cover.height)
@@ -67,11 +70,16 @@ def _columns() -> tuple[Any, Any, Any]:
         (Album.thumb.is_(None), "missing"),
         (stale, "unchecked"),
         (cover.width.is_(None), "missing"),  # there, but not an image anyone can read
-        (shorter < LOW, "low"),
+        (shorter < low, "low"),
         else_="ok",
     )
     kept = func.coalesce(cover.kept, false())
     return state, kept, shorter
+
+
+def _check_low(low_px: int) -> None:
+    if low_px not in LOW_RESOLUTIONS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "low_px is 600, 1000 or 1500.")
 
 
 def _shown(show: str, q: str | None, state: Any, kept: Any) -> list[Any]:
@@ -119,14 +127,18 @@ async def list_covers(
     user: UserDep,
     show: AlbumCoverFilter = "needs",
     q: Annotated[str | None, Query(max_length=200)] = None,
+    low_px: int = LOW,
+    sort: AlbumCoverSort | None = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 60,
 ) -> AlbumCoverPage:
     """Albums and their covers: by default those that most need a better one (no cover
-    first, then the smallest), leaving out ones marked as fine."""
+    first, then the smallest), leaving out ones marked as fine. Low resolution is under
+    `low_px` (600, 1000 or 1500) on the shorter side; `sort` orders them otherwise."""
+    _check_low(low_px)
     us = await owner_server(db, user, server_id)
     vis, cond, where = visible(Album, user.id, us)
-    cover_state, kept, shorter = _columns()
+    cover_state, kept, shorter = _columns(low_px)
     base = (
         select(Album, Artist.title, AlbumCover, cover_state.label("state"), kept.label("kept"))
         .join(vis, cond)
@@ -171,10 +183,16 @@ async def list_covers(
         func.lower(func.coalesce(Album.title_sort, Album.title)),
         Album.rating_key,
     )
+    smallest = (case((cover_state == "missing", 0), else_=1), shorter.asc().nulls_first())
+    sort = sort or ("name" if show == "all" else "smallest")
     order = (
         by_name
-        if show == "all"
-        else (case((cover_state == "missing", 0), else_=1), shorter.asc().nulls_first(), *by_name)
+        if sort == "name"
+        else (Album.added_at.desc().nulls_last(), Album.rating_key.desc())
+        if sort == "added"
+        else (AlbumCover.applied_at.desc().nulls_last(), *by_name)
+        if sort == "changed"
+        else (*smallest, *by_name)
     )
     rows = await db.execute(query.order_by(*order).offset(offset).limit(limit))
     return AlbumCoverPage(
@@ -191,6 +209,7 @@ async def list_covers(
                 kept=bool(is_kept),
                 source=cover.source if cover else None,
                 applied_at=cover.applied_at if cover else None,
+                added_at=album.added_at,
             )
             for album, artist, cover, state_name, is_kept in rows.all()
         ],
@@ -480,6 +499,7 @@ async def start_best(
 ) -> ArtworkJobOut:
     """Apply the best match to every album the list shows with this filter and search (in
     the background, a few seconds an album)."""
+    _check_low(body.low_px)
     us = await owner_server(db, user, server_id)
     sources = await _best_sources(db, body.sources or load_preferences(user).best_cover_sources)
     if not sources:
@@ -487,7 +507,7 @@ async def start_best(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "Every source chosen has been turned off."
         )
     vis, cond, where = visible(Album, user.id, us)
-    cover_state, kept, shorter = _columns()
+    cover_state, kept, shorter = _columns(body.low_px)
     keys = list(
         await db.scalars(
             select(Album.rating_key)

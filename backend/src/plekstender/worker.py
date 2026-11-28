@@ -12,7 +12,7 @@ from procrastinate.exceptions import AlreadyEnqueued
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from plekstender import __version__
+from plekstender import __version__, release_covers
 from plekstender.artist_countries import look_up as look_up_artist_countries
 from plekstender.artwork.folders import check_server as check_folder_mapping
 from plekstender.artwork.folders import write_queued as write_queued_folder
@@ -87,6 +87,28 @@ async def sync_library(run_id: int) -> None:
         us = await db.get(UserServer, run.user_server_id) if run else None
     if run is not None and run.status == "succeeded" and us is not None:
         await enqueue_listen_counts([us.user_id])  # new or changed items to match
+        await enqueue_new_music(us.server_id)  # logos, covers and lyrics for what's new
+
+
+@app.task(queue="maintenance", lock="new-music")
+async def act_on_new_music(server_id: int) -> None:
+    """After a sync: the owner's automatic actions for artists and albums new in Plex (see
+    plekstender.new_music)."""
+    from plekstender import new_music
+
+    async with get_sessionmaker()() as db:
+        done = await new_music.act(db, get_settings(), server_id)
+    if done:
+        log.info("new music on server %s: %s", server_id, done)
+
+
+async def enqueue_new_music(server_id: int) -> None:
+    try:
+        await act_on_new_music.configure(queueing_lock=f"new-music-{server_id}").defer_async(
+            server_id=server_id
+        )
+    except AlreadyEnqueued:
+        pass
 
 
 async def enqueue_sync(db: AsyncSession, us: UserServer, kind: str, trigger: str) -> SyncRun:
@@ -784,8 +806,35 @@ async def find_artist_releases(timestamp: int) -> None:
         httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
     ):
         done = await look_up_releases(db, http)
+        # Their covers, kept on disk while they're recent or coming up.
+        saved = await release_covers.save_recent(db, http, get_settings())
     if done:
         log.info("Read %d artists' releases from MusicBrainz", done)
+    if saved:
+        log.info("Saved the covers of %d releases", saved)
+
+
+@app.periodic(cron="5 * * * *", periodic_id="discover-art")
+@app.task(queue="maintenance", queueing_lock="discover-art", lock="discover-art")
+async def find_discover_art(timestamp: int | None = None) -> None:
+    """Hourly (and when Discover shows artists not looked up yet): fanart.tv artwork for the
+    top suggested artists (see plekstender.discover_art)."""
+    from plekstender import discover_art
+
+    async with (
+        get_sessionmaker()() as db,
+        httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+    ):
+        done = await discover_art.fill(db, http, get_settings())
+    if done:
+        log.info("Looked up artwork for %d suggested artists", done)
+
+
+async def enqueue_discover_art() -> None:
+    try:
+        await find_discover_art.configure(queueing_lock="discover-art").defer_async()
+    except AlreadyEnqueued:
+        pass
 
 
 @app.periodic(cron="*/15 * * * *", periodic_id="cover-colours")
@@ -953,6 +1002,39 @@ async def _gig_playlists(user_id: int) -> None:
         )
 
 
+@app.periodic(cron="30 4 * * *", periodic_id="delete-old-gig-playlists")
+@app.task(queue="maintenance", queueing_lock="old-gig-playlists", lock="gig-playlists")
+async def delete_old_gig_playlists_periodically(timestamp: int) -> None:
+    """Daily: gig playlists deleted (in Plex and here) for people who want them gone some
+    time after the gig."""
+    from sqlalchemy import text as sql
+
+    from plekstender.db.models import User
+    from plekstender.gigs.playlists import delete_old_gig_playlists
+
+    async with get_sessionmaker()() as db:
+        user_ids = list(
+            await db.scalars(
+                sql(
+                    "SELECT id FROM users"
+                    " WHERE preferences #>> '{gig_playlists,delete_after}' NOT IN ('0')"
+                    " ORDER BY id"
+                )
+            )
+        )
+    for user_id in user_ids:
+        async with (
+            get_sessionmaker()() as db,
+            httpx.AsyncClient(headers={"User-Agent": f"Plekstender/{__version__}"}) as http,
+        ):
+            user = await db.get(User, user_id)
+            if user is None:
+                continue
+            deleted = await delete_old_gig_playlists(db, http, get_settings(), user)
+        if deleted:
+            log.info("old gig playlists for user %s: %d deleted", user_id, deleted)
+
+
 @app.periodic(cron="40 3 * * *", periodic_id="prune-history")
 @app.task(queue="maintenance", queueing_lock="prune-history")
 async def prune_history(timestamp: int) -> None:
@@ -962,6 +1044,9 @@ async def prune_history(timestamp: int) -> None:
 
     await prune_jobs(app)
     async with get_sessionmaker()() as db:
+        covers_gone = await release_covers.prune(db, get_settings())
+        if covers_gone:
+            log.info("deleted %d covers of releases out over 90 days ago", covers_gone)
         removed = await prune_records(db)
         await db.commit()
     if any(removed.values()):

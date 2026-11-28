@@ -16,6 +16,7 @@ const requests = (path: string) =>
   fetchMock.mock.calls.filter(([input]) => new URL(typeof input === 'string' ? input : input.url, 'http://localhost').pathname === path)
 
 beforeEach(() => {
+  localStorage.clear() // the threshold and sort chosen are kept between visits
   jobs = []
   usable = ['deezer', 'itunes', 'coverartarchive', 'tidal', 'fanart', 'plex', 'search']
   prefs = { accent: null, skip_threshold: 80, phone_start: 'rate', cover_source: 'deezer', best_cover_sources: ['deezer', 'itunes', 'tidal', 'coverartarchive'] }
@@ -124,7 +125,7 @@ describe('Album covers', () => {
     expect(await screen.findByText('Applying best matches…')).toBeInTheDocument()
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
     const [started] = requests('/api/servers/1/artwork/albums/best')
-    expect(await (started[0] as Request).clone().json()).toEqual({ show: 'needs', sources: ['deezer', 'itunes', 'tidal', 'coverartarchive'] })
+    expect(await (started[0] as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['deezer', 'itunes', 'tidal', 'coverartarchive'] })
   })
 
   it('opens albums on the source chosen, and remembers the sources for best matches', async () => {
@@ -153,7 +154,7 @@ describe('Album covers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply to 2' }))
     await vi.waitFor(() => expect(requests('/api/servers/1/artwork/albums/best')).toHaveLength(1))
     const [started] = requests('/api/servers/1/artwork/albums/best')[0]
-    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', sources: ['itunes', 'tidal', 'coverartarchive'] })
+    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['itunes', 'tidal', 'coverartarchive'] })
     await vi.waitFor(async () => {
       const [put] = requests('/api/auth/me/preferences').at(-1) ?? []
       expect(await (put as Request).clone().json()).toMatchObject({ cover_source: 'coverartarchive', best_cover_sources: ['itunes', 'tidal', 'coverartarchive'] })
@@ -181,11 +182,34 @@ describe('Album covers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply to 2' }))
     await vi.waitFor(() => expect(requests('/api/servers/1/artwork/albums/best')).toHaveLength(1))
     const [started] = requests('/api/servers/1/artwork/albums/best')[0]
-    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', sources: ['itunes', 'coverartarchive'] })
+    expect(await (started as Request).clone().json()).toEqual({ show: 'needs', low_px: 600, sources: ['itunes', 'coverartarchive'] })
     // Tidal stays chosen for when it's set up.
     await vi.waitFor(async () => {
       const [put] = requests('/api/auth/me/preferences').at(-1) ?? []
       expect(await (put as Request).clone().json()).toMatchObject({ best_cover_sources: ['itunes', 'tidal', 'coverartarchive'] })
     })
   })
+})
+
+it('counts covers as low resolution from 600, 1000 or 1500 px, and sorts the newest first', async () => {
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <AlbumCovers serverId={1} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+  await screen.findByRole('list', { name: 'Albums' })
+  const last = () => new URL((requests('/api/servers/1/artwork/albums').at(-1)![0] as Request).url).searchParams
+  expect([last().get('low_px'), last().get('sort')]).toEqual(['600', 'smallest'])
+
+  fireEvent.click(screen.getByRole('button', { name: '1000 px' }))
+  await vi.waitFor(() => expect(last().get('low_px')).toBe('1000'))
+  expect(screen.getByText('Low resolution: under 1000 pixels on the shorter side.')).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('combobox', { name: 'Sort' }), { target: { value: 'added' } })
+  await vi.waitFor(() => expect(last().get('sort')).toBe('added'))
+  // Kept for the next visit.
+  expect([localStorage.getItem('cover-low-px'), localStorage.getItem('cover-sort')]).toEqual(['1000', 'added'])
+  fireEvent.change(screen.getByRole('combobox', { name: 'Sort' }), { target: { value: 'changed' } })
+  await vi.waitFor(() => expect(last().get('sort')).toBe('changed'))
 })

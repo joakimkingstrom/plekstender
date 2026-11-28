@@ -12,24 +12,26 @@ const PAGE = 60
 
 export const artworkKeys = {
   all: (serverId: number) => ['servers', serverId, 'artwork'] as const,
-  artists: (serverId: number, q: string, status: ArtworkStatus | null) =>
-    ['servers', serverId, 'artwork', 'artists', { q, status }] as const,
+  artists: (serverId: number, q: string, status: ArtworkStatus | null, sort: ArtistSort = 'name') =>
+    ['servers', serverId, 'artwork', 'artists', { q, status, sort }] as const,
   candidates: (serverId: number, key: number, source: CandidateSource) =>
     ['servers', serverId, 'artwork', 'candidates', key, source] as const,
   fonts: ['artwork', 'fonts'] as const,
   fanartKey: ['admin', 'fanart'] as const,
 }
 
-export function useArtworkArtists(serverId: number, q: string, status: ArtworkStatus | null) {
+export type ArtistSort = 'name' | 'added' | 'changed'
+
+export function useArtworkArtists(serverId: number, q: string, status: ArtworkStatus | null, sort: ArtistSort = 'name') {
   return useInfiniteQuery({
-    queryKey: artworkKeys.artists(serverId, q, status),
+    queryKey: artworkKeys.artists(serverId, q, status, sort),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       unwrap(
         api.GET('/api/servers/{server_id}/artwork/artists', {
           params: {
             path: { server_id: serverId },
-            query: { offset: pageParam, limit: PAGE, ...(q ? { q } : {}), ...(status ? { status } : {}) },
+            query: { offset: pageParam, limit: PAGE, sort, ...(q ? { q } : {}), ...(status ? { status } : {}) },
           },
         }),
       ),

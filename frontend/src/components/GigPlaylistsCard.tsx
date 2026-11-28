@@ -3,12 +3,26 @@ import { Link } from 'react-router'
 import { api, errorMessage, unwrap, type Schemas } from '../api/client'
 import { useMe, useSetPreferences } from '../api/hooks'
 import { formatDate } from '../format'
+import { Select } from './Select'
 import { Card, Notice, Spinner } from './ui'
 
 const KEY = ['gigs', 'playlists'] as const
 type Choice = Required<Schemas['GigPlaylistSettings']>
 
-const OPTIONS: [keyof Choice, string, string][] = [
+type Unit = Choice['delete_unit']
+const DEFAULT: Choice = { before: false, after: false, delete_after: 0, delete_unit: 'weeks' }
+const UNITS: { value: Unit; label: string }[] = [
+  { value: 'days', label: 'days' },
+  { value: 'weeks', label: 'weeks' },
+  { value: 'months', label: 'months' },
+]
+const amounts = (current: number) =>
+  [...new Set([...Array.from({ length: 12 }, (_, i) => i + 1), current])]
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b)
+    .map((n) => ({ value: n, label: String(n) }))
+
+const OPTIONS: ['before' | 'after', string, string][] = [
   [
     'before',
     'Before a gig',
@@ -31,8 +45,11 @@ export function GigPlaylistsCard() {
     mutationFn: () => unwrap(api.POST('/api/gigs/playlists/check')),
     onSuccess: () => setTimeout(() => void qc.invalidateQueries({ queryKey: KEY }), 15_000),
   })
-  const chosen: Choice = { before: false, after: false, ...me.data?.preferences?.gig_playlists }
+  const chosen: Choice = { ...DEFAULT, ...me.data?.preferences?.gig_playlists }
   const items = made.data?.items ?? []
+  const set = (patch: Partial<Choice>, then?: () => void) =>
+    save.mutate({ gig_playlists: { ...chosen, ...patch } }, { onSuccess: then })
+  const deleting = chosen.delete_after > 0
 
   return (
     <Card title="Gig playlists">
@@ -54,7 +71,7 @@ export function GigPlaylistsCard() {
                 checked={chosen[key]}
                 onChange={(e) => {
                   const on = e.target.checked
-                  save.mutate({ gig_playlists: { ...chosen, [key]: on } }, { onSuccess: () => on && check.mutate() })
+                  set({ [key]: on }, () => on && check.mutate())
                 }}
               />
               <span>
@@ -63,6 +80,41 @@ export function GigPlaylistsCard() {
               </span>
             </label>
           ))}
+          <div className="flex items-start gap-2">
+            <input
+              id="gig-playlists-delete"
+              type="checkbox"
+              className="mt-0.5"
+              checked={deleting}
+              onChange={(e) => set({ delete_after: e.target.checked ? 2 : 0 })}
+            />
+            <div>
+              <label htmlFor="gig-playlists-delete" className="font-medium">
+                Delete them afterwards
+              </label>
+              {deleting ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                  <Select
+                    size="sm"
+                    label="How many"
+                    value={chosen.delete_after}
+                    options={amounts(chosen.delete_after)}
+                    onChange={(delete_after) => set({ delete_after })}
+                  />
+                  <Select
+                    size="sm"
+                    label="Days, weeks or months"
+                    value={chosen.delete_unit}
+                    options={UNITS}
+                    onChange={(delete_unit) => set({ delete_unit })}
+                  />
+                  <span>after the gig, in Plex and here. They aren't made again.</span>
+                </div>
+              ) : (
+                <span className="block text-xs text-muted">Kept until you delete them.</span>
+              )}
+            </div>
+          </div>
         </fieldset>
         {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
         {check.isSuccess && <p className="text-xs text-muted">Looking for gigs now: playlists show up in a minute or two.</p>}

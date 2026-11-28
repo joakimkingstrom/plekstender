@@ -94,12 +94,11 @@ function Review({ serverId, data }: { serverId: number; data: PlaylistImportPrev
                   }}
                 />
                 <span className="min-w-0 flex-1 truncate">
-                  {m.title}
                   <span className="text-muted">
-                    {' '}
-                    · {m.artist}
-                    {m.album ? ` · ${m.album}` : ''}
+                    {m.artist}
+                    {m.album ? ` · ${m.album}` : ''} ·{' '}
                   </span>
+                  {m.title}
                 </span>
                 {m.how === 'title' && (
                   <span className="rounded-full bg-warn/15 px-2 text-xs text-warn" title={`The file says ${s.artist}`}>

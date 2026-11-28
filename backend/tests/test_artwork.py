@@ -297,6 +297,9 @@ async def test_artwork_editor_flow(app: FastAPI, plex: FakePlex, web: respx.Mock
     assert applied.json()["thumb"] == "/library/metadata/100/thumb/1"  # the new poster
     [(key, image)] = plex.library.uploaded
     assert key == 100 and jpeg_size(image) == (1000, 1000)
+    # Recently changed: the artist just done first.
+    changed = (await owner.get(f"{base}/artists", params={"sort": "changed"})).json()["items"]
+    assert changed[0]["rating_key"] == 100
 
     # Upload your own, and a Plex poster.
     upload = await owner.post(
@@ -800,3 +803,17 @@ async def test_search_thumbnails_with_query_strings(
         thumb = await owner.get(candidate["thumb"])
         assert thumb.status_code == 200, (candidate["label"], thumb.text)
         assert thumb.headers["content-type"] == "image/png"
+
+
+@pytest.mark.db
+async def test_artists_by_name_or_newest_first(
+    app: FastAPI, plex: FakePlex, web: respx.MockRouter
+) -> None:
+    owner, sid = await setup(app, plex)
+    base = f"/api/servers/{sid}/artwork/artists"
+    by_name = [a["title"] for a in (await owner.get(base)).json()["items"]]
+    assert by_name == sorted(by_name, key=str.lower)
+    newest = (await owner.get(base, params={"sort": "added"})).json()["items"]
+    # Added a second apart in the fake library, by key: the highest is the newest.
+    keys = [a["rating_key"] for a in newest]
+    assert keys == sorted(keys, reverse=True) and newest[0]["added_at"] is not None

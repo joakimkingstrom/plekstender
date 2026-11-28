@@ -69,6 +69,15 @@ class GigPlaylistSettings(BaseModel):
         description="Before a starred gig: the songs the artists have been playing lately.",
     )
     after: bool = Field(default=False, description="After a gig you went to: its setlist.")
+    delete_after: int = Field(
+        default=0,
+        ge=0,
+        le=365,
+        description="Delete gig playlists this many units after the gig; 0: keep them.",
+    )
+    delete_unit: Literal["days", "weeks", "months"] = Field(
+        default="weeks", description="The unit of delete_after."
+    )
 
 
 class GigPlaylistOut(BaseModel):
@@ -113,6 +122,10 @@ class Preferences(BaseModel):
         default=None, description="Light or dark on every device; None: each browser's own choice."
     )
     achievements: bool = Field(default=True, description="Achievements and their pop-ups.")
+    lyrics_icons: bool = Field(
+        default=False,
+        description="Small icons on song and album rows: what lyrics their files have.",
+    )
     instance_notifications: bool = Field(
         default=True, description="Admins: notifications about this Plekstender's services."
     )
@@ -361,6 +374,16 @@ class ArtistPage(BaseModel):
     limit: int
 
 
+class AlbumLyricsOut(BaseModel):
+    songs: int = Field(description="Songs on the album.")
+    with_lyrics: int = Field(
+        description="Of those, songs whose files have lyrics (or are marked instrumental)."
+    )
+
+
+LyricsKind = Literal["word", "synced", "plain", "instrumental", "none"]
+
+
 class AlbumSummary(BaseModel):
     rating_key: int
     title: str
@@ -374,6 +397,11 @@ class AlbumSummary(BaseModel):
     release_type: str = Field(
         default="Album",
         description="Album, EP, Single, Compilation, Live, Soundtrack… (from Plex's tags).",
+    )
+    lyrics: AlbumLyricsOut | None = Field(
+        default=None,
+        description="How many of its songs have lyrics in their files; None: the lyrics icons "
+        "preference is off, or none of its files have been read.",
     )
 
 
@@ -410,6 +438,11 @@ class TrackOut(BaseModel):
     album_thumb: str | None
     listens: int = Field(default=0, description="Your listens of this song (all sources).")
     seen_live: int = Field(default=0, description="Gigs you've been to where it was played.")
+    lyrics: LyricsKind | None = Field(
+        default=None,
+        description="The best lyrics its files have (word-synced, synced, plain, instrumental "
+        "or none); None: the lyrics icons preference is off, or its files haven't been read.",
+    )
 
 
 class SimilarArtistOut(BaseModel):
@@ -710,6 +743,7 @@ class ArtworkArtistOut(BaseModel):
     folder_queued: bool = Field(
         default=False, description="Apply: artist.jpg is being written by the worker."
     )
+    added_at: dt.datetime | None = Field(default=None, description="Added to Plex.")
 
 
 class ArtworkArtistPage(BaseModel):
@@ -806,6 +840,12 @@ class AcoustIdKeyOut(BaseModel):
 
 AlbumCoverState = Literal["missing", "low", "ok", "unchecked"]
 AlbumCoverFilter = Literal["needs", "missing", "low", "all"]
+# Under how many pixels (on its shorter side) a cover counts as low resolution.
+LOW_RESOLUTIONS = (600, 1000, 1500)
+# name: by artist then album; added: newest in Plex first; changed: the covers changed here
+# most recently first; smallest: no cover first, then the smallest covers (the default,
+# except for "all", which is by name).
+AlbumCoverSort = Literal["name", "added", "changed", "smallest"]
 
 
 class AlbumCoverOut(BaseModel):
@@ -817,12 +857,14 @@ class AlbumCoverOut(BaseModel):
     width: int | None = Field(description="The cover's size in Plex, once measured.")
     height: int | None
     state: AlbumCoverState = Field(
-        description="missing: no cover (or one that can't be read); low: under 600 px on its "
+        description="missing: no cover (or one that can't be read); low: under low_px (600 by "
+        "default) on its "
         "shorter side; unchecked: not measured yet."
     )
     kept: bool = Field(description="Marked as fine as it is: left out of the lists to improve.")
     source: str | None
     applied_at: dt.datetime | None
+    added_at: dt.datetime | None = Field(default=None, description="Added to Plex.")
 
 
 class AlbumCoverPage(BaseModel):
@@ -899,6 +941,9 @@ class BestCoversJobIn(BaseModel):
         default="needs", description="The albums listed with this filter (and search)."
     )
     q: str | None = Field(default=None, max_length=200)
+    low_px: int = Field(
+        default=600, description="Low resolution: under this many pixels (600, 1000 or 1500)."
+    )
     sources: list[BestCoverSource] | None = Field(
         default=None,
         min_length=1,
@@ -2641,12 +2686,23 @@ class SuggestionSourceOut(BaseModel):
     rating_key: int
 
 
+class SuggestionArtOut(BaseModel):
+    """fanart.tv artwork of a top suggestion (kept by Plekstender): where to load each."""
+
+    background: str | None
+    banner: str | None
+    logo: str | None
+
+
 class ArtistSuggestionOut(BaseModel):
     key: str
     name: str
     similar_to: int = Field(description="Library artists Plex names it as similar to.")
     sources: list[SuggestionSourceOut] = Field(description="Some of them, most played first.")
     listens: int = Field(description="Your listens to it (scrobbles count too).")
+    art: SuggestionArtOut | None = Field(
+        default=None, description="The top suggestions' artwork, once looked up (if any)."
+    )
 
 
 class ArtistSuggestionsOut(BaseModel):
@@ -2827,3 +2883,30 @@ class JobOut(BaseModel):
 class JobsOut(BaseModel):
     active: list[JobOut] = Field(description="Running, then waiting (oldest first).")
     finished: list[JobOut] = Field(description="The latest finished, newest first.")
+
+
+# --- automatic actions for new music ---------------------------------------------------------
+
+
+class NewMusicLyricsWrite(BaseModel):
+    sidecar: bool = Field(default=True, description="A .lrc (synced) or .txt next to each song.")
+    lyricsfile: bool = Field(default=False, description="A .lyricsfile.yaml next to each song.")
+    embedded: bool = Field(default=False, description="The plain lyrics in each song's tags.")
+    overwrite: bool = Field(default=False, description="Replace lyrics the files already have.")
+
+
+class NewMusicIn(BaseModel):
+    logos: bool = Field(description="fanart.tv's most liked logo for new artists.")
+    covers: bool = Field(description="The best cover match for new albums.")
+    lyrics: bool = Field(description="Look up lyrics for new albums' songs.")
+    lyrics_write: NewMusicLyricsWrite | None = Field(
+        default=None,
+        description="Where found lyrics are written (tag editing on); none: only looked up.",
+    )
+
+
+class NewMusicOut(NewMusicIn):
+    since: dt.datetime | None = Field(description="Added to Plex after this counts as new.")
+    fanart_ready: bool = Field(description="fanart.tv has an API key (logos need one).")
+    folder_ready: bool = Field(description="The music folder is set up (lyrics need it).")
+    tag_editing: bool = Field(description="Tag editing is on (writing lyrics needs it).")
