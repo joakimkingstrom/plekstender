@@ -21,7 +21,10 @@ const version = (key: number, title: string, album: number, album_title: string,
   user_rating: null, plays: current ? 4 : 0, current,
 })
 
+let owner = false
+
 beforeEach(() => {
+  owner = false
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: Request | string) => {
@@ -29,6 +32,11 @@ beforeEach(() => {
       const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
       const album = url.pathname.match(/^\/api\/servers\/1\/library\/albums\/(\d+)$/)
       if (album) {
+        if (album[1] === '211')
+          return json({
+            ...summary(211, 'Hail to the Thief', 2003), thumb: '/library/metadata/211/thumb/1', video: '/api/servers/1/library/albums/211/video',
+            summary: null, released: null, studio: null, artist_rating_key: 100, artist_title: 'Radiohead', tags: [], tracks: [], your_listens: listens,
+          })
         if (album[1] === '209')
           return json({
             ...summary(209, 'I Might Be Wrong', 2001, 'Live'), summary: null, released: null, studio: null, artist_rating_key: 100,
@@ -61,7 +69,14 @@ beforeEach(() => {
         })
       if (url.pathname === '/api/servers/1/library/artists/100')
         return json({ ...summary(100, 'Radiohead', 0), album_count: 3, summary: null, art: null, country: null, tags: [], similar: [], albums, top_tracks: [], your_listens: listens })
-      if (url.pathname === '/api/servers') return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: false, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
+      if (url.pathname === '/api/servers') return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: owner, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
+      if (url.pathname === '/api/auth/me') return json({ id: 1, username: 'me', email: null, thumb_url: null, is_admin: owner, preferences: { cover_source: 'deezer' } })
+      // Its files aren't part of this.
+      if (url.pathname.includes('/files')) return new Response('{}', { status: 403, headers: { 'content-type': 'application/json' } })
+      if (url.pathname === '/api/servers/1/artwork/albums/sources') return json({ sources: ['deezer'] })
+      if (url.pathname === '/api/servers/1/artwork/albums/211')
+        return json({ rating_key: 211, title: 'Hail to the Thief', artist: 'Radiohead', year: 2003, thumb: '/library/metadata/211/thumb/1', width: 500, height: 500, state: 'low', kept: false, source: null, applied_at: null, added_at: null })
+      if (url.pathname === '/api/servers/1/artwork/albums/211/candidates') return json({ candidates: [], note: null })
       if (url.pathname === '/api/servers/1/sync') return json({ active: null, last: null, last_sync_at: null, counts: { artists: 1, albums: 3, tracks: 30, rated_tracks: 0, plays: 0 }, incremental_minutes: 30, full_days: 7 })
       return json([])
     }),
@@ -174,4 +189,40 @@ it('shows where a compilation’s songs come from, each release artist first', a
   fireEvent.click(releases[0])
   expect(screen.queryByRole('list', { name: 'Songs from Portishead · Dummy' })).not.toBeInTheDocument()
   expect(screen.getByText(/1 of 4 songs aren’t on another album, EP or single in the library/)).toBeInTheDocument()
+})
+
+function renderAlbum(key: number) {
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={[`/library/albums/${key}`]}>
+        <main>
+          <Routes>
+            <Route path="/library/albums/:key" element={<AlbumPage />} />
+          </Routes>
+        </main>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+it('opens the cover larger in a card, its video cover when it has one', async () => {
+  renderAlbum(211)
+  fireEvent.click(await screen.findByRole('button', { name: 'Show Hail to the Thief larger' }))
+  const card = screen.getByRole('dialog', { name: 'Hail to the Thief' })
+  expect(within(card).getByLabelText('Video cover of Hail to the Thief')).toHaveAttribute('src', '/api/servers/1/library/albums/211/video')
+  // Not the server's owner: nothing to change.
+  expect(within(card).queryByRole('button', { name: 'Find a better cover' })).not.toBeInTheDocument()
+})
+
+it('lets the server’s owner find a better cover from there, and go back', async () => {
+  owner = true
+  renderAlbum(211)
+  fireEvent.click(await screen.findByRole('button', { name: 'Show Hail to the Thief larger' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Find a better cover' }))
+  // The album covers page's editor, for this album: now and new side by side, and the sources.
+  expect(await screen.findByText('Choose a cover below')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Save to Plex' })).toBeDisabled()
+  expect(screen.getByRole('tab', { name: 'Deezer' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '← The cover' }))
+  expect(await screen.findByLabelText('Video cover of Hail to the Thief')).toBeInTheDocument()
 })

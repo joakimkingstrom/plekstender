@@ -23,6 +23,20 @@ const keys = {
   tidal: ['admin', 'tidal'] as const,
 }
 
+/** One album and its cover (owners), as the list has it: to change it from the album's page. */
+export function useAlbumCover(serverId: number, key: number, enabled = true) {
+  return useQuery({
+    queryKey: [...keys.all(serverId), 'one', key],
+    enabled,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/artwork/albums/{rating_key}', {
+          params: { path: { server_id: serverId, rating_key: key } },
+        }),
+      ),
+  })
+}
+
 /** Albums and their covers: by default the ones most in need of a better cover. */
 export function useAlbumCovers(serverId: number, show: CoverFilter, q: string, lowPx: LowPx = 600, sort: CoverSort | null = null) {
   return useInfiniteQuery({

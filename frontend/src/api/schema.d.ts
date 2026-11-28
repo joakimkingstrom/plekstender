@@ -3156,6 +3156,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/albums/{rating_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Cover
+         * @description One album and its cover, as the list has it (to change it from the album's page).
+         */
+        get: operations["get_cover_api_servers__server_id__artwork_albums__rating_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/albums/{rating_key}/candidates": {
         parameters: {
             query?: never;
@@ -16850,6 +16870,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoverSourcesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cover_api_servers__server_id__artwork_albums__rating_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumCoverOut"];
                 };
             };
             /** @description Validation Error */
