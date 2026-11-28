@@ -27,6 +27,7 @@ from plekstender.api.schemas import (
     ArtistPage,
     ArtistSummary,
     ItemListensOut,
+    LiveSource,
     RecentItem,
     SimilarArtistOut,
     SongListens,
@@ -41,6 +42,7 @@ from plekstender.api.schemas import (
 from plekstender.artist_countries import ArtistKey, artist_country
 from plekstender.db.models import (
     Album,
+    AlbumColour,
     Artist,
     ItemTag,
     MediaFile,
@@ -761,6 +763,91 @@ async def get_artist(
     )
 
 
+# Where a live album's songs first came out: albums and EPs before singles, then the oldest.
+_SOURCE_TYPES = {"Album": 0, "EP": 0, "Single": 1}
+
+
+async def _live_sources(
+    db: DbDep, user_id: int, us: UserServer, album: Album, tracks: list[Track]
+) -> tuple[list[LiveSource], int]:
+    """The artist's studio releases (albums, EPs, singles) each of the live album's songs
+    first came out on (by the title without "(Live)"-style suffixes), with how many songs
+    each, oldest first; and how many songs weren't found on any."""
+    if album.artist_rating_key is None:
+        return [], len(tracks)
+    state, cond, where = visible(Album, user_id, us)
+    albums = {
+        a.rating_key: a
+        for a in await db.scalars(
+            select(Album)
+            .join(state, cond)
+            .where(
+                *where,
+                Album.artist_rating_key == album.artist_rating_key,
+                Album.rating_key != album.rating_key,
+            )
+        )
+    }
+    types = await _release_types(db, us.server_id, list(albums))
+    studio = {k: a for k, a in albums.items() if types.get(k, "Album") in _SOURCE_TYPES}
+    first: dict[str, Album] = {}
+    if studio:
+        rows = await db.execute(
+            select(Track.title, Track.album_rating_key).where(
+                Track.server_id == us.server_id, Track.album_rating_key.in_(list(studio))
+            )
+        )
+
+        def rank(a: Album) -> tuple[int, int, int]:
+            return (
+                _SOURCE_TYPES[types.get(a.rating_key, "Album")],
+                a.year if a.year is not None else 9999,
+                a.rating_key,
+            )
+
+        for title, album_key in rows.all():
+            if album_key not in studio:
+                continue
+            core, candidate = core_title(title), studio[album_key]
+            if core not in first or rank(candidate) < rank(first[core]):
+                first[core] = candidate
+    counts: dict[int, int] = {}
+    unmatched = 0
+    for track in tracks:
+        source = first.get(core_title(track.title))
+        if source is None:
+            unmatched += 1
+        else:
+            counts[source.rating_key] = counts.get(source.rating_key, 0) + 1
+    colours = {
+        key: hex_
+        for key, hex_ in (
+            await db.execute(
+                select(AlbumColour.rating_key, AlbumColour.hex).where(
+                    AlbumColour.server_id == us.server_id,
+                    AlbumColour.rating_key.in_(list(counts)),
+                )
+            )
+        ).all()
+    }
+    sources = sorted(
+        (studio[key] for key in counts),
+        key=lambda a: (a.year if a.year is not None else 9999, a.title),
+    )
+    return [
+        LiveSource(
+            rating_key=a.rating_key,
+            title=a.title,
+            year=a.year,
+            thumb=a.thumb,
+            release_type=types.get(a.rating_key, "Album"),
+            colour=colours.get(a.rating_key),
+            songs=counts[a.rating_key],
+        )
+        for a in sources
+    ], unmatched
+
+
 @router.get("/library/albums/{rating_key}", response_model=AlbumDetail)
 async def get_album(
     server_id: int, rating_key: int, db: DbDep, user: UserDep, tz: TzQuery = "UTC"
@@ -795,6 +882,12 @@ async def get_album(
         db, user.id, _zone(tz), artist_keys, normalise_title(album.title)
     )
     tracks = [_track_out(t, r, p, album) for t, r, p in track_rows]
+    live = found[0].release_type == "Live"
+    sources, unmatched = (
+        await _live_sources(db, user.id, us, album, [t for t, _, _ in track_rows])
+        if live
+        else ([], 0)
+    )
     found[0].plays = max(found[0].plays, listens.listens)
     return AlbumDetail(
         **found[0].model_dump(),
@@ -818,6 +911,8 @@ async def get_album(
             ),
         ),
         your_listens=_listens_out(listens),
+        live_sources=sources if live else None,
+        live_unmatched=unmatched,
     )
 
 
