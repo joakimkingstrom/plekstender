@@ -101,8 +101,8 @@ export function LibraryPage() {
   )
 }
 
-/** The first row: the search on the left; on the right the view (artists or albums) and the
- * cover size, rightmost. (The tag kind, the chips, and the sort are the row below.) */
+/** The first row: the search on the left, the view (artists or albums) on the right. (The tag
+ * kind, the chips, the cover size, and the sort are the row below.) */
 function Toolbar({ search, right }: { search: ReactNode; right: ReactNode }) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -137,12 +137,7 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
             aria-label="Search artists"
           />
         }
-        right={
-          <>
-            {viewSwitch}
-            <CoverSizeSwitch value={size} onChange={setSize} />
-          </>
-        }
+        right={viewSwitch}
       />
       <TagFilter
         serverId={serverId}
@@ -158,7 +153,12 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
             }}
           />
         }
-        end={<Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />}
+        end={
+          <>
+            <CoverSizeSwitch value={size} onChange={setSize} />
+            <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
+          </>
+        }
       />
       <ArtistGrid serverId={serverId} q={deferredQuery} sort={sort} tag={tag} size={size} />
     </>
@@ -214,12 +214,7 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
             aria-label="Search albums or artists"
           />
         }
-        right={
-          <>
-            {viewSwitch}
-            <CoverSizeSwitch value={size} onChange={setSize} />
-          </>
-        }
+        right={viewSwitch}
       />
       <TagFilter
         serverId={serverId}
@@ -236,7 +231,12 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
             }}
           />
         }
-        end={<Select label="Sort by" value={sort} onChange={setSort} options={ALBUM_SORTS} />}
+        end={
+          <>
+            <CoverSizeSwitch value={size} onChange={setSize} />
+            <Select label="Sort by" value={sort} onChange={setSort} options={ALBUM_SORTS} />
+          </>
+        }
       />
       <div className="mb-5 flex items-center gap-3">
         <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label="Release type">
@@ -340,7 +340,7 @@ const FILTER_KINDS: [TagKind, string][] = [
 ]
 
 /** The second row: genres, styles, or moods (`start`, the switch for `kind`), the ones to
- * filter by as chips, and the sort at the right end (`end`). */
+ * filter by as chips, and the cover size and sort at the right end (`end`). */
 function TagFilter({
   serverId,
   kind,
@@ -356,7 +356,7 @@ function TagFilter({
   onSelect: (id: number | null) => void
   /** At the start of the row (the kind of tag). */
   start?: ReactNode
-  /** At the right end of the row (the sort). */
+  /** At the right end of the row (the cover size and the sort). */
   end?: ReactNode
   className?: string
 }) {
@@ -395,7 +395,7 @@ function TagFilter({
           {chosen.name} page →
         </Link>
       )}
-      {end && <div className="ml-auto shrink-0">{end}</div>}
+      {end && <div className="ml-auto flex shrink-0 gap-2">{end}</div>}
     </div>
   )
 }
