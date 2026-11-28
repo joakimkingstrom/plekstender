@@ -359,7 +359,7 @@ describe('LivePage', () => {
   it('says when JamBase has no key yet', async () => {
     settings = { ...placed, source_ready: false, sources: [] }
     renderPage()
-    expect(await screen.findByText(/Live needs a JamBase or Ticketmaster API key/)).toBeInTheDocument()
+    expect(await screen.findByText(/Upcoming gigs need a JamBase or Ticketmaster API key/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled()
   })
 })

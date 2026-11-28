@@ -71,7 +71,7 @@ export function GigsPage() {
           <p className="text-sm text-muted">
             {filtered
               ? 'No gigs match.'
-              : 'No gigs yet. Add the ones you’ve been to, or star gigs on Live: once they’ve happened, they’re offered here.'}
+              : 'No gigs yet. Add the ones you’ve been to, or star gigs under Upcoming: once they’ve happened, they’re offered here.'}
           </p>
         </Card>
       ) : (
@@ -245,7 +245,7 @@ function Suggestions() {
   if (!suggestions.data?.length) return null
   return (
     <Card title="Did you go?">
-      <p className="mb-2 text-sm text-muted">Gigs you starred on Live that have happened.</p>
+      <p className="mb-2 text-sm text-muted">Gigs you starred under Upcoming that have happened.</p>
       <ul className="divide-y divide-border">
         {suggestions.data.map((s) => (
           <li key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
