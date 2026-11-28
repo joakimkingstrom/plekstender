@@ -122,10 +122,11 @@ describe('Library stats', () => {
       'Other20 songs2.0%',
     ])
     expect(screen.getByText('60 MB · OPUS 12, Unknown 8')).toBeInTheDocument()
-    // How much room they take: each type, and in all (so far: 8 files' sizes aren't known).
+    // How much room each type takes, and how many files in all in the middle.
     expect(screen.getByText('18 GB')).toBeInTheDocument()
-    expect(screen.getByText('20.9 GB')).toBeInTheDocument()
-    expect(screen.getByText('so far')).toBeInTheDocument()
+    expect(within(types.parentElement!.parentElement!).getByText('1,000')).toBeInTheDocument()
+    expect(screen.getByText('files')).toBeInTheDocument()
+    expect(screen.queryByText('20.9 GB')).not.toBeInTheDocument()
     expect(screen.getByText(/1 album without a year isn't counted/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'The 1990s: 2 albums' }))

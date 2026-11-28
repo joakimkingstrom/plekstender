@@ -37,7 +37,19 @@ export function AlbumCoverView({ serverId, album, children, className = '' }: { 
         {children}
       </button>
       {open && (
-        <Dialog title={album.title} subtitle={album.artist_title ?? undefined} onClose={close} wide={finding}>
+        <Dialog
+          title={album.title}
+          subtitle={album.artist_title ?? undefined}
+          onClose={close}
+          // Most of the window, with a margin all round: the cover as big as the height allows
+          // (the header, the button, and the padding take about 10.5rem), or the whole editor.
+          panelClassName={
+            finding
+              ? 'h-[calc(100dvh-3rem)] w-[calc(100vw-2rem)] max-w-[120rem]'
+              : 'max-h-[calc(100dvh-3rem)] w-[min(calc(100vw-2rem),calc(100dvh-10.5rem))]'
+          }
+          fill={finding}
+        >
           {finding ? (
             <FindCover serverId={serverId} albumKey={album.rating_key} onBack={() => setFinding(false)} />
           ) : (
@@ -65,10 +77,10 @@ function Large({ serverId, album, onFind }: { serverId: number; album: Album; on
           loop
           playsInline
           autoPlay={!reduced}
-          className="mx-auto max-h-[70dvh] w-full rounded-lg object-contain"
+          className="aspect-square w-full rounded-lg object-contain"
         />
       ) : (
-        src && <img src={src} alt={`Cover of ${album.title}`} className="mx-auto max-h-[70dvh] w-auto rounded-lg object-contain" />
+        src && <img src={src} alt={`Cover of ${album.title}`} className="aspect-square w-full rounded-lg object-contain" />
       )}
       {onFind && (
         <div className="flex justify-center">
@@ -88,12 +100,14 @@ function FindCover({ serverId, albumKey, onBack }: { serverId: number; albumKey:
   if (cover.isPending) return <Spinner />
   if (cover.isError) return <Notice tone="error">{errorMessage(cover.error)}</Notice>
   return (
-    <div className="flex h-[min(56rem,78dvh)] min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <CoverEditor
         serverId={serverId}
         album={cover.data}
         back="The cover"
         onBack={onBack}
+        // Filling the dialog: its preview sizes the two covers from the height it gets.
+        className="flex-1"
         // The album's page shows the new cover too.
         onSaved={() => void qc.invalidateQueries({ queryKey: libraryKeys.library(serverId) })}
       />
