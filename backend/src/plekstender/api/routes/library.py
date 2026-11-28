@@ -7,29 +7,47 @@ their own Plex account can access, in the music libraries they selected.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal, cast
 from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import ColumnElement, and_, func, literal, select, tuple_
+from fastapi.responses import FileResponse
+from sqlalchemy import ColumnElement, and_, func, literal, or_, select, true, tuple_
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import aliased
 
-from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
+from plekstender.api.deps import AdminDep, CipherDep, DbDep, HttpDep, SettingsDep, UserDep
 from plekstender.api.routes.servers import get_user_server, server_client
 from plekstender.api.schemas import (
     AlbumDetail,
+    AlbumListPage,
     AlbumLyricsOut,
     AlbumSummary,
+    ArtistCover,
+    ArtistCoversOut,
     ArtistDetail,
     ArtistNeighbourOut,
     ArtistNeighboursOut,
     ArtistPage,
     ArtistSummary,
+    CoveredSong,
+    CoverOf,
+    CoverOriginalIn,
+    CoverOriginalsOut,
     ItemListensOut,
+    LibrarySearchOut,
     RecentItem,
+    SameTitleSong,
+    SearchHit,
     SimilarArtistOut,
     SongListens,
+    SongSource,
+    SongVersion,
+    SongVersionsOut,
+    SourceSong,
     TagAlbum,
     TagDetail,
     TagOut,
@@ -40,9 +58,11 @@ from plekstender.artist_countries import ArtistKey, artist_country
 from plekstender.db.models import (
     Album,
     Artist,
+    FolderVideo,
     ItemTag,
     MediaFile,
     SimilarArtist,
+    SongCover,
     Tag,
     Track,
     User,
@@ -52,13 +72,15 @@ from plekstender.db.models import (
 from plekstender.gigs.seen_live import seen_live, times_seen
 from plekstender.history import stats
 from plekstender.plex.tv import PlexError
-from plekstender.sync.parse import normalise_artist, normalise_title
+from plekstender.sync.parse import core_title, normalise_artist, normalise_title, without_suffixes
 from plekstender.tags.lyrics_kinds import Kind, best
 from plekstender.tags.read import LYRICS_READER
+from plekstender.tags.scan import video_folder
 
 router = APIRouter(prefix="/api/servers/{server_id}", tags=["library"])
 
 ArtistSort = Literal["title", "popularity", "plays", "rating", "added"]
+AlbumSort = Literal["artist", "title", "newest", "oldest", "added", "rating", "plays", "popularity"]
 IMAGE_PATH = re.compile(r"^/library/metadata/\d+/(?:thumb|art)(?:/\d+)?$")
 IMAGE_SIZES = (64, 128, 256, 400, 600, 1000)
 
@@ -155,6 +177,130 @@ async def list_artists(
         total=total or 0,
         offset=offset,
         limit=limit,
+    )
+
+
+def _release_type() -> Any:
+    """An album's release type in SQL, as `_release_types` works it out: its Subformat
+    (Compilation, Live…) if Plex set one, else its Format (Album, EP, Single), else Album."""
+
+    def first(kind: str) -> Any:
+        return (
+            select(func.min(Tag.name))
+            .select_from(ItemTag)
+            .join(Tag, ItemTag.tag_id == Tag.id)
+            .where(
+                ItemTag.server_id == Album.server_id,
+                ItemTag.rating_key == Album.rating_key,
+                Tag.kind == kind,
+            )
+            .correlate(Album)
+            .scalar_subquery()
+        )
+
+    return func.coalesce(first("subformat"), first("format"), literal("Album"))
+
+
+def album_has_tag(server_id: int, tag_id: int) -> ColumnElement[bool]:
+    """The album has the tag, or its artist has it."""
+    tagged = select(ItemTag.rating_key).where(
+        ItemTag.server_id == server_id, ItemTag.tag_id == tag_id
+    )
+    return Album.rating_key.in_(tagged) | Album.artist_rating_key.in_(tagged)
+
+
+@router.get("/library/albums", response_model=AlbumListPage)
+async def list_albums(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    q: str | None = Query(default=None, max_length=200),
+    tag: int | None = None,
+    release_type: str | None = Query(default=None, max_length=40),
+    sort: AlbumSort = "artist",
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=60, ge=1, le=200),
+) -> AlbumListPage:
+    """Every album, with its artist: searched (by album or artist), filtered by genre, style,
+    or mood (the album's or its artist's) and by release type, and sorted."""
+    us = await get_user_server(db, user, server_id)
+    state, cond, where = visible(Album, user.id, us)
+    kind = _release_type()
+    filters: list[ColumnElement[bool]] = list(where)
+    if q:
+        like = _like(q)
+        filters.append(
+            or_(Album.title.ilike(like, escape="\\"), Artist.title.ilike(like, escape="\\"))
+        )
+    if tag is not None:
+        filters.append(album_has_tag(us.server_id, tag))
+
+    def query(*columns: Any) -> Any:
+        return (
+            select(*columns)
+            .select_from(Album)
+            .join(state, cond)
+            .outerjoin(
+                Artist,
+                and_(
+                    Artist.server_id == Album.server_id,
+                    Artist.rating_key == Album.artist_rating_key,
+                ),
+            )
+        )
+
+    types = {
+        name: n
+        for name, n in (
+            await db.execute(query(kind, func.count()).where(*filters).group_by(kind))
+        ).all()
+    }
+    if release_type:
+        filters.append(kind == release_type)
+    total = await db.scalar(query(func.count()).where(*filters)) or 0
+    by_title = func.lower(func.coalesce(Album.title_sort, Album.title))
+    orders: dict[str, list[Any]] = {
+        "artist": [
+            func.lower(func.coalesce(Artist.title_sort, Artist.title)),
+            Album.year.nulls_last(),
+            by_title,
+        ],
+        "title": [by_title],
+        "newest": [Album.year.desc().nulls_last(), by_title],
+        "oldest": [Album.year.nulls_last(), by_title],
+        "added": [Album.added_at.desc().nulls_last()],
+        "rating": [state.user_rating.desc().nulls_last(), by_title],
+        "plays": [plays_of(state).desc(), by_title],
+        "popularity": [Album.popularity.desc().nulls_last(), by_title],
+    }
+    rows = (
+        await db.execute(
+            query(Album.rating_key, Artist.rating_key, Artist.title)
+            .where(*filters)
+            .order_by(*orders[sort], Album.rating_key)
+            .offset(offset)
+            .limit(limit)
+        )
+    ).all()
+    keys = [key for key, _, _ in rows]
+    summaries = {
+        a.rating_key: a
+        for a in await _albums_with_lyrics(
+            db, user, us.server_id, await _albums(db, user.id, us, Album.rating_key.in_(keys))
+        )
+    }
+    return AlbumListPage(
+        items=[
+            TagAlbum(
+                **summaries[key].model_dump(), artist_rating_key=artist_key, artist_title=artist
+            )
+            for key, artist_key, artist in rows
+            if key in summaries
+        ],
+        total=total,
+        offset=offset,
+        limit=limit,
+        types=types,
     )
 
 
@@ -451,6 +597,49 @@ async def _release_types(db: DbDep, server_id: int, keys: list[int]) -> dict[int
     }
 
 
+VIDEO_TYPES = {
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+}
+
+
+async def album_videos(db: DbDep, server_id: int, album_keys: list[int]) -> dict[int, FolderVideo]:
+    """Each album's video cover (copied by the scan): one in the folder its songs are in, else
+    in the folder above (an album split into CD1, CD2...)."""
+    if not album_keys:
+        return {}
+    videos: dict[str, FolderVideo] = {}
+    for video in await db.scalars(
+        select(FolderVideo).where(
+            FolderVideo.server_id == server_id, FolderVideo.stored.is_not(None)
+        )
+    ):
+        videos.setdefault(str(PurePosixPath(video.path).parent), video)
+    if not videos:
+        return {}
+    rows = await db.execute(
+        select(Track.album_rating_key, MediaFile.path)
+        .join(
+            Track,
+            and_(Track.server_id == MediaFile.server_id, Track.rating_key == MediaFile.rating_key),
+        )
+        .where(MediaFile.server_id == server_id, Track.album_rating_key.in_(album_keys))
+    )
+    found: dict[int, FolderVideo] = {}
+    for album_key, path in rows.all():
+        if album_key is None or album_key in found:
+            continue
+        folder = PurePosixPath(path).parent
+        match = videos.get(str(folder)) or (
+            videos.get(str(folder.parent)) if str(folder.parent) != "." else None
+        )
+        if match is not None:
+            found[album_key] = match
+    return found
+
+
 async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> list[AlbumSummary]:
     state, cond, where = visible(Album, user_id, us)
     rows = await db.execute(
@@ -461,6 +650,7 @@ async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> lis
     )
     found = rows.all()
     types = await _release_types(db, us.server_id, [a.rating_key for a, _, _ in found])
+    videos = await album_videos(db, us.server_id, [a.rating_key for a, _, _ in found])
     return [
         AlbumSummary(
             rating_key=a.rating_key,
@@ -473,6 +663,11 @@ async def _albums(db: DbDep, user_id: int, us: UserServer, *filters: Any) -> lis
             user_rating=rating,
             plays=plays,
             release_type=types.get(a.rating_key, "Album"),
+            video=(
+                f"/api/servers/{us.id}/library/albums/{a.rating_key}/video"
+                if a.rating_key in videos
+                else None
+            ),
         )
         for a, rating, plays in found
     ]
@@ -629,6 +824,119 @@ def _with_listens(
     return tracks
 
 
+@dataclass
+class _Original:
+    """A cover's original in the library: its artist, and the song's releases there."""
+
+    artist_rating_key: int | None
+    rating_key: int | None  # its oldest release
+    album_rating_key: int | None
+    versions: int
+
+
+async def _originals(
+    db: DbDep, user_id: int, us: UserServer, wanted: set[tuple[str, str | None]]
+) -> dict[tuple[str, str | None], _Original]:
+    """For (original artist, original title) pairs: the artist in the library (by normalised
+    name), and the song by them there (by the title without "(Remastered)"-style suffixes,
+    as Song versions counts its releases)."""
+    keys = {normalise_artist(name) for name, _ in wanted}
+    if not keys:
+        return {}
+    a_state, a_cond, a_where = visible(Artist, user_id, us)
+    artists = {
+        key: rk
+        for key, rk in (
+            await db.execute(
+                select(Artist.name_key, Artist.rating_key)
+                .join(a_state, a_cond)
+                .where(*a_where, Artist.name_key.in_(keys))
+                .order_by(Artist.rating_key)
+            )
+        ).all()
+        if key is not None
+    }
+    t_state, t_cond, t_where = visible(Track, user_id, us)
+    rows = await db.execute(
+        select(Track.rating_key, Track.title, Track.artist_key, Track.album_rating_key, Album.year)
+        .join(t_state, t_cond)
+        .outerjoin(
+            Album,
+            and_(Album.server_id == Track.server_id, Album.rating_key == Track.album_rating_key),
+        )
+        .where(*t_where, Track.artist_key.in_(keys))
+    )
+    songs: dict[tuple[str | None, str], list[tuple[int, int, int | None]]] = {}
+    for rk, track_title, artist_key, album_key, year in rows.all():
+        songs.setdefault((artist_key, core_title(track_title)), []).append(
+            (year if year is not None else 9999, rk, album_key)
+        )
+    out: dict[tuple[str, str | None], _Original] = {}
+    for name, title in wanted:
+        key = normalise_artist(name)
+        releases = sorted(songs.get((key, core_title(title)), [])) if title else []
+        oldest = releases[0] if releases else None
+        out[(name, title)] = _Original(
+            artists.get(key),
+            oldest[1] if oldest else None,
+            oldest[2] if oldest else None,
+            len(releases),
+        )
+    return out
+
+
+def _cover_of(cover: SongCover, original: _Original | None) -> CoverOf:
+    return CoverOf(
+        artist=cover.original_artist,
+        title=cover.original_title,
+        url=cover.original_url,
+        cover_url=cover.performance_url,
+        source=cover.source,
+        artist_rating_key=original.artist_rating_key if original else None,
+        original_rating_key=original.rating_key if original else None,
+        original_album_rating_key=original.album_rating_key if original else None,
+        original_versions=original.versions if original else 0,
+    )
+
+
+async def _with_covers(db: DbDep, user_id: int, us: UserServer, tracks: list[TrackOut]) -> None:
+    """Marks the songs that are covers (SecondHandSongs or MusicBrainz: looked up by the
+    worker when an admin turned it on), with whose song they are and where that is in the
+    library."""
+    if not tracks:
+        return
+    rows = await db.execute(
+        select(Track.rating_key, SongCover)
+        .join(
+            SongCover,
+            and_(
+                SongCover.artist_key == Track.artist_key, SongCover.title_norm == Track.title_norm
+            ),
+        )
+        .where(
+            Track.server_id == us.server_id,
+            Track.rating_key.in_([t.rating_key for t in tracks]),
+            SongCover.status == "cover",
+            SongCover.original_url.is_not(None),  # not still waiting to hear whose song
+        )
+    )
+    covers = {key: cover for key, cover in rows.all()}
+    originals = await _originals(
+        db,
+        user_id,
+        us,
+        {(c.original_artist, c.original_title) for c in covers.values() if c.original_artist},
+    )
+    for track in tracks:
+        if cover := covers.get(track.rating_key):
+            original = (
+                originals.get((cover.original_artist, cover.original_title))
+                if cover.original_artist
+                else None
+            )
+            track.cover_of = _cover_of(cover, original)
+
+
 async def _with_seen_live(
     db: DbDep, user_id: int, tracks: list[TrackOut], artist: str | None
 ) -> list[TrackOut]:
@@ -649,6 +957,119 @@ async def _title_norms(db: DbDep, server_id: int, keys: list[int]) -> dict[int, 
         )
     )
     return {k: t for k, t in rows.all()}
+
+
+SEARCH_EACH = 6  # results of each kind
+
+
+@router.get("/library/search", response_model=LibrarySearchOut)
+async def search_library(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    q: Annotated[str, Query(min_length=1, max_length=200)],
+) -> LibrarySearchOut:
+    """Artists, albums and songs whose names contain the text (names starting with it first,
+    then the most popular), for the header's search."""
+    us = await get_user_server(db, user, server_id)
+    like = _like(q.strip())
+    starts = f"{like[1:]}"  # the text, then anything
+
+    def ranked(column: Any, popularity: Any) -> tuple[Any, ...]:
+        return (
+            (func.lower(column) == q.strip().lower()).desc(),
+            column.ilike(starts, escape="\\").desc(),
+            popularity.desc().nulls_last(),
+            column,
+        )
+
+    a_state, a_cond, a_where = visible(Artist, user.id, us)
+    artists = (
+        await db.scalars(
+            select(Artist)
+            .join(a_state, a_cond)
+            .where(*a_where, Artist.title.ilike(like, escape="\\"))
+            .order_by(*ranked(Artist.title, Artist.popularity))
+            .limit(SEARCH_EACH)
+        )
+    ).all()
+    owner = aliased(Artist)
+    al_state, al_cond, al_where = visible(Album, user.id, us)
+    albums = (
+        await db.execute(
+            select(Album, owner.title)
+            .join(al_state, al_cond)
+            .outerjoin(
+                owner,
+                and_(
+                    owner.server_id == Album.server_id, owner.rating_key == Album.artist_rating_key
+                ),
+            )
+            .where(*al_where, Album.title.ilike(like, escape="\\"))
+            .order_by(*ranked(Album.title, Album.popularity))
+            .limit(SEARCH_EACH)
+        )
+    ).all()
+    t_state, t_cond, t_where = visible(Track, user.id, us)
+    song_artist = aliased(Artist)
+    song_album = aliased(Album)
+    # One release a song (the most popular).
+    songs = (
+        await db.execute(
+            select(Track, song_artist.title, song_album)
+            .ext(distinct_on(Track.artist_key, Track.title_norm))
+            .join(t_state, t_cond)
+            .outerjoin(
+                song_artist,
+                and_(
+                    song_artist.server_id == Track.server_id,
+                    song_artist.rating_key == Track.artist_rating_key,
+                ),
+            )
+            .outerjoin(
+                song_album,
+                and_(
+                    song_album.server_id == Track.server_id,
+                    song_album.rating_key == Track.album_rating_key,
+                ),
+            )
+            .where(*t_where, Track.title.ilike(like, escape="\\"))
+            .order_by(Track.artist_key, Track.title_norm, Track.popularity.desc().nulls_last())
+            .limit(200)
+        )
+    ).all()
+    songs = sorted(
+        songs,
+        key=lambda r: (
+            r[0].title.lower() != q.strip().lower(),
+            not r[0].title.lower().startswith(q.strip().lower()),
+            -(r[0].popularity or 0),
+            r[0].title,
+        ),
+    )[:SEARCH_EACH]
+    return LibrarySearchOut(
+        artists=[
+            SearchHit(rating_key=a.rating_key, title=a.title, thumb=a.thumb, subtitle=None)
+            for a in artists
+        ],
+        albums=[
+            SearchHit(rating_key=a.rating_key, title=a.title, thumb=a.thumb, subtitle=artist)
+            for a, artist in albums
+        ],
+        songs=[
+            SearchHit(
+                rating_key=t.rating_key,
+                title=t.title,
+                thumb=album.thumb if album else None,
+                subtitle=" · ".join(
+                    x for x in (t.original_title or artist, album.title if album else None) if x
+                )
+                or None,
+                album_rating_key=t.album_rating_key,
+            )
+            for t, artist, album in songs
+        ],
+    )
 
 
 @router.get("/library/artists/{rating_key}/neighbours", response_model=ArtistNeighboursOut)
@@ -686,6 +1107,176 @@ async def artist_neighbours(
         return ArtistNeighbourOut(rating_key=row[0], title=row[1]) if row else None
 
     return ArtistNeighboursOut(previous=await one(True), next=await one(False))
+
+
+@router.get("/library/artists/{rating_key}/covers", response_model=ArtistCoversOut)
+async def get_artist_covers(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep
+) -> ArtistCoversOut:
+    """The artist's covers of other people's songs, and their songs others covered, as Cover
+    songs found them in the library."""
+    us = await get_user_server(db, user, server_id)
+    a_state, a_cond, a_where = visible(Artist, user.id, us)
+    artist = await db.scalar(
+        select(Artist).join(a_state, a_cond).where(*a_where, Artist.rating_key == rating_key)
+    )
+    if artist is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Artist not found")
+    key = normalise_artist(artist.title)
+    t_state, t_cond, t_where = visible(Track, user.id, us)
+    with_album = and_(
+        Album.server_id == Track.server_id, Album.rating_key == Track.album_rating_key
+    )
+    decided = (SongCover.status == "cover", SongCover.original_url.is_not(None))
+
+    def oldest(rows: Any, song: Any) -> list[Any]:
+        """One row per song: its oldest release."""
+        firsts: dict[Any, Any] = {}
+        for row in sorted(rows, key=lambda r: (r.year if r.year is not None else 9999, r.rk)):
+            firsts.setdefault(song(row), row)
+        return list(firsts.values())
+
+    # Their covers.
+    mine = oldest(
+        (
+            await db.execute(
+                select(
+                    Track.rating_key.label("rk"),
+                    Track.title,
+                    Track.title_norm,
+                    Track.album_rating_key,
+                    Album.title.label("album_title"),
+                    Album.year,
+                    SongCover,
+                )
+                .join(t_state, t_cond)
+                .join(
+                    SongCover,
+                    and_(
+                        SongCover.artist_key == Track.artist_key,
+                        SongCover.title_norm == Track.title_norm,
+                    ),
+                )
+                .outerjoin(Album, with_album)
+                # Their songs: on their albums, whoever the track credits ("Elvis Presley & the
+                # Jordanaires"), or credited to them on others' (a compilation).
+                .where(
+                    *t_where,
+                    or_(Track.artist_rating_key == rating_key, Track.artist_key == key),
+                    *decided,
+                )
+            )
+        ).all(),
+        lambda r: r.title_norm,
+    )
+    # Their songs, covered: covers whose original artist is them (a rough match in SQL, then
+    # the exact one), and those covers' recordings in the library.
+    words = sorted(re.findall(r"\w+", artist.title.lower()), key=len, reverse=True)
+    theirs = []
+    if words:
+        theirs = [
+            c
+            for c in await db.scalars(
+                select(SongCover).where(
+                    *decided, SongCover.original_artist.ilike(_like(words[0]), escape="\\")
+                )
+            )
+            if c.original_artist and normalise_artist(c.original_artist) == key
+        ]
+    by_song = {(c.artist_key, c.title_norm): c for c in theirs if c.artist_key != key}
+    covered = []
+    if by_song:
+        covered = (
+            oldest(
+                (
+                    await db.execute(
+                        select(
+                            Track.rating_key.label("rk"),
+                            Track.title,
+                            Track.title_norm,
+                            Track.artist_key,
+                            Track.original_title.label("track_artist"),
+                            Track.artist_rating_key,
+                            Track.album_rating_key,
+                            Album.title.label("album_title"),
+                            Album.year,
+                        )
+                        .join(t_state, t_cond)
+                        .outerjoin(Album, with_album)
+                        .where(
+                            *t_where, tuple_(Track.artist_key, Track.title_norm).in_(list(by_song))
+                        )
+                    )
+                ).all(),
+                lambda r: (r.artist_key, r.title_norm),
+            )
+            if by_song
+            else []
+        )
+    # Who covered them: the artists in the library, by name.
+    names: dict[str, tuple[int, str]] = {}
+    if covered:
+        names = {
+            k: (rk, title)
+            for k, rk, title in (
+                await db.execute(
+                    select(Artist.name_key, Artist.rating_key, Artist.title)
+                    .join(a_state, a_cond)
+                    .where(*a_where, Artist.name_key.in_({r.artist_key for r in covered}))
+                )
+            ).all()
+            if k is not None
+        }
+    originals = await _originals(
+        db,
+        user.id,
+        us,
+        {
+            (r.SongCover.original_artist, r.SongCover.original_title)
+            for r in mine
+            if r.SongCover.original_artist
+        }
+        | {(artist.title, by_song[(r.artist_key, r.title_norm)].original_title) for r in covered},
+    )
+    out_mine = [
+        ArtistCover(
+            rating_key=r.rk,
+            title=r.title,
+            album_rating_key=r.album_rating_key,
+            album_title=r.album_title,
+            year=r.year,
+            cover_of=_cover_of(
+                r.SongCover,
+                originals.get((r.SongCover.original_artist, r.SongCover.original_title))
+                if r.SongCover.original_artist
+                else None,
+            ),
+        )
+        for r in mine
+    ]
+    out_covered = []
+    for r in covered:
+        cover = by_song[(r.artist_key, r.title_norm)]
+        own = originals.get((artist.title, cover.original_title))
+        who = names.get(r.artist_key)
+        out_covered.append(
+            CoveredSong(
+                rating_key=r.rk,
+                title=r.title,
+                artist=r.track_artist or (who[1] if who else None),
+                artist_rating_key=who[0] if who else None,
+                album_rating_key=r.album_rating_key,
+                album_title=r.album_title,
+                year=r.year,
+                original_title=cover.original_title,
+                original_rating_key=own.rating_key if own else None,
+                original_album_rating_key=own.album_rating_key if own else None,
+                original_versions=own.versions if own else 0,
+                cover_url=cover.performance_url,
+                source=cover.source,
+            )
+        )
+    return ArtistCoversOut(covers=out_mine, covered=out_covered)
 
 
 @router.get("/library/artists/{rating_key}", response_model=ArtistDetail)
@@ -728,6 +1319,7 @@ async def get_artist(
     listens = await stats.item_listens(db, user.id, _zone(tz), {normalise_artist(artist.title)})
     top_tracks = await _top_tracks(db, user.id, us, rating_key)
     titles = await _title_norms(db, us.server_id, [t.rating_key for t in top_tracks])
+    await _with_covers(db, user.id, us, top_tracks)
     summary = _artist_summary(row)
     summary.plays = max(summary.plays, listens.listens)
     return ArtistDetail(
@@ -757,6 +1349,113 @@ async def get_artist(
         ),
         your_listens=_listens_out(listens),
     )
+
+
+# Where a live album's or a compilation's songs first came out: albums and EPs before singles,
+# then the oldest. (Other compilations, live albums and soundtracks don't count.)
+_SOURCE_TYPES = {"Album": 0, "EP": 0, "Single": 1}
+_VARIOUS = {"various artists", "various", "va"}
+
+
+def _is_compilation(release_type: str | None, artist: Artist | None) -> bool:
+    various = artist is not None and artist.title.strip().lower() in _VARIOUS
+    return release_type == "Compilation" or various
+
+
+async def _song_sources(
+    db: DbDep,
+    user_id: int,
+    us: UserServer,
+    album: Album,
+    tracks: list[Track],
+    *,
+    own_artist: bool,
+) -> tuple[list[SongSource], int]:
+    """The releases (albums, EPs, singles) each of the album's songs first came out on, by the
+    title without "(Live)"- or "(Remastered)"-style suffixes, with how many songs each, oldest
+    first; and how many songs weren't found on any. `own_artist` (live albums): the album
+    artist's releases. Otherwise (compilations): each song's own artist's."""
+    state, cond, where = visible(Album, user_id, us)
+    query = (
+        select(Track.title, Track.artist_key, Album)
+        .join(
+            Album,
+            and_(Album.server_id == Track.server_id, Album.rating_key == Track.album_rating_key),
+        )
+        .join(state, cond)
+        .where(*where, Track.server_id == us.server_id, Album.rating_key != album.rating_key)
+    )
+    if own_artist:
+        if album.artist_rating_key is None:
+            return [], len(tracks)
+        query = query.where(Album.artist_rating_key == album.artist_rating_key)
+    else:
+        artist_keys = {t.artist_key for t in tracks if t.artist_key}
+        if not artist_keys:
+            return [], len(tracks)
+        query = query.where(Track.artist_key.in_(artist_keys))
+
+    def song(title: str, artist_key: str | None) -> tuple[str | None, str]:
+        return (None if own_artist else artist_key, core_title(title))
+
+    rows = (await db.execute(query)).all()
+    albums = {a.rating_key: a for _, _, a in rows}
+    types = await _release_types(db, us.server_id, list(albums))
+
+    def kind(a: Album) -> str:
+        return types.get(a.rating_key, "Album")
+
+    def rank(a: Album) -> tuple[int, int, int]:
+        return (_SOURCE_TYPES[kind(a)], a.year if a.year is not None else 9999, a.rating_key)
+
+    first: dict[tuple[str | None, str], Album] = {}
+    for title, artist_key, candidate in rows:
+        if kind(candidate) not in _SOURCE_TYPES:
+            continue
+        key = song(title, artist_key)
+        if key not in first or rank(candidate) < rank(first[key]):
+            first[key] = candidate
+    counts: dict[int, list[Track]] = {}
+    unmatched = 0
+    for track in tracks:
+        source = first.get(song(track.title, track.artist_key))
+        if source is None:
+            unmatched += 1
+        else:
+            counts.setdefault(source.rating_key, []).append(track)
+    if not counts:
+        return [], unmatched
+    artist_names = {
+        key: title
+        for key, title in (
+            await db.execute(
+                select(Artist.rating_key, Artist.title).where(
+                    Artist.server_id == us.server_id,
+                    Artist.rating_key.in_({albums[k].artist_rating_key for k in counts} - {None}),
+                )
+            )
+        ).all()
+    }
+    sources = sorted(
+        (albums[key] for key in counts),
+        key=lambda a: (a.year if a.year is not None else 9999, a.title),
+    )
+    return [
+        SongSource(
+            rating_key=a.rating_key,
+            title=a.title,
+            artist=artist_names.get(a.artist_rating_key) if a.artist_rating_key else None,
+            year=a.year,
+            thumb=a.thumb,
+            release_type=kind(a),
+            songs=len(counts[a.rating_key]),
+            tracks=[
+                SourceSong(rating_key=t.rating_key, title=t.title, disc=t.disc, number=t.number)
+                for t in counts[a.rating_key]
+            ],
+        )
+        for a in sources
+    ], unmatched
 
 
 @router.get("/library/albums/{rating_key}", response_model=AlbumDetail)
@@ -793,6 +1492,14 @@ async def get_album(
         db, user.id, _zone(tz), artist_keys, normalise_title(album.title)
     )
     tracks = [_track_out(t, r, p, album) for t, r, p in track_rows]
+    await _with_covers(db, user.id, us, tracks)
+    live = found[0].release_type == "Live"
+    compilation = not live and _is_compilation(found[0].release_type, artist)
+    sources, unmatched = (
+        await _song_sources(db, user.id, us, album, [t for t, _, _ in track_rows], own_artist=live)
+        if live or compilation
+        else ([], 0)
+    )
     found[0].plays = max(found[0].plays, listens.listens)
     return AlbumDetail(
         **found[0].model_dump(),
@@ -816,6 +1523,222 @@ async def get_album(
             ),
         ),
         your_listens=_listens_out(listens),
+        song_sources=sources if live or compilation else None,
+        sources_unmatched=unmatched,
+    )
+
+
+async def _cover_and_originals(
+    db: DbDep, user: User, us: UserServer, rating_key: int
+) -> tuple[Track, SongCover, str, list[tuple[Track, Album | None, str | None]]]:
+    """A cover in the library, its song's title, and the library's songs of that title by
+    other artists (each artist's oldest release), oldest first."""
+    state, cond, where = visible(Track, user.id, us)
+    track = await db.scalar(
+        select(Track).join(state, cond).where(*where, Track.rating_key == rating_key)
+    )
+    if track is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
+    cover = await db.scalar(
+        select(SongCover).where(
+            SongCover.artist_key == track.artist_key,
+            SongCover.title_norm == track.title_norm,
+            SongCover.status == "cover",
+        )
+    )
+    if cover is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not a cover")
+    title = cover.original_title or without_suffixes(track.title)
+    core = core_title(title)
+    words = sorted(re.findall(r"\w+", core), key=len, reverse=True)
+    rows = (
+        await db.execute(
+            select(Track, Album, Artist.title)
+            .join(state, cond)
+            .outerjoin(
+                Album,
+                and_(
+                    Album.server_id == Track.server_id, Album.rating_key == Track.album_rating_key
+                ),
+            )
+            .outerjoin(
+                Artist,
+                and_(
+                    Artist.server_id == Track.server_id,
+                    Artist.rating_key == Track.artist_rating_key,
+                ),
+            )
+            .where(
+                *where,
+                Track.artist_key != track.artist_key,
+                Track.title.ilike(_like(words[0]), escape="\\") if words else true(),
+            )
+        )
+    ).all()
+    oldest: dict[str | None, tuple[Track, Album | None, str | None]] = {}
+    for t, album, album_artist in sorted(
+        rows, key=lambda r: (r[1].year if r[1] and r[1].year is not None else 9999, r[0].rating_key)
+    ):
+        if core_title(t.title) == core:
+            oldest.setdefault(t.artist_key, (t, album, t.original_title or album_artist))
+    return track, cover, title, list(oldest.values())
+
+
+def _originals_out(
+    title: str, cover: SongCover, songs: list[tuple[Track, Album | None, str | None]], user: User
+) -> CoverOriginalsOut:
+    chosen = normalise_artist(cover.original_artist) if cover.original_artist else None
+    return CoverOriginalsOut(
+        title=title,
+        songs=[
+            SameTitleSong(
+                rating_key=t.rating_key,
+                title=t.title,
+                artist=artist,
+                artist_rating_key=t.artist_rating_key,
+                album_rating_key=t.album_rating_key,
+                album_title=album.title if album else None,
+                album_thumb=album.thumb if album else None,
+                year=album.year if album else None,
+                original=chosen is not None and t.artist_key == chosen,
+            )
+            for t, album, artist in songs
+        ],
+        can_choose=user.is_admin,
+    )
+
+
+@router.get("/library/tracks/{rating_key}/originals", response_model=CoverOriginalsOut)
+async def cover_originals(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep
+) -> CoverOriginalsOut:
+    """For a cover: the library's songs with its song's title by other artists, any of which
+    an admin can choose as its original (MusicBrainz covers don't name one)."""
+    us = await get_user_server(db, user, server_id)
+    _track, cover, title, songs = await _cover_and_originals(db, user, us, rating_key)
+    return _originals_out(title, cover, songs, user)
+
+
+@router.put("/library/tracks/{rating_key}/original", response_model=CoverOriginalsOut)
+async def choose_cover_original(
+    server_id: int, rating_key: int, body: CoverOriginalIn, db: DbDep, user: AdminDep
+) -> CoverOriginalsOut:
+    """Choose a cover's original among the library's songs of its title (admins), or none:
+    for everyone, as Cover songs' answers are."""
+    us = await get_user_server(db, user, server_id)
+    _track, cover, title, songs = await _cover_and_originals(db, user, us, rating_key)
+    if body.rating_key is None:
+        cover.original_artist = None
+    else:
+        picked = next((s for s in songs if s[0].rating_key == body.rating_key), None)
+        if picked is None or not picked[2]:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Not one of this song's other versions"
+            )
+        cover.original_artist = picked[2]
+        cover.original_title = without_suffixes(picked[0].title)
+    await db.commit()
+    return _originals_out(title, cover, songs, user)
+
+
+@router.get("/library/tracks/{rating_key}/versions", response_model=SongVersionsOut)
+async def song_versions(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep
+) -> SongVersionsOut:
+    """Every release of the song by the same artist: remasters, live, demo and other
+    versions (the same title without its bracketed or dashed suffix), oldest first."""
+    us = await get_user_server(db, user, server_id)
+    state, cond, where = visible(Track, user.id, us)
+    track = await db.scalar(
+        select(Track).join(state, cond).where(*where, Track.rating_key == rating_key)
+    )
+    if track is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
+    core = core_title(track.title)
+    by_artist = (
+        Track.artist_key == track.artist_key
+        if track.artist_key
+        else Track.artist_rating_key == track.artist_rating_key
+    )
+    rows = [
+        row
+        for row in (
+            await db.execute(
+                select(Track, state.user_rating, plays_of(state), Album)
+                .join(state, cond)
+                .outerjoin(
+                    Album,
+                    and_(
+                        Album.server_id == Track.server_id,
+                        Album.rating_key == Track.album_rating_key,
+                    ),
+                )
+                .where(*where, by_artist)
+            )
+        ).all()
+        if core_title(row[0].title) == core
+    ]
+    types = await _release_types(
+        db, us.server_id, [a.rating_key for _, _, _, a in rows if a is not None]
+    )
+    rows.sort(
+        key=lambda r: (
+            r[3].year if r[3] is not None and r[3].year is not None else 9999,
+            r[3].title if r[3] is not None else "",
+            r[0].disc or 0,
+            r[0].number or 0,
+        )
+    )
+    artist = track.original_title
+    if artist is None and track.artist_rating_key is not None:
+        found = await db.get(Artist, (us.server_id, track.artist_rating_key))
+        artist = found.title if found else None
+    return SongVersionsOut(
+        title=track.title,
+        artist=artist,
+        versions=[
+            SongVersion(
+                rating_key=t.rating_key,
+                title=t.title,
+                album_rating_key=t.album_rating_key,
+                album_title=a.title if a else None,
+                album_thumb=a.thumb if a else None,
+                year=a.year if a else None,
+                release_type=types.get(a.rating_key, "Album") if a else None,
+                duration_ms=t.duration_ms,
+                user_rating=rating,
+                plays=plays,
+                current=t.rating_key == rating_key,
+            )
+            for t, rating, plays, a in rows
+        ],
+    )
+
+
+@router.get(
+    "/library/albums/{rating_key}/video",
+    response_class=FileResponse,
+    responses={200: {"content": {"video/mp4": {}}}},
+)
+async def album_video(
+    server_id: int, rating_key: int, db: DbDep, user: UserDep, settings: SettingsDep
+) -> FileResponse:
+    """The album's video cover (a copy the scan keeps), streamed with range requests."""
+    us = await get_user_server(db, user, server_id)
+    if not await _albums(db, user.id, us, Album.rating_key == rating_key):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Album not found")
+    video = (await album_videos(db, us.server_id, [rating_key])).get(rating_key)
+    path = (
+        video_folder(settings.data_dir, us.server_id) / video.stored
+        if video is not None and video.stored
+        else None
+    )
+    if path is None or not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No video cover")
+    return FileResponse(
+        path,
+        media_type=VIDEO_TYPES.get(path.suffix.lower(), "video/mp4"),
+        headers={"Cache-Control": "private, max-age=86400"},
     )
 
 

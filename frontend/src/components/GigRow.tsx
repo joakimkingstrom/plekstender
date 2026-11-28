@@ -125,7 +125,7 @@ export function GigRow({
               `with ${others
                 .slice(0, 3)
                 .map((p) => p.name)
-                .join(', ')}${others.length > 3 ? ` and ${others.length - 3} more` : ''}`}
+                .join(', ')}${others.length > 3 ? `, and ${others.length - 3} more` : ''}`}
           </p>
         )}
       </div>

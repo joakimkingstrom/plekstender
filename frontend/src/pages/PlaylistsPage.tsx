@@ -33,6 +33,19 @@ import { formatCount, formatDuration, formatListeningTime, formatRelative } from
 
 type Order = Definition['order']
 type NewAlbums = { days: number; per_album: number }
+type CoversRule = NonNullable<Schemas['Rules']['covers']>
+type LyricsRule = NonNullable<Schemas['Rules']['lyrics']>
+const COVERS: { value: CoversRule; label: string }[] = [
+  { value: 'any', label: 'Covers or not' },
+  { value: 'only', label: 'Only covers' },
+  { value: 'none', label: 'No covers' },
+]
+const LYRICS: { value: LyricsRule; label: string }[] = [
+  { value: 'any', label: 'With or without lyrics' },
+  { value: 'with', label: 'Only songs with lyrics' },
+  { value: 'synced', label: 'Only synced lyrics' },
+  { value: 'word', label: 'Only word-synced lyrics' },
+]
 const FRESH_DAYS = [7, 14, 30, 60, 90].map((n) => ({ value: n, label: `${n} days` }))
 const FRESH_SONGS = [1, 2, 3, 5, 10].map((n) => ({ value: n, label: n === 1 ? 'song' : `${n} songs` }))
 type Op = 'AND' | 'OR'
@@ -69,7 +82,7 @@ export function PlaylistsPage() {
   return (
     <>
       <p className="mb-4 text-sm text-muted">
-        Playlists built from artists, songs and genres, saved to Plex under your own account.
+        Playlists built from artists, songs, and genres, saved to Plex under your own account.
       </p>
       {blocker ?? (
         <div className="space-y-6">
@@ -148,9 +161,9 @@ function PlaylistList({ serverId }: { serverId: number }) {
           <div className="space-y-2 text-sm">
             <p className="font-semibold">No playlists yet</p>
             <p className="text-muted">
-              Start from a few artists, songs or a genre, add similar artists, then keep only what you rate highly or each
+              Start from a few artists, songs, or a genre, add similar artists, then keep only what you rate highly or each
               artist's best-known songs. Playlists are saved to Plex, so they show up in Plexamp, and can refresh
-              themselves daily, weekly or monthly.
+              themselves daily, weekly, or monthly.
             </p>
           </div>
         </Card>
@@ -314,8 +327,12 @@ type Draft = {
   tracks: SeedTrack[]
   /** Also your forgotten favourites (found again at each refresh). */
   forgotten: boolean
+  /** Also every song with one of these words in its title (found again at each refresh). */
+  titleWords: string[]
   /** Also the best songs of albums added lately ("Fresh picks", found again at each refresh). */
   newAlbums: NewAlbums | null
+  /** Also every cover song in the library (found again at each refresh). */
+  allCovers: boolean
   minRating: number | null
   includeUnrated: boolean
   topPercent: number
@@ -325,6 +342,8 @@ type Draft = {
   genres: string[]
   /** Only songs whose album or artist has one of these. */
   tags: RuleTag[]
+  covers: CoversRule
+  lyrics: LyricsRule
 }
 
 type RuleTag = { id: number; name: string; kind: string }
@@ -340,7 +359,9 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
     artists: p?.seed_artists ?? [],
     tracks: p?.seed_tracks ?? [],
     forgotten: d?.forgotten ?? forgotten,
+    titleWords: d?.title_words ?? [],
     newAlbums: d?.new_albums ? { days: d.new_albums.days ?? 30, per_album: d.new_albums.per_album ?? 3 } : null,
+    allCovers: d?.all_covers ?? false,
     minRating: d?.rules?.min_rating ?? null,
     includeUnrated: d?.rules?.include_unrated ?? true,
     topPercent: d?.rules?.top_percent ?? 0,
@@ -350,22 +371,38 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
     genres: display.genres ?? [],
     // Names come from the display copy; a tag without one still filters.
     tags: ruleTags.map((id) => display.tags?.find((t) => t.id === id) ?? { id, name: `#${id}`, kind: 'genre' }),
+    covers: d?.rules?.covers ?? 'any',
+    lyrics: d?.rules?.lyrics ?? 'any',
   }
 }
 
+/** Something to pick songs from: artists, songs, or a rule that finds them. */
+function hasSource(draft: Draft) {
+  return draft.artists.length > 0 || draft.tracks.length > 0 || hasFinder(draft)
+}
+
+/** A rule that finds songs by itself (forgotten favourites, new albums, title words, covers). */
+function hasFinder(draft: Draft) {
+  return draft.forgotten || draft.newAlbums !== null || draft.titleWords.length > 0 || draft.allCovers
+}
+
 function definitionOf(draft: Draft): Definition | null {
-  if (draft.artists.length === 0 && draft.tracks.length === 0 && !draft.forgotten && !draft.newAlbums) return null
+  if (!hasSource(draft)) return null
   return {
     artists: draft.artists.map((a) => a.rating_key),
     tracks: draft.tracks.map((t) => t.rating_key),
     forgotten: draft.forgotten,
     new_albums: draft.newAlbums,
+    title_words: draft.titleWords,
+    all_covers: draft.allCovers,
     rules: {
       min_rating: draft.minRating,
       include_unrated: draft.includeUnrated,
       top_percent: draft.topPercent || null,
       op: draft.op,
       tags: draft.tags.map((t) => t.id),
+      covers: draft.covers,
+      lyrics: draft.lyrics,
     },
     limit: draft.limit || null,
     order: draft.order,
@@ -379,7 +416,11 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
   const [draft, setDraft] = useState<Draft>(() => {
     const fromRediscover = !initial && params.get('forgotten') === '1'
     const start = draftFrom(initial, fromRediscover)
-    return fromRediscover ? { ...start, name: 'Forgotten favourites', schedule: 'weekly' } : start
+    if (fromRediscover) return { ...start, name: 'Forgotten favourites', schedule: 'weekly' }
+    // From the word cloud (Library → Stats): songs about a word, refreshed weekly.
+    const word = !initial ? params.get('word')?.trim() : null
+    if (word) return { ...start, titleWords: [word], name: `Songs about ${word}`, schedule: 'weekly' }
+    return start
   })
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
   const definition = useDebounced(definitionOf(draft), 350)
@@ -507,6 +548,34 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
               )}
             </div>
           </div>
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={draft.allCovers}
+              onChange={(e) =>
+                setDraft((d) =>
+                  e.target.checked ? { ...d, allCovers: true, name: d.name.trim() ? d.name : 'Covers' } : { ...d, allCovers: false },
+                )
+              }
+            />
+            <span>
+              <span className="font-medium">Every cover song</span>
+              <span className="block text-xs text-muted">
+                Every song in the library that's a cover of someone else's (Settings → Services → Cover songs finds them).
+                Found again at each refresh, so newly found covers come in.
+              </span>
+            </span>
+          </label>
+          {draft.titleWords.length > 0 && (
+            <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Words in the title">
+              {draft.titleWords.map((w) => (
+                <Chip key={w} label={`Remove “${w}”`} onRemove={() => set({ titleWords: draft.titleWords.filter((x) => x !== w) })}>
+                  Songs with “{w}” in the title
+                </Chip>
+              ))}
+            </ul>
+          )}
           <Chosen draft={draft} serverId={serverId} set={set} />
         </Card>
         {(draft.artists.length > 0 || draft.tracks.length > 0) && (
@@ -583,7 +652,7 @@ function StartFrom({
   const [loadingGenre, setLoadingGenre] = useState(false)
 
   const tagOptions = [
-    { value: 0, label: 'Add a genre, style or mood’s top artists…' },
+    { value: 0, label: 'Add a genre, style, or mood’s top artists…' },
     ...(genres.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Genres' })),
     ...(styles.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Styles' })),
     ...(moods.data ?? []).map((t) => ({ value: t.id, label: t.name, group: 'Moods' })),
@@ -617,7 +686,7 @@ function StartFrom({
           aria-label="Search artists and songs"
           className="min-w-0 flex-1 basis-56 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
         />
-        <Select label="Genre, style or mood" className="max-w-full" value={0} options={tagOptions} onChange={(id) => void pickTag(id)} />
+        <Select label="Genre, style, or mood" className="max-w-full" value={0} options={tagOptions} onChange={(id) => void pickTag(id)} />
         {loadingGenre && <Spinner small />}
       </div>
       {genreError && <Notice tone="warn">{genreError}</Notice>}
@@ -723,7 +792,7 @@ function Chip({ children, onRemove, label }: { children: ReactNode; onRemove: ()
 
 function Chosen({ draft, serverId, set }: { draft: Draft; serverId: number; set: (patch: Partial<Draft>) => void }) {
   if (draft.artists.length === 0 && draft.tracks.length === 0)
-    return draft.forgotten || draft.newAlbums ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
+    return hasFinder(draft) ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
   return (
     <div className="mt-4 space-y-3">
       {draft.artists.length > 0 && (
@@ -911,6 +980,18 @@ function Rules({ draft, set, serverId }: { draft: Draft; set: (patch: Partial<Dr
           }))}
         />
       </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="w-40 font-medium">Covers</span>
+        <Select label="Covers" value={draft.covers} onChange={(covers) => set({ covers })} options={COVERS} />
+        {draft.covers !== 'any' && (
+          <span className="text-xs text-muted">Songs found to be covers (Settings → Services → Cover songs).</span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="w-40 font-medium">Lyrics</span>
+        <Select label="Lyrics" value={draft.lyrics} onChange={(lyrics) => set({ lyrics })} options={LYRICS} />
+        {draft.lyrics !== 'any' && <span className="text-xs text-muted">In the songs’ files (or next to them).</span>}
+      </div>
       {both && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="w-40 font-medium">Combine</span>
@@ -980,7 +1061,7 @@ function TagRule({ serverId, tags, onChange }: { serverId: number; tags: RuleTag
         </span>
       ))}
       <Select
-        label="Only songs with a genre, style or mood"
+        label="Only songs with a genre, style, or mood"
         size="sm"
         value={0}
         onChange={(id) => {
@@ -988,7 +1069,7 @@ function TagRule({ serverId, tags, onChange }: { serverId: number; tags: RuleTag
           if (t) onChange([...tags, { id: t.id, name: t.name, kind: t.kind }])
         }}
         options={[
-          { value: 0, label: tags.length ? 'Or…' : 'Any genre, style or mood' },
+          { value: 0, label: tags.length ? 'Or…' : 'Any genre, style, or mood' },
           ...all.map((t) => ({ value: t.id, label: t.name, group: t.group })),
         ]}
       />

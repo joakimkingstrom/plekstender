@@ -71,14 +71,14 @@ export function GigsPage() {
           <p className="text-sm text-muted">
             {filtered
               ? 'No gigs match.'
-              : 'No gigs yet. Add the ones you’ve been to, or star gigs on Live: once they’ve happened, they’re offered here.'}
+              : 'No gigs yet. Add the ones you’ve been to, or star gigs under Upcoming: once they’ve happened, they’re offered here.'}
           </p>
         </Card>
       ) : (
         <GigList gigs={gigs.data.gigs} />
       )}
       <p className="text-xs text-muted">
-        Bring gigs in from setlist.fm, a CSV or a calendar file, or take them with you, in{' '}
+        Bring gigs in from setlist.fm, a CSV, or a calendar file, or take them with you, in{' '}
         <Link to="/settings/export/gigs" className="underline hover:text-text">
           Settings → Export &amp; import
         </Link>
@@ -245,7 +245,7 @@ function Suggestions() {
   if (!suggestions.data?.length) return null
   return (
     <Card title="Did you go?">
-      <p className="mb-2 text-sm text-muted">Gigs you starred on Live that have happened.</p>
+      <p className="mb-2 text-sm text-muted">Gigs you starred under Upcoming that have happened.</p>
       <ul className="divide-y divide-border">
         {suggestions.data.map((s) => (
           <li key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
@@ -426,7 +426,7 @@ function GigDialog({ gig, onClose }: { gig?: Gig; onClose: () => void }) {
       </Dialog>
     )
   return (
-    <Dialog title="Add a gig" subtitle="Find it on setlist.fm to fill in the night, the bill and what was played." onClose={onClose}>
+    <Dialog title="Add a gig" subtitle="Find it on setlist.fm to fill in the night, the bill, and what was played." onClose={onClose}>
       <GigFinder onFound={setFound} onByHand={() => setByHand(true)} />
     </Dialog>
   )
@@ -642,7 +642,7 @@ function GigForm({ gig, found, onDone }: { gig?: Gig; found?: SetlistLookup; onD
           <p className="text-xs text-muted">
             {lookup.isPending
               ? 'Looking it up on setlist.fm…'
-              : filled ?? 'Paste a setlist.fm link to fill in the rest: the date, the venue, everyone on the bill and what they played.'}
+              : filled ?? 'Paste a setlist.fm link to fill in the rest: the date, the venue, everyone on the bill, and what they played.'}
           </p>
           {lookup.isError && <Notice tone="error">{errorMessage(lookup.error)}</Notice>}
         </div>

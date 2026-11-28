@@ -52,7 +52,7 @@ it('lists running and waiting jobs (and what a waiting one waits for), then fini
   expect(within(active).getByText('Folder pictures · 200 / 15,000')).toBeInTheDocument()
   expect(within(active).getByRole('button', { name: 'Stop finding duplicate files' })).toBeInTheDocument()
   expect(within(active).getByText(/Waiting for:/).textContent).toMatch(/Finding duplicate files \(started 2 hours ago\)/)
-  expect(within(active).getAllByRole('link', { name: 'Tags in your files →' })[0]).toHaveAttribute('href', '/settings/files/scan')
+  expect(within(active).getAllByRole('link', { name: 'Folder scan →' })[0]).toHaveAttribute('href', '/settings/files/scan')
   const finished = screen.getByRole('heading', { name: 'Finished' }).closest('section')!
   expect(within(finished).getByText('Written')).toBeInTheDocument()
   expect(within(finished).getByText('Failed')).toBeInTheDocument()

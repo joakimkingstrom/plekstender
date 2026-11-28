@@ -21,7 +21,7 @@ function LoginShell({ children }: { children: React.ReactNode }) {
         <div className="mb-2 flex justify-center">
           <Wordmark size="text-3xl" />
         </div>
-        <p className="mb-8 text-sm text-muted">Rate, tidy and curate your Plex music library.</p>
+        <p className="mb-8 text-sm text-muted">Rate, tidy, and curate your Plex music library.</p>
         {children}
       </div>
     </div>

@@ -138,8 +138,8 @@ function TagEditing({ serverId }: { serverId: number }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted">
-        Albums whose files don't match Plex, have no MusicBrainz release ID or are missing tags. Pick a few and look them
-        up on MusicBrainz, write Plex's metadata into them, rename their files or add lyrics: each album becomes its own
+        Albums whose files don't match Plex, have no MusicBrainz release ID, or are missing tags. Pick a few and look them
+        up on MusicBrainz, write Plex's metadata into them, rename their files, or add lyrics: each album becomes its own
         edit, which you can undo on its album page.
       </p>
       <div className="flex flex-wrap gap-2">
@@ -157,7 +157,7 @@ function TagEditing({ serverId }: { serverId: number }) {
         <Notice tone="warn">
           Writing to the files is off, so you can look but not fix. Turn on tag editing on{' '}
           <Link to="/settings/files/scan" className="underline">
-            Settings → Music files → Tags in your files
+            Settings → Music files → Folder scan
           </Link>
           .
         </Notice>
@@ -655,7 +655,7 @@ function BulkPlex({
   return (
     <Dialog
       title="Write Plex's metadata into the files"
-      subtitle="Titles, artists, album, album artist, track and disc numbers, year and genres as Plex has them. Each album is written as its own edit."
+      subtitle="Titles, artists, album, album artist, track and disc numbers, year, and genres as Plex has them. Each album is written as its own edit."
       onClose={() => {
         void refresh()
         onClose()

@@ -13,6 +13,7 @@ from plekstender.api.deps import DbDep, UserDep
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
     DayArtistOut,
+    DayGigOut,
     DayTrackOut,
     DayYearOut,
     OnThisDayOut,
@@ -45,7 +46,11 @@ async def on_this_day(
     tzinfo = _zone(tz)
     library = (await get_user_server(db, user, server_id)).server_id if server_id else None
     today = dt.datetime.now(tzinfo).date()
-    years = await insights.on_this_day(db, user.id, library, tzinfo, today)
+    years = {y.year: y for y in await insights.on_this_day(db, user.id, library, tzinfo, today)}
+    # The gigs that day, also in years with nothing played.
+    for year, gigs in (await insights.gigs_on_this_day(db, user.id, today)).items():
+        years.setdefault(year, insights.DayYear(year=year, listens=0, artists=[], tracks=[]))
+        years[year].gigs = gigs
     return OnThisDayOut(
         date=today,
         years=[
@@ -57,8 +62,9 @@ async def on_this_day(
                 album=y.album,
                 album_rating_key=y.album_rating_key,
                 album_thumb=y.album_thumb,
+                gigs=[DayGigOut(**asdict(g)) for g in y.gigs],
             )
-            for y in years
+            for y in sorted(years.values(), key=lambda y: -y.year)
         ],
     )
 

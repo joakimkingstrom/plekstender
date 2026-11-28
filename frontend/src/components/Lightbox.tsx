@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-export type LightboxImage = { src: string; alt: string; caption?: string }
+/** An image (or, with `video`, a video cover with the image as its poster). */
+export type LightboxImage = { src: string; alt: string; caption?: string; video?: string }
 
 /**
  * A full-screen view of one image (or a set, with ← / →). Esc, the close button or a click
@@ -65,7 +66,21 @@ export function Lightbox({
       >
         ×
       </button>
-      <img src={image.src} alt={image.alt} className="max-h-[85vh] max-w-[92vw] rounded-lg object-contain shadow-2xl" />
+      {image.video ? (
+        <video
+          src={image.video}
+          poster={image.src}
+          aria-label={image.alt}
+          controls
+          muted
+          loop
+          playsInline
+          autoPlay={!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches}
+          className="max-h-[85vh] max-w-[92vw] rounded-lg object-contain shadow-2xl"
+        />
+      ) : (
+        <img src={image.src} alt={image.alt} className="max-h-[85vh] max-w-[92vw] rounded-lg object-contain shadow-2xl" />
+      )}
       {(image.caption || images.length > 1) && (
         <p className="text-sm text-white/80">
           {image.caption}

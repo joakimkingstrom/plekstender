@@ -18,6 +18,7 @@ import {
   usePreview,
   useSetArtworkStatus,
   useStartFanartJob,
+  useStartTextJob,
   useUploadImage,
   type ArtistSort,
   type ArtworkStatus,
@@ -34,7 +35,9 @@ import { useLibraryServer } from '../components/useLibraryServer'
 import { TabNav } from '../components/TabNav'
 import { AlbumCovers } from './AlbumCoversPage'
 import { useFillHeight } from '../fillHeight'
-import { formatRelative } from '../format'
+import { formatCount, formatRelative } from '../format'
+import { useRangeSelection } from '../selection'
+import { Segmented } from '../components/Segmented'
 
 type Artist = Schemas['ArtworkArtistOut']
 type Tab = CandidateSource | 'upload' | 'text'
@@ -116,6 +119,8 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
   const items = artists.data?.pages.flatMap((p) => p.items) ?? []
   const counts = artists.data?.pages[0]?.counts ?? {}
   const total = Object.values(counts).reduce((a, b) => a + b, 0)
+  const ticked = useRangeSelection<number>()
+  const order = items.map((a) => a.rating_key)
   // Keep the selected artist in step with the list (status / thumb after applying).
   const current = selected ? (items.find((a) => a.rating_key === selected.rating_key) ?? selected) : null
 
@@ -131,7 +136,12 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
         aria-label="Artists"
         className={`min-h-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-3 ${current ? 'hidden lg:flex' : 'flex'}`}
       >
-        <BulkFanart serverId={serverId} todo={counts.none ?? 0} />
+        <BulkLogos
+          serverId={serverId}
+          selected={[...ticked.selected]}
+          listed={{ status: status ?? 'all', q, total: artists.data?.pages[0]?.total ?? 0 }}
+          onStarted={ticked.clear}
+        />
         <input
           type="search"
           value={query}
@@ -184,6 +194,15 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
                 key={a.rating_key}
                 className={`flex items-center hover:bg-surface-2 ${current?.rating_key === a.rating_key ? 'bg-surface-2' : ''}`}
               >
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${a.title}`}
+                  title="Select (shift-click: a range)"
+                  checked={ticked.selected.has(a.rating_key)}
+                  onChange={() => undefined}
+                  onClick={(e) => ticked.toggle(a.rating_key, order, e.shiftKey)}
+                  className="ml-2 shrink-0"
+                />
                 <button
                   type="button"
                   onClick={() => setSelected(a)}
@@ -214,7 +233,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
           </ul>
         )}
         <p className="px-1 text-xs text-muted">
-          Saving to artist folders, logo packs and the text logo fonts are in{' '}
+          Saving to artist folders, logo packs, and the text logo fonts are in{' '}
           <Link to="/settings/artwork" className="underline hover:text-text">
             Settings → Artwork
           </Link>{' '}
@@ -666,53 +685,75 @@ function Adjustments({
   )
 }
 
-function BulkFanart({ serverId, todo }: { serverId: number; todo: number }) {
-  const jobs = useArtworkJobs(serverId)
-  const start = useStartFanartJob(serverId)
-  const [confirming, setConfirming] = useState(false)
-  const latest = jobs.data?.find((j) => j.kind === 'fanart')
-  const running = latest && (latest.status === 'queued' || latest.status === 'running')
-  const { done = 0, total = 0 } = (latest?.progress ?? {}) as {
-    done?: number
-    total?: number
-  }
-  const stats = (latest?.stats ?? {}) as Record<string, number>
+type Listed = { status: ArtworkStatus | 'all'; q: string; total: number }
 
+/** Logos for many artists at once: the ticked ones, else every one listed (the status
+ * filter and search). From fanart.tv (each one's most-liked logo), or text logos of their
+ * names: one font and colour for all, or a random pick for each from several. Runs as an
+ * artwork job that can be stopped, or cancelled to put the old pictures back. */
+function BulkLogos({
+  serverId,
+  selected,
+  listed,
+  onStarted,
+}: {
+  serverId: number
+  selected: number[]
+  listed: Listed
+  onStarted: () => void
+}) {
+  const jobs = useArtworkJobs(serverId)
+  const fanart = useStartFanartJob(serverId)
+  const textJob = useStartTextJob(serverId)
+  const fonts = useFonts()
+  const [open, setOpen] = useState(false)
+  const [source, setSource] = useState<'fanart' | 'text'>('fanart')
+  const [chosenFonts, setChosenFonts] = useState<string[]>([])
+  const [colours, setColours] = useState<string[]>(['#ffffff'])
+  const [nextColour, setNextColour] = useState('#f2ad45')
+  const [letterCase, setLetterCase] = useState<'none' | 'upper' | 'lower'>('none')
+  const latest = jobs.data?.find((j) => j.kind === 'fanart' || j.kind === 'text')
+  const running = latest && (latest.status === 'queued' || latest.status === 'running')
+  const { done = 0, total = 0 } = (latest?.progress ?? {}) as { done?: number; total?: number }
+  const stats = (latest?.stats ?? {}) as Record<string, number>
+  const count = selected.length || listed.total
+  const scope = selected.length
+    ? { rating_keys: selected, status: 'all' as const, q: null }
+    : { rating_keys: null, status: listed.status, q: listed.q || null }
+  const offered = (fonts.data ?? []).flatMap((g) => g.fonts)
+  const start = () => {
+    const done = {
+      onSuccess: () => {
+        setOpen(false)
+        onStarted()
+      },
+    }
+    if (source === 'fanart') fanart.mutate(scope, done)
+    else textJob.mutate({ ...scope, fonts: chosenFonts, colours, case: letterCase }, done)
+  }
+  const error = fanart.error ?? textJob.error
+  const who = selected.length ? `the ${formatCount(count)} ticked` : `the ${formatCount(count)} listed`
+
+  if (running) {
+    return (
+      <div className="space-y-2 rounded-2xl border border-border bg-surface p-3 text-sm" aria-live="polite">
+        <p>
+          {latest.kind === 'text' ? 'Making text logos…' : 'Applying fanart.tv logos…'}{' '}
+          <span className="text-muted tabular-nums">{done} / {total || '?'}</span>
+        </p>
+        <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+          <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 5}%` }} />
+        </div>
+        <ArtworkJobStop job={latest} />
+      </div>
+    )
+  }
   return (
-    <div className="rounded-2xl border border-border bg-surface p-3 text-sm">
-      {running ? (
-        <div className="space-y-2" aria-live="polite">
-          <p>
-            Applying fanart.tv logos… <span className="text-muted tabular-nums">{done} / {total || '?'}</span>
-          </p>
-          <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 5}%` }} />
-          </div>
-          <ArtworkJobStop job={latest} />
-        </div>
-      ) : confirming ? (
-        <div className="space-y-2">
-          <p>
-            Give all {todo} "To do" artists their most-liked fanart.tv logo and save it to Plex? Artists without one
-            are left alone.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="primary"
-              busy={start.isPending}
-              onClick={() => start.mutate({ status: 'none' }, { onSettled: () => setConfirming(false) })}
-            >
-              Apply to {todo}
-            </Button>
-            <Button variant="ghost" onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <Button variant="secondary" disabled={todo === 0} onClick={() => setConfirming(true)} className="w-full">
-            Apply fanart.tv logos to all "To do"
+    <div className="space-y-2 rounded-2xl border border-border bg-surface p-3 text-sm">
+      {!open ? (
+        <>
+          <Button variant="secondary" disabled={count === 0} onClick={() => setOpen(true)} className="w-full">
+            Logos for {who} {count === 1 ? 'artist' : 'artists'}…
           </Button>
           {latest?.status === 'succeeded' && (
             <p className="text-xs text-muted">
@@ -727,9 +768,104 @@ function BulkFanart({ serverId, todo }: { serverId: number; todo: number }) {
               {latest.stop_requested ? `Last run: ${latest.error}` : `Last run failed: ${latest.error}`}
             </p>
           )}
+        </>
+      ) : (
+        <div className="space-y-3">
+          <p className="font-medium">
+            Logos for {who} {count === 1 ? 'artist' : 'artists'}
+          </p>
+          <Segmented
+            label="Where from"
+            value={source}
+            onChange={setSource}
+            options={[
+              ['fanart', 'fanart.tv'],
+              ['text', 'Text logos'],
+            ]}
+            className="w-full"
+          />
+          {source === 'fanart' ? (
+            <p className="text-xs text-muted">Each one’s most-liked fanart.tv logo. Artists without one are left alone.</p>
+          ) : (
+            <>
+              <fieldset>
+                <legend className="mb-1 text-xs font-medium">Fonts</legend>
+                <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-lg border border-border p-2 text-xs">
+                  {offered.map((f) => (
+                    <label key={f} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={chosenFonts.includes(f)}
+                        onChange={(e) => setChosenFonts((c) => (e.target.checked ? [...c, f] : c.filter((x) => x !== f)))}
+                      />
+                      {f}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend className="mb-1 text-xs font-medium">Colours</legend>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {colours.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      aria-label={`Remove ${c}`}
+                      title={`Remove ${c}`}
+                      disabled={colours.length === 1}
+                      onClick={() => setColours((cs) => cs.filter((x) => x !== c))}
+                      className="size-6 rounded-full ring-1 ring-border disabled:cursor-default"
+                      style={{ background: c }}
+                    />
+                  ))}
+                  <ColorPicker label="Colour to add" value={nextColour} onChange={setNextColour} />
+                  <Button
+                    variant="ghost"
+                    disabled={colours.includes(nextColour) || colours.length >= 12}
+                    onClick={() => setColours((cs) => [...cs, nextColour])}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </fieldset>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-medium">Case</span>
+                <Select
+                  size="sm"
+                  label="Case"
+                  value={letterCase}
+                  onChange={setLetterCase}
+                  options={[
+                    { value: 'none' as const, label: 'As written' },
+                    { value: 'upper' as const, label: 'UPPER CASE' },
+                    { value: 'lower' as const, label: 'lower case' },
+                  ]}
+                />
+              </div>
+              <p className="text-xs text-muted">
+                {chosenFonts.length > 1 || colours.length > 1
+                  ? 'Each artist gets a random pick of these fonts and colours.'
+                  : 'Every artist gets the same font and colour.'}
+              </p>
+            </>
+          )}
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              disabled={source === 'text' && chosenFonts.length === 0}
+              busy={fanart.isPending || textJob.isPending}
+              onClick={start}
+            >
+              Apply to {formatCount(count)}
+            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+          <p className="text-xs text-muted">Saved to Plex as the artists’ pictures; the whole run can be cancelled to put the old ones back.</p>
         </div>
       )}
-      {start.isError && <div className="mt-2"><Notice tone="error">{errorMessage(start.error)}</Notice></div>}
+      {error && <Notice tone="error">{errorMessage(error)}</Notice>}
     </div>
   )
 }

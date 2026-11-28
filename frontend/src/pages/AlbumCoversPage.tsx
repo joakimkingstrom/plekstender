@@ -31,6 +31,7 @@ import { Segmented } from '../components/Segmented'
 import { Button, Card, Notice, Spinner } from '../components/ui'
 import { useFillHeight } from '../fillHeight'
 import { formatCount, formatRelative } from '../format'
+import { useRangeSelection } from '../selection'
 
 type Tab = CoverSource | 'upload'
 
@@ -38,6 +39,7 @@ const FILTERS: [CoverFilter, string][] = [
   ['needs', 'Needs a better one'],
   ['missing', 'No cover'],
   ['low', 'Low resolution'],
+  ['ok', 'Fine'],
   ['all', 'All'],
 ]
 const TABS: [Tab, string][] = [
@@ -124,9 +126,12 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
     needs: n('missing') + n('low'),
     missing: n('missing'),
     low: n('low'),
+    ok: n('ok'),
     all: n('missing') + n('low') + n('ok') + n('unchecked') + n('kept'),
   }
   const current = selected ? (items.find((a) => a.rating_key === selected.rating_key) ?? selected) : null
+  const ticked = useRangeSelection<number>()
+  const order = items.map((a) => a.rating_key)
 
   return (
     <div ref={fillRef} style={fillStyle} className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:grid-rows-[minmax(0,1fr)]">
@@ -185,8 +190,16 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
             </select>
           </label>
         </div>
-        {show !== 'all' && (albums.data?.pages[0]?.total ?? 0) > 0 && (
-          <BestMatches serverId={serverId} show={show} q={q} lowPx={lowPx} count={albums.data?.pages[0]?.total ?? 0} />
+        {((show !== 'all' && (albums.data?.pages[0]?.total ?? 0) > 0) || ticked.selected.size > 0) && (
+          <BestMatches
+            serverId={serverId}
+            show={show === 'all' ? 'needs' : show}
+            q={q}
+            lowPx={lowPx}
+            count={albums.data?.pages[0]?.total ?? 0}
+            ticked={[...ticked.selected]}
+            onStarted={ticked.clear}
+          />
         )}
         {n('unchecked') > 0 && (
           <p className="flex items-center gap-2 text-xs text-muted">
@@ -202,8 +215,17 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
         ) : (
           <ul className="max-h-[70vh] min-h-0 flex-1 divide-y divide-border overflow-y-auto border-t border-border lg:max-h-none" aria-label="Albums">
             {items.map((a) => (
-              <li key={a.rating_key} className={`rounded-lg ${current?.rating_key === a.rating_key ? 'bg-surface-2' : 'hover:bg-surface-2'}`}>
-                <button type="button" onClick={() => setSelected(a)} className="flex w-full items-center gap-3 px-2 py-2 text-left text-sm">
+              <li key={a.rating_key} className={`flex items-center rounded-lg ${current?.rating_key === a.rating_key ? 'bg-surface-2' : 'hover:bg-surface-2'}`}>
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${a.title}`}
+                  title="Select (shift-click: a range)"
+                  checked={ticked.selected.has(a.rating_key)}
+                  onChange={() => undefined}
+                  onClick={(e) => ticked.toggle(a.rating_key, order, e.shiftKey)}
+                  className="ml-2 shrink-0"
+                />
+                <button type="button" onClick={() => setSelected(a)} className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2 text-left text-sm">
                   <Artwork serverId={serverId} path={a.thumb} title={a.title} size={96} className="size-10 shrink-0" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{a.title}</span>
@@ -246,16 +268,22 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
   )
 }
 
-function CoverEditor({
+/** One album's cover: now and a new one side by side, the sources below, and Save to Plex.
+ * On this page, and from an album's own page (`back` names where Back goes, always shown). */
+export function CoverEditor({
   serverId,
   album,
   onBack,
   onSaved,
+  back,
+  className = '',
 }: {
   serverId: number
   album: AlbumCover
   onBack: () => void
   onSaved: (album: AlbumCover) => void
+  back?: string
+  className?: string
 }) {
   const me = useMe()
   const savePreferences = useSetPreferences()
@@ -310,12 +338,12 @@ function CoverEditor({
     )
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col gap-4">
+    <div className={`flex min-h-0 min-w-0 flex-col gap-4 ${className}`}>
       {/* The album and the preview: all the room above the results. */}
       <section aria-label="Preview" className="flex min-h-0 flex-1 flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={onBack} className="text-sm text-muted hover:text-text lg:hidden">
-            ← Albums
+          <button type="button" onClick={onBack} className={`text-sm text-muted hover:text-text ${back ? '' : 'lg:hidden'}`}>
+            ← {back ?? 'Albums'}
           </button>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-2xl font-bold">
@@ -541,14 +569,21 @@ function BestMatches({
   show,
   q,
   lowPx,
-  count,
+  count: listed,
+  ticked,
+  onStarted,
 }: {
   serverId: number
   show: Exclude<CoverFilter, 'all'>
   q: string
   lowPx: LowPx
   count: number
+  /** The ticked albums: these instead of the ones listed. */
+  ticked: number[]
+  onStarted: () => void
 }) {
+  const count = ticked.length || listed
+  const upgrade = !ticked.length && show === 'ok'
   const jobs = useArtworkJobs(serverId)
   const start = useStartBestCovers(serverId)
   const me = useMe()
@@ -582,8 +617,9 @@ function BestMatches({
       ) : confirming ? (
         <div className="space-y-2">
           <p>
-            Look for a cover for {count === 1 ? 'the album' : `all ${formatCount(count)} albums`} listed that is {BEST_RULE}, and
-            save the biggest to Plex? Albums without one are left alone. It takes a few seconds an album.
+            Look for a cover for {count === 1 ? 'the album' : `all ${formatCount(count)} albums`} {ticked.length ? 'ticked' : 'listed'} that is{' '}
+            {BEST_RULE}, and save the biggest to Plex{upgrade ? ' where it’s bigger than the one there' : ''}? Albums without one
+            {upgrade ? ' (or with a cover as big already)' : ''} are left alone. It takes a few seconds an album.
           </p>
           <fieldset className="space-y-1">
             <legend className="mb-1 text-xs font-medium text-muted">Look on</legend>
@@ -611,7 +647,13 @@ function BestMatches({
                 // Ones not set up now keep their saved choice, for when they are.
                 const keep = BEST_SOURCES.map(([k]) => k).filter((k) => (usable.includes(k) ? sources.includes(k) : saved.includes(k)))
                 if (chosen && keep.join() !== saved.join()) savePreferences.mutate({ best_cover_sources: keep })
-                start.mutate({ show, q: q || undefined, low_px: lowPx, sources }, { onSettled: () => setConfirming(false) })
+                start.mutate(
+                  { show, q: q || undefined, low_px: lowPx, sources, rating_keys: ticked.length ? ticked : null },
+                  {
+                    onSettled: () => setConfirming(false),
+                    onSuccess: onStarted,
+                  },
+                )
               }}
             >
               Apply to {formatCount(count)}
@@ -624,7 +666,11 @@ function BestMatches({
       ) : (
         <>
           <Button variant="secondary" onClick={() => setConfirming(true)} className="w-full">
-            Apply best matches
+            {ticked.length
+              ? `Apply best match to ${formatCount(ticked.length)} ticked`
+              : upgrade
+                ? 'Upgrade to the biggest found'
+                : 'Apply best matches'}
           </Button>
           {latest?.status === 'succeeded' && (
             <p className="text-xs text-muted">

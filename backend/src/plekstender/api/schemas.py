@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field, field_validator
@@ -95,6 +96,40 @@ class GigPlaylistsOut(BaseModel):
     items: list[GigPlaylistOut] = Field(description="The latest, newest gig first.")
 
 
+CoverFamily = Literal[
+    "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "white", "grey", "black"
+]
+
+
+class BackgroundSettings(BaseModel):
+    """Album covers slowly panning behind the pages."""
+
+    mode: Literal["off", "covers", "colour"] = Field(
+        default="off",
+        description="covers: light covers in light mode, dark ones in dark mode; colour: only "
+        "covers of one colour family.",
+    )
+    family: CoverFamily = Field(default="blue", description="The colour, in colour mode.")
+    speed: Literal["slow", "normal", "fast"] = Field(
+        default="normal", description="How long each cover stays (about 30, 22 or 14 s)."
+    )
+    blur: int = Field(
+        default=0,
+        ge=0,
+        le=24,
+        description="How much the covers are blurred behind the page's content (px; 0: not at "
+        "all), fading out towards its edges.",
+    )
+
+
+class BackgroundCover(BaseModel):
+    rating_key: int
+    thumb: str
+    title: str = Field(default="", description="The album's.")
+    artist: str | None = Field(default=None, description="Its album artist.")
+    artist_rating_key: int | None = None
+
+
 class Preferences(BaseModel):
     """Per-user settings, stored on the account so they follow the user across devices."""
 
@@ -122,6 +157,7 @@ class Preferences(BaseModel):
         default=None, description="Light or dark on every device; None: each browser's own choice."
     )
     achievements: bool = Field(default=True, description="Achievements and their pop-ups.")
+    background: BackgroundSettings = Field(default_factory=BackgroundSettings)
     lyrics_icons: bool = Field(
         default=False,
         description="Small icons on song and album rows: what lyrics their files have.",
@@ -398,6 +434,10 @@ class AlbumSummary(BaseModel):
         default="Album",
         description="Album, EP, Single, Compilation, Live, Soundtrack… (from Plex's tags).",
     )
+    video: str | None = Field(
+        default=None,
+        description="Its video cover (cover.mp4 in its folder), to play: an API path.",
+    )
     lyrics: AlbumLyricsOut | None = Field(
         default=None,
         description="How many of its songs have lyrics in their files; None: the lyrics icons "
@@ -408,6 +448,17 @@ class AlbumSummary(BaseModel):
 class TagAlbum(AlbumSummary):
     artist_rating_key: int | None
     artist_title: str | None
+
+
+class AlbumListPage(BaseModel):
+    items: list[TagAlbum] = Field(description="Albums with their artist.")
+    total: int
+    offset: int
+    limit: int
+    types: dict[str, int] = Field(
+        description="Albums of each release type (Album, EP, Compilation, Live…) among those "
+        "the other filters leave, for the type filter."
+    )
 
 
 class TagDetail(BaseModel):
@@ -421,6 +472,25 @@ class TagDetail(BaseModel):
     artists: list[ArtistSummary] = Field(description="Tagged themselves or on an album.")
     albums: list[TagAlbum]
     related: list[TagOut] = Field(description="Tags often on the same artists and albums.")
+
+
+class CoverOf(BaseModel):
+    artist: str | None
+    title: str | None
+    url: str | None = Field(description="The original on the source.")
+    cover_url: str | None = Field(description="This recording on the source.")
+    source: str = Field(description="secondhandsongs | musicbrainz")
+    artist_rating_key: int | None = Field(
+        default=None, description="The original artist, when they're in the library."
+    )
+    original_rating_key: int | None = Field(
+        default=None,
+        description="The original song in the library (its oldest release), when it's there.",
+    )
+    original_album_rating_key: int | None = Field(default=None, description="Its album.")
+    original_versions: int = Field(
+        default=0, description="Releases of the original song in the library."
+    )
 
 
 class TrackOut(BaseModel):
@@ -438,11 +508,75 @@ class TrackOut(BaseModel):
     album_thumb: str | None
     listens: int = Field(default=0, description="Your listens of this song (all sources).")
     seen_live: int = Field(default=0, description="Gigs you've been to where it was played.")
+    cover_of: CoverOf | None = Field(
+        default=None, description="Whose song it is, when it's a cover (SecondHandSongs)."
+    )
     lyrics: LyricsKind | None = Field(
         default=None,
         description="The best lyrics its files have (word-synced, synced, plain, instrumental "
         "or none); None: the lyrics icons preference is off, or its files haven't been read.",
     )
+
+
+class SongVersion(BaseModel):
+    rating_key: int
+    title: str
+    album_rating_key: int | None
+    album_title: str | None
+    album_thumb: str | None
+    year: int | None
+    release_type: str | None = Field(description="Album, Live, Compilation… (its album's).")
+    duration_ms: int | None
+    user_rating: float | None
+    plays: int
+    current: bool = Field(description="The song the dialog was opened from.")
+
+
+class SameTitleSong(BaseModel):
+    """A song in the library with the title a cover is of, by another artist (its oldest
+    release)."""
+
+    rating_key: int
+    title: str
+    artist: str | None
+    artist_rating_key: int | None
+    album_rating_key: int | None
+    album_title: str | None
+    album_thumb: str | None
+    year: int | None
+    original: bool = Field(description="Chosen as the cover's original.")
+
+
+class CoverOriginalsOut(BaseModel):
+    title: str = Field(description="The song the cover is of.")
+    songs: list[SameTitleSong] = Field(description="Oldest first.")
+    can_choose: bool = Field(description="The user may choose the original (admins).")
+
+
+class CoverOriginalIn(BaseModel):
+    rating_key: int | None = Field(
+        description="The library song that's the original; None: none of them (no artist)."
+    )
+
+
+class SongVersionsOut(BaseModel):
+    title: str
+    artist: str | None
+    versions: list[SongVersion] = Field(description="Oldest release first.")
+
+
+class SearchHit(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+    subtitle: str | None = Field(description="Albums and songs: the artist (songs: · album).")
+    album_rating_key: int | None = Field(default=None, description="Songs: their album.")
+
+
+class LibrarySearchOut(BaseModel):
+    artists: list[SearchHit]
+    albums: list[SearchHit]
+    songs: list[SearchHit]
 
 
 class SimilarArtistOut(BaseModel):
@@ -473,6 +607,45 @@ class ItemListensOut(BaseModel):
     album_key: str | None = Field(description="…and, for an album, this album.")
 
 
+class ArtistCover(BaseModel):
+    """A song by the artist that's a cover (its oldest release in the library)."""
+
+    rating_key: int
+    title: str
+    album_rating_key: int | None
+    album_title: str | None
+    year: int | None
+    cover_of: CoverOf
+
+
+class CoveredSong(BaseModel):
+    """The artist's song, covered by someone else in the library (the cover's oldest
+    release)."""
+
+    rating_key: int
+    title: str
+    artist: str | None = Field(description="Who covered it.")
+    artist_rating_key: int | None
+    album_rating_key: int | None
+    album_title: str | None
+    year: int | None
+    original_title: str | None = Field(description="The song as the artist recorded it.")
+    original_rating_key: int | None = Field(
+        default=None, description="The artist's own recording in the library (oldest release)."
+    )
+    original_album_rating_key: int | None = None
+    original_versions: int = Field(default=0, description="Releases of it in the library.")
+    cover_url: str | None = Field(description="The cover on its source.")
+    source: str
+
+
+class ArtistCoversOut(BaseModel):
+    covers: list[ArtistCover] = Field(description="Their covers, oldest first.")
+    covered: list[CoveredSong] = Field(
+        description="Their songs covered by others in the library, oldest cover first."
+    )
+
+
 class ArtistDetail(ArtistSummary):
     summary: str | None
     art: str | None
@@ -487,6 +660,28 @@ class ArtistDetail(ArtistSummary):
     your_listens: ItemListensOut
 
 
+class SourceSong(BaseModel):
+    """A song on the album, as the album has it."""
+
+    rating_key: int
+    title: str
+    disc: int | None
+    number: int | None
+
+
+class SongSource(BaseModel):
+    """A release a live album's or a compilation's songs first came out on."""
+
+    rating_key: int
+    title: str
+    artist: str | None = Field(description="Its album artist.")
+    year: int | None
+    thumb: str | None
+    release_type: str
+    songs: int = Field(description="Songs on the album first released on it.")
+    tracks: list[SourceSong] = Field(description="Those songs, in the album's order.")
+
+
 class AlbumDetail(AlbumSummary):
     summary: str | None
     released: dt.date | None
@@ -496,6 +691,16 @@ class AlbumDetail(AlbumSummary):
     tags: list[TagOut]
     tracks: list[TrackOut]
     your_listens: ItemListensOut
+    song_sources: list[SongSource] | None = Field(
+        default=None,
+        description="Live albums and compilations: the releases (albums, EPs, singles) their "
+        "songs first came out on, oldest first; by the album artist for live albums, by each "
+        "song's own artist for compilations. None for other albums.",
+    )
+    sources_unmatched: int = Field(
+        default=0,
+        description="Live albums and compilations: songs not found on any of those releases.",
+    )
 
 
 # --- library settings (admin) -------------------------------------------------------------
@@ -839,7 +1044,7 @@ class AcoustIdKeyOut(BaseModel):
 
 
 AlbumCoverState = Literal["missing", "low", "ok", "unchecked"]
-AlbumCoverFilter = Literal["needs", "missing", "low", "all"]
+AlbumCoverFilter = Literal["needs", "missing", "low", "ok", "all"]
 # Under how many pixels (on its shorter side) a cover counts as low resolution.
 LOW_RESOLUTIONS = (600, 1000, 1500)
 # name: by artist then album; added: newest in Plex first; changed: the covers changed here
@@ -923,7 +1128,7 @@ class AcoustIdKeyIn(BaseModel):
 
 class ArtworkJobOut(BaseModel):
     id: int
-    kind: Literal["fanart", "export", "import", "covers"]
+    kind: Literal["fanart", "text", "export", "import", "covers"]
     status: Literal["queued", "running", "succeeded", "failed"]
     progress: dict[str, Any]
     stats: dict[str, Any]
@@ -937,8 +1142,13 @@ class ArtworkJobOut(BaseModel):
 
 
 class BestCoversJobIn(BaseModel):
-    show: Literal["needs", "missing", "low"] = Field(
-        default="needs", description="The albums listed with this filter (and search)."
+    show: Literal["needs", "missing", "low", "ok"] = Field(
+        default="needs",
+        description="The albums listed with this filter (and search); ok: upgrade covers "
+        "that are fine (a cover is only replaced by a bigger one).",
+    )
+    rating_keys: list[int] | None = Field(
+        default=None, max_length=10000, description="These albums instead (the ticked ones)."
     )
     q: str | None = Field(default=None, max_length=200)
     low_px: int = Field(
@@ -954,9 +1164,29 @@ class BestCoversJobIn(BaseModel):
 
 class FanartJobIn(BaseModel):
     rating_keys: list[int] | None = Field(default=None, max_length=10000)
-    status: Literal["none", "custom", "done"] = Field(
+    status: Literal["none", "custom", "done", "all"] = Field(
         default="none", description="Without rating_keys: every artist with this status."
     )
+    q: str | None = Field(
+        default=None, max_length=200, description="Without rating_keys: names containing this."
+    )
+
+
+class TextJobIn(FanartJobIn):
+    """Text logos for many artists: each artist's name, in one font and colour, or in one
+    picked at random (per artist) from several."""
+
+    fonts: list[str] = Field(min_length=1, max_length=40)
+    colours: list[str] = Field(min_length=1, max_length=12)
+    case: Literal["none", "upper", "lower"] = "none"
+
+    @field_validator("colours")
+    @classmethod
+    def _colours(cls, value: list[str]) -> list[str]:
+        for colour in value:
+            if not re.fullmatch(r"#[0-9a-fA-F]{6}", colour):
+                raise ValueError(f"not a colour: {colour!r}")
+        return value
 
 
 class FolderSettingsIn(BaseModel):
@@ -1054,6 +1284,14 @@ class DayTrackOut(BaseModel):
     listens: int
 
 
+class DayGigOut(BaseModel):
+    id: int
+    artists: list[str] = Field(description="On the bill, headliners first.")
+    venue: str | None
+    city: str | None
+    setlist_url: str | None = Field(description="Its setlist on setlist.fm, if it has one.")
+
+
 class DayYearOut(BaseModel):
     year: int
     listens: int
@@ -1062,11 +1300,16 @@ class DayYearOut(BaseModel):
     album: str | None = Field(description="The day's most played album.")
     album_rating_key: int | None
     album_thumb: str | None
+    gigs: list[DayGigOut] = Field(
+        default_factory=list, description="Gigs you went to on this date that year."
+    )
 
 
 class OnThisDayOut(BaseModel):
     date: dt.date = Field(description="Today, in the time zone asked for.")
-    years: list[DayYearOut] = Field(description="Earlier years with listens on this date.")
+    years: list[DayYearOut] = Field(
+        description="Earlier years with listens or a gig on this date, the latest first."
+    )
 
 
 class ShareOut(BaseModel):
@@ -1790,9 +2033,19 @@ class UnknownFileOut(BaseModel):
     suggestion: IdentityChoice | None
 
 
+class UnknownFolder(BaseModel):
+    folder: str = Field(description="Relative to the music folder; '' for files right in it.")
+    files: int
+
+
 class UnknownFilesOut(BaseModel):
     total: int
-    files: list[UnknownFileOut] = Field(description="The first 200.")
+    folders: list[UnknownFolder] = Field(
+        default_factory=list, description="The folders the files are in, by path, with how many."
+    )
+    files: list[UnknownFileOut] = Field(
+        description="The first 200 (in the folder asked for, when one was)."
+    )
 
 
 class IdentifyApplyIn(BaseModel):
@@ -2266,6 +2519,44 @@ class GigImportOut(BaseModel):
 
 class SetlistFmImportIn(BaseModel):
     username: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.\-]+$")
+
+
+class CoverSongsIn(BaseModel):
+    enabled: bool = Field(description="Look library songs up for covers.")
+    secondhandsongs: bool = Field(default=True, description="Ask SecondHandSongs.")
+    musicbrainz: bool = Field(
+        default=True, description="Ask MusicBrainz (songs with a recording MBID)."
+    )
+    song_versions: bool = Field(
+        default=True,
+        description="Settle the library's other versions of a cover's song from its page on "
+        "SecondHandSongs (one request, only when the library has two or more of them).",
+    )
+    api_key: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9\-]{20,64}$",
+        description="A new SecondHandSongs API key (checked first); None keeps the one saved.",
+    )
+    remove_key: bool = Field(default=False, description="Forget the saved API key.")
+
+
+class CoverSongsOut(BaseModel):
+    enabled: bool
+    secondhandsongs: bool
+    musicbrainz: bool
+    song_versions: bool
+    api_key: bool = Field(description="A SecondHandSongs API key is saved (higher limits).")
+    per_hour: int = Field(description="SecondHandSongs requests an hour Plekstender allows.")
+    per_day: int = Field(description="And a day.")
+    songs: int = Field(description="Different songs in the libraries.")
+    checked: int = Field(description="Of those, looked up.")
+    covers: int = Field(description="Of those, covers.")
+    by_versions: int = Field(
+        default=0, description="Of those looked up, settled from a song's other versions."
+    )
+    requests_left: int = Field(
+        description="About how many SecondHandSongs requests looking up the rest takes."
+    )
 
 
 class SetlistFmKeyIn(BaseModel):

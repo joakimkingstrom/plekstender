@@ -15,6 +15,24 @@ AUDIO_EXTENSIONS = {
     ".flac", ".mp3", ".m4a", ".mp4", ".aac", ".alac", ".ogg", ".oga", ".opus",
     ".wav", ".aif", ".aiff", ".wv", ".ape", ".wma", ".dsf",
 }  # fmt: skip
+# Video covers in an album's folder (cover.mp4, animated.webm...): by name, not songs.
+VIDEO_EXTENSIONS = {".mp4", ".m4v", ".mov", ".webm"}
+VIDEO_COVER_NAMES = {
+    "cover", "folder", "front", "album", "animated", "animated_cover", "cover_animated",
+    "animated-cover", "cover-animated", "motion", "video_cover",
+}  # fmt: skip
+
+
+def is_video_cover(name: str) -> bool:
+    """A video cover by its file name (cover.mp4, Folder.webm, animated.mov...)."""
+    path = Path(name)
+    return path.suffix.lower() in VIDEO_EXTENSIONS and path.stem.lower() in VIDEO_COVER_NAMES
+
+
+def is_song_file(name: str) -> bool:
+    """A song by its file name: an audio file, but not a video cover (cover.mp4 isn't one)."""
+    return Path(name).suffix.lower() in AUDIO_EXTENSIONS and not is_video_cover(name)
+
 
 # Easy-interface keys (the same for ID3, MP4 and Vorbis comments) and how they're kept.
 TEXT_FIELDS = (
@@ -22,11 +40,11 @@ TEXT_FIELDS = (
     "tracknumber", "discnumber", "musicbrainz_trackid", "musicbrainz_albumid",
     "musicbrainz_artistid", "musicbrainz_albumartistid", "musicbrainz_releasegroupid",
     "musicbrainz_releasetrackid", "releasecountry", "rating", "label", "catalognumber",
-    "barcode",
+    "barcode", "originalartist",
 )  # fmt: skip
 LIST_FIELDS = ("genre",)
 # Bumped when more fields are read: the next scan re-reads every file once.
-READER = 6
+READER = 7
 # The reader version that started describing embedded covers.
 COVERS_READER = 4
 # The fields each reader version added: a file read by an older reader may have them without
@@ -37,6 +55,7 @@ ADDED = {
     4: frozenset(),  # embedded covers described (not a tag)
     5: frozenset({"label", "catalognumber", "barcode"}),  # and MP4 composers
     6: frozenset(),  # the kind of lyrics in the tags (not a tag field)
+    7: frozenset({"originalartist"}),  # whose song a cover is
 }
 # The reader version that started noting the kind of lyrics in the tags.
 LYRICS_READER = 6

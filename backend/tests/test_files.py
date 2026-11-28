@@ -124,6 +124,7 @@ async def test_scan_and_compare(app: FastAPI, plex: FakePlex, music: Path) -> No
         "lyrics": 0,
         "nfo": 0,
         "images": 0,
+        "videos": 0,
         "errors": 1,
         "matched": 2,
     }
@@ -939,6 +940,14 @@ async def test_identifying_files_by_sound(
     # The demo has no artist or album; nothing's known about it yet.
     unknown = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()
     assert unknown["total"] == 1
+    # By folder: the folders with how many, and a folder's files when it's asked for.
+    assert unknown["folders"] == [{"folder": "extra", "files": 1}]
+    assert unknown["files"] == []
+    other = {"kind": "missing", "folder": "Radiohead"}
+    assert (await owner.get(f"{base}/unknown", params=other)).json()["files"] == []
+    unknown = (
+        await owner.get(f"{base}/unknown", params={"kind": "missing", "folder": "extra"})
+    ).json()
     [demo] = unknown["files"]
     assert (demo["path"], demo["status"], demo["in_plex"]) == ("extra/demo.mp3", "new", False)
     assert (await owner.get(f"{base}/unknown", params={"kind": "no_mbid"})).json()["total"] == 3
@@ -957,7 +966,9 @@ async def test_identifying_files_by_sound(
     }
     assert acoustid.lookups[0]["duration"] == "61"  # length and fingerprint only
 
-    [demo] = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()["files"]
+    [demo] = (
+        await owner.get(f"{base}/unknown", params={"kind": "missing", "folder": "extra"})
+    ).json()["files"]
     assert demo["status"] == "identified"
     assert demo["results"][0]["recordings"][0]["releases"][0]["date"] == "1997-05-21"
     assert demo["results"][0]["recordings"][0]["duration"] == 284  # whole seconds
@@ -974,7 +985,9 @@ async def test_identifying_files_by_sound(
             )
         )
         await db.commit()
-    [demo] = (await owner.get(f"{base}/unknown", params={"kind": "missing"})).json()["files"]
+    [demo] = (
+        await owner.get(f"{base}/unknown", params={"kind": "missing", "folder": "extra"})
+    ).json()["files"]
     assert demo["results"][0]["recordings"][0]["duration"] == 133
     suggestion = demo["suggestion"]
     assert suggestion["track_id"].endswith("01")
@@ -1155,7 +1168,15 @@ def test_planning_moves_with_their_files(tmp_path: Path) -> None:
     root = tmp_path
     album = root / "incoming" / "okc"
     album.mkdir(parents=True)
-    for name in ("01.flac", "02.flac", "01.lrc", "01.en.lrc", "cover.jpg", "album.cue"):
+    for name in (
+        "01.flac",
+        "02.flac",
+        "01.lrc",
+        "01.en.lrc",
+        "cover.jpg",
+        "album.cue",
+        "cover.mp4",
+    ):
         (album / name).write_bytes(b"x")
     (album / "Scans").mkdir()
     (album / "Scans" / "front.png").write_bytes(b"x")
@@ -1180,6 +1201,8 @@ def test_planning_moves_with_their_files(tmp_path: Path) -> None:
         "Radiohead/OK Computer/01 - Airbag.en.lrc",
     )
     assert targets["incoming/okc/cover.jpg"] == ("folder", "Radiohead/OK Computer/cover.jpg")
+    # A video cover goes with the album, not left behind as a song that isn't moving.
+    assert targets["incoming/okc/cover.mp4"] == ("folder", "Radiohead/OK Computer/cover.mp4")
     assert targets["incoming/okc/Scans"] == ("folder", "Radiohead/OK Computer/Scans")
     assert targets["mixed/b.flac"] == ("song", "Elsewhere/b.flac")
     reasons = {s.path: s.reason for s in skipped}
@@ -1650,3 +1673,38 @@ async def test_a_scan_says_what_it_is_doing_and_stops_at_any_step(
     assert (last["id"], last["status"]) == (second["id"], "failed")
     assert last["error"].startswith("Stopped.")
     assert steps[-1][0] == "Folder pictures"
+
+
+@pytest.mark.db
+async def test_unknown_files_by_folder(app: FastAPI, plex: FakePlex) -> None:
+    """Unknown files by the folder they're right in: nested folders apart, and files right in
+    the music folder under ''."""
+    from sqlalchemy import select
+
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import MediaFile, User, UserServer
+
+    owner, sid = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        user_id = await db.scalar(select(User.id).where(User.username == "owner"))
+        us = await db.scalar(select(UserServer).where(UserServer.user_id == user_id))
+        assert us is not None
+        for path in ("A/one.mp3", "A/two.mp3", "A/B/three.mp3", "loose.mp3"):
+            db.add(MediaFile(server_id=us.server_id, path=path, size=1, mtime=1.0, tags={}))
+        await db.commit()
+    base = f"/api/servers/{sid}/files/unknown"
+    found = (await owner.get(base, params={"kind": "missing"})).json()
+    assert found["total"] == 4
+    assert found["folders"] == [
+        {"folder": "", "files": 1},
+        {"folder": "A", "files": 2},
+        {"folder": "A/B", "files": 1},
+    ]
+
+    async def paths(folder: str) -> list[str]:
+        files = (await owner.get(base, params={"kind": "missing", "folder": folder})).json()
+        return [f["path"] for f in files["files"]]
+
+    assert await paths("A") == ["A/one.mp3", "A/two.mp3"]  # not A/B's
+    assert await paths("A/B") == ["A/B/three.mp3"]
+    assert await paths("") == ["loose.mp3"]

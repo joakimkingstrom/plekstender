@@ -71,6 +71,37 @@ afterEach(() => {
 })
 
 describe('Library stats', () => {
+  it('makes a playlist of the songs with a word in the title, from the word cloud', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <LibraryStatsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Love: 40' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Songs about Love' })
+    expect(within(dialog).getByText(/the 40 songs with “Love” in the title/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('link', { name: 'Adjust it first' })).toHaveAttribute('href', '/library/playlists/new?word=Love')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make the playlist' }))
+    const posted = async () =>
+      Promise.all(
+        (vi.mocked(fetch).mock.calls as [Request | string][])
+          .map(([r]) => r)
+          .filter((r): r is Request => typeof r !== 'string' && r.method === 'POST' && new URL(r.url).pathname === '/api/servers/1/playlists')
+          .map((r) => r.clone().json()),
+      )
+    await vi.waitFor(async () =>
+      expect(await posted()).toEqual([
+        expect.objectContaining({
+          name: 'Songs about Love',
+          schedule: 'weekly',
+          definition: { title_words: ['Love'], forgotten: false, all_covers: false, order: 'random', limit: null },
+        }),
+      ]),
+    )
+  })
+
   it('shows totals, growth, decades down to months, and words', async () => {
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -91,10 +122,11 @@ describe('Library stats', () => {
       'Other20 songs2.0%',
     ])
     expect(screen.getByText('60 MB · OPUS 12, Unknown 8')).toBeInTheDocument()
-    // How much room they take: each type, and in all (so far: 8 files' sizes aren't known).
+    // How much room each type takes, and how many files in all in the middle.
     expect(screen.getByText('18 GB')).toBeInTheDocument()
-    expect(screen.getByText('20.9 GB')).toBeInTheDocument()
-    expect(screen.getByText('so far')).toBeInTheDocument()
+    expect(within(types.parentElement!.parentElement!).getByText('1,000')).toBeInTheDocument()
+    expect(screen.getByText('files')).toBeInTheDocument()
+    expect(screen.queryByText('20.9 GB')).not.toBeInTheDocument()
     expect(screen.getByText(/1 album without a year isn't counted/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'The 1990s: 2 albums' }))

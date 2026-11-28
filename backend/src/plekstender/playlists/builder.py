@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from plekstender.history.insights import forgotten_keys
 from plekstender.playlists.definition import Definition, NewAlbums
 from plekstender.sync.parse import normalise_artist
+from plekstender.tags.read import LYRICS_READER
 
 # Songs released more than once count once (earliest release); a song's rating is its
 # best-rated release's. Popularity rank is within each artist (0 = most popular).
@@ -29,7 +30,17 @@ _SONGS = """
                    SELECT 1 FROM item_tags it
                    WHERE it.server_id = t.server_id AND it.tag_id = ANY(CAST(:tags AS integer[]))
                      AND it.rating_key IN (t.album_rating_key, t.artist_rating_key)
-               ) AS tagged
+               ) AS tagged,
+               EXISTS (
+                   SELECT 1 FROM song_covers c
+                   WHERE c.artist_key = t.artist_key AND c.title_norm = t.title_norm
+                     AND c.status = 'cover'
+               ) AS cover,
+               (SELECT min(CASE m.lyrics WHEN 'word' THEN 0 WHEN 'synced' THEN 1
+                                         WHEN 'plain' THEN 2 END)
+                FROM media_files m
+                WHERE m.server_id = t.server_id AND m.rating_key = t.rating_key
+                  AND m.reader >= :lyrics_reader AND m.error IS NULL) AS lyrics_rank
         FROM tracks t
         JOIN user_item_state s
           ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
@@ -71,6 +82,58 @@ _FRESH = """
 """
 
 
+# Songs whose title has the word somewhere (narrowed down further in Python).
+_WORDS = """
+    SELECT t.rating_key, t.title
+    FROM tracks t
+    JOIN user_item_state s
+      ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
+    WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
+      AND t.title ILIKE ANY(:likes)
+"""
+
+
+# Every song that's a cover (by Cover songs).
+_COVERS = """
+    SELECT t.rating_key
+    FROM tracks t
+    JOIN user_item_state s
+      ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
+    JOIN song_covers c
+      ON c.artist_key = t.artist_key AND c.title_norm = t.title_norm AND c.status = 'cover'
+    WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
+"""
+
+
+async def cover_keys(
+    db: AsyncSession, user_id: int, server_id: int, sections: list[str]
+) -> list[int]:
+    """Every cover song in the libraries."""
+    rows = await db.scalars(
+        text(_COVERS), {"user_id": user_id, "server_id": server_id, "sections": sections}
+    )
+    return list(rows)
+
+
+async def title_word_keys(
+    db: AsyncSession, user_id: int, server_id: int, sections: list[str], wanted: list[str]
+) -> list[int]:
+    """The songs with one of these words in their title, as the word cloud counts words."""
+    from plekstender.library_stats import words_in
+
+    folded = {w.casefold() for w in wanted}
+    rows = await db.execute(
+        text(_WORDS),
+        {
+            "user_id": user_id,
+            "server_id": server_id,
+            "sections": sections,
+            "likes": [f"%{w}%" for w in wanted],
+        },
+    )
+    return [key for key, title in rows.all() if words_in(title) & folded]
+
+
 async def new_album_keys(
     db: AsyncSession,
     user_id: int,
@@ -107,11 +170,21 @@ class Song:
     rating: float | None
 
 
+# The best lyrics a song's files must have for each choice (0 word-synced, 1 synced, 2 plain).
+_LYRICS_AT_MOST = {"with": 2, "synced": 1, "word": 0}
+
+
 def _passes(row: Any, d: Definition) -> bool:
     if row.chosen:
         return True
     r = d.rules
     if not row.tagged:
+        return False
+    if (r.covers == "only" and not row.cover) or (r.covers == "none" and row.cover):
+        return False
+    if r.lyrics != "any" and (
+        row.lyrics_rank is None or row.lyrics_rank > _LYRICS_AT_MOST[r.lyrics]
+    ):
         return False
     checks = []
     if r.min_rating is not None:
@@ -133,9 +206,15 @@ async def matching_songs(
     """Every song the definition selects (before the limit), most popular first."""
     # Songs found by a rule rather than chosen (the rules still apply to them).
     found = await forgotten_keys(db, user_id, server_id, sections) if d.forgotten else []
+    worded = (
+        await title_word_keys(db, user_id, server_id, sections, d.title_words)
+        if d.title_words
+        else []
+    )
     fresh = (
         await new_album_keys(db, user_id, server_id, sections, d.new_albums) if d.new_albums else []
     )
+    covers = await cover_keys(db, user_id, server_id, sections) if d.all_covers else []
     rows = await db.execute(
         text(_SONGS),
         {
@@ -144,9 +223,10 @@ async def matching_songs(
             "sections": sections,
             "artists": d.artists,
             "tracks": d.tracks,
-            "found": found,
+            "found": found + worded + covers,
             "fresh": fresh,
             "tags": d.rules.tags,
+            "lyrics_reader": LYRICS_READER,
         },
     )
     songs = [

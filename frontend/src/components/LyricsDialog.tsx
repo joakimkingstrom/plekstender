@@ -174,7 +174,7 @@ export function LyricsPanel({
   const writeOff = !canWrite && (
     <Notice tone="warn">Writing to the files is off. Turn on tag editing on{' '}
       <Link to="/settings/files/scan" className="underline">
-        Settings → Music files → Tags in your files
+        Settings → Music files → Folder scan
       </Link>
       .</Notice>
   )

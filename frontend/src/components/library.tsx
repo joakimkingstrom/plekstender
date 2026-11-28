@@ -88,7 +88,7 @@ const PHASES: Record<string, string> = {
   artists: 'Reading artists',
   albums: 'Reading albums',
   tracks: 'Reading tracks',
-  artist_details: 'Fetching genres, moods and similar artists',
+  artist_details: 'Fetching genres, moods, and similar artists',
   album_details: 'Fetching album genres and moods',
   artist_activity: 'Checking recent plays and ratings',
   album_activity: 'Checking recent plays and ratings',

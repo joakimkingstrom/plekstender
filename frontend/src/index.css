@@ -346,3 +346,55 @@ input[type='number']::-webkit-outer-spin-button {
     opacity: 0;
   }
 }
+
+/* Album-cover backgrounds: each cover fades in, then pans and zooms slowly (Ken Burns). */
+@keyframes cover-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cover-ken-burns {
+  from {
+    transform: scale(var(--kb-s0, 1.08)) translate(var(--kb-x0, 0), var(--kb-y0, 0));
+  }
+  to {
+    transform: scale(var(--kb-s1, 1.22)) translate(var(--kb-x1, 0), var(--kb-y1, 0));
+  }
+}
+.cover-slide {
+  animation-name: cover-fade-in, cover-ken-burns;
+  animation-timing-function: ease-in-out, linear;
+  animation-fill-mode: both, both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cover-slide {
+    animation: none;
+  }
+}
+
+/* The page's content over a blur of the covers behind it (Theme → Background → Blur), from
+   the header to the bottom, fading out towards the sides rather than stopping at a line: the
+   blur's strength is --page-blur. (Standard properties only: the build adds the -webkit- ones
+   Safari needs.) */
+.page-blur {
+  --fade-x: 4rem;
+  backdrop-filter: blur(var(--page-blur, 0px));
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade-x), #000 calc(100% - var(--fade-x)), transparent);
+}
+
+/* A slider whose whole line is the accent colour, with a round knob (more specific than the
+   sliders above, which fill up to the knob). */
+input[type='range'].accent-range::-webkit-slider-runnable-track {
+  background: var(--color-accent);
+}
+input[type='range'].accent-range::-moz-range-track {
+  background: var(--color-accent);
+}
+input[type='range'].accent-range:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 9999px;
+}

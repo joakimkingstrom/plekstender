@@ -748,6 +748,37 @@ class HiddenSuggestion(Base):
     hidden_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 
+class SongCover(Base):
+    """Whether a song is a cover, and of whose song (SecondHandSongs, then MusicBrainz): looked
+    up once per song, by its normalised artist and title, whichever releases and servers have
+    it."""
+
+    __tablename__ = "song_covers"
+    __table_args__ = (
+        PrimaryKeyConstraint("artist_key", "title_norm"),
+        Index("ix_song_covers_checked", "checked_at"),
+    )
+
+    artist_key: Mapped[str] = mapped_column(Text)
+    title_norm: Mapped[str] = mapped_column(Text)
+    # cover | original (the artist's own song, or a re-recording of it) | unknown (not on
+    # SecondHandSongs) | error (tried again the next day)
+    status: Mapped[str] = mapped_column(String(12))
+    original_artist: Mapped[str | None] = mapped_column(Text)
+    original_title: Mapped[str | None] = mapped_column(Text)
+    # Pages on the source: this recording, and the original's.
+    performance_url: Mapped[str | None] = mapped_column(Text)
+    original_url: Mapped[str | None] = mapped_column(Text)
+    # Where the answer came from: secondhandsongs | musicbrainz (for unknown, the last tried).
+    source: Mapped[str] = mapped_column(String(24), default="secondhandsongs")
+    # The sources asked, comma-separated ("secondhandsongs,musicbrainz").
+    tried: Mapped[str] = mapped_column(String(64), default="")
+    # Requests made to SecondHandSongs for it, counted against its limits.
+    requests: Mapped[int] = mapped_column(SmallInteger, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    checked_at: Mapped[dt.datetime]
+
+
 class DiscoverArt(Base):
     """fanart.tv artwork of an artist suggested on Library → Discover (the top few): the
     artist found on MusicBrainz by name, and which of its images are saved under
@@ -951,6 +982,23 @@ class FolderImage(Base):
     sha1: Mapped[str | None] = mapped_column(String(40))
     width: Mapped[int | None]
     height: Mapped[int | None]
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+class FolderVideo(Base):
+    """A video cover in the music folder (cover.mp4, animated.webm...), kept as a copy under
+    DATA_DIR/video-covers by the worker (the web app never reads the music folder)."""
+
+    __tablename__ = "folder_videos"
+    __table_args__ = (UniqueConstraint("server_id", "path"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("plex_servers.id", ondelete="CASCADE"))
+    path: Mapped[str] = mapped_column(Text)  # relative to the mapped folder
+    size: Mapped[int] = mapped_column(BigInteger)
+    mtime: Mapped[float]
+    # The copy's file name under DATA_DIR/video-covers/<server>; None: not copied (too big).
+    stored: Mapped[str | None] = mapped_column(String(80))
     error: Mapped[str | None] = mapped_column(Text)
 
 

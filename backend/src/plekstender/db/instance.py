@@ -696,3 +696,51 @@ async def get_fonts(db: AsyncSession) -> dict[str, list[str]]:
 async def set_fonts(db: AsyncSession, groups: dict[str, list[str]] | None) -> None:
     """Save the font list (None restores the default)."""
     await _put(db, FONTS_KEY, {} if groups is None else {"groups": groups})
+
+
+# --- cover songs (SecondHandSongs, MusicBrainz) -------------------------------------------
+
+COVER_SONGS_KEY = "cover_songs"
+SECONDHANDSONGS_PURPOSE = "instance.secondhandsongs_api_key"
+
+
+class CoverSongsSettings(BaseModel):
+    enabled: bool = False  # look songs up at all (an admin turns it on)
+    secondhandsongs: bool = True
+    musicbrainz: bool = True
+    # A cover's song page settles the library's other versions of it (when it saves requests).
+    song_versions: bool = True
+    api_key: str | None = None  # SecondHandSongs' (optional: higher rate limits)
+
+
+async def get_cover_songs(db: AsyncSession, settings: Settings) -> CoverSongsSettings:
+    """Whether songs are looked up for covers, where, and SecondHandSongs' API key if one was
+    given."""
+    stored = await _get(db, COVER_SONGS_KEY) or {}
+    key = None
+    if encrypted := stored.get("api_key_enc"):
+        try:
+            key = _cipher(settings).decrypt(encrypted, purpose=SECONDHANDSONGS_PURPOSE)
+        except DecryptionError:
+            key = None
+    return CoverSongsSettings(
+        enabled=stored.get("enabled") is True,
+        secondhandsongs=stored.get("secondhandsongs") is not False,
+        musicbrainz=stored.get("musicbrainz") is not False,
+        song_versions=stored.get("song_versions") is not False,
+        api_key=key,
+    )
+
+
+async def set_cover_songs(db: AsyncSession, settings: Settings, value: CoverSongsSettings) -> None:
+    stored: dict[str, Any] = {
+        "enabled": value.enabled,
+        "secondhandsongs": value.secondhandsongs,
+        "musicbrainz": value.musicbrainz,
+        "song_versions": value.song_versions,
+    }
+    if value.api_key:
+        stored["api_key_enc"] = _cipher(settings).encrypt(
+            value.api_key, purpose=SECONDHANDSONGS_PURPOSE
+        )
+    await _put(db, COVER_SONGS_KEY, stored)

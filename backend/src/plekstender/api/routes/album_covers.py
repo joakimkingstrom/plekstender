@@ -89,6 +89,8 @@ def _shown(show: str, q: str | None, state: Any, kept: Any) -> list[Any]:
         where += [state.in_(("missing", "low")), ~kept]
     elif show in ("missing", "low"):
         where += [state == show, ~kept]
+    elif show == "ok":
+        where.append(state == "ok")
     if q:
         like = _like(q)
         where.append(
@@ -195,26 +197,26 @@ async def list_covers(
         else (*smallest, *by_name)
     )
     rows = await db.execute(query.order_by(*order).offset(offset).limit(limit))
-    return AlbumCoverPage(
-        items=[
-            AlbumCoverOut(
-                rating_key=album.rating_key,
-                title=album.title,
-                artist=artist,
-                year=album.year,
-                thumb=album.thumb,
-                width=cover.width if cover and state_name != "unchecked" else None,
-                height=cover.height if cover and state_name != "unchecked" else None,
-                state=state_name,
-                kept=bool(is_kept),
-                source=cover.source if cover else None,
-                applied_at=cover.applied_at if cover else None,
-                added_at=album.added_at,
-            )
-            for album, artist, cover, state_name, is_kept in rows.all()
-        ],
-        total=total,
-        counts=counts,
+    return AlbumCoverPage(items=[_listed(*row) for row in rows.all()], total=total, counts=counts)
+
+
+def _listed(
+    album: Album, artist: str | None, cover: AlbumCover | None, state: str, kept: bool
+) -> AlbumCoverOut:
+    """An album and its cover, as the list shows them (no size until it's measured)."""
+    return AlbumCoverOut(
+        rating_key=album.rating_key,
+        title=album.title,
+        artist=artist,
+        year=album.year,
+        thumb=album.thumb,
+        width=cover.width if cover and state != "unchecked" else None,
+        height=cover.height if cover and state != "unchecked" else None,
+        state=state,
+        kept=bool(kept),
+        source=cover.source if cover else None,
+        applied_at=cover.applied_at if cover else None,
+        added_at=album.added_at,
     )
 
 
@@ -264,6 +266,40 @@ async def cover_sources(
 
 
 NO_MBID = "MusicBrainz doesn't know this album by its name and artist, so {} can't be searched."
+
+
+@router.get("/{rating_key}", response_model=AlbumCoverOut)
+async def get_cover(server_id: int, rating_key: int, db: DbDep, user: UserDep) -> AlbumCoverOut:
+    """One album and its cover, as the list has it (to change it from the album's page)."""
+    us = await owner_server(db, user, server_id)
+    vis, cond, where = visible(Album, user.id, us)
+    cover_state, kept, _shorter = _columns()
+    row = (
+        await db.execute(
+            select(Album, Artist.title, AlbumCover, cover_state, kept)
+            .join(vis, cond)
+            .outerjoin(
+                Artist,
+                and_(
+                    Artist.server_id == Album.server_id,
+                    Artist.rating_key == Album.artist_rating_key,
+                ),
+            )
+            .outerjoin(
+                AlbumCover,
+                and_(
+                    AlbumCover.server_id == Album.server_id,
+                    AlbumCover.rating_key == Album.rating_key,
+                ),
+            )
+            .where(*where, Album.rating_key == rating_key)
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Album not found")
+    if row[3] == "unchecked":
+        await enqueue_cover_sizes()  # measure it now rather than at the next sweep
+    return _listed(*row)
 
 
 @router.get("/{rating_key}/candidates", response_model=CandidatesOut)
@@ -497,8 +533,9 @@ async def apply_best(
 async def start_best(
     server_id: int, body: BestCoversJobIn, db: DbDep, user: UserDep
 ) -> ArtworkJobOut:
-    """Apply the best match to every album the list shows with this filter and search (in
-    the background, a few seconds an album)."""
+    """Apply the best match to every album the list shows with this filter and search, or to
+    the ticked ones (in the background, a few seconds an album). A cover is only replaced by
+    a bigger one, so "ok" upgrades the fine ones where a bigger version is found."""
     _check_low(body.low_px)
     us = await owner_server(db, user, server_id)
     sources = await _best_sources(db, body.sources or load_preferences(user).best_cover_sources)
@@ -526,7 +563,14 @@ async def start_best(
                     AlbumCover.rating_key == Album.rating_key,
                 ),
             )
-            .where(*where, *_shown(body.show, body.q, cover_state, kept))
+            .where(
+                *where,
+                *(
+                    [Album.rating_key.in_(body.rating_keys)]
+                    if body.rating_keys
+                    else _shown(body.show, body.q, cover_state, kept)
+                ),
+            )
             .order_by(
                 case((cover_state == "missing", 0), else_=1),
                 shorter.asc().nulls_first(),

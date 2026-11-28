@@ -46,8 +46,8 @@ export function RewindPage() {
     <div className="space-y-4">
       <Card title="Rewind">
         <p className="mb-4 text-sm text-muted">
-          A look back at any stretch of your listening: your top artists, albums and songs, new obsessions, when you listen,
-          what you had on repeat and more, one card at a time.
+          A look back at any stretch of your listening: your top artists, albums, and songs, new obsessions, when you listen,
+          what you had on repeat, and more, one card at a time.
         </p>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Period">
           {options.map((o) => (

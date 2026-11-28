@@ -2,14 +2,19 @@ import { useArtistPastGigs } from '../api/gigs'
 import { useArtistGigs, useArtistsWithGigs } from '../api/live'
 import { GigMarker } from '../components/GigMarker'
 import { GigRow } from '../components/GigRow'
+import { SongSources } from '../components/SongSources'
+import { ArtistCovers, CoverOf } from '../components/Covers'
+import { SongVersions } from '../components/SongVersions'
+import { VideoCover } from '../components/VideoCover'
+import { AlbumCoverView } from '../components/AlbumCoverView'
 import { AlbumLyricsIcon, SongLyricsIcon } from '../components/LyricsIcon'
 import { useLyricsIcons } from '../api/hooks'
-import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Zoomable } from '../components/Lightbox'
 import { ListensDialog } from '../components/listens'
 import { Select } from '../components/Select'
 import { Tooltip } from '../components/Tooltip'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { errorMessage, type Schemas } from '../api/client'
 import {
   imageUrl,
@@ -17,7 +22,9 @@ import {
   useArtist,
   useArtistNeighbours,
   useArtists,
+  useLibraryAlbums,
   useTags,
+  type AlbumSort,
   type ArtistSort,
   type TagKind,
 } from '../api/library'
@@ -59,34 +66,286 @@ export function ServerPicker({
   )
 }
 
+type View = 'artists' | 'albums'
+const VIEWS: [View, string][] = [
+  ['artists', 'Artists'],
+  ['albums', 'Albums'],
+]
+
+/** Library: its artists, or its albums (?view=albums), each searchable and filterable. */
 export function LibraryPage() {
   const { active, blocker } = useLibraryServer()
-  const [query, setQuery] = useState('')
-  const [sort, setSort] = useState<ArtistSort>('title')
-  const [tag, setTag] = useState<number | null>(null)
-  const [size, setSize] = useCoverSize('library-cover-size')
-  const deferredQuery = useDeferredValue(query.trim())
+  const [params, setParams] = useSearchParams()
+  const view: View = params.get('view') === 'albums' ? 'albums' : 'artists'
+  const viewSwitch = (
+    <Segmented
+      label="Show"
+      prefix="Show"
+      value={view}
+      options={VIEWS}
+      className={SWITCH_WIDTH}
+      onChange={(v) => setParams(v === 'albums' ? { view: v } : {}, { replace: true })}
+    />
+  )
 
   return (
     <>
       {blocker ?? (
         <>
-          <div className="mb-4 flex flex-wrap gap-2">
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search artists"
-              className="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-              aria-label="Search artists"
-            />
-            <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
-            <CoverSizeSwitch value={size} onChange={setSize} />
-          </div>
-          <TagFilter serverId={active!.id} selected={tag} onSelect={setTag} />
-          <ArtistGrid serverId={active!.id} q={deferredQuery} sort={sort} tag={tag} size={size} />
+          {view === 'albums' ? (
+            <AlbumsView serverId={active!.id} viewSwitch={viewSwitch} />
+          ) : (
+            <ArtistsView serverId={active!.id} viewSwitch={viewSwitch} />
+          )}
         </>
       )}
+    </>
+  )
+}
+
+/** The first row: what's shown ("Show: Artists | Albums") on the left, then the search. On
+ * narrow windows just the search: the switch is at the start of the row below (TagFilter). */
+function Toolbar({ left, search }: { left: ReactNode; search: ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <div className="shrink-0 max-sm:hidden">{left}</div>
+      <div className="min-w-0 flex-1">{search}</div>
+    </div>
+  )
+}
+
+/** "Show Artists | Albums" and "Genres | Styles | Moods" are one above the other: the same
+ * width (on windows wide enough for both; their buttons share it). */
+const SWITCH_WIDTH = 'sm:w-56'
+
+/** Genres, styles, or moods: which the chips under the search row are. */
+function TagKindSwitch({ value, onChange }: { value: TagKind; onChange: (kind: TagKind) => void }) {
+  // Not on narrow windows, like the chips: too little room for them to be of use.
+  return <Segmented label="Filter by" value={value} options={FILTER_KINDS} onChange={onChange} className={`max-sm:hidden ${SWITCH_WIDTH}`} />
+}
+
+function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: ReactNode }) {
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<ArtistSort>('title')
+  const [tag, setTag] = useState<number | null>(null)
+  const [kind, setKind] = useState<TagKind>('genre')
+  const [size, setSize] = useCoverSize('library-cover-size')
+  const deferredQuery = useDeferredValue(query.trim())
+  return (
+    <>
+      <Toolbar
+        left={viewSwitch}
+        search={
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search artists"
+            className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+            aria-label="Search artists"
+          />
+        }
+      />
+      <TagFilter
+        serverId={serverId}
+        kind={kind}
+        selected={tag}
+        onSelect={setTag}
+        start={
+          <>
+            {/* Narrow windows: the view switch here, under the search (hidden from both the
+                eye and screen readers at the other width). */}
+            <div className="sm:hidden">{viewSwitch}</div>
+            <TagKindSwitch
+              value={kind}
+              onChange={(k) => {
+                setKind(k)
+                setTag(null)
+              }}
+            />
+          </>
+        }
+        end={
+          <>
+            <CoverSizeSwitch value={size} onChange={setSize} />
+            <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
+          </>
+        }
+      />
+      <ArtistGrid serverId={serverId} q={deferredQuery} sort={sort} tag={tag} size={size} />
+    </>
+  )
+}
+
+const ALBUM_SORTS: { value: AlbumSort; label: string }[] = [
+  { value: 'artist', label: 'Artist' },
+  { value: 'title', label: 'Title' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'added', label: 'Recently added' },
+  { value: 'rating', label: 'Your rating' },
+  { value: 'plays', label: 'Most played' },
+  { value: 'popularity', label: 'Popularity' },
+]
+
+/** Release types as the type filter names them (others as Plex has them). */
+const TYPE_NAMES: Record<string, string> = {
+  Album: 'Albums',
+  EP: 'EPs',
+  Single: 'Singles',
+  Compilation: 'Compilations',
+  Live: 'Live',
+  Soundtrack: 'Soundtracks',
+  Remix: 'Remixes',
+  Demo: 'Demos',
+  Mixtape: 'Mixtapes',
+}
+
+function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: ReactNode }) {
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<AlbumSort>('artist')
+  const [tag, setTag] = useState<number | null>(null)
+  const [kind, setKind] = useState<TagKind>('genre')
+  const [type, setType] = useState<string | null>(null)
+  const [size, setSize] = useCoverSize('library-album-size')
+  const q = useDeferredValue(query.trim())
+  const albums = useLibraryAlbums(serverId, q, sort, tag, type)
+  const counts = albums.data?.pages[0]?.types ?? {}
+  const types = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  const all = types.reduce((n, [, c]) => n + c, 0)
+  return (
+    <>
+      <Toolbar
+        left={viewSwitch}
+        search={
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search albums or artists"
+            className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+            aria-label="Search albums or artists"
+          />
+        }
+      />
+      <TagFilter
+        serverId={serverId}
+        kind={kind}
+        selected={tag}
+        onSelect={setTag}
+        className="mb-3"
+        start={
+          <>
+            {/* Narrow windows: the view switch here, under the search (hidden from both the
+                eye and screen readers at the other width). */}
+            <div className="sm:hidden">{viewSwitch}</div>
+            <TagKindSwitch
+              value={kind}
+              onChange={(k) => {
+                setKind(k)
+                setTag(null)
+              }}
+            />
+          </>
+        }
+        end={
+          <>
+            <CoverSizeSwitch value={size} onChange={setSize} />
+            <Select label="Sort by" value={sort} onChange={setSort} options={ALBUM_SORTS} />
+          </>
+        }
+      />
+      <div className="mb-5 flex items-center gap-3">
+        <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label="Release type">
+          {([[null, 'All', all], ...types.map(([t, n]) => [t, TYPE_NAMES[t] ?? t, n])] as [string | null, string, number][]).map(
+            ([value, label, n]) => {
+              const on = type === value
+              return (
+                <button
+                  key={value ?? 'all'}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setType(value)}
+                  className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${
+                    on ? 'border-accent bg-accent text-on-accent' : 'border-border text-muted hover:text-text'
+                  }`}
+                >
+                  {label} <span className="tabular-nums opacity-75">{formatCount(n)}</span>
+                </button>
+              )
+            },
+          )}
+        </div>
+      </div>
+      <AlbumGrid serverId={serverId} albums={albums} size={size} />
+    </>
+  )
+}
+
+function AlbumGrid({
+  serverId,
+  albums,
+  size,
+}: {
+  serverId: number
+  albums: ReturnType<typeof useLibraryAlbums>
+  size: CoverSize
+}) {
+  const sentinel = useRef<HTMLDivElement>(null)
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = albums
+  // Load the next page when the end of the grid scrolls into view.
+  useEffect(() => {
+    const el = sentinel.current
+    if (!el || !hasNextPage) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !isFetchingNextPage) void fetchNextPage()
+      },
+      { rootMargin: '600px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+
+  if (albums.isPending) return <Spinner />
+  if (albums.isError) return <Notice tone="error">{errorMessage(albums.error)}</Notice>
+  const items = albums.data.pages.flatMap((p) => p.items)
+  const total = albums.data.pages[0]?.total ?? 0
+  return (
+    <>
+      <p className="mb-3 text-xs text-muted">
+        {formatCount(total)} {total === 1 ? 'album' : 'albums'}
+      </p>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted">No albums match.</p>
+      ) : (
+        <ul className={ARTIST_GRIDS[size]} aria-label="Albums">
+          {items.map((al) => (
+            <li key={al.rating_key}>
+              <Link to={`/library/albums/${al.rating_key}`} className="group block">
+                <VideoCover video={al.video}>
+                  <Artwork serverId={serverId} path={al.thumb} title={al.title} size={COVER_PIXELS[size]} className="w-full transition-opacity group-hover:opacity-85" />
+                </VideoCover>
+                <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
+              </Link>
+              <div className="truncate text-xs text-muted">
+                {al.artist_rating_key ? (
+                  <Link to={`/library/artists/${al.artist_rating_key}`} className="hover:text-text hover:underline">
+                    {al.artist_title}
+                  </Link>
+                ) : (
+                  al.artist_title
+                )}
+                {[al.year, al.release_type !== 'Album' ? al.release_type : null].filter(Boolean).map((p) => ` · ${p}`).join('')}
+              </div>
+              <RateStars serverId={serverId} ratingKey={al.rating_key} value={al.user_rating} label={`Rate ${al.title}`} size="size-3.5" />
+            </li>
+          ))}
+        </ul>
+      )}
+      <div ref={sentinel} className="flex justify-center py-6">
+        {isFetchingNextPage && <Spinner small />}
+      </div>
     </>
   )
 }
@@ -97,32 +356,40 @@ const FILTER_KINDS: [TagKind, string][] = [
   ['mood', 'Moods'],
 ]
 
+/** Under the search: genres, styles, or moods (`start`, the switch for `kind`), the ones to
+ * filter by as chips, and the cover size and sort on the right (`end`). The switch and the chips
+ * are left out on narrow windows. */
 function TagFilter({
   serverId,
+  kind,
   selected,
   onSelect,
+  start,
+  end,
+  className = 'mb-5',
 }: {
   serverId: number
+  kind: TagKind
   selected: number | null
   onSelect: (id: number | null) => void
+  /** At the start of the row (the kind of tag). */
+  start?: ReactNode
+  /** At the right end of the row (the cover size and the sort). */
+  end?: ReactNode
+  className?: string
 }) {
-  const [kind, setKind] = useState<TagKind>('genre')
   const tags = useTags(serverId, kind)
   const label = FILTER_KINDS.find(([k]) => k === kind)?.[1] ?? ''
   const chosen = tags.data?.find((t) => t.id === selected)
   return (
-    <div className="mb-5 flex items-start gap-3">
-      <Segmented
-        label="Filter by"
-        value={kind}
-        options={FILTER_KINDS}
-        onChange={(k) => {
-          setKind(k)
-          onSelect(null)
-        }}
-        className="shrink-0"
-      />
-      <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label={`Filter by ${label.toLowerCase()}`}>
+    // The kind switch, the chips (scrolling sideways in the room between), and the size and sort.
+    <div className={`flex items-center gap-3 ${className}`}>
+      {start && <div className="flex shrink-0 gap-2">{start}</div>}
+      <div
+        className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1 max-sm:hidden"
+        role="group"
+        aria-label={`Filter by ${label.toLowerCase()}`}
+      >
         {tags.data?.length === 0 && <span className="py-1 text-xs text-muted">No {label.toLowerCase()} yet.</span>}
         {tags.data?.slice(0, 40).map((t) => {
           const on = t.id === selected
@@ -142,10 +409,11 @@ function TagFilter({
         })}
       </div>
       {chosen && (
-        <Link to={`/library/tags/${chosen.id}`} className="shrink-0 py-1 text-xs text-accent hover:underline">
+        <Link to={`/library/tags/${chosen.id}`} className="shrink-0 py-1 text-xs text-accent hover:underline max-sm:hidden">
           {chosen.name} page →
         </Link>
       )}
+      {end && <div className="ml-auto flex shrink-0 gap-2">{end}</div>}
     </div>
   )
 }
@@ -252,7 +520,12 @@ function TrackList({
   showListens?: boolean
 }) {
   const lyricsIcons = useLyricsIcons()
+  const [versionsOf, setVersionsOf] = useState<Schemas['TrackOut'] | null>(null)
   return (
+    <>
+    {versionsOf && (
+      <SongVersions serverId={serverId} ratingKey={versionsOf.rating_key} title={versionsOf.title} onClose={() => setVersionsOf(null)} />
+    )}
     <ol className="divide-y divide-border">
       {tracks.map((t, i) => (
         <li key={t.rating_key} className="flex items-center gap-3 py-2 text-sm">
@@ -261,7 +534,9 @@ function TrackList({
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
-              <span className="truncate">{t.title}</span>
+              <button type="button" onClick={() => setVersionsOf(t)} className="truncate text-left hover:underline" title="Every version of this song">
+                {t.title}
+              </button>
               {t.seen_live > 0 && <SeenLive times={t.seen_live} />}
               {lyricsIcons && <SongLyricsIcon kind={t.lyrics} />}
             </span>
@@ -270,6 +545,7 @@ function TrackList({
                 {[t.original_title, showAlbum ? t.album_title : null].filter(Boolean).join(' · ')}
               </span>
             )}
+            {t.cover_of && <CoverOf serverId={serverId} trackKey={t.rating_key} cover={t.cover_of} />}
           </span>
           <Tooltip content="Last.fm listeners" className="hidden w-14 justify-end sm:inline-flex">
             <span className="text-xs text-muted tabular-nums">{formatCompact(t.popularity)}</span>
@@ -284,6 +560,7 @@ function TrackList({
         </li>
       ))}
     </ol>
+    </>
   )
 }
 
@@ -496,7 +773,9 @@ function Releases({ serverId, albums }: { serverId: number; albums: Schemas['Alb
             {items.map((al) => (
                 <li key={al.rating_key}>
                   <Link to={`/library/albums/${al.rating_key}`} className="group block">
-                    <Artwork serverId={serverId} path={al.thumb} title={al.title} size={COVER_PIXELS[size]} className="w-full group-hover:opacity-85" />
+                    <VideoCover video={al.video}>
+                      <Artwork serverId={serverId} path={al.thumb} title={al.title} size={COVER_PIXELS[size]} className="w-full group-hover:opacity-85" />
+                    </VideoCover>
                     <div className="mt-2 truncate text-sm font-medium">{al.title}</div>
                   </Link>
                   <div className="flex items-center justify-between gap-2 text-xs text-muted">
@@ -690,6 +969,7 @@ function ArtistView({ serverId, artistKey }: { serverId: number; artistKey: numb
         </div>
         <div className="space-y-6">
         <YourListens listens={a.your_listens} showSongs name={a.title} />
+        <ArtistCovers serverId={serverId} artistKey={a.rating_key} />
         {a.similar.length > 0 && (
           <Card title="Similar artists">
             <ul className="flex flex-wrap gap-2">
@@ -752,12 +1032,11 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
         <BackLink to="/library" label="Library" />
       )}
       <div className="mb-8 flex flex-col gap-6 sm:flex-row">
-        <Zoomable
-          image={al.thumb ? { src: imageUrl(serverId, al.thumb, 1000)!, alt: al.title, caption: al.artist_title ?? undefined } : null}
-          className="w-56 shrink-0 self-center sm:self-start"
-        >
-          <Artwork serverId={serverId} path={al.thumb} title={al.title} size={600} className="w-full" />
-        </Zoomable>
+        <AlbumCoverView serverId={serverId} album={al} className="w-56 shrink-0 self-center sm:self-start">
+          <VideoCover video={al.video}>
+            <Artwork serverId={serverId} path={al.thumb} title={al.title} size={600} className="w-full" />
+          </VideoCover>
+        </AlbumCoverView>
         <div className="min-w-0 flex-1 space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">{al.title}</h1>
           <p className="text-sm text-muted">
@@ -786,8 +1065,17 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
             </div>
           ))}
         </Card>
-        <div>
+        <div className="space-y-6">
           <YourListens listens={al.your_listens} showSongs={false} name={al.title} />
+          {al.song_sources && (
+            <SongSources
+              serverId={serverId}
+              sources={al.song_sources}
+              unmatched={al.sources_unmatched ?? 0}
+              albumArtist={al.artist_title}
+              compilation={al.release_type !== 'Live'}
+            />
+          )}
         </div>
       </div>
     </>

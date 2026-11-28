@@ -337,6 +337,15 @@ function yearsAgo(year: number, now: number) {
 }
 
 /** What you played on today's date in earlier years (the last few years with listens). */
+function TicketIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-accent" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-label="Gig" role="img">
+      <path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z" />
+      <path d="M14 6v12" strokeDasharray="2 2" />
+    </svg>
+  )
+}
+
 export function OnThisDay({ serverId }: { serverId: number | null }) {
   const day = useOnThisDay(serverId)
   const years = day.data?.years.slice(0, 4) ?? []
@@ -362,9 +371,29 @@ export function OnThisDay({ serverId }: { serverId: number | null }) {
                 <p className="text-sm">
                   <span className="font-semibold">{yearsAgo(y.year, now)}</span>{' '}
                   <span className="text-muted">
-                    · {y.year} · {formatCount(y.listens)} {y.listens === 1 ? 'listen' : 'listens'}
+                    · {y.year}
+                    {y.listens > 0 && ` · ${formatCount(y.listens)} ${y.listens === 1 ? 'listen' : 'listens'}`}
                   </span>
                 </p>
+                {(y.gigs ?? []).map((g) => (
+                  <p key={g.id} className="flex items-center gap-1.5 truncate text-sm">
+                    <TicketIcon />
+                    <span className="truncate">
+                      {[g.artists.join(', '), [g.venue, g.city].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || 'A gig'}
+                    </span>
+                    {g.setlist_url && (
+                      <a
+                        href={g.setlist_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 text-xs text-accent hover:underline"
+                        aria-label={`The setlist on setlist.fm${g.artists[0] ? ` (${g.artists[0]})` : ''}`}
+                      >
+                        Setlist
+                      </a>
+                    )}
+                  </p>
+                ))}
                 <p className="truncate text-sm">
                   {y.artists.map((a, i) => (
                     <span key={a.name}>

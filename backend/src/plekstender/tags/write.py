@@ -37,6 +37,7 @@ EDITABLE: tuple[str, ...] = (
     "musicbrainz_albumartistid",
     "musicbrainz_releasegroupid",
     "rating",  # 0-100 (see keys.py)
+    "originalartist",  # whose song a cover is (cover songs)
 )
 LIST_FIELDS = {"genre"}
 MAX_VALUE = 500

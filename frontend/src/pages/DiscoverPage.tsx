@@ -141,20 +141,22 @@ type SuggestionProps = {
   onToggle: () => void
 }
 
-/** "Radiohead, Portishead and 3 more": the library artists it's like, each a link. */
+/** "Radiohead, Portishead, and 3 more": the library artists it's like, each a link. */
 function Sources({ artist, linkClass = 'text-text' }: { artist: ArtistSuggestion; linkClass?: string }) {
   const more = artist.similar_to - artist.sources.length
+  // An Oxford comma before the last of three or more.
+  const and = artist.sources.length + (more > 0 ? 1 : 0) > 2 ? ', and ' : ' and '
   return (
     <>
       {artist.sources.map((s, i) => (
         <span key={s.rating_key}>
-          {i > 0 && (i === artist.sources.length - 1 && more <= 0 ? ' and ' : ', ')}
+          {i > 0 && (i === artist.sources.length - 1 && more <= 0 ? and : ', ')}
           <Link to={`/library/artists/${s.rating_key}`} className={`${linkClass} hover:underline`}>
             {s.name}
           </Link>
         </span>
       ))}
-      {more > 0 && ` and ${formatCount(more)} more`}
+      {more > 0 && `${artist.sources.length > 0 ? and : ''}${formatCount(more)} more`}
     </>
   )
 }

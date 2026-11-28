@@ -4,7 +4,7 @@ import { useJamBaseKey, useSetJamBaseKey } from '../api/live'
 import { formatRelative } from '../format'
 import { Button, Card, Notice, Spinner } from './ui'
 
-/** The instance's JamBase key (admins), for the Live tab, and this month's requests. */
+/** The instance's JamBase key (admins), for Gigs → Upcoming, and this month's requests. */
 export function JamBaseKeyCard() {
   const [check, setCheck] = useState(false)
   const key = useJamBaseKey(true, check)
@@ -17,7 +17,7 @@ export function JamBaseKeyCard() {
     <Card title="JamBase API key">
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          Finds upcoming gigs for the Live tab. The free Developer plan at{' '}
+          Finds the gigs for Gigs → Upcoming. The free Developer plan at{' '}
           <a href="https://data.jambase.com" target="_blank" rel="noreferrer" className="text-accent underline">
             data.jambase.com
           </a>{' '}

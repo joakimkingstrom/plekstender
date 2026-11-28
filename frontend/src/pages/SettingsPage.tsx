@@ -14,6 +14,7 @@ import { FolderSettings } from '../components/FolderSettings'
 import { ScanCard } from '../components/MusicFiles'
 import { ArtworkSummaryCard } from '../components/FileArtwork'
 import { PlexSync } from '../components/PlexSync'
+import { CoverTags } from '../components/CoverTags'
 import { TagHistory } from '../components/TagEditor'
 import { UnknownFiles } from '../components/UnknownFiles'
 import { useFilesSummary } from '../api/files'
@@ -25,7 +26,7 @@ type Section = { to: string; label: string; end?: boolean; children?: Section[] 
 /** Settings → Music files, a page each ('' is the main one). */
 const FILES_PARTS = [
   { slug: '', title: 'Folder and tools' },
-  { slug: 'scan', title: 'Tags in your files' },
+  { slug: 'scan', title: 'Folder scan' },
   { slug: 'unknown', title: 'Unknown files' },
   { slug: 'history', title: 'Tag history' },
 ] as const
@@ -608,7 +609,7 @@ function LibrarySettingsForm({ initial }: { initial: Settings }) {
           <div className="space-y-5">
             <NumberField
               label="Check for changes every"
-              help="Picks up new plays, ratings and library changes."
+              help="Picks up new plays, ratings, and library changes."
               suffix="minutes"
               value={form.incremental_minutes}
               limits={LIMITS.incremental_minutes}
@@ -770,6 +771,21 @@ export function FontsSettingsPage() {
   return <Navigate to="/settings/fonts/offered" replace />
 }
 
+function CoverTagsCard({ serverId }: { serverId: number }) {
+  const summary = useFilesSummary(serverId)
+  if (!summary.data?.mapped || !summary.data.files) return null
+  return (
+    <Card title="Cover songs into the files">
+      <p className="mb-3 text-sm text-muted">
+        For songs found to be covers (Settings → Services → Cover songs), write whose song it is into the files: the
+        “Original artist” tag, which Picard and many players show. Only files that say something else are changed,
+        and the whole run can be undone.
+      </p>
+      <CoverTags serverId={serverId} canWrite={summary.data.tag_editing} />
+    </Card>
+  )
+}
+
 function PlexSyncCard({ serverId }: { serverId: number }) {
   const summary = useFilesSummary(serverId)
   if (!summary.data?.mapped || !summary.data.files) return null
@@ -813,6 +829,7 @@ export function FilesSettingsPage() {
       <FolderSettings serverId={active.id} />
       <div className="space-y-4">
         <PlexSyncCard serverId={active.id} />
+        <CoverTagsCard serverId={active.id} />
         <ArtworkCard serverId={active.id} />
       </div>
     </div>

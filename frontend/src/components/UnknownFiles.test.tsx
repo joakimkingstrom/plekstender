@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UnknownFiles } from './UnknownFiles'
@@ -24,7 +24,11 @@ describe('Unknown files', () => {
   it('identifies files, offers their matches and writes the chosen ones', async () => {
     const fetch = vi.fn(async (input: Request) => {
       const url = new URL(input.url)
-      if (url.pathname.endsWith('/files/unknown')) return json({ total: 2, files: [demo, unread] })
+      if (url.pathname.endsWith('/files/unknown')) {
+        const folders = [{ folder: '', files: 1 }, { folder: 'extra', files: 2 }]
+        const files = url.searchParams.get('folder') === 'extra' ? [demo, unread] : []
+        return json({ total: 3, folders, files })
+      }
       if (url.pathname.endsWith('/files/identify') && input.method === 'POST')
         return json({ id: 3, status: 'queued', progress: {}, stats: {}, error: null, created_at: '', finished_at: null }, 201)
       if (url.pathname.endsWith('/files/identify'))
@@ -42,6 +46,11 @@ describe('Unknown files', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     )
+    // By folder: a folder's files show when it's clicked.
+    const folders = await screen.findByRole('list', { name: 'Folders' })
+    expect(within(folders).getAllByRole('button').map((b) => b.textContent)).toEqual(['The music folder itself1 file', 'extra2 files'])
+    expect(screen.queryByRole('button', { name: 'Match for demo.mp3' })).not.toBeInTheDocument()
+    fireEvent.click(within(folders).getByRole('button', { name: /extra/ }))
     // The suggestion is picked; the other releases (and "just the song") can be.
     const match = await screen.findByRole('button', { name: 'Match for demo.mp3' })
     fireEvent.click(match)
@@ -61,7 +70,8 @@ describe('Unknown files', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Radiohead · OKNOTOK (2017, GB, CD) · Airbag · 93%' }))
     // Above the list (it can be 200 files long), not below it.
     const check = screen.getByRole('button', { name: 'Check the changes for 1 file' })
-    expect(check.compareDocumentPosition(screen.getAllByRole('listitem')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const firstFile = within(screen.getByRole('list', { name: 'Files in extra' })).getAllByRole('listitem')[0]
+    expect(check.compareDocumentPosition(firstFile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     fireEvent.click(check)
     expect(await screen.findByText('Airbag')).toBeInTheDocument()
     expect(screen.getByText('+ 1 MusicBrainz ID')).toBeInTheDocument()

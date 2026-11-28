@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import hashlib
 import logging
 import os
+import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -22,7 +24,15 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.config import get_settings
-from plekstender.db.models import FileScan, FolderImage, MediaFile, NfoFile, PlexServer, Track
+from plekstender.db.models import (
+    FileScan,
+    FolderImage,
+    FolderVideo,
+    MediaFile,
+    NfoFile,
+    PlexServer,
+    Track,
+)
 from plekstender.jobs import JobStopped, check_stop
 from plekstender.tags import embedded_lyrics
 from plekstender.tags.lyrics_kinds import (
@@ -38,7 +48,13 @@ from plekstender.tags.nfo import NfoError, kind_of
 from plekstender.tags.nfo import parse as parse_nfo
 from plekstender.tags.pictures import cover_of, image_kind, thumbnail
 from plekstender.tags.pictures import info as picture_info
-from plekstender.tags.read import AUDIO_EXTENSIONS, READER, TagReadError, read_file
+from plekstender.tags.read import (
+    AUDIO_EXTENSIONS,
+    READER,
+    TagReadError,
+    is_video_cover,
+    read_file,
+)
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +84,7 @@ class Found:
 
 def walk(root: Path) -> list[Found]:
     """Every audio file under `root` (symlinks not followed)."""
-    return walk_all(root)[0]
+    return walk_all(root).audio
 
 
 def _is_lyrics(name: str) -> bool:
@@ -76,12 +92,23 @@ def _is_lyrics(name: str) -> bool:
     return lower.endswith(LYRICSFILE) or Path(lower).suffix in (".lrc", ".txt")
 
 
-def walk_all(root: Path) -> tuple[list[Found], list[Found], list[Found], set[str]]:
-    """Every audio file, artist.nfo / album.nfo, and folder image (cover.jpg, artist.jpg...)
-    under `root` (no symlinks), and the paths of lyrics files (.lrc, .txt, .lyricsfile.yaml)."""
+@dataclass
+class Walked:
+    audio: list[Found]
+    nfos: list[Found]
+    images: list[Found]
+    lyrics: set[str]
+    videos: list[Found]
+
+
+def walk_all(root: Path) -> Walked:
+    """Every audio file, artist.nfo / album.nfo, folder image (cover.jpg, artist.jpg...) and
+    video cover (cover.mp4...) under `root` (no symlinks), and the paths of lyrics files
+    (.lrc, .txt, .lyricsfile.yaml). A video cover isn't a song, whatever its extension."""
     audio: list[Found] = []
     nfos: list[Found] = []
     images: list[Found] = []
+    videos: list[Found] = []
     lyrics: set[str] = set()
     for folder, dirs, files in os.walk(root, followlinks=False):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
@@ -91,8 +118,9 @@ def walk_all(root: Path) -> tuple[list[Found], list[Found], list[Found], set[str
                 continue
             is_nfo = kind_of(name) is not None
             is_image = image_kind(name) is not None
+            is_video = is_video_cover(name)
             if name.startswith(".") or not (
-                is_nfo or is_image or Path(name).suffix.lower() in AUDIO_EXTENSIONS
+                is_nfo or is_image or is_video or Path(name).suffix.lower() in AUDIO_EXTENSIONS
             ):
                 continue
             full = Path(folder) / name
@@ -103,8 +131,8 @@ def walk_all(root: Path) -> tuple[list[Found], list[Found], list[Found], set[str
             if not full.is_file() or full.is_symlink():
                 continue
             item = Found(full.relative_to(root).as_posix(), st.st_size, st.st_mtime)
-            (nfos if is_nfo else images if is_image else audio).append(item)
-    return audio, nfos, images, lyrics
+            (nfos if is_nfo else images if is_image else videos if is_video else audio).append(item)
+    return Walked(audio, nfos, images, lyrics, videos)
 
 
 def _read_nfos(root: Path, items: list[Found]) -> list[dict[str, Any]]:
@@ -295,6 +323,73 @@ async def _scan_images(
     return len(images)
 
 
+VIDEO_MAX = 80 * 1024 * 1024  # bytes: bigger video covers aren't kept (or shown)
+
+
+def video_folder(data_dir: Path, server_id: int) -> Path:
+    return data_dir / "video-covers" / str(server_id)
+
+
+def _stored_name(path: str) -> str:
+    """The copy's name: from the path (a new file there replaces it), with its extension."""
+    digest = hashlib.sha1(path.encode(), usedforsecurity=False).hexdigest()
+    return f"{digest}{PurePosixPath(path).suffix.lower()}"
+
+
+def _copy_videos(root: Path, folder: Path, items: list[Found]) -> list[dict[str, Any]]:
+    folder.mkdir(parents=True, exist_ok=True)
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if item.size > VIDEO_MAX:
+            out.append({"stored": None, "error": "Too big to show (over 80 MB)."})
+            continue
+        name = _stored_name(item.path)
+        part = folder / f"{name}.part"
+        try:
+            shutil.copyfile(root / item.path, part)
+            part.replace(folder / name)
+        except OSError as exc:
+            part.unlink(missing_ok=True)
+            out.append({"stored": None, "error": str(exc)})
+            continue
+        out.append({"stored": name, "error": None})
+    return out
+
+
+async def scan_videos(db: AsyncSession, server: PlexServer, root: Path, videos: list[Found]) -> int:
+    """Copy new and changed video covers to DATA_DIR (where the web app can stream them from);
+    forget gone ones (and their copies)."""
+    folder = video_folder(get_settings().data_dir, server.id)
+    known = {
+        v.path: v
+        for v in await db.scalars(select(FolderVideo).where(FolderVideo.server_id == server.id))
+    }
+    changed = [
+        f
+        for f in videos
+        if f.path not in known or (known[f.path].size, known[f.path].mtime) != (f.size, f.mtime)
+    ]
+    copied = await asyncio.to_thread(_copy_videos, root, folder, changed)
+    for f, info in zip(changed, copied, strict=True):
+        stmt = insert(FolderVideo).values(
+            server_id=server.id, path=f.path, size=f.size, mtime=f.mtime, **info
+        )
+        await db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[FolderVideo.server_id, FolderVideo.path],
+                set_={"size": f.size, "mtime": f.mtime, **info},
+            )
+        )
+    present = {f.path for f in videos}
+    for path, video in known.items():
+        if path not in present:
+            if video.stored:
+                (folder / video.stored).unlink(missing_ok=True)
+            await db.delete(video)
+    await db.commit()
+    return len(videos)
+
+
 async def _scan_lyrics(
     db: AsyncSession, server: PlexServer, root: Path, songs: list[str], lyrics: set[str]
 ) -> int:
@@ -384,7 +479,8 @@ async def run_scan(db: AsyncSession, scan_id: int) -> None:
 
 
 async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path) -> dict[str, int]:
-    files, nfos, images, lyrics = await asyncio.to_thread(walk_all, root)
+    walked = await asyncio.to_thread(walk_all, root)
+    files, nfos, images, lyrics = walked.audio, walked.nfos, walked.images, walked.lyrics
     known = {
         path: (size, mtime, reader)
         for path, size, mtime, reader in (
@@ -462,6 +558,7 @@ async def _scan(db: AsyncSession, scan: FileScan, server: PlexServer, root: Path
     stats["images"] = await _scan_images(
         db, server, root, images, _reporter(db, scan, STEPS["images"])
     )
+    stats["videos"] = await scan_videos(db, server, root, walked.videos)
     await _reporter(db, scan, STEPS["matching"])(0, 0)
     unmatched = (
         await db.execute(

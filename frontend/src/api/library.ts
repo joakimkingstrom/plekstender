@@ -11,6 +11,7 @@ import { useServers } from './hooks'
 import { localTimeZone } from './stats'
 
 export type ArtistSort = 'title' | 'popularity' | 'plays' | 'rating' | 'added'
+export type AlbumSort = 'artist' | 'title' | 'newest' | 'oldest' | 'added' | 'rating' | 'plays' | 'popularity'
 export type TagKind = 'genre' | 'mood' | 'style' | 'country'
 export type TagSort = 'plays' | 'rating' | 'year' | 'name'
 
@@ -19,6 +20,8 @@ export const libraryKeys = {
   library: (serverId: number) => ['servers', serverId, 'library'] as const,
   artists: (serverId: number, q: string, sort: ArtistSort, tag: number | null) =>
     ['servers', serverId, 'library', 'artists', { q, sort, tag }] as const,
+  albums: (serverId: number, q: string, sort: AlbumSort, tag: number | null, type: string | null) =>
+    ['servers', serverId, 'library', 'albums', { q, sort, tag, type }] as const,
   tags: (serverId: number, kind: TagKind) => ['servers', serverId, 'library', 'tags', kind] as const,
   tag: (serverId: number, id: number, sort: TagSort) => ['servers', serverId, 'library', 'tag', id, sort] as const,
   artist: (serverId: number, key: number) => ['servers', serverId, 'library', 'artist', key] as const,
@@ -136,6 +139,27 @@ export function useArtists(serverId: number, q: string, sort: ArtistSort, tag: n
   })
 }
 
+/** Every album with its artist (Library → Albums), a page at a time, with how many of each
+ * release type the other filters leave. */
+export function useLibraryAlbums(serverId: number, q: string, sort: AlbumSort, tag: number | null, type: string | null) {
+  return useInfiniteQuery({
+    queryKey: libraryKeys.albums(serverId, q, sort, tag, type),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/albums', {
+          params: {
+            path: { server_id: serverId },
+            query: { q: q || undefined, sort, tag: tag ?? undefined, release_type: type ?? undefined, offset: pageParam, limit: PAGE },
+          },
+        }),
+      ),
+    getNextPageParam: (last) =>
+      last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
+    placeholderData: keepPreviousData,
+  })
+}
+
 export function useTags(serverId: number, kind: TagKind) {
   return useQuery({
     queryKey: libraryKeys.tags(serverId, kind),
@@ -172,6 +196,74 @@ export function useArtist(serverId: number, key: number) {
           params: { path: { server_id: serverId, rating_key: key }, query: { tz: localTimeZone() } },
         }),
       ),
+  })
+}
+
+/** Every release of a song by the same artist (remasters, live, demos…), oldest first. */
+export function useSongVersions(serverId: number, key: number | null) {
+  return useQuery({
+    queryKey: [...libraryKeys.library(serverId), 'versions', key],
+    enabled: key !== null,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/tracks/{rating_key}/versions', {
+          params: { path: { server_id: serverId, rating_key: key! } },
+        }),
+      ),
+  })
+}
+
+/** The artist's covers, and their songs others covered, in the library (Cover songs). */
+export function useArtistCovers(serverId: number, key: number) {
+  return useQuery({
+    queryKey: [...libraryKeys.library(serverId), 'artist-covers', key],
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/artists/{rating_key}/covers', {
+          params: { path: { server_id: serverId, rating_key: key } },
+        }),
+      ),
+  })
+}
+
+/** For a cover: the library's songs with its song's title by other artists, to choose its
+ * original from. */
+export function useCoverOriginals(serverId: number, key: number, enabled = true) {
+  return useQuery({
+    queryKey: [...libraryKeys.library(serverId), 'originals', key],
+    enabled,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/tracks/{rating_key}/originals', {
+          params: { path: { server_id: serverId, rating_key: key } },
+        }),
+      ),
+  })
+}
+
+/** Choose a cover's original among them (admins), or none. */
+export function useChooseOriginal(serverId: number, key: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ratingKey: number | null) =>
+      unwrap(
+        api.PUT('/api/servers/{server_id}/library/tracks/{rating_key}/original', {
+          params: { path: { server_id: serverId, rating_key: key } },
+          body: { rating_key: ratingKey },
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: libraryKeys.library(serverId) }),
+  })
+}
+
+/** Artists, albums and songs whose names contain the text (the header's search). */
+export function useLibrarySearch(serverId: number | null, q: string) {
+  return useQuery({
+    queryKey: ['servers', serverId, 'library', 'search', q],
+    enabled: serverId !== null && q.length > 0,
+    placeholderData: (previous) => previous,
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/library/search', { params: { path: { server_id: serverId! }, query: { q } } })),
   })
 }
 

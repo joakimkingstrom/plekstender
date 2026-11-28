@@ -24,10 +24,11 @@ export function ScanCard({ serverId }: { serverId: number }) {
   const active = s.active
   const { done = 0, total = 0, step } = (active?.progress ?? {}) as { done?: number; total?: number; step?: string }
   return (
-    <Card title="Tags in your files">
+    <Card title="Folder scan">
       <div className="space-y-3 text-sm">
         <p className="text-muted">
-          The worker reads the tags of every music file, so album pages can show them next to Plex's. Nothing is
+          The worker reads the music folder: every music file's tags (so album pages can show them next to
+          Plex's), and the lyrics, .nfo files, cover and artist images, and video covers beside them. Nothing is
           changed in the files. Later scans only read new and changed files.
         </p>
         {!s.mapped ? (
@@ -72,7 +73,10 @@ export function ScanCard({ serverId }: { serverId: number }) {
                 <Notice tone="error">The last scan stopped: {s.last.error}</Notice>
               ))}
             {s.last?.status === 'succeeded' && s.last.finished_at && (
-              <p className="text-xs text-muted">Last scanned {formatRelative(s.last.finished_at)}.</p>
+              <p className="text-xs text-muted">
+                Last scanned {formatRelative(s.last.finished_at)}
+                {videoCovers(s.last.stats)}.
+              </p>
             )}
             <Button variant="primary" busy={start.isPending} onClick={() => start.mutate()}>
               {s.files ? 'Scan again' : 'Scan the music folder'}
@@ -89,7 +93,7 @@ export function ScanCard({ serverId }: { serverId: number }) {
                 disabled={setEditing.isPending}
                 onChange={(e) => setEditing.mutate(e.target.checked)}
               />
-              Allow changing files (tags, names and folders)
+              Allow changing files (tags, names, and folders)
             </label>
             <p className="text-xs text-muted">
               Lets Plekstender change your music files: edit tags, write Plex's metadata or a MusicBrainz release into
@@ -122,6 +126,12 @@ function show(value: unknown): string {
 function fileValue(file: TrackFile, field: string): unknown {
   const tags = file.tags as Record<string, unknown>
   return field === 'year' ? (typeof tags.date === 'string' ? tags.date.slice(0, 4) : null) : tags[field]
+}
+
+/** ", with 3 video covers": what the last scan found besides songs (cover.mp4...). */
+function videoCovers(stats: Record<string, unknown>) {
+  const n = Number(stats.videos ?? 0)
+  return n > 0 ? `, with ${formatCount(n)} video ${n === 1 ? 'cover' : 'covers'}` : ''
 }
 
 /** An album's songs with the tags in their files, where they differ from Plex highlighted. */
@@ -194,7 +204,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
         <p className="text-sm text-muted">
           Scan your music folder (
           <Link to="/settings/files/scan" className="text-accent underline">
-            Settings → Music files → Tags in your files
+            Settings → Music files → Folder scan
           </Link>
           ) to see the tags in these songs' files.
         </p>
@@ -258,7 +268,7 @@ export function AlbumFiles({ serverId, albumKey }: { serverId: number; albumKey:
                 {' '}
                 To edit tags, allow it in{' '}
                 <Link to="/settings/files/scan" className="underline">
-                  Settings → Music files → Tags in your files
+                  Settings → Music files → Folder scan
                 </Link>
                 .
               </>

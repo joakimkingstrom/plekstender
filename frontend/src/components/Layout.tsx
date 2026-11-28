@@ -1,11 +1,15 @@
 import { useEffect } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { useLogout, useMe, useSetPreferences } from '../api/hooks'
+import { useLogout, useMe } from '../api/hooks'
 import { useOnline } from '../online'
 import { InstallPrompt } from './InstallPrompt'
 import { UpdateBanner } from './UpdateBanner'
 import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
+import { useRoomForBackgrounds } from '../motion'
+import { CoverBackground } from './CoverBackground'
+import { ThemeMenu } from './ThemeMenu'
+import { HeaderSearch } from './HeaderSearch'
 import { SPIN_MS, SPIN_SCALE } from '../brand'
 import { Mark } from './Mark'
 import { Avatar, Button } from './ui'
@@ -56,6 +60,13 @@ export function Layout() {
   const navigate = useNavigate()
   const logout = useLogout()
   const [theme, setTheme] = useTheme()
+  const room = useRoomForBackgrounds()
+  const background = me?.preferences?.background
+  // The blur behind the page's content, when there are covers behind it.
+  const blurred = room && (background?.mode ?? 'off') !== 'off'
+  useEffect(() => {
+    document.documentElement.style.setProperty('--page-blur', `${background?.blur ?? 0}px`)
+  }, [background?.blur])
   const accent = me?.preferences?.accent ?? null
   // The user's accent colour, worked out for the current theme.
   useEffect(() => applyAccent(accent, theme), [accent, theme])
@@ -65,7 +76,6 @@ export function Layout() {
   useEffect(() => {
     if (savedTheme) setTheme(savedTheme)
   }, [savedTheme, setTheme])
-  const savePreferences = useSetPreferences()
 
   if (isPending) {
     return <PageLoader />
@@ -111,6 +121,7 @@ export function Layout() {
   const phoneHidden = focus ? 'max-md:hidden' : ''
   return (
     <div className="flex min-h-dvh flex-col">
+      <CoverBackground theme={theme} settings={me.preferences?.background} />
       <header className={`sticky top-0 z-10 border-b border-border bg-bg/90 pt-[env(safe-area-inset-top)] backdrop-blur ${phoneHidden}`}>
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <NavLink to="/" aria-label="Plekstender home" onClick={(e) => spinPick(e.currentTarget)}>
@@ -124,19 +135,8 @@ export function Layout() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const next = theme === 'dark' ? 'light' : 'dark'
-                setTheme(next)
-                // Saved to the account too when the account has a theme (Profile → Theme).
-                if (savedTheme) savePreferences.mutate({ theme: next })
-              }}
-              className="rounded-lg px-2 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-text"
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-            >
-              {theme === 'dark' ? '☀' : '☾'}
-            </button>
+            <HeaderSearch />
+            <ThemeMenu />
             <NotificationBell isAdmin={me.is_admin} />
             <NavLink to="/profile" aria-label="Your profile" className="rounded-full focus-visible:outline-2">
               <Avatar url={me.thumb_url} name={me.username} />
@@ -158,20 +158,32 @@ export function Layout() {
         </div>
       </header>
 
-      <InstallPrompt />
-      <UpdateBanner />
-      {!online && (
-        <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-xs text-warn">
-          You're offline. What's on screen may be out of date, and changes can't be saved until you're back online.
-        </div>
-      )}
-      <main
-        className={`mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:pb-6 ${
-          focus ? 'max-md:pb-[calc(env(safe-area-inset-bottom)+1rem)] max-md:pt-[calc(env(safe-area-inset-top)+0.5rem)]' : 'pb-24'
-        }`}
-      >
-        <Outlet />
-      </main>
+      {/* Everything under the header, over the blur (when there is one). */}
+      <div className="relative flex flex-1 flex-col">
+        {blurred && (
+          // Behind the content, over the covers, from the header to the bottom of the page: past
+          // the content's sides on wide windows (the fade happens outside the cards), within them
+          // on narrower ones (nothing to scroll).
+          <div
+            aria-hidden
+            className="page-blur pointer-events-none absolute inset-y-0 left-1/2 -z-[5] w-full max-w-6xl -translate-x-1/2 xl:max-w-[80rem]"
+          />
+        )}
+        <InstallPrompt />
+        <UpdateBanner />
+        {!online && (
+          <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-xs text-warn">
+            You're offline. What's on screen may be out of date, and changes can't be saved until you're back online.
+          </div>
+        )}
+        <main
+          className={`mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:pb-6 ${
+            focus ? 'max-md:pb-[calc(env(safe-area-inset-bottom)+1rem)] max-md:pt-[calc(env(safe-area-inset-top)+0.5rem)]' : 'pb-24'
+          }`}
+        >
+          <Outlet />
+        </main>
+      </div>
       <AchievementCelebration enabled={me.preferences?.achievements !== false} />
 
       {/* Mobile bottom navigation */}
