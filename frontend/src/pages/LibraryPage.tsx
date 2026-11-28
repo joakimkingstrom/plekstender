@@ -279,6 +279,7 @@ function TrackList({
                 {[t.original_title, showAlbum ? t.album_title : null].filter(Boolean).join(' · ')}
               </span>
             )}
+            {t.cover_of && <CoverOf cover={t.cover_of} />}
           </span>
           <Tooltip content="Last.fm listeners" className="hidden w-14 justify-end sm:inline-flex">
             <span className="text-xs text-muted tabular-nums">{formatCompact(t.popularity)}</span>
@@ -294,6 +295,23 @@ function TrackList({
       ))}
     </ol>
     </>
+  )
+}
+
+/** Whose song a cover is (SecondHandSongs or MusicBrainz), artist first; links to the original there. */
+function CoverOf({ cover }: { cover: NonNullable<Schemas['TrackOut']['cover_of']> }) {
+  const what = [cover.artist, cover.title].filter(Boolean).join(' · ')
+  return (
+    <span className="block truncate text-xs text-muted">
+      Cover of{' '}
+      {cover.url ? (
+        <a href={cover.url} target="_blank" rel="noreferrer" className="hover:text-text hover:underline" title={cover.source === 'musicbrainz' ? 'On MusicBrainz' : 'On SecondHandSongs'}>
+          {what}
+        </a>
+      ) : (
+        what
+      )}
+    </span>
   )
 }
 

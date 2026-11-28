@@ -26,6 +26,7 @@ from plekstender.api.schemas import (
     ArtistNeighboursOut,
     ArtistPage,
     ArtistSummary,
+    CoverOf,
     ItemListensOut,
     LiveSource,
     RecentItem,
@@ -47,6 +48,7 @@ from plekstender.db.models import (
     ItemTag,
     MediaFile,
     SimilarArtist,
+    SongCover,
     Tag,
     Track,
     User,
@@ -633,6 +635,37 @@ def _with_listens(
     return tracks
 
 
+async def _with_covers(db: DbDep, server_id: int, tracks: list[TrackOut]) -> None:
+    """Marks the songs that are covers (SecondHandSongs or MusicBrainz: looked up by the
+    worker when an admin turned it on), with whose song they are."""
+    if not tracks:
+        return
+    rows = await db.execute(
+        select(Track.rating_key, SongCover)
+        .join(
+            SongCover,
+            and_(
+                SongCover.artist_key == Track.artist_key, SongCover.title_norm == Track.title_norm
+            ),
+        )
+        .where(
+            Track.server_id == server_id,
+            Track.rating_key.in_([t.rating_key for t in tracks]),
+            SongCover.status == "cover",
+        )
+    )
+    covers = {key: cover for key, cover in rows.all()}
+    for track in tracks:
+        if cover := covers.get(track.rating_key):
+            track.cover_of = CoverOf(
+                artist=cover.original_artist,
+                title=cover.original_title,
+                url=cover.original_url,
+                cover_url=cover.performance_url,
+                source=cover.source,
+            )
+
+
 async def _with_seen_live(
     db: DbDep, user_id: int, tracks: list[TrackOut], artist: str | None
 ) -> list[TrackOut]:
@@ -732,6 +765,7 @@ async def get_artist(
     listens = await stats.item_listens(db, user.id, _zone(tz), {normalise_artist(artist.title)})
     top_tracks = await _top_tracks(db, user.id, us, rating_key)
     titles = await _title_norms(db, us.server_id, [t.rating_key for t in top_tracks])
+    await _with_covers(db, us.server_id, top_tracks)
     summary = _artist_summary(row)
     summary.plays = max(summary.plays, listens.listens)
     return ArtistDetail(
@@ -882,6 +916,7 @@ async def get_album(
         db, user.id, _zone(tz), artist_keys, normalise_title(album.title)
     )
     tracks = [_track_out(t, r, p, album) for t, r, p in track_rows]
+    await _with_covers(db, us.server_id, tracks)
     live = found[0].release_type == "Live"
     sources, unmatched = (
         await _live_sources(db, user.id, us, album, [t for t, _, _ in track_rows])
