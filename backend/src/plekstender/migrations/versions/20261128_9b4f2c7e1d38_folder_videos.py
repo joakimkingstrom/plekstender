@@ -1,7 +1,7 @@
 """folder videos: video covers found in the music folder (cover.mp4...)
 
 Revision ID: 9b4f2c7e1d38
-Revises: c5e8a1f3d920
+Revises: 7d2e9b4c1a65
 Create Date: 2026-11-28 18:00:00.000000
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "9b4f2c7e1d38"
-down_revision: str | None = "c5e8a1f3d920"
+down_revision: str | None = "7d2e9b4c1a65"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
