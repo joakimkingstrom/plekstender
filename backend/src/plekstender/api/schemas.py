@@ -113,6 +113,13 @@ class BackgroundSettings(BaseModel):
     speed: Literal["slow", "normal", "fast"] = Field(
         default="normal", description="How long each cover stays (about 30, 22 or 14 s)."
     )
+    blur: int = Field(
+        default=0,
+        ge=0,
+        le=24,
+        description="How much the covers are blurred behind the page's content (px; 0: not at "
+        "all), fading out towards its edges.",
+    )
 
 
 class BackgroundCover(BaseModel):

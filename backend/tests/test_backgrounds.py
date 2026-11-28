@@ -66,7 +66,7 @@ async def test_backgrounds(app: FastAPI, plex: FakePlex) -> None:
 
     # The preference, saved with the others.
     prefs = (await owner.get("/api/auth/me")).json()["preferences"]
-    assert prefs["background"] == {"mode": "off", "family": "blue", "speed": "normal"}
-    prefs["background"] = {"mode": "colour", "family": "red", "speed": "slow"}
+    assert prefs["background"] == {"mode": "off", "family": "blue", "speed": "normal", "blur": 0}
+    prefs["background"] = {"mode": "colour", "family": "red", "speed": "slow", "blur": 12}
     saved = await owner.put("/api/auth/me/preferences", json=prefs, headers=CSRF)
     assert saved.json()["preferences"]["background"]["family"] == "red"
