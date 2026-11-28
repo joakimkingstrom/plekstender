@@ -5221,6 +5221,17 @@ export interface components {
             /** Tracks */
             tracks: components["schemas"]["TrackOut"][];
             your_listens: components["schemas"]["ItemListensOut"];
+            /**
+             * Live Sources
+             * @description Live albums: the studio releases their songs first came out on, oldest first; None for other albums.
+             */
+            live_sources?: components["schemas"]["LiveSource"][] | null;
+            /**
+             * Live Unmatched
+             * @description Live albums: songs not found on any of the artist's releases.
+             * @default 0
+             */
+            live_unmatched: number;
         };
         /** AlbumFilesOut */
         AlbumFilesOut: {
@@ -8110,6 +8121,32 @@ export interface components {
              * @description Venues with shows, for the filter.
              */
             venues: components["schemas"]["LiveVenueCount"][];
+        };
+        /**
+         * LiveSource
+         * @description A studio release a live album's songs first came out on.
+         */
+        LiveSource: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year: number | null;
+            /** Thumb */
+            thumb: string | null;
+            /** Release Type */
+            release_type: string;
+            /**
+             * Colour
+             * @description Its cover's main colour (#rrggbb), when known.
+             */
+            colour: string | null;
+            /**
+             * Songs
+             * @description Songs on the live album first released on it.
+             */
+            songs: number;
         };
         /** LiveStarIn */
         LiveStarIn: {
