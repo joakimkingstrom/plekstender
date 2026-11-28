@@ -48,12 +48,13 @@ describe('Music files', () => {
         matched: 4188,
         errors: 3,
         active: null,
-        last: { id: 2, status: 'succeeded', progress: {}, stats: {}, error: null, created_at: new Date().toISOString(), finished_at: new Date().toISOString() },
+        last: { id: 2, status: 'succeeded', progress: {}, stats: { videos: 3 }, error: null, created_at: new Date().toISOString(), finished_at: new Date().toISOString() },
       },
       'POST /api/servers/1/files/scans': { id: 3, status: 'queued', progress: {}, stats: {}, error: null, created_at: new Date().toISOString(), finished_at: null },
     })
     expect(await screen.findByText(/4,210 files, 4,188 of them Plex tracks/)).toBeInTheDocument()
     expect(screen.getByText(/3 couldn't be read/)).toBeInTheDocument()
+    expect(screen.getByText(/Last scanned .*, with 3 video covers\./)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Scan again' }))
     await vi.waitFor(() => expect(fetch.mock.calls.some(([r]) => r.method === 'POST')).toBe(true))
   })

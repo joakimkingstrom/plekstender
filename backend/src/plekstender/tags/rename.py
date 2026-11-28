@@ -28,7 +28,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plekstender.db.models import Album, FileScan, MediaFile, PlexServer, Track
-from plekstender.tags.read import AUDIO_EXTENSIONS
+from plekstender.tags.read import is_song_file
 
 log = logging.getLogger(__name__)
 
@@ -206,7 +206,7 @@ async def _files(db: AsyncSession, server_id: int, scope: str, key: int) -> list
 
 def _has_audio(folder: Path) -> bool:
     for _, _, names in os.walk(folder):
-        if any(Path(n).suffix.lower() in AUDIO_EXTENSIONS for n in names):
+        if any(is_song_file(n) for n in names):
             return True
     return False
 
@@ -244,15 +244,15 @@ def plan_moves(root: Path, songs: list[Move]) -> tuple[list[Move], list[Skip], i
         except OSError:
             continue
         moved = {PurePosixPath(s.source).name for s in folder_songs}
-        audio_here = [e for e in entries if e.is_file() and e.suffix.lower() in AUDIO_EXTENSIONS]
+        audio_here = [e for e in entries if e.is_file() and is_song_file(e.name)]
         targets = {str(PurePosixPath(s.target).parent) for s in folder_songs}
         whole = folder != "." and len(targets) == 1 and all(e.name in moved for e in audio_here)
         stems = {PurePosixPath(s.source).stem: s for s in folder_songs}
         for entry in entries:
             if entry.name in moved or entry.is_symlink():
                 continue
-            if entry.is_file() and entry.suffix.lower() in AUDIO_EXTENSIONS:
-                continue  # a song that isn't moving
+            if entry.is_file() and is_song_file(entry.name):
+                continue  # a song that isn't moving (a video cover goes with the album)
             source = str(PurePosixPath(folder) / entry.name)
             owner = next(
                 (

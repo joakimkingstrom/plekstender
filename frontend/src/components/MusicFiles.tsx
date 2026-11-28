@@ -72,7 +72,10 @@ export function ScanCard({ serverId }: { serverId: number }) {
                 <Notice tone="error">The last scan stopped: {s.last.error}</Notice>
               ))}
             {s.last?.status === 'succeeded' && s.last.finished_at && (
-              <p className="text-xs text-muted">Last scanned {formatRelative(s.last.finished_at)}.</p>
+              <p className="text-xs text-muted">
+                Last scanned {formatRelative(s.last.finished_at)}
+                {videoCovers(s.last.stats)}.
+              </p>
             )}
             <Button variant="primary" busy={start.isPending} onClick={() => start.mutate()}>
               {s.files ? 'Scan again' : 'Scan the music folder'}
@@ -122,6 +125,12 @@ function show(value: unknown): string {
 function fileValue(file: TrackFile, field: string): unknown {
   const tags = file.tags as Record<string, unknown>
   return field === 'year' ? (typeof tags.date === 'string' ? tags.date.slice(0, 4) : null) : tags[field]
+}
+
+/** ", with 3 video covers": what the last scan found besides songs (cover.mp4...). */
+function videoCovers(stats: Record<string, unknown>) {
+  const n = Number(stats.videos ?? 0)
+  return n > 0 ? `, with ${formatCount(n)} video ${n === 1 ? 'cover' : 'covers'}` : ''
 }
 
 /** An album's songs with the tags in their files, where they differ from Plex highlighted. */
