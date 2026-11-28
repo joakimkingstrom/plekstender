@@ -375,15 +375,12 @@ input[type='number']::-webkit-outer-spin-button {
   }
 }
 
-/* The page's content over a blur of the covers behind it (Theme → Background → Blur), fading
-   out towards the edges rather than stopping at a line: the blur's strength is --page-blur.
-   (Standard properties only: the build adds the -webkit- ones Safari needs.) */
+/* The page's content over a blur of the covers behind it (Theme → Background → Blur), from
+   the header to the bottom, fading out towards the sides rather than stopping at a line: the
+   blur's strength is --page-blur. (Standard properties only: the build adds the -webkit- ones
+   Safari needs.) */
 .page-blur {
   --fade-x: 4rem;
-  --fade-y: 3rem;
   backdrop-filter: blur(var(--page-blur, 0px));
-  mask-image:
-    linear-gradient(to right, transparent, #000 var(--fade-x), #000 calc(100% - var(--fade-x)), transparent),
-    linear-gradient(to bottom, transparent, #000 var(--fade-y), #000 calc(100% - var(--fade-y)), transparent);
-  mask-composite: intersect;
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade-x), #000 calc(100% - var(--fade-x)), transparent);
 }
