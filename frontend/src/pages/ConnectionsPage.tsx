@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router'
 import { useMe } from '../api/hooks'
 import { AcoustIdKeyCard } from '../components/AcoustIdKeyCard'
+import { CoverSongsCard } from '../components/CoverSongsCard'
 import { CoverSourcesCard } from '../components/CoverSourcesCard'
 import { LidarrCard } from '../components/LidarrCard'
 import { MusicBrainzContactCard } from '../components/MusicBrainzContactCard'
@@ -55,6 +56,7 @@ const CARDS: Record<ServiceKind, () => ReactNode> = {
       <SetlistFmKeyCard />
     </>
   ),
+  covers: () => <CoverSongsCard />,
   playlists: () => (
     <>
       <SpotifyAppCard />

@@ -71,7 +71,7 @@ async def clean_db(migrated_db: None) -> AsyncIterator[None]:
         await db.execute(
             text(
                 "TRUNCATE users, sessions, plex_servers, user_servers, instance_settings,"
-                " procrastinate_jobs, release_groups, artist_release_checks CASCADE"
+                " procrastinate_jobs, release_groups, artist_release_checks, song_covers CASCADE"
             )
         )
         await db.commit()

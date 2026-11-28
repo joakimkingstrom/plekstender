@@ -22,11 +22,11 @@ TEXT_FIELDS = (
     "tracknumber", "discnumber", "musicbrainz_trackid", "musicbrainz_albumid",
     "musicbrainz_artistid", "musicbrainz_albumartistid", "musicbrainz_releasegroupid",
     "musicbrainz_releasetrackid", "releasecountry", "rating", "label", "catalognumber",
-    "barcode",
+    "barcode", "originalartist",
 )  # fmt: skip
 LIST_FIELDS = ("genre",)
 # Bumped when more fields are read: the next scan re-reads every file once.
-READER = 6
+READER = 7
 # The reader version that started describing embedded covers.
 COVERS_READER = 4
 # The fields each reader version added: a file read by an older reader may have them without
@@ -37,6 +37,7 @@ ADDED = {
     4: frozenset(),  # embedded covers described (not a tag)
     5: frozenset({"label", "catalognumber", "barcode"}),  # and MP4 composers
     6: frozenset(),  # the kind of lyrics in the tags (not a tag field)
+    7: frozenset({"originalartist"}),  # whose song a cover is
 }
 # The reader version that started noting the kind of lyrics in the tags.
 LYRICS_READER = 6
