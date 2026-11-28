@@ -101,20 +101,16 @@ export function LibraryPage() {
   )
 }
 
-/** The first row: the search on the left, the view (artists or albums) on the right. (The tag
- * kind, the chips, the cover size, and the sort are the row below.) */
-function Toolbar({ search, right }: { search: ReactNode; right: ReactNode }) {
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
-      <div className="min-w-48 flex-1">{search}</div>
-      <div className="ml-auto flex shrink-0 gap-2">{right}</div>
-    </div>
-  )
+/** The first row: the search, on its own (the view and the filters below aren't what it
+ * searches). */
+function Toolbar({ search }: { search: ReactNode }) {
+  return <div className="mb-3">{search}</div>
 }
 
 /** Genres, styles, or moods: which the chips under the search row are. */
 function TagKindSwitch({ value, onChange }: { value: TagKind; onChange: (kind: TagKind) => void }) {
-  return <Segmented label="Filter by" value={value} options={FILTER_KINDS} onChange={onChange} />
+  // Not on narrow windows, like the chips: too little room for them to be of use.
+  return <Segmented label="Filter by" value={value} options={FILTER_KINDS} onChange={onChange} className="max-sm:hidden" />
 }
 
 function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: ReactNode }) {
@@ -137,7 +133,6 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
             aria-label="Search artists"
           />
         }
-        right={viewSwitch}
       />
       <TagFilter
         serverId={serverId}
@@ -145,13 +140,16 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
         selected={tag}
         onSelect={setTag}
         start={
-          <TagKindSwitch
-            value={kind}
-            onChange={(k) => {
-              setKind(k)
-              setTag(null)
-            }}
-          />
+          <>
+            {viewSwitch}
+            <TagKindSwitch
+              value={kind}
+              onChange={(k) => {
+                setKind(k)
+                setTag(null)
+              }}
+            />
+          </>
         }
         end={
           <>
@@ -214,7 +212,6 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
             aria-label="Search albums or artists"
           />
         }
-        right={viewSwitch}
       />
       <TagFilter
         serverId={serverId}
@@ -223,13 +220,16 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
         onSelect={setTag}
         className="mb-3"
         start={
-          <TagKindSwitch
-            value={kind}
-            onChange={(k) => {
-              setKind(k)
-              setTag(null)
-            }}
-          />
+          <>
+            {viewSwitch}
+            <TagKindSwitch
+              value={kind}
+              onChange={(k) => {
+                setKind(k)
+                setTag(null)
+              }}
+            />
+          </>
         }
         end={
           <>
@@ -339,8 +339,9 @@ const FILTER_KINDS: [TagKind, string][] = [
   ['mood', 'Moods'],
 ]
 
-/** The second row: genres, styles, or moods (`start`, the switch for `kind`), the ones to
- * filter by as chips, and the cover size and sort at the right end (`end`). */
+/** Under the search: the view and genres, styles, or moods (`start`, with the switch for
+ * `kind`), the cover size and sort on the right (`end`); then the ones to filter by, as chips,
+ * on a row of their own. */
 function TagFilter({
   serverId,
   kind,
@@ -354,7 +355,7 @@ function TagFilter({
   kind: TagKind
   selected: number | null
   onSelect: (id: number | null) => void
-  /** At the start of the row (the kind of tag). */
+  /** At the start of the row (the view, and the kind of tag). */
   start?: ReactNode
   /** At the right end of the row (the cover size and the sort). */
   end?: ReactNode
@@ -364,11 +365,11 @@ function TagFilter({
   const label = FILTER_KINDS.find(([k]) => k === kind)?.[1] ?? ''
   const chosen = tags.data?.find((t) => t.id === selected)
   return (
-    // On phones the chips get a line of their own, under the switch and the sort.
-    <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 sm:flex-nowrap ${className}`}>
-      {start && <div className="shrink-0">{start}</div>}
+    // The switches and the sort, then the chips on a row of their own.
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${className}`}>
+      {start && <div className="flex shrink-0 flex-wrap gap-2">{start}</div>}
       <div
-        className="no-scrollbar order-last flex min-w-0 basis-full gap-2 overflow-x-auto py-1 sm:order-none sm:flex-1 sm:basis-auto"
+        className="no-scrollbar order-last flex min-w-0 basis-full gap-2 overflow-x-auto py-1 max-sm:hidden"
         role="group"
         aria-label={`Filter by ${label.toLowerCase()}`}
       >
@@ -391,7 +392,7 @@ function TagFilter({
         })}
       </div>
       {chosen && (
-        <Link to={`/library/tags/${chosen.id}`} className="shrink-0 py-1 text-xs text-accent hover:underline">
+        <Link to={`/library/tags/${chosen.id}`} className="shrink-0 py-1 text-xs text-accent hover:underline max-sm:hidden">
           {chosen.name} page →
         </Link>
       )}
