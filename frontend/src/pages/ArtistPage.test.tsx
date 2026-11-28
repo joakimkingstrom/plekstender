@@ -9,10 +9,18 @@ const album = (key: number, title: string) => ({
   popularity: null, release_type: 'Album', artist_rating_key: 100, artist_title: 'Radiohead',
 })
 
+// Portishead's top song is a cover (SecondHandSongs).
+const gloryBox = {
+  rating_key: 304, title: 'Glory Box', original_title: null, disc: 1, number: 11, duration_ms: 300_000,
+  popularity: 800, user_rating: null, plays: 3, album_rating_key: 202, album_title: 'Dummy', album_thumb: null,
+  listens: 0, seen_live: 0, lyrics: null,
+  cover_of: { artist: 'Isaac Hayes', title: "Ike's Rap II", url: 'https://secondhandsongs.com/performance/20', cover_url: null, source: 'secondhandsongs' },
+}
+
 const artist = (key: number, title: string) => ({
   rating_key: key, title, thumb: null, popularity: null, user_rating: null, plays: 5, album_count: 2,
   summary: null, art: null, country: null, tags: [], similar: [],
-  albums: [album(200, 'OK Computer'), album(201, 'Kid A')], top_tracks: [],
+  albums: [album(200, 'OK Computer'), album(201, 'Kid A')], top_tracks: key === 99 ? [gloryBox] : [],
   your_listens: { listens: 0, first_at: null, last_at: null, years: [], songs: [], artist_keys: [], album_key: null },
 })
 
@@ -77,6 +85,13 @@ describe('Artist page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'L' }))
     expect(await cover()).toContain('size=512')
     expect(localStorage.getItem('artist-cover-size')).toBe('large')
+  })
+
+  it('says whose song a cover is, artist first, linking to the original', async () => {
+    renderArtist(99)
+    const link = await screen.findByRole('link', { name: "Isaac Hayes · Ike's Rap II" })
+    expect(link).toHaveAttribute('href', 'https://secondhandsongs.com/performance/20')
+    expect(link.parentElement).toHaveTextContent("Cover of Isaac Hayes · Ike's Rap II")
   })
 
   it('steps to the previous and next artist by name', async () => {

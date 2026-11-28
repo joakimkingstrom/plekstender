@@ -137,6 +137,13 @@ export function usePlexSync(serverId: number) {
   )
 }
 
+/** Write the original artist into the files of covers, as one edit. */
+export function useWriteCoverTags(serverId: number) {
+  return useQueueTags<void>(serverId, () =>
+    unwrap(api.POST('/api/servers/{server_id}/files/cover-tags', { params: { path: { server_id: serverId } } })),
+  )
+}
+
 export type MbRelease = Schemas['MbReleaseSummary']
 export type MbApply = Schemas['MbApplyIn']
 export type MbPreview = Schemas['MbPreviewOut']
