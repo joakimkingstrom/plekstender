@@ -80,6 +80,7 @@ export function LibraryPage() {
   const viewSwitch = (
     <Segmented
       label="Show"
+      prefix="Show"
       value={view}
       options={VIEWS}
       onChange={(v) => setParams(v === 'albums' ? { view: v } : {}, { replace: true })}
@@ -101,10 +102,14 @@ export function LibraryPage() {
   )
 }
 
-/** The first row: the search, on its own (the view and the filters below aren't what it
- * searches). */
-function Toolbar({ search }: { search: ReactNode }) {
-  return <div className="mb-3">{search}</div>
+/** The first row: what's shown ("Show: Artists | Albums") on the left, then the search. */
+function Toolbar({ left, search }: { left: ReactNode; search: ReactNode }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="shrink-0">{left}</div>
+      <div className="min-w-48 flex-1">{search}</div>
+    </div>
+  )
 }
 
 /** Genres, styles, or moods: which the chips under the search row are. */
@@ -123,6 +128,7 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
   return (
     <>
       <Toolbar
+        left={viewSwitch}
         search={
           <input
             type="search"
@@ -140,16 +146,13 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
         selected={tag}
         onSelect={setTag}
         start={
-          <>
-            {viewSwitch}
-            <TagKindSwitch
-              value={kind}
-              onChange={(k) => {
-                setKind(k)
-                setTag(null)
-              }}
-            />
-          </>
+          <TagKindSwitch
+            value={kind}
+            onChange={(k) => {
+              setKind(k)
+              setTag(null)
+            }}
+          />
         }
         end={
           <>
@@ -202,6 +205,7 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
   return (
     <>
       <Toolbar
+        left={viewSwitch}
         search={
           <input
             type="search"
@@ -220,16 +224,13 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
         onSelect={setTag}
         className="mb-3"
         start={
-          <>
-            {viewSwitch}
-            <TagKindSwitch
-              value={kind}
-              onChange={(k) => {
-                setKind(k)
-                setTag(null)
-              }}
-            />
-          </>
+          <TagKindSwitch
+            value={kind}
+            onChange={(k) => {
+              setKind(k)
+              setTag(null)
+            }}
+          />
         }
         end={
           <>
@@ -339,9 +340,8 @@ const FILTER_KINDS: [TagKind, string][] = [
   ['mood', 'Moods'],
 ]
 
-/** Under the search: the view and genres, styles, or moods (`start`, with the switch for
- * `kind`), the cover size and sort on the right (`end`); then the ones to filter by, as chips,
- * on a row of their own. */
+/** Under the search: genres, styles, or moods (`start`, the switch for `kind`), the cover size
+ * and sort on the right (`end`); then the ones to filter by, as chips, on a row of their own. */
 function TagFilter({
   serverId,
   kind,
@@ -355,7 +355,7 @@ function TagFilter({
   kind: TagKind
   selected: number | null
   onSelect: (id: number | null) => void
-  /** At the start of the row (the view, and the kind of tag). */
+  /** At the start of the row (the kind of tag). */
   start?: ReactNode
   /** At the right end of the row (the cover size and the sort). */
   end?: ReactNode
