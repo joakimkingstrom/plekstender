@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { HomePage } from "./HomePage";
@@ -154,6 +154,10 @@ beforeEach(() => {
                 album_thumb: null,
               },
               { year: 2021, listens: 1, artists: [{ name: "Portishead", listens: 1, rating_key: null, thumb: null }], tracks: [{ name: "Roads", artist: "Portishead", listens: 1 }], album: null, album_rating_key: null, album_thumb: null },
+              {
+                year: 2019, listens: 0, artists: [], tracks: [], album: null, album_rating_key: null, album_thumb: null,
+                gigs: [{ id: 9, artists: ["Radiohead", "Caribou"], venue: "The O2", city: "London", setlist_url: "https://www.setlist.fm/x.html" }],
+              },
             ],
           });
         case "/api/live/settings":
@@ -226,5 +230,8 @@ it("shows your listening, top artists and albums, recent albums, gigs and rating
   expect(day.textContent).toMatch(/A year ago · 2025 · 34 listens/);
   expect(day.textContent).toMatch(/5 years ago · 2021 · 1 listen(?!s)/);
   expect(day.textContent).toMatch(/Most played: Airbag by Radiohead \(5×\)/);
+  // A gig on this day, in a year with no plays: the bill, the place, and its setlist.
+  expect(day.textContent).toMatch(/7 years ago · 2019Radiohead, Caribou · The O2, London/);
+  expect(within(day).getByRole("link", { name: "The setlist on setlist.fm (Radiohead)" })).toHaveAttribute("href", "https://www.setlist.fm/x.html");
   expect(screen.getAllByRole("link", { name: "Radiohead" }).some((a) => a.getAttribute("href") === "/library/artists/100")).toBe(true);
 });

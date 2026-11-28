@@ -327,6 +327,8 @@ type Draft = {
   tracks: SeedTrack[]
   /** Also your forgotten favourites (found again at each refresh). */
   forgotten: boolean
+  /** Also every song with one of these words in its title (found again at each refresh). */
+  titleWords: string[]
   /** Also the best songs of albums added lately ("Fresh picks", found again at each refresh). */
   newAlbums: NewAlbums | null
   minRating: number | null
@@ -355,6 +357,7 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
     artists: p?.seed_artists ?? [],
     tracks: p?.seed_tracks ?? [],
     forgotten: d?.forgotten ?? forgotten,
+    titleWords: d?.title_words ?? [],
     newAlbums: d?.new_albums ? { days: d.new_albums.days ?? 30, per_album: d.new_albums.per_album ?? 3 } : null,
     minRating: d?.rules?.min_rating ?? null,
     includeUnrated: d?.rules?.include_unrated ?? true,
@@ -371,12 +374,14 @@ function draftFrom(p: PlaylistDetail | null, forgotten = false): Draft {
 }
 
 function definitionOf(draft: Draft): Definition | null {
-  if (draft.artists.length === 0 && draft.tracks.length === 0 && !draft.forgotten && !draft.newAlbums) return null
+  if (draft.artists.length === 0 && draft.tracks.length === 0 && !draft.forgotten && !draft.newAlbums && draft.titleWords.length === 0)
+    return null
   return {
     artists: draft.artists.map((a) => a.rating_key),
     tracks: draft.tracks.map((t) => t.rating_key),
     forgotten: draft.forgotten,
     new_albums: draft.newAlbums,
+    title_words: draft.titleWords,
     rules: {
       min_rating: draft.minRating,
       include_unrated: draft.includeUnrated,
@@ -398,7 +403,11 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
   const [draft, setDraft] = useState<Draft>(() => {
     const fromRediscover = !initial && params.get('forgotten') === '1'
     const start = draftFrom(initial, fromRediscover)
-    return fromRediscover ? { ...start, name: 'Forgotten favourites', schedule: 'weekly' } : start
+    if (fromRediscover) return { ...start, name: 'Forgotten favourites', schedule: 'weekly' }
+    // From the word cloud (Library → Stats): songs about a word, refreshed weekly.
+    const word = !initial ? params.get('word')?.trim() : null
+    if (word) return { ...start, titleWords: [word], name: `Songs about ${word}`, schedule: 'weekly' }
+    return start
   })
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
   const definition = useDebounced(definitionOf(draft), 350)
@@ -526,6 +535,15 @@ function Builder({ serverId, initial }: { serverId: number; initial: PlaylistDet
               )}
             </div>
           </div>
+          {draft.titleWords.length > 0 && (
+            <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Words in the title">
+              {draft.titleWords.map((w) => (
+                <Chip key={w} label={`Remove “${w}”`} onRemove={() => set({ titleWords: draft.titleWords.filter((x) => x !== w) })}>
+                  Songs with “{w}” in the title
+                </Chip>
+              ))}
+            </ul>
+          )}
           <Chosen draft={draft} serverId={serverId} set={set} />
         </Card>
         {(draft.artists.length > 0 || draft.tracks.length > 0) && (
@@ -742,7 +760,7 @@ function Chip({ children, onRemove, label }: { children: ReactNode; onRemove: ()
 
 function Chosen({ draft, serverId, set }: { draft: Draft; serverId: number; set: (patch: Partial<Draft>) => void }) {
   if (draft.artists.length === 0 && draft.tracks.length === 0)
-    return draft.forgotten || draft.newAlbums ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
+    return draft.forgotten || draft.newAlbums || draft.titleWords.length ? null : <p className="mt-3 text-sm text-muted">Nothing chosen yet. Artists bring all their songs; songs are always included.</p>
   return (
     <div className="mt-4 space-y-3">
       {draft.artists.length > 0 && (

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 
 class Rules(BaseModel):
@@ -42,6 +42,9 @@ class NewAlbums(BaseModel):
     per_album: int = Field(default=3, ge=1, le=20, description="Each album's N most popular songs.")
 
 
+TitleWord = Annotated[str, StringConstraints(min_length=2, max_length=40, pattern=r"^[^\s%_\\]+$")]
+
+
 class Definition(BaseModel):
     artists: list[int] = Field(default_factory=list, max_length=500)
     tracks: list[int] = Field(
@@ -57,6 +60,13 @@ class Definition(BaseModel):
         description="Also the best songs of albums added lately (picked again at each "
         "refresh; the rules still apply).",
     )
+    title_words: list[TitleWord] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Also every song with one of these words in its title (whole words, any "
+        "case, bracketed parts left out, as the word cloud counts them; found again at each "
+        "refresh, and the rules still apply).",
+    )
     rules: Rules = Field(default_factory=Rules)
     limit: int | None = Field(default=500, ge=1, le=5000)
     # random | most popular first | as listed in `tracks` (gig playlists: setlist order).
@@ -64,8 +74,11 @@ class Definition(BaseModel):
 
     @model_validator(mode="after")
     def _something(self) -> Definition:
-        if not (self.artists or self.tracks or self.forgotten or self.new_albums):
+        if not (
+            self.artists or self.tracks or self.forgotten or self.new_albums or self.title_words
+        ):
             raise ValueError(
-                "choose at least one artist or song, your forgotten favourites or new albums"
+                "choose at least one artist or song, a word, your forgotten favourites or new "
+                "albums"
             )
         return self
