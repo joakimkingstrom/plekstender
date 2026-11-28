@@ -388,6 +388,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/stats/backgrounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Backgrounds
+         * @description Covers to show behind the pages, in random order: light ones in light mode and dark
+         *     ones in dark mode, or (colour) those of one colour family.
+         */
+        get: operations["backgrounds_api_servers__server_id__library_stats_backgrounds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/stats/file-types": {
         parameters: {
             query?: never;
@@ -5670,6 +5691,40 @@ export interface components {
             /** Allowed */
             allowed: boolean;
         };
+        /** BackgroundCover */
+        BackgroundCover: {
+            /** Rating Key */
+            rating_key: number;
+            /** Thumb */
+            thumb: string;
+        };
+        /**
+         * BackgroundSettings
+         * @description Album covers slowly panning behind the pages.
+         */
+        BackgroundSettings: {
+            /**
+             * Mode
+             * @description covers: light covers in light mode, dark ones in dark mode; colour: only covers of one colour family.
+             * @default off
+             * @enum {string}
+             */
+            mode: "off" | "covers" | "colour";
+            /**
+             * Family
+             * @description The colour, in colour mode.
+             * @default blue
+             * @enum {string}
+             */
+            family: "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink" | "white" | "grey" | "black";
+            /**
+             * Speed
+             * @description How long each cover stays (about 30, 22 or 14 s).
+             * @default normal
+             * @enum {string}
+             */
+            speed: "slow" | "normal" | "fast";
+        };
         /** BestCoversJobIn */
         BestCoversJobIn: {
             /**
@@ -9286,6 +9341,7 @@ export interface components {
              * @default true
              */
             achievements: boolean;
+            background?: components["schemas"]["BackgroundSettings"];
             /**
              * Lyrics Icons
              * @description Small icons on song and album rows: what lyrics their files have.
@@ -11834,6 +11890,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumColourOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backgrounds_api_servers__server_id__library_stats_backgrounds_get: {
+        parameters: {
+            query?: {
+                mode?: "covers" | "colour";
+                theme?: "dark" | "light";
+                family?: "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink" | "white" | "grey" | "black";
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackgroundCover"][];
                 };
             };
             /** @description Validation Error */

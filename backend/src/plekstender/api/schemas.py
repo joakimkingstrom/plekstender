@@ -96,6 +96,30 @@ class GigPlaylistsOut(BaseModel):
     items: list[GigPlaylistOut] = Field(description="The latest, newest gig first.")
 
 
+CoverFamily = Literal[
+    "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "white", "grey", "black"
+]
+
+
+class BackgroundSettings(BaseModel):
+    """Album covers slowly panning behind the pages."""
+
+    mode: Literal["off", "covers", "colour"] = Field(
+        default="off",
+        description="covers: light covers in light mode, dark ones in dark mode; colour: only "
+        "covers of one colour family.",
+    )
+    family: CoverFamily = Field(default="blue", description="The colour, in colour mode.")
+    speed: Literal["slow", "normal", "fast"] = Field(
+        default="normal", description="How long each cover stays (about 30, 22 or 14 s)."
+    )
+
+
+class BackgroundCover(BaseModel):
+    rating_key: int
+    thumb: str
+
+
 class Preferences(BaseModel):
     """Per-user settings, stored on the account so they follow the user across devices."""
 
@@ -123,6 +147,7 @@ class Preferences(BaseModel):
         default=None, description="Light or dark on every device; None: each browser's own choice."
     )
     achievements: bool = Field(default=True, description="Achievements and their pop-ups.")
+    background: BackgroundSettings = Field(default_factory=BackgroundSettings)
     lyrics_icons: bool = Field(
         default=False,
         description="Small icons on song and album rows: what lyrics their files have.",
