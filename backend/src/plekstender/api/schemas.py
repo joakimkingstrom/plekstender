@@ -558,6 +558,15 @@ class ArtistDetail(ArtistSummary):
     your_listens: ItemListensOut
 
 
+class SourceSong(BaseModel):
+    """A song on the album, as the album has it."""
+
+    rating_key: int
+    title: str
+    disc: int | None
+    number: int | None
+
+
 class SongSource(BaseModel):
     """A release a live album's or a compilation's songs first came out on."""
 
@@ -568,6 +577,7 @@ class SongSource(BaseModel):
     thumb: str | None
     release_type: str
     songs: int = Field(description="Songs on the album first released on it.")
+    tracks: list[SourceSong] = Field(description="Those songs, in the album's order.")
 
 
 class AlbumDetail(AlbumSummary):

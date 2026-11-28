@@ -1,3 +1,4 @@
+import { useId, useState } from 'react'
 import { Link } from 'react-router'
 import type { Schemas } from '../api/client'
 import { formatCount } from '../format'
@@ -6,8 +7,9 @@ import { Tooltip } from './Tooltip'
 import { Card } from './ui'
 
 /** A live album's or a compilation's songs by the release each first came out on: one bar
- * per release, oldest first, each a link to the album. A release by another artist than the
- * album's (a various artists compilation) is named artist first. */
+ * per release, oldest first. Clicking a release lists its songs (as this album has them); the
+ * arrow beside it goes to the release. A release by another artist than the album's (a
+ * various artists compilation) is named artist first. */
 export function SongSources({
   serverId,
   sources,
@@ -21,19 +23,37 @@ export function SongSources({
   albumArtist: string | null
   compilation: boolean
 }) {
+  const id = useId()
+  const [open, setOpen] = useState<ReadonlySet<number>>(new Set())
   if (sources.length === 0) return null
   const max = Math.max(...sources.map((s) => s.songs))
   const total = sources.reduce((n, s) => n + s.songs, 0) + unmatched
+  const discs = sources.some((s) => s.tracks.some((t) => (t.disc ?? 1) > 1))
+  const toggle = (key: number) =>
+    setOpen((was) => {
+      const next = new Set(was)
+      if (!next.delete(key)) next.add(key)
+      return next
+    })
   return (
     <Card title="Where the songs come from">
       <ol className="space-y-1.5" aria-label="Songs by release">
         {sources.map((s) => {
           const name = s.artist && s.artist !== albumArtist ? `${s.artist} · ${s.title}` : s.title
           const label = `${formatCount(s.songs)} ${s.songs === 1 ? 'song' : 'songs'} from ${name}${s.year ? ` (${s.year})` : ''}`
+          const shown = open.has(s.rating_key)
+          const songs = `${id}-${s.rating_key}`
           return (
             <li key={s.rating_key}>
-              <Tooltip content={label} className="block">
-                <Link to={`/library/albums/${s.rating_key}`} aria-label={label} className="flex items-center gap-2 rounded-lg p-1 hover:bg-surface-2/60">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label={label}
+                  aria-expanded={shown}
+                  aria-controls={songs}
+                  onClick={() => toggle(s.rating_key)}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 text-left hover:bg-surface-2/60"
+                >
                   <Artwork serverId={serverId} path={s.thumb} title={s.title} size={96} className="size-8 shrink-0 rounded" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-2 text-sm">
@@ -49,8 +69,32 @@ export function SongSources({
                       <span className="block h-full rounded-full bg-accent" style={{ width: `${(100 * s.songs) / max}%` }} />
                     </span>
                   </span>
-                </Link>
-              </Tooltip>
+                </button>
+                <Tooltip content={`Go to ${name}`}>
+                  <Link
+                    to={`/library/albums/${s.rating_key}`}
+                    aria-label={`Go to ${name}`}
+                    className="shrink-0 rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-text"
+                  >
+                    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M5 12h14" />
+                      <path d="M13 6l6 6-6 6" />
+                    </svg>
+                  </Link>
+                </Tooltip>
+              </div>
+              {shown && (
+                <ol id={songs} aria-label={`Songs from ${name}`} className="mb-1 ml-11 mr-9 mt-1 space-y-0.5 text-sm">
+                  {s.tracks.map((t) => (
+                    <li key={t.rating_key} className="flex gap-2">
+                      <span className="w-7 shrink-0 text-right text-xs leading-5 text-muted tabular-nums">
+                        {t.number != null ? (discs ? `${t.disc ?? 1}-${t.number}` : t.number) : ''}
+                      </span>
+                      <span className="min-w-0 truncate">{t.title}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </li>
           )
         })}

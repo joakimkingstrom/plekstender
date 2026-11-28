@@ -72,6 +72,11 @@ async def test_live_album_sources(app: FastAPI, plex: FakePlex) -> None:
         (207, "Lucky", "Single", 1),
         (200, "OK Computer", "Album", 2),
     ]
+    # Each with its songs, as the live album has them, in its order.
+    assert [[t["title"] for t in s["tracks"]] for s in live["song_sources"]] == [
+        ["Lucky (Live)"],
+        ["Paranoid Android (Live)", "Karma Police - Live in Oslo"],
+    ]
     assert live["sources_unmatched"] == 1  # Like Spinning Plates: no studio version here
     studio = (await owner.get(f"/api/servers/{sid}/library/albums/200")).json()
     assert (studio["song_sources"], studio["sources_unmatched"]) == (None, 0)

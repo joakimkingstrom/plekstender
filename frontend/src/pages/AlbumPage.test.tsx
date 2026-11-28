@@ -34,8 +34,8 @@ beforeEach(() => {
             ...summary(209, 'I Might Be Wrong', 2001, 'Live'), summary: null, released: null, studio: null, artist_rating_key: 100,
             artist_title: 'Radiohead', tags: [], tracks: [], your_listens: listens, sources_unmatched: 2,
             song_sources: [
-              { rating_key: 205, title: 'Drill', artist: 'Radiohead', year: 1992, thumb: null, release_type: 'EP', songs: 1 },
-              { rating_key: 201, title: 'The Bends', artist: 'Radiohead', year: 1995, thumb: null, release_type: 'Album', songs: 4 },
+              { rating_key: 205, title: 'Drill', artist: 'Radiohead', year: 1992, thumb: null, release_type: 'EP', songs: 1, tracks: [{ rating_key: 2093, title: 'Thinking About You (Live)', disc: 1, number: 3 }] },
+              { rating_key: 201, title: 'The Bends', artist: 'Radiohead', year: 1995, thumb: null, release_type: 'Album', songs: 4, tracks: [] },
             ],
           })
         if (album[1] === '210')
@@ -43,8 +43,8 @@ beforeEach(() => {
             ...summary(210, 'Trip-Hop Classics', 2005, 'Compilation'), summary: null, released: null, studio: null, artist_rating_key: 104,
             artist_title: 'Various Artists', tags: [], tracks: [], your_listens: listens, sources_unmatched: 1,
             song_sources: [
-              { rating_key: 300, title: 'Dummy', artist: 'Portishead', year: 1994, thumb: null, release_type: 'Album', songs: 2 },
-              { rating_key: 301, title: 'Mezzanine', artist: 'Massive Attack', year: 1998, thumb: null, release_type: 'Album', songs: 1 },
+              { rating_key: 300, title: 'Dummy', artist: 'Portishead', year: 1994, thumb: null, release_type: 'Album', songs: 2, tracks: [{ rating_key: 2101, title: 'Glory Box', disc: 1, number: 1 }, { rating_key: 2104, title: 'Sour Times', disc: 1, number: 4 }] },
+              { rating_key: 301, title: 'Mezzanine', artist: 'Massive Attack', year: 1998, thumb: null, release_type: 'Album', songs: 1, tracks: [{ rating_key: 2102, title: 'Teardrop', disc: 1, number: 2 }] },
             ],
           })
         const al = albums.find((a) => a.rating_key === Number(album[1]))!
@@ -139,9 +139,10 @@ it('shows where a live album’s songs come from, linking to each release', asyn
     </QueryClientProvider>,
   )
   const list = await screen.findByRole('list', { name: 'Songs by release' })
-  const links = within(list).getAllByRole('link')
-  expect(links.map((l) => l.getAttribute('aria-label'))).toEqual(['1 song from Drill (1992)', '4 songs from The Bends (1995)'])
-  expect(links[1]).toHaveAttribute('href', '/library/albums/201')
+  const releases = within(list).getAllByRole('button')
+  expect(releases.map((b) => b.getAttribute('aria-label'))).toEqual(['1 song from Drill (1992)', '4 songs from The Bends (1995)'])
+  // The arrow beside each goes to the release.
+  expect(within(list).getByRole('link', { name: 'Go to The Bends' })).toHaveAttribute('href', '/library/albums/201')
   expect(screen.getByText(/2 of 7 songs aren’t on one of the artist’s studio releases/)).toBeInTheDocument()
 })
 
@@ -158,10 +159,19 @@ it('shows where a compilation’s songs come from, each release artist first', a
     </QueryClientProvider>,
   )
   const list = await screen.findByRole('list', { name: 'Songs by release' })
-  const links = within(list).getAllByRole('link')
-  expect(links.map((l) => l.getAttribute('aria-label'))).toEqual([
+  const releases = within(list).getAllByRole('button')
+  expect(releases.map((b) => b.getAttribute('aria-label'))).toEqual([
     '2 songs from Portishead · Dummy (1994)',
     '1 song from Massive Attack · Mezzanine (1998)',
   ])
+  expect(within(list).getByRole('link', { name: 'Go to Portishead · Dummy' })).toHaveAttribute('href', '/library/albums/300')
+  // Clicking a release lists its songs, as this album has them; clicking again hides them.
+  expect(screen.queryByRole('list', { name: 'Songs from Portishead · Dummy' })).not.toBeInTheDocument()
+  fireEvent.click(releases[0])
+  expect(releases[0]).toHaveAttribute('aria-expanded', 'true')
+  const songs = screen.getByRole('list', { name: 'Songs from Portishead · Dummy' })
+  expect(within(songs).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['1Glory Box', '4Sour Times'])
+  fireEvent.click(releases[0])
+  expect(screen.queryByRole('list', { name: 'Songs from Portishead · Dummy' })).not.toBeInTheDocument()
   expect(screen.getByText(/1 of 4 songs aren’t on another album, EP or single in the library/)).toBeInTheDocument()
 })

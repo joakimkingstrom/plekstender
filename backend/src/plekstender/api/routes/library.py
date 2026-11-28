@@ -37,6 +37,7 @@ from plekstender.api.schemas import (
     SongSource,
     SongVersion,
     SongVersionsOut,
+    SourceSong,
     TagAlbum,
     TagDetail,
     TagOut,
@@ -977,14 +978,14 @@ async def _song_sources(
         key = song(title, artist_key)
         if key not in first or rank(candidate) < rank(first[key]):
             first[key] = candidate
-    counts: dict[int, int] = {}
+    counts: dict[int, list[Track]] = {}
     unmatched = 0
     for track in tracks:
         source = first.get(song(track.title, track.artist_key))
         if source is None:
             unmatched += 1
         else:
-            counts[source.rating_key] = counts.get(source.rating_key, 0) + 1
+            counts.setdefault(source.rating_key, []).append(track)
     if not counts:
         return [], unmatched
     artist_names = {
@@ -1010,7 +1011,11 @@ async def _song_sources(
             year=a.year,
             thumb=a.thumb,
             release_type=kind(a),
-            songs=counts[a.rating_key],
+            songs=len(counts[a.rating_key]),
+            tracks=[
+                SourceSong(rating_key=t.rating_key, title=t.title, disc=t.disc, number=t.number)
+                for t in counts[a.rating_key]
+            ],
         )
         for a in sources
     ], unmatched

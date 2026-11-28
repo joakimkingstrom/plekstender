@@ -10504,6 +10504,11 @@ export interface components {
              * @description Songs on the album first released on it.
              */
             songs: number;
+            /**
+             * Tracks
+             * @description Those songs, in the album's order.
+             */
+            tracks: components["schemas"]["SourceSong"][];
         };
         /** SongVersion */
         SongVersion: {
@@ -10547,6 +10552,20 @@ export interface components {
              * @description Oldest release first.
              */
             versions: components["schemas"]["SongVersion"][];
+        };
+        /**
+         * SourceSong
+         * @description A song on the album, as the album has it.
+         */
+        SourceSong: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Disc */
+            disc: number | null;
+            /** Number */
+            number: number | null;
         };
         /**
          * SourceSpec
