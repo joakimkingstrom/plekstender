@@ -358,10 +358,10 @@ input[type='number']::-webkit-outer-spin-button {
 }
 @keyframes cover-ken-burns {
   from {
-    transform: scale(1.08) translate(var(--kb-x0, 0), var(--kb-y0, 0));
+    transform: scale(var(--kb-s0, 1.08)) translate(var(--kb-x0, 0), var(--kb-y0, 0));
   }
   to {
-    transform: scale(1.22) translate(var(--kb-x1, 0), var(--kb-y1, 0));
+    transform: scale(var(--kb-s1, 1.22)) translate(var(--kb-x1, 0), var(--kb-y1, 0));
   }
 }
 .cover-slide {

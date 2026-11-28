@@ -158,6 +158,7 @@ describe('Playlists', () => {
             forgotten: false,
             new_albums: null,
             title_words: [],
+            all_covers: false,
             rules: { min_rating: null, include_unrated: true, top_percent: null, op: 'AND', tags: [], covers: 'any', lyrics: 'any' },
             limit: 100,
             order: 'random',
@@ -228,5 +229,15 @@ describe('Playlists', () => {
     await vi.waitFor(async () => expect(await posted('/api/servers/1/playlists')).toHaveLength(1))
     const [saved] = await posted('/api/servers/1/playlists')
     expect(saved.definition.rules).toMatchObject({ covers: 'only', lyrics: 'synced' })
+  })
+
+  it('makes a playlist of every cover, with no artist chosen', async () => {
+    renderAt('/playlists/new')
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Every cover song/ }))
+    expect(screen.getByDisplayValue('Covers')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create in Plex' }))
+    await vi.waitFor(async () => expect(await posted('/api/servers/1/playlists')).toHaveLength(1))
+    const [saved] = await posted('/api/servers/1/playlists')
+    expect(saved).toMatchObject({ name: 'Covers', definition: { artists: [], all_covers: true } })
   })
 })

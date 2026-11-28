@@ -112,7 +112,7 @@ export function TagEditor({
         onClick={() => setMore((m) => !m)}
         className="text-sm font-medium text-accent hover:underline"
       >
-        {more ? 'Fewer fields' : 'More fields'}: release details, MusicBrainz IDs, disc and composer
+        {more ? 'Fewer fields' : 'More fields'}: release details, MusicBrainz IDs, disc, and composer
       </button>
       {more && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

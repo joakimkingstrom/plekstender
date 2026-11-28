@@ -25,7 +25,7 @@ const KINDS: [UnknownKind, string][] = [
   ['no_mbid', 'No MusicBrainz ID'],
 ]
 const EMPTY: Record<UnknownKind, string> = {
-  missing: 'Every file has a title, artist and album.',
+  missing: 'Every file has a title, artist, and album.',
   unmatched: 'Plex has every file.',
   no_mbid: 'Every file has a MusicBrainz recording ID.',
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 
 export type Theme = 'dark' | 'light'
 /** What the person chose: a theme, or the system's (light or dark, following the device). */
@@ -6,23 +6,46 @@ export type ThemeChoice = Theme | 'system'
 
 const LIGHT = '(prefers-color-scheme: light)'
 
-function readChoice(): ThemeChoice {
-  try {
-    const stored = localStorage.getItem('theme')
-    return stored === 'light' || stored === 'system' ? stored : 'dark'
-  } catch {
-    return 'dark'
-  }
-}
-
 function systemTheme(): Theme {
   return window.matchMedia?.(LIGHT).matches ? 'light' : 'dark'
 }
 
+// The choice, shared by everything that shows or changes it (the header's menu, the profile):
+// this browser's storage, or what was last chosen when storage isn't available.
+let unstored: ThemeChoice = 'dark'
+const listeners = new Set<() => void>()
+
+function chosen(): ThemeChoice {
+  try {
+    const stored = localStorage.getItem('theme')
+    return stored === 'light' || stored === 'system' || stored === 'dark' ? stored : unstored
+  } catch {
+    return unstored
+  }
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function choose(next: ThemeChoice) {
+  try {
+    localStorage.setItem('theme', next)
+  } catch {
+    // storage unavailable (private mode): kept for this page only
+    unstored = next
+  }
+  listeners.forEach((listener) => listener())
+}
+
 /** The theme in use, the choice behind it, and a way to change the choice (kept in this
- * browser). "System" follows the device's light or dark mode, also as it changes. */
+ * browser, and the same everywhere it's used). "System" follows the device's light or dark
+ * mode, also as it changes. */
 export function useTheme() {
-  const [choice, setChoice] = useState<ThemeChoice>(readChoice)
+  const choice = useSyncExternalStore(subscribe, chosen)
   const [system, setSystem] = useState<Theme>(systemTheme)
   useEffect(() => {
     const query = window.matchMedia?.(LIGHT)
@@ -35,12 +58,5 @@ export function useTheme() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
-  useEffect(() => {
-    try {
-      localStorage.setItem('theme', choice)
-    } catch {
-      // storage unavailable (private mode); the choice just won't persist
-    }
-  }, [choice])
-  return [theme, setChoice, choice] as const
+  return [theme, choose, choice] as const
 }

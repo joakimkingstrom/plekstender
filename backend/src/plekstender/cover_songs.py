@@ -67,7 +67,9 @@ class Limits:
     per_day: int
 
 
-WITHOUT_KEY = Limits(per_minute=9, per_hour=90, per_day=900)
+# Without a key SecondHandSongs reports 10 a minute and 100 an hour: a little under those,
+# and 1000 a day to stay well within what it allows over a day.
+WITHOUT_KEY = Limits(per_minute=9, per_hour=90, per_day=1000)
 WITH_KEY = Limits(per_minute=60, per_hour=900, per_day=9000)
 RUNS_PER_HOUR = 6  # the worker's schedule: every ten minutes
 
@@ -528,6 +530,7 @@ _LEFT = text(
     """  # noqa: S608 - constant SQL fragments
 )
 COVER_SHARE = 0.05  # of songs, before enough are looked up to tell
+COVER_SHARE_FROM = 500  # songs looked up before their share of covers is used instead
 
 
 async def progress(db: AsyncSession, now: dt.datetime | None = None) -> dict[str, int]:
@@ -544,7 +547,7 @@ async def progress(db: AsyncSession, now: dt.datetime | None = None) -> dict[str
             },
         )
     ).one()
-    share = row.covers / row.checked if row.checked >= 1000 else COVER_SHARE
+    share = row.covers / row.checked if row.checked >= COVER_SHARE_FROM else COVER_SHARE
     requests_left = 2 * row.artists_due + row.pending + round(row.songs_due * share)
     return {
         "songs": row.songs,

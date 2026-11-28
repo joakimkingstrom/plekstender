@@ -173,5 +173,5 @@ it('shows where a compilation’s songs come from, each release artist first', a
   expect(within(songs).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['1Glory Box', '4Sour Times'])
   fireEvent.click(releases[0])
   expect(screen.queryByRole('list', { name: 'Songs from Portishead · Dummy' })).not.toBeInTheDocument()
-  expect(screen.getByText(/1 of 4 songs aren’t on another album, EP or single in the library/)).toBeInTheDocument()
+  expect(screen.getByText(/1 of 4 songs aren’t on another album, EP, or single in the library/)).toBeInTheDocument()
 })

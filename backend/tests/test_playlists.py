@@ -198,6 +198,10 @@ async def test_cover_and_lyrics_rules(app: FastAPI, plex: FakePlex) -> None:
     # Chosen songs are always kept.
     kept = await preview(owner, sid, tracks=[301], order="popular", rules={"lyrics": "word"})
     assert keys(kept) == [301]
+    # Every cover, no artist chosen (and the rules still apply).
+    assert keys(await preview(owner, sid, all_covers=True)) == [303]
+    assert keys(await preview(owner, sid, all_covers=True, rules={"lyrics": "synced"})) == [303]
+    assert keys(await preview(owner, sid, all_covers=True, rules={"covers": "none"})) == []
 
 
 async def test_builder_helpers(app: FastAPI, plex: FakePlex) -> None:

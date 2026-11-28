@@ -233,7 +233,7 @@ function ArtworkEditor({ serverId, isAdmin }: { serverId: number; isAdmin: boole
           </ul>
         )}
         <p className="px-1 text-xs text-muted">
-          Saving to artist folders, logo packs and the text logo fonts are in{' '}
+          Saving to artist folders, logo packs, and the text logo fonts are in{' '}
           <Link to="/settings/artwork" className="underline hover:text-text">
             Settings → Artwork
           </Link>{' '}
