@@ -19,7 +19,8 @@ export function Segmented<T extends string>({
   className?: string
   /** sm: compact, to sit beside a small dropdown in a narrow column. */
   size?: 'sm' | 'md'
-  /** A word before the buttons, inside the same box ("Show"), saying what they choose. */
+  /** A word before the buttons, inside the same box ("Show"), saying what they choose (left
+   * out on narrow windows, where the room is the buttons'). */
   prefix?: string
 }) {
   return (
@@ -29,7 +30,7 @@ export function Segmented<T extends string>({
       aria-label={label}
     >
       {prefix && (
-        <span className={`flex items-center pl-2.5 pr-1.5 text-muted ${size === 'sm' ? 'text-xs' : 'text-sm'}`} aria-hidden>
+        <span className={`flex items-center pl-2.5 pr-1.5 text-muted max-sm:hidden ${size === 'sm' ? 'text-xs' : 'text-sm'}`} aria-hidden>
           {prefix}
         </span>
       )}

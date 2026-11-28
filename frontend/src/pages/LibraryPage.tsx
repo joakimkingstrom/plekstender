@@ -340,8 +340,9 @@ const FILTER_KINDS: [TagKind, string][] = [
   ['mood', 'Moods'],
 ]
 
-/** Under the search: genres, styles, or moods (`start`, the switch for `kind`), the cover size
- * and sort on the right (`end`); then the ones to filter by, as chips, on a row of their own. */
+/** Under the search: genres, styles, or moods (`start`, the switch for `kind`), the ones to
+ * filter by as chips, and the cover size and sort on the right (`end`). The switch and the chips
+ * are left out on narrow windows. */
 function TagFilter({
   serverId,
   kind,
@@ -365,11 +366,11 @@ function TagFilter({
   const label = FILTER_KINDS.find(([k]) => k === kind)?.[1] ?? ''
   const chosen = tags.data?.find((t) => t.id === selected)
   return (
-    // The switches and the sort, then the chips on a row of their own.
-    <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${className}`}>
-      {start && <div className="flex shrink-0 flex-wrap gap-2">{start}</div>}
+    // The kind switch, the chips (scrolling sideways in the room between), and the size and sort.
+    <div className={`flex items-center gap-3 ${className}`}>
+      {start && <div className="flex shrink-0 gap-2">{start}</div>}
       <div
-        className="no-scrollbar order-last flex min-w-0 basis-full gap-2 overflow-x-auto py-1 max-sm:hidden"
+        className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1 max-sm:hidden"
         role="group"
         aria-label={`Filter by ${label.toLowerCase()}`}
       >
