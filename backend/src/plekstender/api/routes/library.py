@@ -648,6 +648,7 @@ async def _with_covers(db: DbDep, server_id: int, tracks: list[TrackOut]) -> Non
             Track.server_id == server_id,
             Track.rating_key.in_([t.rating_key for t in tracks]),
             SongCover.status == "cover",
+            SongCover.original_url.is_not(None),  # not still waiting to hear whose song
         )
     )
     covers = {key: cover for key, cover in rows.all()}
