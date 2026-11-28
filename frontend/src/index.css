@@ -346,3 +346,31 @@ input[type='number']::-webkit-outer-spin-button {
     opacity: 0;
   }
 }
+
+/* Album-cover backgrounds: each cover fades in, then pans and zooms slowly (Ken Burns). */
+@keyframes cover-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cover-ken-burns {
+  from {
+    transform: scale(1.08) translate(var(--kb-x0, 0), var(--kb-y0, 0));
+  }
+  to {
+    transform: scale(1.22) translate(var(--kb-x1, 0), var(--kb-y1, 0));
+  }
+}
+.cover-slide {
+  animation-name: cover-fade-in, cover-ken-burns;
+  animation-timing-function: ease-in-out, linear;
+  animation-fill-mode: both, both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cover-slide {
+    animation: none;
+  }
+}
