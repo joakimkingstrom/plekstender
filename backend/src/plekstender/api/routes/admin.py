@@ -8,7 +8,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from plekstender import acoustid, musicbrainz, tidal
+from plekstender import acoustid, cover_songs, musicbrainz, tidal
 from plekstender.api.deps import AdminDep, DbDep, HttpDep, SettingsDep
 from plekstender.api.routes.servers import get_user_server
 from plekstender.api.schemas import (
@@ -22,6 +22,8 @@ from plekstender.api.schemas import (
     AdminUserOut,
     CatalogueFont,
     CataloguePage,
+    CoverSongsIn,
+    CoverSongsOut,
     CoverSourcesSettings,
     DataThistleOut,
     DataThistleTokensIn,
@@ -52,10 +54,12 @@ from plekstender.artwork.text import FontError, check_font
 from plekstender.auth.sessions import end_sessions_without_access
 from plekstender.db.instance import (
     OPEN_COVER_SOURCES,
+    CoverSongsSettings,
     DataThistleTokens,
     LibrarySettings,
     get_access_settings,
     get_acoustid_api_key,
+    get_cover_songs,
     get_cover_sources_off,
     get_datathistle_tokens,
     get_datathistle_usage,
@@ -76,6 +80,7 @@ from plekstender.db.instance import (
     save_jambase_quota,
     set_access_settings,
     set_acoustid_api_key,
+    set_cover_songs,
     set_cover_sources_off,
     set_datathistle_tokens,
     set_fanart_api_key,
@@ -560,6 +565,61 @@ async def delete_datathistle(db: DbDep, _: AdminDep, settings: SettingsDep) -> D
     await set_datathistle_tokens(db, settings, None)
     await db.commit()
     return await _datathistle_out(db, settings)
+
+
+async def _cover_songs_out(db: DbDep, settings: SettingsDep) -> CoverSongsOut:
+    chosen = await get_cover_songs(db, settings)
+    limits = cover_songs.WITH_KEY if chosen.api_key else cover_songs.WITHOUT_KEY
+    return CoverSongsOut(
+        enabled=chosen.enabled,
+        secondhandsongs=chosen.secondhandsongs,
+        musicbrainz=chosen.musicbrainz,
+        api_key=chosen.api_key is not None,
+        per_hour=limits.per_hour,
+        per_day=limits.per_day,
+        **await cover_songs.progress(db),
+    )
+
+
+@router.get("/cover-songs", response_model=CoverSongsOut)
+async def get_cover_songs_settings(db: DbDep, _: AdminDep, settings: SettingsDep) -> CoverSongsOut:
+    return await _cover_songs_out(db, settings)
+
+
+@router.put("/cover-songs", response_model=CoverSongsOut)
+async def put_cover_songs_settings(
+    body: CoverSongsIn, db: DbDep, _: AdminDep, settings: SettingsDep, http: HttpDep
+) -> CoverSongsOut:
+    """Turn cover song lookups on or off, choose the sources, and set (after one small search)
+    or forget SecondHandSongs' optional API key."""
+    chosen = await get_cover_songs(db, settings)
+    key = None if body.remove_key else chosen.api_key
+    if body.api_key:
+        client = cover_songs.Client(http, body.api_key, cover_songs.WITH_KEY)
+        try:
+            await client.get("/search/performance", title="Hurt", performer="Johnny Cash")
+        except cover_songs.Busy as exc:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "SecondHandSongs didn't accept the key (or couldn't be reached).",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "SecondHandSongs didn't accept the key."
+            ) from exc
+        key = body.api_key
+    await set_cover_songs(
+        db,
+        settings,
+        CoverSongsSettings(
+            enabled=body.enabled,
+            secondhandsongs=body.secondhandsongs,
+            musicbrainz=body.musicbrainz,
+            api_key=key,
+        ),
+    )
+    await db.commit()
+    return await _cover_songs_out(db, settings)
 
 
 @router.get("/setlistfm", response_model=SetlistFmKeyOut)
