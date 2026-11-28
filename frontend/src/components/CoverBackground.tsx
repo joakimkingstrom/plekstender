@@ -3,7 +3,7 @@ import { useEffect, useId, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router'
 import { api, unwrap, type Schemas } from '../api/client'
 import { imageUrl, useActiveServer } from '../api/library'
-import { useReducedMotion } from '../motion'
+import { useReducedMotion, useRoomForBackgrounds } from '../motion'
 import { Artwork } from './library'
 import { Tooltip } from './Tooltip'
 import type { Theme } from '../theme'
@@ -15,17 +15,28 @@ const SECONDS: Record<NonNullable<BackgroundSettings['speed']>, number> = { slow
 const FADE = 2.5
 const SIZE = 1000 // px: the Plex image proxy's size for a full-window cover
 
-/** Where a cover's slow pan starts and ends (percent), different for each one shown. */
+/** Where a cover's slow pan starts and ends (percent), and whether it zooms in or out (about
+ * half of them each way), different for each one shown. */
 function drift(n: number) {
   const at = (k: number) => ((Math.sin(n * 12.9898 + k * 78.233) * 43758.5453) % 1) * 4
-  return { '--kb-x0': `${at(1)}%`, '--kb-y0': `${at(2)}%`, '--kb-x1': `${-at(3)}%`, '--kb-y1': `${-at(4)}%` }
+  // The hash's fractional part, not its sign (which runs in streaks from cover to cover).
+  const hash = Math.sin(n * 12.9898 + 5 * 78.233) * 43758.5453
+  const zoomOut = hash - Math.floor(hash) < 0.5
+  return {
+    '--kb-x0': `${at(1)}%`,
+    '--kb-y0': `${at(2)}%`,
+    '--kb-x1': `${-at(3)}%`,
+    '--kb-y1': `${-at(4)}%`,
+    '--kb-s0': zoomOut ? '1.22' : '1.08',
+    '--kb-s1': zoomOut ? '1.08' : '1.22',
+  }
 }
 
 /**
  * Album covers slowly panning and zooming behind the pages (Ken Burns), one after another
  * with a cross-fade, dimmed so the page stays readable: light covers in light mode and dark
- * ones in dark mode, or one colour family's. Nothing at all when it's off or the system asks
- * for less motion.
+ * ones in dark mode, or one colour family's. Nothing at all when it's off, the system asks
+ * for less motion, or the window is phone-sized.
  */
 export function CoverBackground({ theme, settings }: { theme: Theme; settings: BackgroundSettings | undefined }) {
   const { active } = useActiveServer()
@@ -33,7 +44,8 @@ export function CoverBackground({ theme, settings }: { theme: Theme; settings: B
   const mode = settings?.mode ?? 'off'
   const family = settings?.family ?? 'blue'
   const seconds = SECONDS[settings?.speed ?? 'normal']
-  const on = mode !== 'off' && !reduced && active !== undefined
+  const room = useRoomForBackgrounds()
+  const on = mode !== 'off' && !reduced && room && active !== undefined
   const covers = useQuery({
     queryKey: ['servers', active?.id, 'backgrounds', mode, mode === 'colour' ? family : theme],
     enabled: on,
@@ -90,7 +102,7 @@ function BackgroundInfo({ serverId, cover }: { serverId: number; cover: Schemas[
   const id = useId()
   const album = `/library/albums/${cover.rating_key}`
   return (
-    <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] right-3 z-20 md:bottom-4 md:right-4">
+    <div className="fixed bottom-4 right-4 z-20">
       {open ? (
         <div
           id={id}

@@ -4,9 +4,10 @@ import { api, errorMessage, unwrap } from '../api/client'
 import { useMe, useSetPreferences } from '../api/hooks'
 import { AchievementList } from '../components/Achievements'
 import { GigPlaylistsCard } from '../components/GigPlaylistsCard'
-import { Segmented } from '../components/Segmented'
+import { ThemeOptions } from '../components/ThemeOptions'
 import { Avatar, Badge, Card, Notice, PageTitle, Spinner } from '../components/ui'
 import { formatCount, formatDate } from '../format'
+import { useTheme } from '../theme'
 import { AppearancePage } from './SettingsPage'
 
 function useProfile() {
@@ -30,6 +31,7 @@ export function ProfilePage() {
   const me = useMe()
   const profile = useProfile()
   const save = useSetPreferences()
+  const [theme, setChoice, choice] = useTheme()
   const qc = useQueryClient()
   if (profile.isPending || me.isPending) return <Spinner />
   if (profile.isError) return <Notice tone="error">{errorMessage(profile.error)}</Notice>
@@ -77,22 +79,26 @@ export function ProfilePage() {
           </ul>
         </Card>
         <Card title="Theme">
-          <div className="space-y-3 text-sm">
-            <Segmented
-              label="Theme"
-              value={prefs?.theme ?? 'browser'}
-              options={[
-                ['dark', 'Dark'],
-                ['light', 'Light'],
-                ['browser', 'Per device'],
-              ]}
-              onChange={(v) => save.mutate({ theme: v === 'browser' ? null : v })}
+          <ThemeOptions />
+          <label className="mt-4 flex items-start gap-2 border-t border-border pt-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={Boolean(prefs?.theme)}
+              onChange={(e) => {
+                // The account keeps light or dark: the system's is each device's own.
+                if (e.target.checked && choice === 'system') setChoice(theme)
+                save.mutate({ theme: e.target.checked ? theme : null })
+              }}
             />
-            <p className="text-muted">
-              Dark or light saves the choice to your account, so every device follows it. Per device: the ☀ / ☾ button
-              in the header sets it for this browser only.
-            </p>
-          </div>
+            <span>
+              <span className="font-medium">Use this theme on all your devices</span>
+              <span className="block text-xs text-muted">
+                Saved to your account, so every device you sign in on follows it (System becomes the theme it shows
+                now). Off: each browser keeps its own.
+              </span>
+            </span>
+          </label>
         </Card>
         <GigPlaylistsCard />
       </div>
@@ -133,7 +139,7 @@ export function ProfilePage() {
               )
             }
           >
-            A small icon on songs (plain, synced or word-synced lyrics, or none) and on albums (all, some or none of
+            A small icon on songs (plain, synced, or word-synced lyrics, or none) and on albums (all, some, or none of
             their songs), from what the music files have. Needs the music folder read on Settings → Music files.
           </Toggle>
         </Card>

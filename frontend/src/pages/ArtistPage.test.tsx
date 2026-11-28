@@ -14,7 +14,28 @@ const gloryBox = {
   rating_key: 304, title: 'Glory Box', original_title: null, disc: 1, number: 11, duration_ms: 300_000,
   popularity: 800, user_rating: null, plays: 3, album_rating_key: 202, album_title: 'Dummy', album_thumb: null,
   listens: 0, seen_live: 0, lyrics: null,
-  cover_of: { artist: 'Isaac Hayes', title: "Ike's Rap II", url: 'https://secondhandsongs.com/performance/20', cover_url: null, source: 'secondhandsongs' },
+  cover_of: {
+    artist: 'Isaac Hayes', title: "Ike's Rap II", url: 'https://secondhandsongs.com/performance/20',
+    cover_url: 'https://secondhandsongs.com/performance/2', source: 'secondhandsongs',
+    artist_rating_key: 150, original_rating_key: 1500, original_album_rating_key: 1501, original_versions: 1,
+  },
+}
+
+// Radiohead's covers, and their songs covered by others.
+const radioheadCovers = {
+  covers: [
+    {
+      rating_key: 303, title: 'Lucky', album_rating_key: 201, album_title: 'OKNOTOK', year: 2017,
+      cover_of: { artist: 'The Unknowns', title: 'Lucky Day', url: null, cover_url: 'https://secondhandsongs.com/performance/3', source: 'secondhandsongs', artist_rating_key: null, original_rating_key: null, original_album_rating_key: null, original_versions: 0 },
+    },
+  ],
+  covered: [
+    {
+      rating_key: 304, title: 'Glory Box', artist: 'Portishead', artist_rating_key: 99, album_rating_key: 202, album_title: 'Dummy', year: 1994,
+      original_title: 'Karma Police', original_rating_key: 301, original_album_rating_key: 200, original_versions: 2,
+      cover_url: 'https://secondhandsongs.com/performance/4', source: 'secondhandsongs',
+    },
+  ],
 }
 
 const artist = (key: number, title: string) => ({
@@ -39,6 +60,8 @@ beforeEach(() => {
         const at = (k: number | undefined) => (k ? { rating_key: k, title: { 99: 'Portishead', 100: 'Radiohead', 101: 'Sigur Rós' }[k]! } : null)
         return json({ previous: at(order[i - 1]), next: at(order[i + 1]) })
       }
+      if (url.pathname === '/api/servers/1/library/artists/100/covers') return json(radioheadCovers)
+      if (url.pathname === '/api/servers/1/library/tracks/301/versions') return json({ title: 'Karma Police', artist: 'Radiohead', versions: [] })
       if (m) return json(artist(Number(m[1]), { 99: 'Portishead', 100: 'Radiohead', 101: 'Sigur Rós' }[Number(m[1])] ?? '?'))
       if (url.pathname === '/api/servers') return json([{ id: 1, machine_identifier: 'm', name: 'Home', is_owner: false, approved: true, connection_kind: 'local', music_section_keys: ['3'] }])
       if (url.pathname === '/api/servers/1/sync') return json({ active: null, last: null, last_sync_at: null, counts: { artists: 3, albums: 2, tracks: 4, rated_tracks: 0, plays: 0 }, incremental_minutes: 30, full_days: 7 })
@@ -87,11 +110,29 @@ describe('Artist page', () => {
     expect(localStorage.getItem('artist-cover-size')).toBe('large')
   })
 
-  it('says whose song a cover is, artist first, linking to the original', async () => {
+  it('says whose song a cover is, artist first, linking to them in the library', async () => {
     renderArtist(99)
-    const link = await screen.findByRole('link', { name: "Isaac Hayes · Ike's Rap II" })
-    expect(link).toHaveAttribute('href', 'https://secondhandsongs.com/performance/20')
-    expect(link.parentElement).toHaveTextContent("Cover of Isaac Hayes · Ike's Rap II")
+    const artistLink = await screen.findByRole('link', { name: 'Isaac Hayes' })
+    expect(artistLink).toHaveAttribute('href', '/library/artists/150')
+    expect(artistLink.parentElement).toHaveTextContent("Cover of Isaac Hayes · Ike's Rap II")
+    // One release of the original: its album.
+    expect(screen.getByRole('link', { name: "Ike's Rap II" })).toHaveAttribute('href', '/library/albums/1501')
+    // The cover itself on SecondHandSongs, as an icon.
+    expect(screen.getByRole('link', { name: 'This cover on SecondHandSongs' })).toHaveAttribute('href', 'https://secondhandsongs.com/performance/2')
+  })
+
+  it('lists the artist’s covers, and their songs covered by others', async () => {
+    renderArtist(100)
+    const theirs = await screen.findByRole('list', { name: 'Their covers' })
+    expect(theirs).toHaveTextContent('Lucky · 2017')
+    expect(theirs).toHaveTextContent('Cover of The Unknowns · Lucky Day') // not in the library: no links
+    const covered = screen.getByRole('list', { name: 'Covered by others' })
+    expect(covered).toHaveTextContent('Portishead · Glory Box · 1994')
+    expect(covered).toHaveTextContent('Their version: Karma Police')
+    expect(screen.getByRole('link', { name: 'Portishead' })).toHaveAttribute('href', '/library/artists/99')
+    // Two releases of their version: every version, in the dialog.
+    fireEvent.click(screen.getByRole('button', { name: 'Karma Police' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
   it('steps to the previous and next artist by name', async () => {

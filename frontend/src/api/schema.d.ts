@@ -531,6 +531,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Albums
+         * @description Every album, with its artist: searched (by album or artist), filtered by genre, style,
+         *     or mood (the album's or its artist's) and by release type, and sorted.
+         */
+        get: operations["list_albums_api_servers__server_id__library_albums_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/tags": {
         parameters: {
             query?: never;
@@ -627,6 +648,27 @@ export interface paths {
          *     step through artist pages).
          */
         get: operations["artist_neighbours_api_servers__server_id__library_artists__rating_key__neighbours_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/artists/{rating_key}/covers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artist Covers
+         * @description The artist's covers of other people's songs, and their songs others covered, as Cover
+         *     songs found them in the library.
+         */
+        get: operations["get_artist_covers_api_servers__server_id__library_artists__rating_key__covers_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3156,6 +3198,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/artwork/albums/{rating_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Cover
+         * @description One album and its cover, as the list has it (to change it from the album's page).
+         */
+        get: operations["get_cover_api_servers__server_id__artwork_albums__rating_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/artwork/albums/{rating_key}/candidates": {
         parameters: {
             query?: never;
@@ -5394,6 +5456,27 @@ export interface components {
              */
             skipped_hidden: number;
         };
+        /** AlbumListPage */
+        AlbumListPage: {
+            /**
+             * Items
+             * @description Albums with their artist.
+             */
+            items: components["schemas"]["TagAlbum"][];
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /**
+             * Types
+             * @description Albums of each release type (Album, EP, Compilation, Live…) among those the other filters leave, for the type filter.
+             */
+            types: {
+                [key: string]: number;
+            };
+        };
         /** AlbumLyricsOut */
         AlbumLyricsOut: {
             /**
@@ -5463,6 +5546,36 @@ export interface components {
              * @description Of those, waiting for a MusicBrainz lookup.
              */
             pending: number;
+        };
+        /**
+         * ArtistCover
+         * @description A song by the artist that's a cover (its oldest release in the library).
+         */
+        ArtistCover: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Album Title */
+            album_title: string | null;
+            /** Year */
+            year: number | null;
+            cover_of: components["schemas"]["CoverOf"];
+        };
+        /** ArtistCoversOut */
+        ArtistCoversOut: {
+            /**
+             * Covers
+             * @description Their covers, oldest first.
+             */
+            covers: components["schemas"]["ArtistCover"][];
+            /**
+             * Covered
+             * @description Their songs covered by others in the library, oldest cover first.
+             */
+            covered: components["schemas"]["CoveredSong"][];
         };
         /** ArtistDetail */
         ArtistDetail: {
@@ -6003,6 +6116,27 @@ export interface components {
              * @description secondhandsongs | musicbrainz
              */
             source: string;
+            /**
+             * Artist Rating Key
+             * @description The original artist, when they're in the library.
+             */
+            artist_rating_key?: number | null;
+            /**
+             * Original Rating Key
+             * @description The original song in the library (its oldest release), when it's there.
+             */
+            original_rating_key?: number | null;
+            /**
+             * Original Album Rating Key
+             * @description Its album.
+             */
+            original_album_rating_key?: number | null;
+            /**
+             * Original Versions
+             * @description Releases of the original song in the library.
+             * @default 0
+             */
+            original_versions: number;
         };
         /** CoverRenderIn */
         CoverRenderIn: {
@@ -6113,6 +6247,55 @@ export interface components {
              * @default true
              */
             coverartarchive: boolean;
+        };
+        /**
+         * CoveredSong
+         * @description The artist's song, covered by someone else in the library (the cover's oldest
+         *     release).
+         */
+        CoveredSong: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /**
+             * Artist
+             * @description Who covered it.
+             */
+            artist: string | null;
+            /** Artist Rating Key */
+            artist_rating_key: number | null;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Album Title */
+            album_title: string | null;
+            /** Year */
+            year: number | null;
+            /**
+             * Original Title
+             * @description The song as the artist recorded it.
+             */
+            original_title: string | null;
+            /**
+             * Original Rating Key
+             * @description The artist's own recording in the library (oldest release).
+             */
+            original_rating_key?: number | null;
+            /** Original Album Rating Key */
+            original_album_rating_key?: number | null;
+            /**
+             * Original Versions
+             * @description Releases of it in the library.
+             * @default 0
+             */
+            original_versions: number;
+            /**
+             * Cover Url
+             * @description The cover on its source.
+             */
+            cover_url: string | null;
+            /** Source */
+            source: string;
         };
         /** DataThistleOut */
         DataThistleOut: {
@@ -6263,6 +6446,12 @@ export interface components {
              * @description Also every song with one of these words in its title (whole words, any case, bracketed parts left out, as the word cloud counts them; found again at each refresh, and the rules still apply).
              */
             title_words?: string[];
+            /**
+             * All Covers
+             * @description Also every cover song in the library (found by Cover songs, again at each refresh; the rules still apply).
+             * @default false
+             */
+            all_covers: boolean;
             rules?: components["schemas"]["Rules"];
             /**
              * Limit
@@ -12280,6 +12469,44 @@ export interface operations {
             };
         };
     };
+    list_albums_api_servers__server_id__library_albums_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                tag?: number | null;
+                release_type?: string | null;
+                sort?: "artist" | "title" | "newest" | "oldest" | "added" | "rating" | "plays" | "popularity";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumListPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tags_api_servers__server_id__library_tags_get: {
         parameters: {
             query?: {
@@ -12434,6 +12661,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtistNeighboursOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artist_covers_api_servers__server_id__library_artists__rating_key__covers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistCoversOut"];
                 };
             };
             /** @description Validation Error */
@@ -16863,6 +17122,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoverSourcesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cover_api_servers__server_id__artwork_albums__rating_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumCoverOut"];
                 };
             };
             /** @description Validation Error */

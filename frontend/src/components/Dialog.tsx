@@ -10,11 +10,14 @@ export function Dialog({
   subtitle,
   onClose,
   children,
+  wide = false,
 }: {
   title: string
   subtitle?: ReactNode
   onClose: () => void
   children: ReactNode
+  /** As wide as the window allows (up to 72rem), for big work like choosing a cover. */
+  wide?: boolean
 }) {
   const id = useId()
   const panel = useRef<HTMLDivElement>(null)
@@ -64,7 +67,7 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}
-        className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-t-2xl border border-border bg-surface shadow-2xl sm:rounded-2xl"
+        className={`flex max-h-[90dvh] w-full ${wide ? 'max-w-6xl' : 'max-w-2xl'} flex-col rounded-t-2xl border border-border bg-surface shadow-2xl sm:rounded-2xl`}
       >
         <header className="flex items-start gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0 flex-1">

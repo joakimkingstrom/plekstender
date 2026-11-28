@@ -47,7 +47,7 @@ CATALOGUE: tuple[Achievement, ...] = (
     A("roadie", "Roadie", "library", "artists", 100,
       "You carry the gear now. Lift with your knees.", "100 artists in your library"),
     A("session-musician", "Session Musician", "library", "artists", 250,
-      "Available for weddings, bar mitzvahs and your library.", "250 artists in your library"),
+      "Available for weddings, bar mitzvahs, and your library.", "250 artists in your library"),
     A("headliner", "Headliner", "library", "artists", 500,
       "Your name goes at the top of the poster now.", "500 artists in your library"),
     A("golden-god", "Golden God", "library", "artists", 1000,

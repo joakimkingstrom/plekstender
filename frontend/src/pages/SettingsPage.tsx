@@ -609,7 +609,7 @@ function LibrarySettingsForm({ initial }: { initial: Settings }) {
           <div className="space-y-5">
             <NumberField
               label="Check for changes every"
-              help="Picks up new plays, ratings and library changes."
+              help="Picks up new plays, ratings, and library changes."
               suffix="minutes"
               value={form.incremental_minutes}
               limits={LIMITS.incremental_minutes}

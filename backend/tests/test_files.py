@@ -1156,7 +1156,15 @@ def test_planning_moves_with_their_files(tmp_path: Path) -> None:
     root = tmp_path
     album = root / "incoming" / "okc"
     album.mkdir(parents=True)
-    for name in ("01.flac", "02.flac", "01.lrc", "01.en.lrc", "cover.jpg", "album.cue"):
+    for name in (
+        "01.flac",
+        "02.flac",
+        "01.lrc",
+        "01.en.lrc",
+        "cover.jpg",
+        "album.cue",
+        "cover.mp4",
+    ):
         (album / name).write_bytes(b"x")
     (album / "Scans").mkdir()
     (album / "Scans" / "front.png").write_bytes(b"x")
@@ -1181,6 +1189,8 @@ def test_planning_moves_with_their_files(tmp_path: Path) -> None:
         "Radiohead/OK Computer/01 - Airbag.en.lrc",
     )
     assert targets["incoming/okc/cover.jpg"] == ("folder", "Radiohead/OK Computer/cover.jpg")
+    # A video cover goes with the album, not left behind as a song that isn't moving.
+    assert targets["incoming/okc/cover.mp4"] == ("folder", "Radiohead/OK Computer/cover.mp4")
     assert targets["incoming/okc/Scans"] == ("folder", "Radiohead/OK Computer/Scans")
     assert targets["mixed/b.flac"] == ("song", "Elsewhere/b.flac")
     reasons = {s.path: s.reason for s in skipped}

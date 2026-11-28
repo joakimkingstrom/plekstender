@@ -8,6 +8,13 @@ let saved: unknown = null
 
 beforeEach(() => {
   saved = null
+  localStorage.clear()
+  // A wide window: the background options show.
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('min-width'),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }))
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: Request) => {
@@ -52,7 +59,12 @@ describe('Profile', () => {
     expect(screen.getByText('Yours')).toBeInTheDocument()
     expect(screen.getByText('Accent colour')).toBeInTheDocument() // Appearance lives here now
 
+    // The header menu's theme options: this browser's, until saved to the account.
     fireEvent.click(screen.getByRole('button', { name: 'Light' }))
+    expect(localStorage.getItem('theme')).toBe('light')
+    expect(saved).toBeNull()
+    expect(screen.getByRole('group', { name: 'Background' })).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText(/Use this theme on all your devices/))
     await vi.waitFor(() => expect(saved).toMatchObject({ theme: 'light' }))
     fireEvent.click(screen.getByLabelText(/^Achievements/))
     await vi.waitFor(() => expect(saved).toMatchObject({ achievements: false }))

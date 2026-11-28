@@ -96,7 +96,7 @@ describe('Library stats', () => {
         expect.objectContaining({
           name: 'Songs about Love',
           schedule: 'weekly',
-          definition: { title_words: ['Love'], forgotten: false, order: 'random', limit: null },
+          definition: { title_words: ['Love'], forgotten: false, all_covers: false, order: 'random', limit: null },
         }),
       ]),
     )

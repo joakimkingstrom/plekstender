@@ -106,7 +106,7 @@ describe('Discover', () => {
     expect(first).toHaveTextContent(/similar to 12 of your artists/i)
     expect(first).toHaveTextContent('42 plays')
     expect(within(first).getByRole('meter', { name: 'Your plays of Muse' })).toHaveAttribute('aria-valuenow', '42')
-    expect(first).toHaveTextContent('Radiohead, Placebo and 10 more')
+    expect(first).toHaveTextContent('Radiohead, Placebo, and 10 more')
     expect(within(first).getByRole('link', { name: 'Radiohead' })).toHaveAttribute('href', '/library/artists/100')
     expect(within(first).getByRole('link', { name: 'Muse on Last.fm' })).toHaveAttribute('href', 'https://www.last.fm/music/Muse')
     expect(screen.getByText('Massive Attack').closest('li')).toHaveTextContent(/similar to 3 of your artistsPortishead/i)
