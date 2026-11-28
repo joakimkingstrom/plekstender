@@ -11,6 +11,7 @@ import { useServers } from './hooks'
 import { localTimeZone } from './stats'
 
 export type ArtistSort = 'title' | 'popularity' | 'plays' | 'rating' | 'added'
+export type AlbumSort = 'artist' | 'title' | 'newest' | 'oldest' | 'added' | 'rating' | 'plays' | 'popularity'
 export type TagKind = 'genre' | 'mood' | 'style' | 'country'
 export type TagSort = 'plays' | 'rating' | 'year' | 'name'
 
@@ -19,6 +20,8 @@ export const libraryKeys = {
   library: (serverId: number) => ['servers', serverId, 'library'] as const,
   artists: (serverId: number, q: string, sort: ArtistSort, tag: number | null) =>
     ['servers', serverId, 'library', 'artists', { q, sort, tag }] as const,
+  albums: (serverId: number, q: string, sort: AlbumSort, tag: number | null, type: string | null) =>
+    ['servers', serverId, 'library', 'albums', { q, sort, tag, type }] as const,
   tags: (serverId: number, kind: TagKind) => ['servers', serverId, 'library', 'tags', kind] as const,
   tag: (serverId: number, id: number, sort: TagSort) => ['servers', serverId, 'library', 'tag', id, sort] as const,
   artist: (serverId: number, key: number) => ['servers', serverId, 'library', 'artist', key] as const,
@@ -127,6 +130,27 @@ export function useArtists(serverId: number, q: string, sort: ArtistSort, tag: n
           params: {
             path: { server_id: serverId },
             query: { q: q || undefined, sort, tag: tag ?? undefined, offset: pageParam, limit: PAGE },
+          },
+        }),
+      ),
+    getNextPageParam: (last) =>
+      last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Every album with its artist (Library → Albums), a page at a time, with how many of each
+ * release type the other filters leave. */
+export function useLibraryAlbums(serverId: number, q: string, sort: AlbumSort, tag: number | null, type: string | null) {
+  return useInfiniteQuery({
+    queryKey: libraryKeys.albums(serverId, q, sort, tag, type),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/albums', {
+          params: {
+            path: { server_id: serverId },
+            query: { q: q || undefined, sort, tag: tag ?? undefined, release_type: type ?? undefined, offset: pageParam, limit: PAGE },
           },
         }),
       ),
