@@ -10,14 +10,18 @@ export function Dialog({
   subtitle,
   onClose,
   children,
-  wide = false,
+  panelClassName = 'max-h-[90dvh] w-full max-w-2xl',
+  fill = false,
 }: {
   title: string
   subtitle?: ReactNode
   onClose: () => void
   children: ReactNode
-  /** As wide as the window allows (up to 72rem), for big work like choosing a cover. */
-  wide?: boolean
+  /** The panel's size (by default up to 42rem wide, and 90% of the window's height). */
+  panelClassName?: string
+  /** The contents fill the panel's height (and scroll themselves), rather than the panel
+   * scrolling them: for something sized to the window, like choosing a cover. */
+  fill?: boolean
 }) {
   const id = useId()
   const panel = useRef<HTMLDivElement>(null)
@@ -67,7 +71,7 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}
-        className={`flex max-h-[90dvh] w-full ${wide ? 'max-w-6xl' : 'max-w-2xl'} flex-col rounded-t-2xl border border-border bg-surface shadow-2xl sm:rounded-2xl`}
+        className={`flex ${panelClassName} flex-col rounded-t-2xl border border-border bg-surface shadow-2xl sm:rounded-2xl`}
       >
         <header className="flex items-start gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0 flex-1">
@@ -86,7 +90,11 @@ export function Dialog({
             ×
           </button>
         </header>
-        <div className="overflow-y-auto px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">{children}</div>
+        <div
+          className={`${fill ? 'flex min-h-0 flex-1 flex-col' : 'overflow-y-auto'} px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4`}
+        >
+          {children}
+        </div>
       </div>
     </div>,
     document.body,

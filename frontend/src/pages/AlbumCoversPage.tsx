@@ -254,12 +254,14 @@ export function CoverEditor({
   onBack,
   onSaved,
   back,
+  className = '',
 }: {
   serverId: number
   album: AlbumCover
   onBack: () => void
   onSaved: (album: AlbumCover) => void
   back?: string
+  className?: string
 }) {
   const me = useMe()
   const savePreferences = useSetPreferences()
@@ -314,7 +316,7 @@ export function CoverEditor({
     )
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col gap-4">
+    <div className={`flex min-h-0 min-w-0 flex-col gap-4 ${className}`}>
       {/* The album and the preview: all the room above the results. */}
       <section aria-label="Preview" className="flex min-h-0 flex-1 flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
