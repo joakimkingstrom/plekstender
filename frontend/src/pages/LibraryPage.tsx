@@ -149,9 +149,14 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
           aria-label="Search artists"
         />
         <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
-        <CoverSizeSwitch value={size} onChange={setSize} />
       </Toolbar>
-      <TagFilter serverId={serverId} kind={kind} selected={tag} onSelect={setTag} />
+      <TagFilter
+        serverId={serverId}
+        kind={kind}
+        selected={tag}
+        onSelect={setTag}
+        end={<CoverSizeSwitch value={size} onChange={setSize} />}
+      />
       <ArtistGrid serverId={serverId} q={deferredQuery} sort={sort} tag={tag} size={size} />
     </>
   )
@@ -218,27 +223,29 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
           aria-label="Search albums or artists"
         />
         <Select label="Sort by" value={sort} onChange={setSort} options={ALBUM_SORTS} />
-        <CoverSizeSwitch value={size} onChange={setSize} />
       </Toolbar>
-      <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto py-1" role="group" aria-label="Release type">
-        {([[null, 'All', all], ...types.map(([t, n]) => [t, TYPE_NAMES[t] ?? t, n])] as [string | null, string, number][]).map(
-          ([value, label, n]) => {
-            const on = type === value
-            return (
-              <button
-                key={value ?? 'all'}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setType(value)}
-                className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${
-                  on ? 'border-accent bg-accent text-on-accent' : 'border-border text-muted hover:text-text'
-                }`}
-              >
-                {label} <span className="tabular-nums opacity-75">{formatCount(n)}</span>
-              </button>
-            )
-          },
-        )}
+      <div className="mb-3 flex items-center gap-3">
+        <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label="Release type">
+          {([[null, 'All', all], ...types.map(([t, n]) => [t, TYPE_NAMES[t] ?? t, n])] as [string | null, string, number][]).map(
+            ([value, label, n]) => {
+              const on = type === value
+              return (
+                <button
+                  key={value ?? 'all'}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setType(value)}
+                  className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${
+                    on ? 'border-accent bg-accent text-on-accent' : 'border-border text-muted hover:text-text'
+                  }`}
+                >
+                  {label} <span className="tabular-nums opacity-75">{formatCount(n)}</span>
+                </button>
+              )
+            },
+          )}
+        </div>
+        <CoverSizeSwitch value={size} onChange={setSize} />
       </div>
       <TagFilter serverId={serverId} kind={kind} selected={tag} onSelect={setTag} />
       <AlbumGrid serverId={serverId} albums={albums} size={size} />
@@ -326,17 +333,20 @@ function TagFilter({
   kind,
   selected,
   onSelect,
+  end,
 }: {
   serverId: number
   kind: TagKind
   selected: number | null
   onSelect: (id: number | null) => void
+  /** At the right end of the row (the cover size). */
+  end?: ReactNode
 }) {
   const tags = useTags(serverId, kind)
   const label = FILTER_KINDS.find(([k]) => k === kind)?.[1] ?? ''
   const chosen = tags.data?.find((t) => t.id === selected)
   return (
-    <div className="mb-5 flex items-start gap-3">
+    <div className="mb-5 flex items-center gap-3">
       <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label={`Filter by ${label.toLowerCase()}`}>
         {tags.data?.length === 0 && <span className="py-1 text-xs text-muted">No {label.toLowerCase()} yet.</span>}
         {tags.data?.slice(0, 40).map((t) => {
@@ -361,6 +371,7 @@ function TagFilter({
           {chosen.name} page →
         </Link>
       )}
+      {end && <div className="ml-auto shrink-0">{end}</div>}
     </div>
   )
 }
