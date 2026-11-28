@@ -593,6 +593,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Library
+         * @description Artists, albums and songs whose names contain the text (names starting with it first,
+         *     then the most popular), for the header's search.
+         */
+        get: operations["search_library_api_servers__server_id__library_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/artists/{rating_key}/neighbours": {
         parameters: {
             query?: never;
@@ -7529,6 +7550,15 @@ export interface components {
             /** Plays */
             plays: number;
         };
+        /** LibrarySearchOut */
+        LibrarySearchOut: {
+            /** Artists */
+            artists: components["schemas"]["SearchHit"][];
+            /** Albums */
+            albums: components["schemas"]["SearchHit"][];
+            /** Songs */
+            songs: components["schemas"]["SearchHit"][];
+        };
         /**
          * LibrarySettings
          * @description Instance-wide library tuning, editable by admins on the Settings page.
@@ -10130,6 +10160,25 @@ export interface components {
             /** Error */
             error: string | null;
         };
+        /** SearchHit */
+        SearchHit: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Thumb */
+            thumb: string | null;
+            /**
+             * Subtitle
+             * @description Albums and songs: the artist (songs: · album).
+             */
+            subtitle: string | null;
+            /**
+             * Album Rating Key
+             * @description Songs: their album.
+             */
+            album_rating_key?: number | null;
+        };
         /** SectionOut */
         SectionOut: {
             /** Key */
@@ -12229,6 +12278,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_library_api_servers__server_id__library_search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibrarySearchOut"];
                 };
             };
             /** @description Validation Error */

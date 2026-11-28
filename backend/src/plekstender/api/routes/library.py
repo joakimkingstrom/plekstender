@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import ColumnElement, and_, func, literal, select, tuple_
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import aliased
 
 from plekstender.api.deps import CipherDep, DbDep, HttpDep, SettingsDep, UserDep
@@ -28,8 +29,10 @@ from plekstender.api.schemas import (
     ArtistSummary,
     CoverOf,
     ItemListensOut,
+    LibrarySearchOut,
     LiveSource,
     RecentItem,
+    SearchHit,
     SimilarArtistOut,
     SongListens,
     SongVersion,
@@ -687,6 +690,119 @@ async def _title_norms(db: DbDep, server_id: int, keys: list[int]) -> dict[int, 
         )
     )
     return {k: t for k, t in rows.all()}
+
+
+SEARCH_EACH = 6  # results of each kind
+
+
+@router.get("/library/search", response_model=LibrarySearchOut)
+async def search_library(
+    server_id: int,
+    db: DbDep,
+    user: UserDep,
+    q: Annotated[str, Query(min_length=1, max_length=200)],
+) -> LibrarySearchOut:
+    """Artists, albums and songs whose names contain the text (names starting with it first,
+    then the most popular), for the header's search."""
+    us = await get_user_server(db, user, server_id)
+    like = _like(q.strip())
+    starts = f"{like[1:]}"  # the text, then anything
+
+    def ranked(column: Any, popularity: Any) -> tuple[Any, ...]:
+        return (
+            (func.lower(column) == q.strip().lower()).desc(),
+            column.ilike(starts, escape="\\").desc(),
+            popularity.desc().nulls_last(),
+            column,
+        )
+
+    a_state, a_cond, a_where = visible(Artist, user.id, us)
+    artists = (
+        await db.scalars(
+            select(Artist)
+            .join(a_state, a_cond)
+            .where(*a_where, Artist.title.ilike(like, escape="\\"))
+            .order_by(*ranked(Artist.title, Artist.popularity))
+            .limit(SEARCH_EACH)
+        )
+    ).all()
+    owner = aliased(Artist)
+    al_state, al_cond, al_where = visible(Album, user.id, us)
+    albums = (
+        await db.execute(
+            select(Album, owner.title)
+            .join(al_state, al_cond)
+            .outerjoin(
+                owner,
+                and_(
+                    owner.server_id == Album.server_id, owner.rating_key == Album.artist_rating_key
+                ),
+            )
+            .where(*al_where, Album.title.ilike(like, escape="\\"))
+            .order_by(*ranked(Album.title, Album.popularity))
+            .limit(SEARCH_EACH)
+        )
+    ).all()
+    t_state, t_cond, t_where = visible(Track, user.id, us)
+    song_artist = aliased(Artist)
+    song_album = aliased(Album)
+    # One release a song (the most popular).
+    songs = (
+        await db.execute(
+            select(Track, song_artist.title, song_album)
+            .ext(distinct_on(Track.artist_key, Track.title_norm))
+            .join(t_state, t_cond)
+            .outerjoin(
+                song_artist,
+                and_(
+                    song_artist.server_id == Track.server_id,
+                    song_artist.rating_key == Track.artist_rating_key,
+                ),
+            )
+            .outerjoin(
+                song_album,
+                and_(
+                    song_album.server_id == Track.server_id,
+                    song_album.rating_key == Track.album_rating_key,
+                ),
+            )
+            .where(*t_where, Track.title.ilike(like, escape="\\"))
+            .order_by(Track.artist_key, Track.title_norm, Track.popularity.desc().nulls_last())
+            .limit(200)
+        )
+    ).all()
+    songs = sorted(
+        songs,
+        key=lambda r: (
+            r[0].title.lower() != q.strip().lower(),
+            not r[0].title.lower().startswith(q.strip().lower()),
+            -(r[0].popularity or 0),
+            r[0].title,
+        ),
+    )[:SEARCH_EACH]
+    return LibrarySearchOut(
+        artists=[
+            SearchHit(rating_key=a.rating_key, title=a.title, thumb=a.thumb, subtitle=None)
+            for a in artists
+        ],
+        albums=[
+            SearchHit(rating_key=a.rating_key, title=a.title, thumb=a.thumb, subtitle=artist)
+            for a, artist in albums
+        ],
+        songs=[
+            SearchHit(
+                rating_key=t.rating_key,
+                title=t.title,
+                thumb=album.thumb if album else None,
+                subtitle=" · ".join(
+                    x for x in (t.original_title or artist, album.title if album else None) if x
+                )
+                or None,
+                album_rating_key=t.album_rating_key,
+            )
+            for t, artist, album in songs
+        ],
+    )
 
 
 @router.get("/library/artists/{rating_key}/neighbours", response_model=ArtistNeighboursOut)

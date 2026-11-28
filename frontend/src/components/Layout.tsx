@@ -8,6 +8,7 @@ import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
 import { CoverBackground } from './CoverBackground'
 import { ThemeMenu } from './ThemeMenu'
+import { HeaderSearch } from './HeaderSearch'
 import { SPIN_MS, SPIN_SCALE } from '../brand'
 import { Mark } from './Mark'
 import { Avatar, Button } from './ui'
@@ -127,6 +128,7 @@ export function Layout() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            <HeaderSearch />
             <ThemeMenu
               theme={theme}
               choice={themeChoice}

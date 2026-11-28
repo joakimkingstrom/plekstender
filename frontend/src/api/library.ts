@@ -189,6 +189,17 @@ export function useSongVersions(serverId: number, key: number | null) {
   })
 }
 
+/** Artists, albums and songs whose names contain the text (the header's search). */
+export function useLibrarySearch(serverId: number | null, q: string) {
+  return useQuery({
+    queryKey: ['servers', serverId, 'library', 'search', q],
+    enabled: serverId !== null && q.length > 0,
+    placeholderData: (previous) => previous,
+    queryFn: () =>
+      unwrap(api.GET('/api/servers/{server_id}/library/search', { params: { path: { server_id: serverId! }, query: { q } } })),
+  })
+}
+
 export function useAlbum(serverId: number, key: number) {
   return useQuery({
     queryKey: libraryKeys.album(serverId, key),
