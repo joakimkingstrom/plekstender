@@ -8,6 +8,13 @@ let saved: unknown = null
 
 beforeEach(() => {
   saved = null
+  localStorage.clear()
+  // A wide window: the background options show.
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('min-width'),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }))
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: Request) => {

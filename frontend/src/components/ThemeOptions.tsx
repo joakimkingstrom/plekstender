@@ -1,5 +1,5 @@
 import { useMe, useSetPreferences } from '../api/hooks'
-import { useReducedMotion } from '../motion'
+import { useReducedMotion, useRoomForBackgrounds } from '../motion'
 import { useTheme, type ThemeChoice } from '../theme'
 import type { BackgroundSettings } from './CoverBackground'
 import { Segmented } from './Segmented'
@@ -27,6 +27,7 @@ export function ThemeOptions() {
   const me = useMe()
   const save = useSetPreferences()
   const reduced = useReducedMotion()
+  const room = useRoomForBackgrounds()
   const [, setChoice, choice] = useTheme()
   const background: Required<BackgroundSettings> = { ...DEFAULT, ...me.data?.preferences?.background }
   const set = (patch: Partial<BackgroundSettings>) => save.mutate({ background: { ...background, ...patch } })
@@ -51,57 +52,60 @@ export function ThemeOptions() {
           className="w-full"
         />
       </div>
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted">Background</p>
-        <Segmented
-          label="Background"
-          value={background.mode}
-          onChange={(mode) => set({ mode })}
-          options={[
-            ['off', 'Off'],
-            ['covers', 'Covers'],
-            ['colour', 'Colour'],
-          ]}
-          className="w-full"
-        />
-        {background.mode === 'covers' && (
-          <p className="text-xs text-muted">Light covers in light mode, dark ones in dark mode.</p>
-        )}
-        {background.mode === 'colour' && (
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Colour">
-            {FAMILIES.map(([key, label, swatch]) => (
-              <button
-                key={key}
-                type="button"
-                role="radio"
-                aria-checked={background.family === key}
-                aria-label={label}
-                title={label}
-                onClick={() => set({ family: key })}
-                className={`size-6 rounded-full ring-1 ring-border ${background.family === key ? 'ring-2 ring-text ring-offset-2 ring-offset-surface' : ''}`}
-                style={{ background: swatch }}
-              />
-            ))}
-          </div>
-        )}
-        {background.mode !== 'off' && (
+      {/* Not on phones: the page covers nearly all of the covers there. */}
+      {room && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Background</p>
           <Segmented
-            label="Speed"
-            value={background.speed}
-            onChange={(speed) => set({ speed })}
+            label="Background"
+            value={background.mode}
+            onChange={(mode) => set({ mode })}
             options={[
-              ['slow', 'Slow'],
-              ['normal', 'Normal'],
-              ['fast', 'Fast'],
+              ['off', 'Off'],
+              ['covers', 'Covers'],
+              ['colour', 'Colour'],
             ]}
-            size="sm"
             className="w-full"
           />
-        )}
-        {background.mode !== 'off' && reduced && (
-          <p className="text-xs text-muted">Your system asks for less motion, so no covers are shown.</p>
-        )}
-      </div>
+          {background.mode === 'covers' && (
+            <p className="text-xs text-muted">Light covers in light mode, dark ones in dark mode.</p>
+          )}
+          {background.mode === 'colour' && (
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Colour">
+              {FAMILIES.map(([key, label, swatch]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={background.family === key}
+                  aria-label={label}
+                  title={label}
+                  onClick={() => set({ family: key })}
+                  className={`size-6 rounded-full ring-1 ring-border ${background.family === key ? 'ring-2 ring-text ring-offset-2 ring-offset-surface' : ''}`}
+                  style={{ background: swatch }}
+                />
+              ))}
+            </div>
+          )}
+          {background.mode !== 'off' && (
+            <Segmented
+              label="Speed"
+              value={background.speed}
+              onChange={(speed) => set({ speed })}
+              options={[
+                ['slow', 'Slow'],
+                ['normal', 'Normal'],
+                ['fast', 'Fast'],
+              ]}
+              size="sm"
+              className="w-full"
+            />
+          )}
+          {background.mode !== 'off' && reduced && (
+            <p className="text-xs text-muted">Your system asks for less motion, so no covers are shown.</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

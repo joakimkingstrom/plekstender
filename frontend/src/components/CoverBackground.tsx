@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { api, unwrap, type Schemas } from '../api/client'
 import { imageUrl, useActiveServer } from '../api/library'
-import { useReducedMotion } from '../motion'
+import { useReducedMotion, useRoomForBackgrounds } from '../motion'
 import type { Theme } from '../theme'
 
 export type BackgroundSettings = Schemas['BackgroundSettings']
@@ -32,8 +32,8 @@ function drift(n: number) {
 /**
  * Album covers slowly panning and zooming behind the pages (Ken Burns), one after another
  * with a cross-fade, dimmed so the page stays readable: light covers in light mode and dark
- * ones in dark mode, or one colour family's. Nothing at all when it's off or the system asks
- * for less motion.
+ * ones in dark mode, or one colour family's. Nothing at all when it's off, the system asks
+ * for less motion, or the window is phone-sized.
  */
 export function CoverBackground({ theme, settings }: { theme: Theme; settings: BackgroundSettings | undefined }) {
   const { active } = useActiveServer()
@@ -41,7 +41,8 @@ export function CoverBackground({ theme, settings }: { theme: Theme; settings: B
   const mode = settings?.mode ?? 'off'
   const family = settings?.family ?? 'blue'
   const seconds = SECONDS[settings?.speed ?? 'normal']
-  const on = mode !== 'off' && !reduced && active !== undefined
+  const room = useRoomForBackgrounds()
+  const on = mode !== 'off' && !reduced && room && active !== undefined
   const covers = useQuery({
     queryKey: ['servers', active?.id, 'backgrounds', mode, mode === 'colour' ? family : theme],
     enabled: on,
