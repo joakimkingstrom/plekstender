@@ -88,7 +88,8 @@ function songs(n: number) {
 }
 
 /** The library's songs by type of file: the four most common each their own colour, the
- * rest together as "Other" (named in the legend), with how much room they take. */
+ * rest together as "Other" (named in the legend), with how much room each takes, and how
+ * many files in all in the middle. */
 function FileTypes({ serverId }: { serverId: number }) {
   const types = useFileTypes(serverId)
   if (!types.data?.length) return null
@@ -117,15 +118,16 @@ function FileTypes({ serverId }: { serverId: number }) {
           : size(restBytes),
     })
   }
-  const total = types.data.reduce((n, t) => n + t.bytes, 0)
+  const files = types.data.reduce((n, t) => n + t.tracks, 0)
   const partly = types.data.some((t) => t.sized < t.tracks)
   return (
     <Card title="Types of file">
+      {/* How many files in the middle; how much room each type takes is in the list. */}
       <Donut
         slices={slices}
         caption="Songs by type of file"
         unit={songs}
-        center={sized ? { value: formatBytes(total), label: partly ? 'so far' : 'in all' } : undefined}
+        center={{ value: formatCount(files), label: files === 1 ? 'file' : 'files' }}
       />
       {sized && partly && (
         <p className="mt-3 text-xs text-muted">Not every file's size is known yet: the next full library sync fills them in.</p>
