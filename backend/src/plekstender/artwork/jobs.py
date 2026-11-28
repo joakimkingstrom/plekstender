@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import random
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from plekstender.artwork import service as art
 from plekstender.artwork import sources, undo
 from plekstender.artwork.images import Transform
+from plekstender.artwork.text import TextLogo
 from plekstender.config import Settings
 from plekstender.db.instance import get_fanart_api_key
 from plekstender.db.models import Artist, ArtistArtwork, ArtworkJob, UserItemState, UserServer
@@ -33,12 +35,18 @@ def utcnow() -> dt.datetime:
 
 
 async def job_artists(db: AsyncSession, job: ArtworkJob, us: UserServer) -> list[int]:
-    """The artists a job covers: the given keys, or every artist with the given status."""
+    """The artists a job covers: the given keys, or every artist with the given status
+    ("all": any) whose name contains `q`, as the Artwork page lists them."""
     keys = job.params.get("rating_keys")
     if keys:
         return [int(k) for k in keys]
     status = job.params.get("status", "none")
+    q = str(job.params.get("q") or "").strip()
     current = func.coalesce(ArtistArtwork.status, "none")
+    filters = [] if status == "all" else [current == status]
+    if q:
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        filters.append(Artist.title.ilike(f"%{escaped}%", escape="\\"))
     rows = await db.scalars(
         select(Artist.rating_key)
         .join(
@@ -55,7 +63,7 @@ async def job_artists(db: AsyncSession, job: ArtworkJob, us: UserServer) -> list
         .where(
             Artist.server_id == us.server_id,
             Artist.section_key.in_(us.music_section_keys),
-            current == status,
+            *filters,
         )
         .order_by(func.lower(func.coalesce(Artist.title_sort, Artist.title)))
     )
@@ -113,6 +121,54 @@ async def run_fanart(
         await db.commit()
 
 
+async def run_text(
+    db: AsyncSession, http: httpx.AsyncClient, settings: Settings, job: ArtworkJob, us: UserServer
+) -> None:
+    """Give each artist a text logo of their name: in the job's one font and colour, or one
+    picked at random from its fonts and colours (the same pick if the job is run again)."""
+    client = client_for(settings, http, us)
+    transform = Transform.model_validate(job.params.get("transform") or {})
+    fonts = [str(f) for f in job.params.get("fonts") or []]
+    colours = [str(c) for c in job.params.get("colours") or []]
+    case = str(job.params.get("case") or "none")
+    if not fonts or not colours:
+        raise art.ArtworkError("Choose at least one font and one colour.")
+    keys = await job_artists(db, job, us)
+    stats = {"applied": 0, "failed": 0, "folder_errors": 0, **job.stats}
+    done = int(job.progress.get("done", 0))  # resume after a restart
+    job.progress = {"done": done, "total": len(keys)}
+    await db.commit()
+    for key in keys[done:]:
+        await check_stop(db, ArtworkJob, job.id)
+        artist = await db.get(Artist, (us.server_id, key))
+        if artist is not None:
+            pick = random.Random(f"{job.id}:{key}")  # noqa: S311 - not for security
+            try:
+                logo = TextLogo(
+                    text=artist.title[:120],
+                    font=pick.choice(fonts),
+                    color=pick.choice(colours),
+                    case=case,
+                )
+                spec = art.SourceSpec(kind="text", text=logo)
+                before = await undo.remember(db, client, job, "artists", key)
+                applied = await art.apply(
+                    db, http, settings, client, artist, spec, transform, us.user_id
+                )
+                undo.keep(job, "artists", key, before)
+                stats["applied"] += 1
+                if applied.folder_error:
+                    stats["folder_errors"] += 1
+            except (art.ArtworkError, ValueError) as exc:
+                log.info("text logo for %s failed: %s", artist.title, exc)
+                stats["failed"] += 1
+        done += 1
+        job.progress = {"done": done, "total": len(keys)}
+        job.stats = dict(stats)
+        job.updated_at = utcnow()
+        await db.commit()
+
+
 async def wind_up(
     db: AsyncSession,
     http: httpx.AsyncClient,
@@ -144,6 +200,7 @@ def _runners() -> dict[str, Runner]:
 
     return {
         "fanart": run_fanart,
+        "text": run_text,
         "export": packs.run_export,
         "import": packs.run_import,
         "covers": covers.run_best_covers,

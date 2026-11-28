@@ -262,6 +262,16 @@ export function useStartFanartJob(serverId: number) {
   })
 }
 
+/** Text logos of their names for many artists (one font and colour, or a random pick). */
+export function useStartTextJob(serverId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Schemas['TextJobIn']) =>
+      unwrap(api.POST('/api/servers/{server_id}/artwork/jobs/text', { params: { path: { server_id: serverId } }, body })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...artworkKeys.all(serverId), 'jobs'] }),
+  })
+}
+
 export function useFolderSettings(serverId: number) {
   return useQuery({
     queryKey: [...artworkKeys.all(serverId), 'folder'],

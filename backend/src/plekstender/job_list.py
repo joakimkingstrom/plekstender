@@ -64,6 +64,7 @@ FILE_JOBS = {
 }
 ARTWORK_JOBS = {
     "fanart": "Artist logos from fanart.tv",
+    "text": "Text logos for artists",
     "export": "Exporting a logo pack",
     "import": "Importing a logo pack",
     "covers": "Best matches for album covers",
