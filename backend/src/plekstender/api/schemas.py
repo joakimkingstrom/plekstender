@@ -445,6 +445,20 @@ class TrackOut(BaseModel):
     )
 
 
+class SearchHit(BaseModel):
+    rating_key: int
+    title: str
+    thumb: str | None
+    subtitle: str | None = Field(description="Albums and songs: the artist (songs: · album).")
+    album_rating_key: int | None = Field(default=None, description="Songs: their album.")
+
+
+class LibrarySearchOut(BaseModel):
+    artists: list[SearchHit]
+    albums: list[SearchHit]
+    songs: list[SearchHit]
+
+
 class SimilarArtistOut(BaseModel):
     name: str
     rating_key: int | None  # set when the artist is in your library

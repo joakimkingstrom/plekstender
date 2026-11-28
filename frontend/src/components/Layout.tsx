@@ -6,6 +6,7 @@ import { InstallPrompt } from './InstallPrompt'
 import { UpdateBanner } from './UpdateBanner'
 import { applyAccent } from '../accent'
 import { useTheme } from '../theme'
+import { HeaderSearch } from './HeaderSearch'
 import { SPIN_MS, SPIN_SCALE } from '../brand'
 import { Mark } from './Mark'
 import { Avatar, Button } from './ui'
@@ -124,6 +125,7 @@ export function Layout() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            <HeaderSearch />
             <button
               type="button"
               onClick={() => {
