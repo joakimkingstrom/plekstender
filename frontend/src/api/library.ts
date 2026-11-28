@@ -175,6 +175,20 @@ export function useArtist(serverId: number, key: number) {
   })
 }
 
+/** Every release of a song by the same artist (remasters, live, demos…), oldest first. */
+export function useSongVersions(serverId: number, key: number | null) {
+  return useQuery({
+    queryKey: [...libraryKeys.library(serverId), 'versions', key],
+    enabled: key !== null,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/tracks/{rating_key}/versions', {
+          params: { path: { server_id: serverId, rating_key: key! } },
+        }),
+      ),
+  })
+}
+
 /** Artists, albums and songs whose names contain the text (the header's search). */
 export function useLibrarySearch(serverId: number | null, q: string) {
   return useQuery({
