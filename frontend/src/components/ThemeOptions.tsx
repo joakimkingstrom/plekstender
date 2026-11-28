@@ -124,7 +124,7 @@ function BlurSlider({ value, onChange }: { value: number; onChange: (blur: numbe
     <label className="block space-y-1">
       <span className="flex justify-between text-xs text-muted">
         <span>Blur behind the page</span>
-        <span className="tabular-nums">{blur === 0 ? 'Off' : `${blur} px`}</span>
+        <span className="tabular-nums">{blur === 0 ? 'Off' : `${Math.round((100 * blur) / MAX_BLUR)}%`}</span>
       </span>
       <input
         type="range"
@@ -139,7 +139,7 @@ function BlurSlider({ value, onChange }: { value: number; onChange: (blur: numbe
           window.clearTimeout(timer.current)
           timer.current = window.setTimeout(() => onChange(next), 400)
         }}
-        className="w-full accent-[var(--color-accent)]"
+        className="accent-range w-full"
       />
     </label>
   )

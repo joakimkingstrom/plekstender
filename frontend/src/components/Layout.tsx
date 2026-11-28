@@ -158,25 +158,32 @@ export function Layout() {
         </div>
       </header>
 
-      <InstallPrompt />
-      <UpdateBanner />
-      {!online && (
-        <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-xs text-warn">
-          You're offline. What's on screen may be out of date, and changes can't be saved until you're back online.
-        </div>
-      )}
-      <main
-        className={`relative mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:pb-6 ${
-          focus ? 'max-md:pb-[calc(env(safe-area-inset-bottom)+1rem)] max-md:pt-[calc(env(safe-area-inset-top)+0.5rem)]' : 'pb-24'
-        }`}
-      >
+      {/* Everything under the header, over the blur (when there is one). */}
+      <div className="relative flex flex-1 flex-col">
         {blurred && (
-          // Behind the content, over the covers: past the content's sides on wide windows (the
-          // fade happens outside the cards), within them on narrower ones (nothing to scroll).
-          <div aria-hidden className="page-blur pointer-events-none absolute inset-x-0 -inset-y-2 -z-[5] xl:-inset-x-16" />
+          // Behind the content, over the covers, from the header to the bottom of the page: past
+          // the content's sides on wide windows (the fade happens outside the cards), within them
+          // on narrower ones (nothing to scroll).
+          <div
+            aria-hidden
+            className="page-blur pointer-events-none absolute inset-y-0 left-1/2 -z-[5] w-full max-w-6xl -translate-x-1/2 xl:max-w-[80rem]"
+          />
         )}
-        <Outlet />
-      </main>
+        <InstallPrompt />
+        <UpdateBanner />
+        {!online && (
+          <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-xs text-warn">
+            You're offline. What's on screen may be out of date, and changes can't be saved until you're back online.
+          </div>
+        )}
+        <main
+          className={`mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:pb-6 ${
+            focus ? 'max-md:pb-[calc(env(safe-area-inset-bottom)+1rem)] max-md:pt-[calc(env(safe-area-inset-top)+0.5rem)]' : 'pb-24'
+          }`}
+        >
+          <Outlet />
+        </main>
+      </div>
       <AchievementCelebration enabled={me.preferences?.achievements !== false} />
 
       {/* Mobile bottom navigation */}

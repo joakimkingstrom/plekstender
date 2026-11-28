@@ -69,7 +69,7 @@ it('chooses light, dark or the system’s, and the covers behind the pages', asy
   // The blur behind the page: at once while dragging, saved a moment later.
   fireEvent.change(screen.getByRole('slider', { name: /Blur behind the page/ }), { target: { value: '12' } })
   expect(document.documentElement.style.getPropertyValue('--page-blur')).toBe('12px')
-  expect(screen.getByText('12 px')).toBeInTheDocument()
+  expect(screen.getByText('50%')).toBeInTheDocument()
   await vi.waitFor(() => expect(preferences).toMatchObject({ background: { blur: 12 } }))
   // Escape closes it.
   fireEvent.keyDown(document, { key: 'Escape' })
