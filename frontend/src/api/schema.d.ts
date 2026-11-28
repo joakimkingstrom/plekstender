@@ -6129,6 +6129,25 @@ export interface components {
             /** Thumb */
             thumb: string | null;
         };
+        /** DayGigOut */
+        DayGigOut: {
+            /** Id */
+            id: number;
+            /**
+             * Artists
+             * @description On the bill, headliners first.
+             */
+            artists: string[];
+            /** Venue */
+            venue: string | null;
+            /** City */
+            city: string | null;
+            /**
+             * Setlist Url
+             * @description Its setlist on setlist.fm, if it has one.
+             */
+            setlist_url: string | null;
+        };
         /** DayTrackOut */
         DayTrackOut: {
             /** Name */
@@ -6163,6 +6182,11 @@ export interface components {
             album_rating_key: number | null;
             /** Album Thumb */
             album_thumb: string | null;
+            /**
+             * Gigs
+             * @description Gigs you went to on this date that year.
+             */
+            gigs?: components["schemas"]["DayGigOut"][];
         };
         /** DecadeCount */
         DecadeCount: {
@@ -8934,7 +8958,7 @@ export interface components {
             date: string;
             /**
              * Years
-             * @description Earlier years with listens on this date.
+             * @description Earlier years with listens or a gig on this date, the latest first.
              */
             years: components["schemas"]["DayYearOut"][];
         };

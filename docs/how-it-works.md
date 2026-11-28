@@ -489,6 +489,9 @@ All from the whole history (Plex plays and imports, `history/insights.py`), matc
 ## Search in the header (28 Nov)
 - A search field in the header (before the theme button; on phones a magnifier icon that opens a full-width field over the header). `GET /api/servers/{id}/library/search?q=` finds up to 6 artists, albums and songs whose names contain the text, the exact name first, then names starting with it, then the most popular; a song released more than once is listed once. Results drop down in groups (a combobox and listbox: ↑ ↓ move, Enter opens the one picked or the first, Escape clears, then closes). Artists and albums open their pages, songs their album's.
 
+## On this day: gigs (28 Nov)
+- Home → On this day also shows the gigs you went to (Gigs → Been to) on today's date in earlier years (`insights.gigs_on_this_day`; `DayYearOut.gigs`): a ticket icon, the bill (headliners first), venue and city, and a link to the setlist on setlist.fm when it has one, above that year's plays. A year with a gig and nothing played is listed too. On 28 February in a year without a 29th, gigs on 29 February count. This year's gigs don't.
+
 ## Gig playlists (25 Nov)
 - Opt-in on the profile (`preferences.gig_playlists.before` / `.after`, off by default); needs the admin's setlist.fm key. An hourly worker job (`gig-playlists`, `gigs/playlists.py`) runs for the people who turned either on; turning one on also asks for a run straight away (`POST /api/gigs/playlists/check`).
 - **Before:** starred Live gigs (merged across sources) in the next 30 days. For each of the user's artists on the bill (up to 4, headliners last), their recent setlists on setlist.fm (by MBID when the library has one, else name; past shows with songs, the last 10): songs played at a quarter of them or more (fewer than 8: the 15 most played), ordered by their average place in the set. Refreshed weekly until the gig.

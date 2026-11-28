@@ -1165,6 +1165,14 @@ class DayTrackOut(BaseModel):
     listens: int
 
 
+class DayGigOut(BaseModel):
+    id: int
+    artists: list[str] = Field(description="On the bill, headliners first.")
+    venue: str | None
+    city: str | None
+    setlist_url: str | None = Field(description="Its setlist on setlist.fm, if it has one.")
+
+
 class DayYearOut(BaseModel):
     year: int
     listens: int
@@ -1173,11 +1181,16 @@ class DayYearOut(BaseModel):
     album: str | None = Field(description="The day's most played album.")
     album_rating_key: int | None
     album_thumb: str | None
+    gigs: list[DayGigOut] = Field(
+        default_factory=list, description="Gigs you went to on this date that year."
+    )
 
 
 class OnThisDayOut(BaseModel):
     date: dt.date = Field(description="Today, in the time zone asked for.")
-    years: list[DayYearOut] = Field(description="Earlier years with listens on this date.")
+    years: list[DayYearOut] = Field(
+        description="Earlier years with listens or a gig on this date, the latest first."
+    )
 
 
 class ShareOut(BaseModel):

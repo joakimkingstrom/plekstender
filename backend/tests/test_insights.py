@@ -203,3 +203,62 @@ async def test_rediscover_and_forgotten_playlist(app: FastAPI, plex: FakePlex) -
     assert [s["title"] for s in back["forgotten"]["items"]] == ["Glory Box"]
     other = await owner.put(f"/api/stats/rediscover/hidden/304?server_id={sid + 9}", headers=CSRF)
     assert other.status_code == 404
+
+
+async def test_gigs_on_this_day(app: FastAPI, plex: FakePlex) -> None:
+    """Gigs you went to on today's date in earlier years, with or without plays that day."""
+    from plekstender.db import get_sessionmaker
+    from plekstender.db.models import Gig, User
+    from plekstender.history.insights import gigs_on_this_day
+
+    owner, sid = await owner_with_library(app, plex)
+    user_id = (await owner.get("/api/auth/me")).json()["id"]
+    today = dt.datetime.now(dt.UTC).date()
+
+    def back(years: int, days: int = 0) -> dt.date:
+        try:
+            day = today.replace(year=today.year - years)
+        except ValueError:  # 29 February
+            day = today.replace(year=today.year - years, day=28)
+        return day - dt.timedelta(days=days)
+
+    setlist = {
+        "artist": "Radiohead",
+        "url": "https://www.setlist.fm/x.html",
+        "songs": [{"name": "Lucky"}],
+    }
+    async with get_sessionmaker()() as db:
+        on_the_day = Gig(
+            user_id=user_id, date=back(5), venue="The O2", city="London", setlists=[setlist],
+            artists=[{"name": "Radiohead"}, {"name": "Caribou"}],
+        )  # fmt: skip
+        another_day = Gig(user_id=user_id, date=back(5, days=3), artists=[{"name": "Muse"}])
+        this_year = Gig(user_id=user_id, date=today, artists=[{"name": "Portishead"}])
+        db.add_all([on_the_day, another_day, this_year])
+        await db.commit()
+
+    found = (await owner.get("/api/stats/on-this-day", params={"server_id": sid})).json()
+    years = {y["year"]: y for y in found["years"]}
+    assert today.year not in years  # this year's doesn't count
+    five = years[today.year - 5]
+    assert five["listens"] == 0  # a year with only a gig is listed too
+    assert five["gigs"] == [
+        {
+            "id": five["gigs"][0]["id"],
+            "artists": ["Radiohead", "Caribou"],
+            "venue": "The O2",
+            "city": "London",
+            "setlist_url": "https://www.setlist.fm/x.html",
+        }
+    ]
+
+    # 29 February is remembered on 28 February in years without one.
+    async with get_sessionmaker()() as db:
+        user = await db.get(User, user_id)
+        assert user is not None
+        db.add(Gig(user_id=user_id, date=dt.date(2024, 2, 29), venue="Leap", artists=[]))
+        await db.commit()
+        assert [
+            g.venue for g in (await gigs_on_this_day(db, user_id, dt.date(2027, 2, 28)))[2024]
+        ] == ["Leap"]
+        assert 2024 not in await gigs_on_this_day(db, user_id, dt.date(2028, 2, 28))  # a leap year
