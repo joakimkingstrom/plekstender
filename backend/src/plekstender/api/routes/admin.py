@@ -574,6 +574,7 @@ async def _cover_songs_out(db: DbDep, settings: SettingsDep) -> CoverSongsOut:
         enabled=chosen.enabled,
         secondhandsongs=chosen.secondhandsongs,
         musicbrainz=chosen.musicbrainz,
+        song_versions=chosen.song_versions,
         api_key=chosen.api_key is not None,
         per_hour=limits.per_hour,
         per_day=limits.per_day,
@@ -615,6 +616,7 @@ async def put_cover_songs_settings(
             enabled=body.enabled,
             secondhandsongs=body.secondhandsongs,
             musicbrainz=body.musicbrainz,
+            song_versions=body.song_versions,
             api_key=key,
         ),
     )

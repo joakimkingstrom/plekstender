@@ -35,7 +35,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 import httpx
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,6 +88,7 @@ class Found:
     original_url: str | None = None
     error: str | None = None
     source: str = "secondhandsongs"
+    work_url: str | None = None  # the song's page (API), from a cover's page; not kept
 
 
 def site_url(uri: str | None) -> str | None:
@@ -201,17 +202,23 @@ async def look_up_original(client: Client, performance_url: str, artist: str) ->
         detail = await client.get(performance_url.replace(SITE, API, 1))
     except (httpx.HTTPStatusError, ValueError) as exc:
         return Found("error", client.requests - before, error=str(exc)[:500])
-    originals: list[dict[str, Any]] = [
-        o["original"]
+    works: list[dict[str, Any]] = [
+        o
         for o in (detail or {}).get("originals") or []
         if isinstance(o, dict) and isinstance(o.get("original"), dict)
     ]
-    if not originals:
+    if not works:
         return Found("unknown", client.requests - before)
-    original = originals[0]
+    original = works[0]["original"]
+    work_url = str(works[0].get("uri") or "") or None
     if normalise_artist(_name(original)) == normalise_artist(artist):
         # Their own song, recorded again.
-        return Found("original", client.requests - before, performance_url=performance_url)
+        return Found(
+            "original",
+            client.requests - before,
+            performance_url=performance_url,
+            work_url=work_url,
+        )
     return Found(
         "cover",
         client.requests - before,
@@ -220,7 +227,41 @@ async def look_up_original(client: Client, performance_url: str, artist: str) ->
         performance_url=performance_url,
         # Without the original's page, the cover's: either way no longer waiting for it.
         original_url=site_url(original.get("uri")) or performance_url,
+        work_url=work_url,
     )
+
+
+VERSIONS_FROM = 2  # other versions in the library waiting, for a song's page to be worth it
+
+
+def settle_versions(
+    work: dict[str, Any], waiting: set[tuple[str, str]]
+) -> dict[tuple[str, str], Found]:
+    """From a song's page (every version of it, the original first-recorded one named): the
+    versions by artists in the library under the same title, as (artist key, title key) in
+    `waiting`, each an original or a cover of it."""
+    original: dict[str, Any] = work["original"] if isinstance(work.get("original"), dict) else {}
+    original_key = normalise_artist(_name(original))
+    out: dict[tuple[str, str], Found] = {}
+    for version in work.get("versions") or []:
+        if not isinstance(version, dict) or not version.get("uri"):
+            continue
+        key = (normalise_artist(_name(version)), normalise_title(str(version.get("title") or "")))
+        if key not in waiting or key in out:
+            continue
+        page = site_url(str(version["uri"]))
+        if version.get("isOriginal") is True or key[0] == original_key:
+            out[key] = Found("original", 0, performance_url=page)
+        else:
+            out[key] = Found(
+                "cover",
+                0,
+                original_artist=_name(original) or None,
+                original_title=str(original.get("title") or "") or None,
+                performance_url=page,
+                original_url=site_url(original.get("uri")) or page,
+            )
+    return out
 
 
 # --- MusicBrainz -----------------------------------------------------------------------------
@@ -380,6 +421,22 @@ _MB_DUE = text(
 )
 
 
+# Library songs with one of these titles, by other artists, still to be looked up on
+# SecondHandSongs (as _SHS_DUE has it): what a song's page could settle.
+_WAITING = text(
+    """
+    SELECT DISTINCT t.artist_key, t.title_norm
+    FROM tracks t
+    LEFT JOIN song_covers c USING (artist_key, title_norm)
+    WHERE t.title_norm = ANY(:titles) AND t.artist_key <> :artist AND t.artist_key <> ''
+      AND (c.artist_key IS NULL
+           OR (c.status = 'error' AND c.checked_at < :error_before)
+           OR (c.status = 'unknown'
+               AND (c.checked_at < :unknown_before OR c.tried NOT LIKE '%secondhandsongs%')))
+    """
+)
+
+
 async def requests_since(db: AsyncSession, since: dt.datetime) -> int:
     used = await db.scalar(
         select(func.coalesce(func.sum(SongCover.requests), 0)).where(SongCover.checked_at >= since)
@@ -438,16 +495,50 @@ def _limits(chosen: CoverSongsSettings) -> Limits:
 
 
 async def _secondhandsongs(
-    db: AsyncSession, client: Client, allowed: int, params: dict[str, Any]
+    db: AsyncSession, client: Client, allowed: int, params: dict[str, Any], versions: bool
 ) -> set[tuple[str, str]]:
     """Covers' originals left from earlier runs, then artists (and their covers' originals),
     until the run's budget is spent. Raises Busy."""
     done: set[tuple[str, str]] = set()
+    settled: set[tuple[str, str]] = set()  # by a song's other versions, this run
 
     async def original(artist_key: str, title: str, artist: str, url: str, tried: str) -> None:
         found = await look_up_original(client, url, artist)
         await _save(db, artist_key, title, found, tried.split(","), more_requests=True)
         done.add((artist_key, title))
+        if versions and found.work_url and client.requests + 1 <= allowed:
+            await other_versions(artist_key, title, found)
+
+    async def other_versions(artist_key: str, title: str, found: Found) -> None:
+        """The song's page, when two or more of its versions in the library are waiting: it
+        settles them all (one request instead of one each)."""
+        titles = {title}
+        if found.original_title:
+            titles.add(normalise_title(found.original_title))
+        waiting = {
+            (r.artist_key, r.title_norm)
+            for r in (
+                await db.execute(_WAITING, params | {"titles": list(titles), "artist": artist_key})
+            ).all()
+        } - done
+        if len(waiting) < VERSIONS_FROM:
+            return
+        before = client.requests
+        try:
+            work = await client.get(str(found.work_url))
+        except httpx.HTTPStatusError, ValueError:
+            work = None
+        # The request counts against the cover whose page led here.
+        await db.execute(
+            update(SongCover)
+            .where(SongCover.artist_key == artist_key, SongCover.title_norm == title)
+            .values(requests=SongCover.requests + (client.requests - before))
+        )
+        await db.commit()
+        for key, versions_found in settle_versions(work or {}, waiting).items():
+            await _save(db, key[0], key[1], versions_found, ["secondhandsongs", "versions"])
+            done.add(key)
+            settled.add(key)
 
     pending = (await db.execute(_PENDING, params | {"limit": allowed})).all()
     for row in pending:
@@ -456,17 +547,27 @@ async def _secondhandsongs(
         await original(row.artist_key, row.title_norm, row.artist, row.performance_url, row.tried)
     artists = (await db.execute(_ARTISTS, params | {"limit": allowed // 2 + 1})).all()
     for artist in artists:
+        # Leaving out songs settled by their song's other versions since this run began.
+        due = [
+            (title, tried, fresh)
+            for title, tried, fresh in zip(artist.titles, artist.tried, artist.fresh, strict=True)
+            if (artist.artist_key, title) not in settled
+        ]
+        if not due:
+            continue
         if client.requests + 2 > allowed:  # an artist takes two
             break
         # (Artists sharing a name take a request each more, a little past the budget maybe.)
-        found_all = await look_up_artist(client, artist.artist, list(artist.titles))
+        found_all = await look_up_artist(client, artist.artist, [t for t, _, _ in due])
         tried_now: dict[str, str] = {}
-        for title, tried, fresh in zip(artist.titles, artist.tried, artist.fresh, strict=True):
+        for title, tried, fresh in due:
             tried_now[title] = ",".join(_tried(tried, fresh, "secondhandsongs"))
             await _save(db, artist.artist_key, title, found_all[title], tried_now[title].split(","))
             done.add((artist.artist_key, title))
-        for title in artist.titles:
+        for title, _, _ in due:
             found = found_all[title]
+            if (artist.artist_key, title) in settled:
+                continue  # settled by another cover's song page just now
             if found.status == "cover" and found.performance_url:
                 if client.requests + 1 > allowed:
                     return done  # the next run's
@@ -498,7 +599,7 @@ async def run(
         allowed = await budget(db, limits, now)
         client = Client(http, chosen.api_key, limits)
         try:
-            done |= await _secondhandsongs(db, client, allowed, params)
+            done |= await _secondhandsongs(db, client, allowed, params, chosen.song_versions)
         except Busy as exc:
             log.info("cover songs on SecondHandSongs paused: %s", exc)
     if chosen.musicbrainz:
@@ -522,6 +623,7 @@ _LEFT = text(
     SELECT count(*) AS songs,
            count(status) AS checked,
            count(*) FILTER (WHERE status = 'cover') AS covers,
+           count(*) FILTER (WHERE tried LIKE '%versions%') AS by_versions,
            count(*) FILTER (WHERE {_SHS_DUE}) AS songs_due,
            count(DISTINCT artist_key) FILTER (WHERE {_SHS_DUE}) AS artists_due,
            count(*) FILTER (WHERE status = 'cover' AND source = 'secondhandsongs'
@@ -553,5 +655,6 @@ async def progress(db: AsyncSession, now: dt.datetime | None = None) -> dict[str
         "songs": row.songs,
         "checked": row.checked,
         "covers": row.covers,
+        "by_versions": row.by_versions,
         "requests_left": requests_left,
     }

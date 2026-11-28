@@ -2478,6 +2478,11 @@ class CoverSongsIn(BaseModel):
     musicbrainz: bool = Field(
         default=True, description="Ask MusicBrainz (songs with a recording MBID)."
     )
+    song_versions: bool = Field(
+        default=True,
+        description="Settle the library's other versions of a cover's song from its page on "
+        "SecondHandSongs (one request, only when the library has two or more of them).",
+    )
     api_key: str | None = Field(
         default=None,
         pattern=r"^[A-Za-z0-9\-]{20,64}$",
@@ -2490,12 +2495,16 @@ class CoverSongsOut(BaseModel):
     enabled: bool
     secondhandsongs: bool
     musicbrainz: bool
+    song_versions: bool
     api_key: bool = Field(description="A SecondHandSongs API key is saved (higher limits).")
     per_hour: int = Field(description="SecondHandSongs requests an hour Plekstender allows.")
     per_day: int = Field(description="And a day.")
     songs: int = Field(description="Different songs in the libraries.")
     checked: int = Field(description="Of those, looked up.")
     covers: int = Field(description="Of those, covers.")
+    by_versions: int = Field(
+        default=0, description="Of those looked up, settled from a song's other versions."
+    )
     requests_left: int = Field(
         description="About how many SecondHandSongs requests looking up the rest takes."
     )
