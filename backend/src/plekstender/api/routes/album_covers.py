@@ -89,6 +89,8 @@ def _shown(show: str, q: str | None, state: Any, kept: Any) -> list[Any]:
         where += [state.in_(("missing", "low")), ~kept]
     elif show in ("missing", "low"):
         where += [state == show, ~kept]
+    elif show == "ok":
+        where.append(state == "ok")
     if q:
         like = _like(q)
         where.append(
@@ -531,8 +533,9 @@ async def apply_best(
 async def start_best(
     server_id: int, body: BestCoversJobIn, db: DbDep, user: UserDep
 ) -> ArtworkJobOut:
-    """Apply the best match to every album the list shows with this filter and search (in
-    the background, a few seconds an album)."""
+    """Apply the best match to every album the list shows with this filter and search, or to
+    the ticked ones (in the background, a few seconds an album). A cover is only replaced by
+    a bigger one, so "ok" upgrades the fine ones where a bigger version is found."""
     _check_low(body.low_px)
     us = await owner_server(db, user, server_id)
     sources = await _best_sources(db, body.sources or load_preferences(user).best_cover_sources)
@@ -560,7 +563,14 @@ async def start_best(
                     AlbumCover.rating_key == Album.rating_key,
                 ),
             )
-            .where(*where, *_shown(body.show, body.q, cover_state, kept))
+            .where(
+                *where,
+                *(
+                    [Album.rating_key.in_(body.rating_keys)]
+                    if body.rating_keys
+                    else _shown(body.show, body.q, cover_state, kept)
+                ),
+            )
             .order_by(
                 case((cover_state == "missing", 0), else_=1),
                 shorter.asc().nulls_first(),

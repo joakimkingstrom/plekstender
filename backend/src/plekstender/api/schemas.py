@@ -1044,7 +1044,7 @@ class AcoustIdKeyOut(BaseModel):
 
 
 AlbumCoverState = Literal["missing", "low", "ok", "unchecked"]
-AlbumCoverFilter = Literal["needs", "missing", "low", "all"]
+AlbumCoverFilter = Literal["needs", "missing", "low", "ok", "all"]
 # Under how many pixels (on its shorter side) a cover counts as low resolution.
 LOW_RESOLUTIONS = (600, 1000, 1500)
 # name: by artist then album; added: newest in Plex first; changed: the covers changed here
@@ -1142,8 +1142,13 @@ class ArtworkJobOut(BaseModel):
 
 
 class BestCoversJobIn(BaseModel):
-    show: Literal["needs", "missing", "low"] = Field(
-        default="needs", description="The albums listed with this filter (and search)."
+    show: Literal["needs", "missing", "low", "ok"] = Field(
+        default="needs",
+        description="The albums listed with this filter (and search); ok: upgrade covers "
+        "that are fine (a cover is only replaced by a bigger one).",
+    )
+    rating_keys: list[int] | None = Field(
+        default=None, max_length=10000, description="These albums instead (the ticked ones)."
     )
     q: str | None = Field(default=None, max_length=200)
     low_px: int = Field(

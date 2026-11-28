@@ -190,6 +190,10 @@ async def test_album_covers(
     assert 203 in [a["rating_key"] for a in strict["items"]]
     assert strict["counts"]["low"] > needs["counts"]["low"]
     assert (await owner.get(base, params={"low_px": 700})).status_code == 422
+    # Fine: the covers that are big enough (to upgrade when a bigger one exists).
+    fine = (await owner.get(base, params={"show": "ok"})).json()
+    assert sorted(a["rating_key"] for a in fine["items"]) == [200, 203]
+    assert {a["state"] for a in fine["items"]} == {"ok"}
     # Newest in Plex first.
     added = (await owner.get(base, params={"show": "all", "sort": "added"})).json()["items"]
     assert [a["rating_key"] for a in added] == [203, 202, 201, 200]
@@ -384,6 +388,17 @@ async def test_best_match(
     assert done["stats"] == {"applied": 0, "not_found": 1, "already": 0, "failed": 0}
     nothing = await owner.post(f"{base}/best", json={"show": "low"}, headers=CSRF)
     assert nothing.status_code == 422  # OKNOTOK isn't low any more
+
+    # The ticked albums only, whatever the filter (a cover is only replaced by a bigger one).
+    ticked = await owner.post(
+        f"{base}/best",
+        json={"show": "ok", "rating_keys": [202], "sources": ["deezer", "itunes"]},
+        headers=CSRF,
+    )
+    assert ticked.status_code == 201, ticked.text
+    await artwork_job.func(job_id=ticked.json()["id"])
+    [done] = (await owner.get(f"/api/servers/{sid}/artwork/jobs")).json()[:1]
+    assert (done["status"], done["progress"]) == ("succeeded", {"done": 1, "total": 1})
 
     # An admin can turn the open sources off: gone from the page and from best matches.
     sources = (await owner.get("/api/admin/cover-sources")).json()
