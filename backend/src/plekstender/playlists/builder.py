@@ -71,6 +71,36 @@ _FRESH = """
 """
 
 
+# Songs whose title has the word somewhere (narrowed down further in Python).
+_WORDS = """
+    SELECT t.rating_key, t.title
+    FROM tracks t
+    JOIN user_item_state s
+      ON s.user_id = :user_id AND s.server_id = t.server_id AND s.rating_key = t.rating_key
+    WHERE t.server_id = :server_id AND t.section_key = ANY(:sections)
+      AND t.title ILIKE ANY(:likes)
+"""
+
+
+async def title_word_keys(
+    db: AsyncSession, user_id: int, server_id: int, sections: list[str], wanted: list[str]
+) -> list[int]:
+    """The songs with one of these words in their title, as the word cloud counts words."""
+    from plekstender.library_stats import words_in
+
+    folded = {w.casefold() for w in wanted}
+    rows = await db.execute(
+        text(_WORDS),
+        {
+            "user_id": user_id,
+            "server_id": server_id,
+            "sections": sections,
+            "likes": [f"%{w}%" for w in wanted],
+        },
+    )
+    return [key for key, title in rows.all() if words_in(title) & folded]
+
+
 async def new_album_keys(
     db: AsyncSession,
     user_id: int,
@@ -133,6 +163,11 @@ async def matching_songs(
     """Every song the definition selects (before the limit), most popular first."""
     # Songs found by a rule rather than chosen (the rules still apply to them).
     found = await forgotten_keys(db, user_id, server_id, sections) if d.forgotten else []
+    worded = (
+        await title_word_keys(db, user_id, server_id, sections, d.title_words)
+        if d.title_words
+        else []
+    )
     fresh = (
         await new_album_keys(db, user_id, server_id, sections, d.new_albums) if d.new_albums else []
     )
@@ -144,7 +179,7 @@ async def matching_songs(
             "sections": sections,
             "artists": d.artists,
             "tracks": d.tracks,
-            "found": found,
+            "found": found + worded,
             "fresh": fresh,
             "tags": d.rules.tags,
         },

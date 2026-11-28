@@ -131,6 +131,30 @@ async def test_fresh_picks(app: FastAPI, plex: FakePlex) -> None:
     assert resp.status_code == 422
 
 
+async def test_songs_about_a_word(app: FastAPI, plex: FakePlex) -> None:
+    """Songs with a word in their title, as the word cloud counts them."""
+    owner, sid = await owner_with_library(app, plex)
+
+    async def songs(*words: str, **more: Any) -> list[int]:
+        return keys(await preview(owner, sid, title_words=list(words), order="popular", **more))
+
+    # Karma Police once (its remaster is the same song), whatever the case.
+    assert await songs("KARMA") == [301]
+    assert await songs("police", "lucky") == [301, 303]
+    assert await songs("Remastered") == []  # brackets don't count, as in the cloud
+    assert await songs("Kar") == []  # whole words only
+    cloud = (await owner.get(f"/api/servers/{sid}/library/stats/words")).json()
+    assert next(w["count"] for w in cloud if w["word"].lower() == "karma") == len(
+        await songs("karma")
+    )
+    # The rules still apply; nothing chosen at all is refused.
+    assert await songs("karma", rules={"min_rating": 9, "include_unrated": False}) == []
+    bad = await owner.post(
+        f"/api/servers/{sid}/playlists/preview", json={"title_words": ["a%b"]}, headers=CSRF
+    )
+    assert bad.status_code == 422
+
+
 async def test_builder_helpers(app: FastAPI, plex: FakePlex) -> None:
     owner, sid = await owner_with_library(app, plex)
     base = f"/api/servers/{sid}/playlists"

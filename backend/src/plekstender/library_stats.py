@@ -36,6 +36,15 @@ FRAGMENTS = frozenset({"ll", "ve", "re"})
 BRACKETS = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 
 
+def words_in(name: str) -> set[str]:
+    """The words of a name as the word cloud counts them (case-folded; bracketed parts left
+    out), stop words and all."""
+    return {
+        re.sub(f"[{APOSTROPHES}]", "'", m.group()).casefold()
+        for m in WORD.finditer(BRACKETS.sub(" ", unicodedata.normalize("NFC", name)))
+    }
+
+
 def words(names: Iterable[str], limit: int = 120) -> list[tuple[str, int]]:
     """The most common words in these names (each name counts a word once), skipping stop
     words and words shorter than two letters. Case-folded; shown as most often written."""

@@ -38,6 +38,10 @@ beforeEach(() => {
       return json({ similar: [portishead], sonic_artists: [], sonic_tracks: [] })
     if (path === '/api/servers/1/playlists/preview') {
       const body = await input.clone().json()
+      if (body.title_words?.length && body.artists.length === 0) {
+        const songs = [song(9001, 'Love Song')]
+        return json({ matched: 1, count: 1, duration_ms: 240_000, artists: 1, top_artists: ['Radiohead'], songs })
+      }
       if (body.new_albums && body.artists.length === 0) {
         const songs = [{ ...song(302, 'Karma Police (Remastered)'), album: 'OK Computer OKNOTOK' }]
         return json({ matched: 1, count: 1, duration_ms: 240_000, artists: 1, top_artists: ['Radiohead'], songs })
@@ -153,6 +157,7 @@ describe('Playlists', () => {
             tracks: [],
             forgotten: false,
             new_albums: null,
+            title_words: [],
             rules: { min_rating: null, include_unrated: true, top_percent: null, op: 'AND', tags: [] },
             limit: 100,
             order: 'random',
@@ -196,5 +201,17 @@ describe('Playlists', () => {
       schedule: 'weekly',
       definition: { new_albums: { days: 30, per_album: 5 }, artists: [], tracks: [] },
     })
+  })
+
+  it('starts “Songs about” a word from the word cloud', async () => {
+    renderAt('/playlists/new?word=Love')
+    expect(await screen.findByDisplayValue('Songs about Love')).toBeInTheDocument()
+    expect(screen.getByText('Songs with “Love” in the title')).toBeInTheDocument()
+    expect(await screen.findByText('Love Song')).toBeInTheDocument() // the preview
+    expect(screen.getByRole('button', { name: 'Remove “Love”' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create in Plex' }))
+    await vi.waitFor(async () => expect(await posted('/api/servers/1/playlists')).toHaveLength(1))
+    const [saved] = await posted('/api/servers/1/playlists')
+    expect(saved).toMatchObject({ name: 'Songs about Love', schedule: 'weekly', definition: { title_words: ['Love'] } })
   })
 })
