@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useState, type CSSProperties } from 'react'
+import { Link } from 'react-router'
 import { api, unwrap, type Schemas } from '../api/client'
 import { imageUrl, useActiveServer } from '../api/library'
 import { useReducedMotion } from '../motion'
+import { Artwork } from './library'
+import { Tooltip } from './Tooltip'
 import type { Theme } from '../theme'
 
 export type BackgroundSettings = Schemas['BackgroundSettings']
@@ -62,17 +65,81 @@ export function CoverBackground({ theme, settings }: { theme: Theme; settings: B
   // The cover showing and the one before it (fading out under it).
   const shown = n > 0 ? [n - 1, n] : [n]
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" data-testid="cover-background">
-      {shown.map((i) => (
+    <>
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" data-testid="cover-background">
+        {shown.map((i) => (
+          <div
+            key={i}
+            className="cover-slide absolute inset-0"
+            style={{ animationDuration: `${FADE}s, ${seconds + FADE}s`, ...drift(i) } as CSSProperties}
+          >
+            <img src={url(i)!} alt="" className="size-full object-cover" />
+          </div>
+        ))}
+        <div className="absolute inset-0 bg-bg/85" />
+      </div>
+      {active && <BackgroundInfo serverId={active.id} cover={list[n % list.length]} />}
+    </>
+  )
+}
+
+/** A small button in the bottom right corner that opens what the background is: its cover,
+ * artist and album (artist first), each a link. Follows the covers as they change. */
+function BackgroundInfo({ serverId, cover }: { serverId: number; cover: Schemas['BackgroundCover'] }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  const album = `/library/albums/${cover.rating_key}`
+  return (
+    <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] right-3 z-20 md:bottom-4 md:right-4">
+      {open ? (
         <div
-          key={i}
-          className="cover-slide absolute inset-0"
-          style={{ animationDuration: `${FADE}s, ${seconds + FADE}s`, ...drift(i) } as CSSProperties}
+          id={id}
+          role="dialog"
+          aria-label="The background"
+          className="flex w-72 max-w-[calc(100vw-1.5rem)] items-center gap-3 rounded-2xl border border-border bg-surface/95 p-2 text-sm shadow-lg backdrop-blur"
         >
-          <img src={url(i)!} alt="" className="size-full object-cover" />
+          <Link to={album} className="shrink-0" aria-label={cover.title || 'The album'}>
+            <Artwork serverId={serverId} path={cover.thumb} title={cover.title} size={128} className="size-12 rounded" />
+          </Link>
+          <span className="min-w-0 flex-1">
+            {cover.artist &&
+              (cover.artist_rating_key ? (
+                <Link to={`/library/artists/${cover.artist_rating_key}`} className="block truncate text-xs text-muted hover:text-text hover:underline">
+                  {cover.artist}
+                </Link>
+              ) : (
+                <span className="block truncate text-xs text-muted">{cover.artist}</span>
+              ))}
+            <Link to={album} className="block truncate font-medium hover:underline">
+              {cover.title || 'This album'}
+            </Link>
+          </span>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => setOpen(false)}
+            className="flex size-7 shrink-0 items-center justify-center self-start rounded-full text-muted hover:bg-surface-2 hover:text-text"
+          >
+            ×
+          </button>
         </div>
-      ))}
-      <div className="absolute inset-0 bg-bg/85" />
+      ) : (
+        <Tooltip content="What’s in the background?">
+          <button
+            type="button"
+            aria-label="What’s in the background?"
+            aria-expanded={false}
+            onClick={() => setOpen(true)}
+            className="flex size-8 items-center justify-center rounded-full border border-border bg-surface/80 text-muted shadow backdrop-blur hover:text-text"
+          >
+            <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3.5" y="3.5" width="17" height="17" rx="2" />
+              <circle cx="12" cy="12" r="4" />
+              <circle cx="12" cy="12" r="0.8" fill="currentColor" />
+            </svg>
+          </button>
+        </Tooltip>
+      )}
     </div>
   )
 }

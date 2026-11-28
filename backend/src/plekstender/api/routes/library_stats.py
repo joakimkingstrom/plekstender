@@ -382,7 +382,7 @@ async def backgrounds(
         coloured, _waiting = await _coloured(db, user.id, us)
         found = [(key, thumb) for fam, *_rest, key, _t, thumb, _a in coloured if fam == family]
         picked = random.sample(found, min(BACKGROUNDS, len(found)))
-        return [BackgroundCover(rating_key=k, thumb=t) for k, t in picked if t]
+        return await _named(db, us.server_id, [(k, t) for k, t in picked if t])
     state, cond, where = visible(Album, user.id, us)
     light = (
         AlbumColour.brightness >= LIGHT_COVER
@@ -402,7 +402,38 @@ async def backgrounds(
         .order_by(func.random())
         .limit(BACKGROUNDS)
     )
-    return [BackgroundCover(rating_key=k, thumb=t) for k, t in rows.all() if t]
+    return await _named(db, us.server_id, [(k, t) for k, t in rows.all() if t])
+
+
+async def _named(db: DbDep, server_id: int, covers: list[tuple[int, str]]) -> list[BackgroundCover]:
+    """The covers, in their order, with their album's title and artist (to say what's showing)."""
+    names = {
+        key: (title, artist, artist_key)
+        for key, title, artist, artist_key in (
+            await db.execute(
+                select(Album.rating_key, Album.title, Artist.title, Album.artist_rating_key)
+                .outerjoin(
+                    Artist,
+                    (Artist.server_id == Album.server_id)
+                    & (Artist.rating_key == Album.artist_rating_key),
+                )
+                .where(Album.server_id == server_id, Album.rating_key.in_([k for k, _ in covers]))
+            )
+        ).all()
+    }
+    out = []
+    for key, thumb in covers:
+        title, artist, artist_key = names.get(key, ("", None, None))
+        out.append(
+            BackgroundCover(
+                rating_key=key,
+                thumb=thumb,
+                title=title,
+                artist=artist,
+                artist_rating_key=artist_key,
+            )
+        )
+    return out
 
 
 SEEN_LIVE_MIN_TRACKS = 5  # fewer, and one song seen live is already a big share

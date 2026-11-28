@@ -57,6 +57,12 @@ async def test_backgrounds(app: FastAPI, plex: FakePlex) -> None:
     assert await keys(mode="colour", family="blue") == [202]
     assert await keys(mode="colour", family="white") == [200]
     assert await keys(mode="colour", family="green") == []
+    # Each with its album and artist, to say what's showing.
+    named = lambda c: (c["title"], c["artist"], c["artist_rating_key"])  # noqa: E731
+    light = (await owner.get(base, params={"mode": "covers", "theme": "light"})).json()
+    assert [named(c) for c in light] == [("OK Computer", "Radiohead", 100)]
+    blue = (await owner.get(base, params={"mode": "colour", "family": "blue"})).json()
+    assert [named(c) for c in blue] == [("Dummy", "Portishead", 101)]
 
     # The preference, saved with the others.
     prefs = (await owner.get("/api/auth/me")).json()["preferences"]
