@@ -404,6 +404,7 @@ Small, silly rewards. Every one has a name from music lore, a badge, and a humor
 - Gigs → Upcoming: a "🎟 Got tickets" filter (`/api/live/shows?tickets=true`).
 
 ## Album covers
+- **From an album's page (28 Nov):** clicking its cover opens it larger in a card (`AlbumCoverView`; its video cover when it has one). For the server's owner the card has "Find a better cover", which turns it into the Album covers page's editor for that album (`CoverEditor`, with "← The cover" to go back): now and new side by side, the sources, and Save to Plex, without leaving the album. `GET /api/servers/{id}/artwork/albums/{rk}` gives the one album's cover as the list has it.
 - Library → Artwork gets sub-tabs: Artist images and **Album covers** (server owners).
 - Every cover in Plex is measured by the worker (only the start of each image is read; every 10 minutes, and right away when the tab finds unmeasured ones; again when a cover changes), in `album_covers`.
 - The list shows what most needs a better cover: none (or unreadable) first, then the smallest. Low resolution means under 600 px on the shorter side. Filters: needs a better one, no cover, low resolution, all; search by album or artist. "It's fine as it is" keeps an album out of these lists.

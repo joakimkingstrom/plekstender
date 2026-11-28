@@ -246,16 +246,20 @@ export function AlbumCovers({ serverId }: { serverId: number }) {
   )
 }
 
-function CoverEditor({
+/** One album's cover: now and a new one side by side, the sources below, and Save to Plex.
+ * On this page, and from an album's own page (`back` names where Back goes, always shown). */
+export function CoverEditor({
   serverId,
   album,
   onBack,
   onSaved,
+  back,
 }: {
   serverId: number
   album: AlbumCover
   onBack: () => void
   onSaved: (album: AlbumCover) => void
+  back?: string
 }) {
   const me = useMe()
   const savePreferences = useSetPreferences()
@@ -314,8 +318,8 @@ function CoverEditor({
       {/* The album and the preview: all the room above the results. */}
       <section aria-label="Preview" className="flex min-h-0 flex-1 flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={onBack} className="text-sm text-muted hover:text-text lg:hidden">
-            ← Albums
+          <button type="button" onClick={onBack} className={`text-sm text-muted hover:text-text ${back ? '' : 'lg:hidden'}`}>
+            ← {back ?? 'Albums'}
           </button>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-2xl font-bold">

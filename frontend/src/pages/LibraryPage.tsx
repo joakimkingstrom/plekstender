@@ -6,6 +6,7 @@ import { SongSources } from '../components/SongSources'
 import { ArtistCovers, CoverOf } from '../components/Covers'
 import { SongVersions } from '../components/SongVersions'
 import { VideoCover } from '../components/VideoCover'
+import { AlbumCoverView } from '../components/AlbumCoverView'
 import { AlbumLyricsIcon, SongLyricsIcon } from '../components/LyricsIcon'
 import { useLyricsIcons } from '../api/hooks'
 import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -768,14 +769,11 @@ function AlbumView({ serverId, albumKey }: { serverId: number; albumKey: number 
         <BackLink to="/library" label="Library" />
       )}
       <div className="mb-8 flex flex-col gap-6 sm:flex-row">
-        <Zoomable
-          image={al.thumb ? { src: imageUrl(serverId, al.thumb, 1000)!, alt: al.title, caption: al.artist_title ?? undefined, video: al.video ?? undefined } : null}
-          className="w-56 shrink-0 self-center sm:self-start"
-        >
+        <AlbumCoverView serverId={serverId} album={al} className="w-56 shrink-0 self-center sm:self-start">
           <VideoCover video={al.video}>
             <Artwork serverId={serverId} path={al.thumb} title={al.title} size={600} className="w-full" />
           </VideoCover>
-        </Zoomable>
+        </AlbumCoverView>
         <div className="min-w-0 flex-1 space-y-3">
           <h1 className="text-3xl font-bold tracking-tight">{al.title}</h1>
           <p className="text-sm text-muted">

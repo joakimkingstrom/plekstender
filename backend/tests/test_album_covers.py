@@ -178,6 +178,12 @@ async def test_album_covers(
         if a["rating_key"] == 203
     )
     assert (wide["width"], wide["height"], wide["state"]) == (1200, 800, "ok")  # 800 px is fine
+    # One album, as the list has it (for the album's page).
+    one = (await owner.get(f"{base}/201")).json()
+    assert (one["title"], one["artist"], one["state"], one["width"]) == (
+        "OK Computer OKNOTOK", "Radiohead", "low", 300,
+    )  # fmt: skip
+    assert (await owner.get(f"{base}/999")).status_code == 404
 
     # Low resolution can start higher: under 1000 px, the 1200 x 800 cover is low too.
     strict = (await owner.get(base, params={"low_px": 1000})).json()
