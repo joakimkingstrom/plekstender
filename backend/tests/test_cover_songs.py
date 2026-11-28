@@ -15,7 +15,7 @@ from sqlalchemy import select, update
 from plekstender import cover_songs
 from plekstender.db import get_sessionmaker
 from plekstender.db.models import SongCover
-from tests.fakes import CSRF, FakePlex
+from tests.fakes import CSRF, FakePlex, sign_in
 from tests.test_sync import owner_with_library
 
 pytestmark = pytest.mark.db
@@ -409,6 +409,72 @@ async def test_covers_link_to_the_library(app: FastAPI, plex: FakePlex) -> None:
     assert missing.status_code == 404
 
 
+async def test_choosing_a_covers_original(app: FastAPI, plex: FakePlex) -> None:
+    """A cover with no original artist (MusicBrainz's): the library's songs of its title by
+    other artists, oldest first, one of which an admin can choose as the original."""
+    from tests.fakes import _album, _artist, _track
+    from tests.test_sync import connect, run_queued_syncs
+
+    lib = plex.library
+    for item in (
+        _artist(120, "Isaac Hayes"),
+        _album(220, "Hot Buttered Soul", 120, 1969),
+        _track(3200, "Glory Box (Remastered)", 220, 120, 1, 10),
+        _track(3201, "Glory Box (Live)", 200, 100, 14, 10),  # Radiohead's, say
+    ):
+        lib.items[int(item["ratingKey"])] = item
+    lib.items[3200]["grandparentTitle"] = "Isaac Hayes"
+    lib.items[3201]["grandparentTitle"] = "Radiohead"
+    owner, sid = await owner_with_library(app, plex)
+    async with get_sessionmaker()() as db:
+        db.add(
+            SongCover(
+                artist_key="portishead", title_norm="glory box", status="cover",
+                original_title="Glory Box", source="musicbrainz",
+                performance_url="https://musicbrainz.org/recording/1",
+                original_url="https://musicbrainz.org/work/1",
+                tried="musicbrainz", requests=0, checked_at=dt.datetime.now(dt.UTC),
+            )
+        )  # fmt: skip
+        await db.commit()
+    base = f"/api/servers/{sid}/library/tracks/304"
+    listed = (await owner.get(f"{base}/originals")).json()
+    assert (listed["title"], listed["can_choose"]) == ("Glory Box", True)
+    assert [(s["rating_key"], s["artist"], s["year"], s["original"]) for s in listed["songs"]] == [
+        (3200, "Isaac Hayes", 1969, False),
+        (3201, "Radiohead", 1997, False),
+    ]  # not Portishead's own
+    not_a_cover = await owner.get(f"/api/servers/{sid}/library/tracks/301/originals")
+    assert not_a_cover.status_code == 404
+
+    chosen = await owner.put(f"{base}/original", json={"rating_key": 3200}, headers=CSRF)
+    assert chosen.status_code == 200, chosen.text
+    assert [s["original"] for s in chosen.json()["songs"]] == [True, False]
+    dummy = (await owner.get(f"/api/servers/{sid}/library/albums/202")).json()
+    cover_of = dummy["tracks"][0]["cover_of"]
+    assert (cover_of["artist"], cover_of["title"], cover_of["artist_rating_key"]) == (
+        "Isaac Hayes", "Glory Box", 120,
+    )  # fmt: skip
+    assert cover_of["original_rating_key"] == 3200
+    wrong = await owner.put(f"{base}/original", json={"rating_key": 301}, headers=CSRF)
+    assert wrong.status_code == 422  # Karma Police isn't Glory Box
+    none = await owner.put(f"{base}/original", json={"rating_key": None}, headers=CSRF)
+    assert [s["original"] for s in none.json()["songs"]] == [False, False]
+
+    # Others see the list, but only admins choose.
+    friend, _ = await sign_in(app, plex, "friend-token")
+    friend_sid = await connect(friend)
+    await run_queued_syncs()
+    seen = (await friend.get(f"/api/servers/{friend_sid}/library/tracks/304/originals")).json()
+    assert seen["can_choose"] is False
+    refused = await friend.put(
+        f"/api/servers/{friend_sid}/library/tracks/304/original",
+        json={"rating_key": 3200},
+        headers=CSRF,
+    )
+    assert refused.status_code == 403
+
+
 async def test_artist_covers_whatever_the_songs_credit(app: FastAPI, plex: FakePlex) -> None:
     """An artist's covers include the songs on their albums that credit someone with them
     (Plex's track artist: "Radiohead & Friends"), as album pages show them."""
@@ -545,13 +611,17 @@ async def test_cover_songs_from_musicbrainz(
         "paranoid android": ("unknown", "musicbrainz", "musicbrainz", 0),
     }
     glory = found["glory box"]
-    assert (glory.original_artist, glory.original_title) == ("Isaac Hayes", "Glory Box")
-    assert glory.original_url == f"https://musicbrainz.org/recording/{REC_ORIGINAL}"
+    # The song's title, but no original artist: MusicBrainz doesn't say whose recording was
+    # first (one request a song: the recording and its link to the song).
+    assert (glory.original_artist, glory.original_title) == (None, "Glory Box")
+    assert glory.original_url == f"https://musicbrainz.org/work/{WORK}"
     assert glory.performance_url == f"https://musicbrainz.org/recording/{REC_GLORY}"
-    # The work's plain recording names the original artist: the live one and the medley don't.
-    assert f"/ws/2/recording/{REC_ORIGINAL} artist-credits" in asked
+    assert all(a.startswith("/ws/2/recording/") and a.endswith("work-rels") for a in asked)
     album = (await owner.get(f"/api/servers/{sid}/library/albums/202")).json()
-    assert album["tracks"][0]["cover_of"]["source"] == "musicbrainz"
+    cover_of = album["tracks"][0]["cover_of"]
+    assert (cover_of["artist"], cover_of["title"], cover_of["source"]) == (
+        None, "Glory Box", "musicbrainz",
+    )  # fmt: skip
 
     # Nothing more to ask; turned off, nothing at all.
     asked.clear()

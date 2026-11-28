@@ -711,6 +711,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/servers/{server_id}/library/tracks/{rating_key}/originals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cover Originals
+         * @description For a cover: the library's songs with its song's title by other artists, any of which
+         *     an admin can choose as its original (MusicBrainz covers don't name one).
+         */
+        get: operations["cover_originals_api_servers__server_id__library_tracks__rating_key__originals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/servers/{server_id}/library/tracks/{rating_key}/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose Cover Original
+         * @description Choose a cover's original among the library's songs of its title (admins), or none:
+         *     for everyone, as Cover songs' answers are.
+         */
+        put: operations["choose_cover_original_api_servers__server_id__library_tracks__rating_key__original_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/servers/{server_id}/library/tracks/{rating_key}/versions": {
         parameters: {
             query?: never;
@@ -6145,6 +6187,32 @@ export interface components {
              */
             original_versions: number;
         };
+        /** CoverOriginalIn */
+        CoverOriginalIn: {
+            /**
+             * Rating Key
+             * @description The library song that's the original; None: none of them (no artist).
+             */
+            rating_key: number | null;
+        };
+        /** CoverOriginalsOut */
+        CoverOriginalsOut: {
+            /**
+             * Title
+             * @description The song the cover is of.
+             */
+            title: string;
+            /**
+             * Songs
+             * @description Oldest first.
+             */
+            songs: components["schemas"]["SameTitleSong"][];
+            /**
+             * Can Choose
+             * @description The user may choose the original (admins).
+             */
+            can_choose: boolean;
+        };
         /** CoverRenderIn */
         CoverRenderIn: {
             source: components["schemas"]["SourceSpec"];
@@ -10352,6 +10420,34 @@ export interface components {
              */
             lyrics: "any" | "with" | "synced" | "word";
         };
+        /**
+         * SameTitleSong
+         * @description A song in the library with the title a cover is of, by another artist (its oldest
+         *     release).
+         */
+        SameTitleSong: {
+            /** Rating Key */
+            rating_key: number;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string | null;
+            /** Artist Rating Key */
+            artist_rating_key: number | null;
+            /** Album Rating Key */
+            album_rating_key: number | null;
+            /** Album Title */
+            album_title: string | null;
+            /** Album Thumb */
+            album_thumb: string | null;
+            /** Year */
+            year: number | null;
+            /**
+             * Original
+             * @description Chosen as the cover's original.
+             */
+            original: boolean;
+        };
         /** ScrobbleTargetIn */
         ScrobbleTargetIn: {
             /**
@@ -12799,6 +12895,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cover_originals_api_servers__server_id__library_tracks__rating_key__originals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverOriginalsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    choose_cover_original_api_servers__server_id__library_tracks__rating_key__original_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                rating_key: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverOriginalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverOriginalsOut"];
                 };
             };
             /** @description Validation Error */

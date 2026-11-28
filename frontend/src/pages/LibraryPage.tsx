@@ -503,7 +503,7 @@ function TrackList({
                 {[t.original_title, showAlbum ? t.album_title : null].filter(Boolean).join(' · ')}
               </span>
             )}
-            {t.cover_of && <CoverOf serverId={serverId} cover={t.cover_of} />}
+            {t.cover_of && <CoverOf serverId={serverId} trackKey={t.rating_key} cover={t.cover_of} />}
           </span>
           <Tooltip content="Last.fm listeners" className="hidden w-14 justify-end sm:inline-flex">
             <span className="text-xs text-muted tabular-nums">{formatCompact(t.popularity)}</span>

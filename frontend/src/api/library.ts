@@ -226,6 +226,36 @@ export function useArtistCovers(serverId: number, key: number) {
   })
 }
 
+/** For a cover: the library's songs with its song's title by other artists, to choose its
+ * original from. */
+export function useCoverOriginals(serverId: number, key: number, enabled = true) {
+  return useQuery({
+    queryKey: [...libraryKeys.library(serverId), 'originals', key],
+    enabled,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/servers/{server_id}/library/tracks/{rating_key}/originals', {
+          params: { path: { server_id: serverId, rating_key: key } },
+        }),
+      ),
+  })
+}
+
+/** Choose a cover's original among them (admins), or none. */
+export function useChooseOriginal(serverId: number, key: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ratingKey: number | null) =>
+      unwrap(
+        api.PUT('/api/servers/{server_id}/library/tracks/{rating_key}/original', {
+          params: { path: { server_id: serverId, rating_key: key } },
+          body: { rating_key: ratingKey },
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: libraryKeys.library(serverId) }),
+  })
+}
+
 /** Artists, albums and songs whose names contain the text (the header's search). */
 export function useLibrarySearch(serverId: number | null, q: string) {
   return useQuery({
