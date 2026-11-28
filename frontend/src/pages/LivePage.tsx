@@ -75,7 +75,7 @@ function SourceMissing() {
   const me = useMe()
   return (
     <Notice tone="warn">
-      Live needs a JamBase or Ticketmaster API key (or a calendar link of yours).{' '}
+      Upcoming gigs need a JamBase or Ticketmaster API key (or a calendar link of yours).{' '}
       {me.data?.is_admin ? (
         <>
           Add one in{' '}

@@ -357,7 +357,7 @@ function ReleaseMatch({
               </Button>
             </div>
           ) : (
-            <Notice>Turn on "Allow changing files" (Settings → Music files → Tags in your files) to write these.</Notice>
+            <Notice>Turn on "Allow changing files" (Settings → Music files → Folder scan) to write these.</Notice>
           )}
           {apply.isError && <Notice tone="error">{errorMessage(apply.error)}</Notice>}
         </div>

@@ -244,7 +244,7 @@ function Results({
             <Notice tone="warn">
               Moving files is off. Turn on tag editing on{' '}
               <Link to="/settings/files/scan" className="underline">
-                Settings → Music files → Tags in your files
+                Settings → Music files → Folder scan
               </Link>
               .
             </Notice>

@@ -26,7 +26,7 @@ type Section = { to: string; label: string; end?: boolean; children?: Section[] 
 /** Settings → Music files, a page each ('' is the main one). */
 const FILES_PARTS = [
   { slug: '', title: 'Folder and tools' },
-  { slug: 'scan', title: 'Tags in your files' },
+  { slug: 'scan', title: 'Folder scan' },
   { slug: 'unknown', title: 'Unknown files' },
   { slug: 'history', title: 'Tag history' },
 ] as const

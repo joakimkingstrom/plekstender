@@ -6,7 +6,7 @@ import { Button, Card, Notice, Spinner } from './ui'
 
 const JWT = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 
-/** Data Thistle's tokens (admins): UK listings for the Live tab, renewed by Plekstender. */
+/** Data Thistle's tokens (admins): UK listings for Gigs → Upcoming, renewed by Plekstender. */
 export function DataThistleCard() {
   const status = useDataThistle(true)
   const save = useSetDataThistle()
@@ -19,12 +19,12 @@ export function DataThistleCard() {
     <Card title="Data Thistle">
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          UK listings for the Live tab, including small local gigs. Register for free at{' '}
+          UK listings for Gigs → Upcoming, including small local gigs. Register for free at{' '}
           <a href="https://api.datathistle.com" target="_blank" rel="noreferrer" className="text-accent underline">
             api.datathistle.com
           </a>
           , then copy the access token and the refresh token from its “Get Access Token” page. Plekstender renews them
-          before they run out. 1,000 requests a month; listings are looked up when someone opens Live.
+          before they run out. 1,000 requests a month; listings are looked up when someone opens Gigs → Upcoming.
         </p>
         {status.isPending ? (
           <Spinner small />
