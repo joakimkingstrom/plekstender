@@ -84,10 +84,10 @@ export function SongSources({
                 </Tooltip>
               </div>
               {shown && (
-                <ol id={songs} aria-label={`Songs from ${name}`} className="mb-1 ml-11 mr-9 mt-1 space-y-0.5 text-sm">
+                <ol id={songs} aria-label={`Songs from ${name}`} className="mb-2 mt-1 space-y-0.5 px-1 text-sm">
                   {s.tracks.map((t) => (
                     <li key={t.rating_key} className="flex gap-2">
-                      <span className="w-7 shrink-0 text-right text-xs leading-5 text-muted tabular-nums">
+                      <span className="min-w-8 shrink-0 whitespace-nowrap text-right text-xs leading-5 text-muted tabular-nums">
                         {t.number != null ? (discs ? `${t.disc ?? 1}-${t.number}` : t.number) : ''}
                       </span>
                       <span className="min-w-0 truncate">{t.title}</span>
