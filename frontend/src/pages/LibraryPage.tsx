@@ -102,12 +102,13 @@ export function LibraryPage() {
   )
 }
 
-/** The first row: what's shown ("Show: Artists | Albums") on the left, then the search. */
+/** The first row: what's shown ("Show: Artists | Albums") on the left, then the search. On
+ * narrow windows just the search: the switch is at the start of the row below (TagFilter). */
 function Toolbar({ left, search }: { left: ReactNode; search: ReactNode }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
-      <div className="shrink-0">{left}</div>
-      <div className="min-w-48 flex-1">{search}</div>
+    <div className="mb-3 flex items-center gap-2">
+      <div className="shrink-0 max-sm:hidden">{left}</div>
+      <div className="min-w-0 flex-1">{search}</div>
     </div>
   )
 }
@@ -146,13 +147,18 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
         selected={tag}
         onSelect={setTag}
         start={
-          <TagKindSwitch
-            value={kind}
-            onChange={(k) => {
-              setKind(k)
-              setTag(null)
-            }}
-          />
+          <>
+            {/* Narrow windows: the view switch here, under the search (hidden from both the
+                eye and screen readers at the other width). */}
+            <div className="sm:hidden">{viewSwitch}</div>
+            <TagKindSwitch
+              value={kind}
+              onChange={(k) => {
+                setKind(k)
+                setTag(null)
+              }}
+            />
+          </>
         }
         end={
           <>
@@ -224,13 +230,18 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
         onSelect={setTag}
         className="mb-3"
         start={
-          <TagKindSwitch
-            value={kind}
-            onChange={(k) => {
-              setKind(k)
-              setTag(null)
-            }}
-          />
+          <>
+            {/* Narrow windows: the view switch here, under the search (hidden from both the
+                eye and screen readers at the other width). */}
+            <div className="sm:hidden">{viewSwitch}</div>
+            <TagKindSwitch
+              value={kind}
+              onChange={(k) => {
+                setKind(k)
+                setTag(null)
+              }}
+            />
+          </>
         }
         end={
           <>
