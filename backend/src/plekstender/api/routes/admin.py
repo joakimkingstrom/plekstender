@@ -576,6 +576,7 @@ async def _cover_songs_out(db: DbDep, settings: SettingsDep) -> CoverSongsOut:
         musicbrainz=chosen.musicbrainz,
         api_key=chosen.api_key is not None,
         per_hour=limits.per_hour,
+        per_day=limits.per_day,
         **await cover_songs.progress(db),
     )
 
