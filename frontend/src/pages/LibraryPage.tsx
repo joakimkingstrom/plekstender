@@ -80,8 +80,10 @@ export function LibraryPage() {
   const viewSwitch = (
     <Segmented
       label="Show"
+      prefix="Show"
       value={view}
       options={VIEWS}
+      className={SWITCH_WIDTH}
       onChange={(v) => setParams(v === 'albums' ? { view: v } : {}, { replace: true })}
     />
   )
@@ -101,20 +103,25 @@ export function LibraryPage() {
   )
 }
 
-/** The search row: the view and tag-kind switches first (on a row of their own, above, on
- * narrower windows), then the search, sort, and size. */
-function Toolbar({ switches, children }: { switches: ReactNode; children: ReactNode }) {
+/** The first row: what's shown ("Show: Artists | Albums") on the left, then the search. On
+ * narrow windows just the search: the switch is at the start of the row below (TagFilter). */
+function Toolbar({ left, search }: { left: ReactNode; search: ReactNode }) {
   return (
-    <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
-      <div className="flex flex-wrap gap-2">{switches}</div>
-      <div className="flex min-w-0 flex-1 flex-wrap gap-2">{children}</div>
+    <div className="mb-3 flex items-center gap-2">
+      <div className="shrink-0 max-sm:hidden">{left}</div>
+      <div className="min-w-0 flex-1">{search}</div>
     </div>
   )
 }
 
+/** "Show Artists | Albums" and "Genres | Styles | Moods" are one above the other: the same
+ * width (on windows wide enough for both; their buttons share it). */
+const SWITCH_WIDTH = 'sm:w-56'
+
 /** Genres, styles, or moods: which the chips under the search row are. */
 function TagKindSwitch({ value, onChange }: { value: TagKind; onChange: (kind: TagKind) => void }) {
-  return <Segmented label="Filter by" value={value} options={FILTER_KINDS} onChange={onChange} />
+  // Not on narrow windows, like the chips: too little room for them to be of use.
+  return <Segmented label="Filter by" value={value} options={FILTER_KINDS} onChange={onChange} className={`max-sm:hidden ${SWITCH_WIDTH}`} />
 }
 
 function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: ReactNode }) {
@@ -127,9 +134,28 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
   return (
     <>
       <Toolbar
-        switches={
+        left={viewSwitch}
+        search={
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search artists"
+            className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+            aria-label="Search artists"
+          />
+        }
+      />
+      <TagFilter
+        serverId={serverId}
+        kind={kind}
+        selected={tag}
+        onSelect={setTag}
+        start={
           <>
-            {viewSwitch}
+            {/* Narrow windows: the view switch here, under the search (hidden from both the
+                eye and screen readers at the other width). */}
+            <div className="sm:hidden">{viewSwitch}</div>
             <TagKindSwitch
               value={kind}
               onChange={(k) => {
@@ -139,23 +165,12 @@ function ArtistsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: R
             />
           </>
         }
-      >
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search artists"
-          className="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-          aria-label="Search artists"
-        />
-        <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
-      </Toolbar>
-      <TagFilter
-        serverId={serverId}
-        kind={kind}
-        selected={tag}
-        onSelect={setTag}
-        end={<CoverSizeSwitch value={size} onChange={setSize} />}
+        end={
+          <>
+            <CoverSizeSwitch value={size} onChange={setSize} />
+            <Select label="Sort by" value={sort} onChange={setSort} options={SORTS} />
+          </>
+        }
       />
       <ArtistGrid serverId={serverId} q={deferredQuery} sort={sort} tag={tag} size={size} />
     </>
@@ -201,9 +216,29 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
   return (
     <>
       <Toolbar
-        switches={
+        left={viewSwitch}
+        search={
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search albums or artists"
+            className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+            aria-label="Search albums or artists"
+          />
+        }
+      />
+      <TagFilter
+        serverId={serverId}
+        kind={kind}
+        selected={tag}
+        onSelect={setTag}
+        className="mb-3"
+        start={
           <>
-            {viewSwitch}
+            {/* Narrow windows: the view switch here, under the search (hidden from both the
+                eye and screen readers at the other width). */}
+            <div className="sm:hidden">{viewSwitch}</div>
             <TagKindSwitch
               value={kind}
               onChange={(k) => {
@@ -213,18 +248,14 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
             />
           </>
         }
-      >
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search albums or artists"
-          className="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-          aria-label="Search albums or artists"
-        />
-        <Select label="Sort by" value={sort} onChange={setSort} options={ALBUM_SORTS} />
-      </Toolbar>
-      <div className="mb-3 flex items-center gap-3">
+        end={
+          <>
+            <CoverSizeSwitch value={size} onChange={setSize} />
+            <Select label="Sort by" value={sort} onChange={setSort} options={ALBUM_SORTS} />
+          </>
+        }
+      />
+      <div className="mb-5 flex items-center gap-3">
         <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label="Release type">
           {([[null, 'All', all], ...types.map(([t, n]) => [t, TYPE_NAMES[t] ?? t, n])] as [string | null, string, number][]).map(
             ([value, label, n]) => {
@@ -245,9 +276,7 @@ function AlbumsView({ serverId, viewSwitch }: { serverId: number; viewSwitch: Re
             },
           )}
         </div>
-        <CoverSizeSwitch value={size} onChange={setSize} />
       </div>
-      <TagFilter serverId={serverId} kind={kind} selected={tag} onSelect={setTag} />
       <AlbumGrid serverId={serverId} albums={albums} size={size} />
     </>
   )
@@ -327,27 +356,40 @@ const FILTER_KINDS: [TagKind, string][] = [
   ['mood', 'Moods'],
 ]
 
-/** The genres, styles, or moods (`kind`, chosen in the search row) to filter by, as chips. */
+/** Under the search: genres, styles, or moods (`start`, the switch for `kind`), the ones to
+ * filter by as chips, and the cover size and sort on the right (`end`). The switch and the chips
+ * are left out on narrow windows. */
 function TagFilter({
   serverId,
   kind,
   selected,
   onSelect,
+  start,
   end,
+  className = 'mb-5',
 }: {
   serverId: number
   kind: TagKind
   selected: number | null
   onSelect: (id: number | null) => void
-  /** At the right end of the row (the cover size). */
+  /** At the start of the row (the kind of tag). */
+  start?: ReactNode
+  /** At the right end of the row (the cover size and the sort). */
   end?: ReactNode
+  className?: string
 }) {
   const tags = useTags(serverId, kind)
   const label = FILTER_KINDS.find(([k]) => k === kind)?.[1] ?? ''
   const chosen = tags.data?.find((t) => t.id === selected)
   return (
-    <div className="mb-5 flex items-center gap-3">
-      <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1" role="group" aria-label={`Filter by ${label.toLowerCase()}`}>
+    // The kind switch, the chips (scrolling sideways in the room between), and the size and sort.
+    <div className={`flex items-center gap-3 ${className}`}>
+      {start && <div className="flex shrink-0 gap-2">{start}</div>}
+      <div
+        className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto py-1 max-sm:hidden"
+        role="group"
+        aria-label={`Filter by ${label.toLowerCase()}`}
+      >
         {tags.data?.length === 0 && <span className="py-1 text-xs text-muted">No {label.toLowerCase()} yet.</span>}
         {tags.data?.slice(0, 40).map((t) => {
           const on = t.id === selected
@@ -367,11 +409,11 @@ function TagFilter({
         })}
       </div>
       {chosen && (
-        <Link to={`/library/tags/${chosen.id}`} className="shrink-0 py-1 text-xs text-accent hover:underline">
+        <Link to={`/library/tags/${chosen.id}`} className="shrink-0 py-1 text-xs text-accent hover:underline max-sm:hidden">
           {chosen.name} page →
         </Link>
       )}
-      {end && <div className="ml-auto shrink-0">{end}</div>}
+      {end && <div className="ml-auto flex shrink-0 gap-2">{end}</div>}
     </div>
   )
 }

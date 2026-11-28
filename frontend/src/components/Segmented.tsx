@@ -9,6 +9,7 @@ export function Segmented<T extends string>({
   label,
   className = '',
   size = 'md',
+  prefix,
 }: {
   value: T
   options: [T, string][]
@@ -18,6 +19,9 @@ export function Segmented<T extends string>({
   className?: string
   /** sm: compact, to sit beside a small dropdown in a narrow column. */
   size?: 'sm' | 'md'
+  /** A word before the buttons, inside the same box ("Show"), saying what they choose (left
+   * out on narrow windows, where the room is the buttons'). */
+  prefix?: string
 }) {
   return (
     <div
@@ -25,6 +29,11 @@ export function Segmented<T extends string>({
       role="group"
       aria-label={label}
     >
+      {prefix && (
+        <span className={`flex items-center pl-2.5 pr-1.5 text-muted max-sm:hidden ${size === 'sm' ? 'text-xs' : 'text-sm'}`} aria-hidden>
+          {prefix}
+        </span>
+      )}
       {options.map(([key, text]) => (
         <button
           key={key}

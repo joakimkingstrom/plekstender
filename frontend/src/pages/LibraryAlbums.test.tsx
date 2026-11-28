@@ -51,7 +51,10 @@ function renderLibrary(at: string) {
 
 it('lists every album with its artist, and filters them by release type', async () => {
   renderLibrary('/library')
-  fireEvent.click(await screen.findByRole('button', { name: 'Albums' }))
+  // The view switch is on row 1 on wide windows, on row 2 on narrow ones (CSS shows one).
+  const albumsButtons = await screen.findAllByRole('button', { name: 'Albums' })
+  expect(albumsButtons).toHaveLength(2)
+  fireEvent.click(albumsButtons[0])
   const grid = await screen.findByRole('list', { name: 'Albums' })
   expect(within(grid).getAllByRole('listitem').map((li) => li.textContent?.split('Rate')[0])).toEqual([
     // (The cover's placeholder letter first: there's no cover.)
