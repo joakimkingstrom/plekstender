@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field, field_validator
@@ -974,7 +975,7 @@ class AcoustIdKeyIn(BaseModel):
 
 class ArtworkJobOut(BaseModel):
     id: int
-    kind: Literal["fanart", "export", "import", "covers"]
+    kind: Literal["fanart", "text", "export", "import", "covers"]
     status: Literal["queued", "running", "succeeded", "failed"]
     progress: dict[str, Any]
     stats: dict[str, Any]
@@ -1005,9 +1006,29 @@ class BestCoversJobIn(BaseModel):
 
 class FanartJobIn(BaseModel):
     rating_keys: list[int] | None = Field(default=None, max_length=10000)
-    status: Literal["none", "custom", "done"] = Field(
+    status: Literal["none", "custom", "done", "all"] = Field(
         default="none", description="Without rating_keys: every artist with this status."
     )
+    q: str | None = Field(
+        default=None, max_length=200, description="Without rating_keys: names containing this."
+    )
+
+
+class TextJobIn(FanartJobIn):
+    """Text logos for many artists: each artist's name, in one font and colour, or in one
+    picked at random (per artist) from several."""
+
+    fonts: list[str] = Field(min_length=1, max_length=40)
+    colours: list[str] = Field(min_length=1, max_length=12)
+    case: Literal["none", "upper", "lower"] = "none"
+
+    @field_validator("colours")
+    @classmethod
+    def _colours(cls, value: list[str]) -> list[str]:
+        for colour in value:
+            if not re.fullmatch(r"#[0-9a-fA-F]{6}", colour):
+                raise ValueError(f"not a colour: {colour!r}")
+        return value
 
 
 class FolderSettingsIn(BaseModel):

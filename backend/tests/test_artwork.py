@@ -536,6 +536,71 @@ async def test_bulk_fanart_job(app: FastAPI, plex: FakePlex, web: respx.MockRout
     assert latest["stats"]["no_mbid"] == 1
 
 
+@pytest.mark.db
+async def test_bulk_text_logos(
+    app: FastAPI,
+    plex: FakePlex,
+    web: respx.MockRouter,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    from plekstender.config import get_settings
+    from plekstender.worker import artwork_job
+
+    monkeypatch.setattr(get_settings(), "data_dir", tmp_path)
+    bundled = ImageFont.load_default(400)
+    monkeypatch.setattr(text.ImageFont, "truetype", lambda *_a, **_k: bundled)
+    families: list[str] = []
+
+    def google_css(request: httpx.Request) -> httpx.Response:
+        family = request.url.params["family"].split(":")[0]
+        families.append(family)
+        slug = family.replace(" ", "").lower()
+        return httpx.Response(
+            200, text=f"@font-face {{ src: url(https://fonts.gstatic.com/s/{slug}/v1/a.ttf); }}"
+        )
+
+    web.get("https://fonts.googleapis.com/css2").mock(side_effect=google_css)
+    web.get(url__regex=r"https://fonts\.gstatic\.com/.*").mock(
+        return_value=httpx.Response(200, content=b"ttf-bytes")
+    )
+    owner, sid = await setup(app, plex)
+    base = f"/api/servers/{sid}/artwork"
+    offered = [f for g in (await owner.get("/api/artwork/fonts")).json() for f in g["fonts"]]
+    one, two = offered[0], offered[1]
+
+    # Not offered here: refused.
+    refused = await owner.post(
+        f"{base}/jobs/text", json={"fonts": ["Not Offered"], "colours": ["#ffffff"]}, headers=CSRF
+    )
+    assert refused.status_code == 400
+
+    # The artists listed: any status, names containing "head".
+    body = {"status": "all", "q": "head", "fonts": [one], "colours": ["#ff0000"], "case": "upper"}
+    started = await owner.post(f"{base}/jobs/text", json=body, headers=CSRF)
+    assert started.status_code == 201, started.text
+    await artwork_job.func(job_id=started.json()["id"])
+    [done] = (await owner.get(f"{base}/jobs")).json()
+    assert done["status"] == "succeeded", done["error"]
+    assert done["progress"] == {"done": 2, "total": 2}
+    assert done["stats"] == {"applied": 2, "failed": 0, "folder_errors": 0}
+    assert sorted(k for k, _ in plex.library.uploaded) == [100, 101]
+    sources = {
+        a["title"]: a["source"] for a in (await owner.get(f"{base}/artists")).json()["items"]
+    }
+    assert sources == {"Portishead": "text", "Radiohead": "text", "Secret Band": None}
+    assert set(families) == {one}
+
+    # Chosen artists, a random pick from two fonts and two colours each.
+    families.clear()
+    mixed = {"rating_keys": [100, 101, 102], "fonts": [one, two], "colours": ["#ffffff", "#000000"]}
+    picked = (await owner.post(f"{base}/jobs/text", json=mixed, headers=CSRF)).json()
+    await artwork_job.func(job_id=picked["id"])
+    latest = (await owner.get(f"{base}/jobs")).json()[0]
+    assert (latest["kind"], latest["stats"]["applied"]) == ("text", 3)
+    assert set(families) <= {one, two}
+
+
 # --- artist folders ---------------------------------------------------------------------------
 
 
