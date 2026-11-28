@@ -82,7 +82,7 @@ describe('Settings', () => {
     expect(within(nav).getByRole('link', { name: 'Unknown files' })).toHaveAttribute('aria-current', 'page')
     // The main page is only marked when it's the one shown (not for every page under it).
     expect(within(nav).getByRole('link', { name: 'Folder and tools' })).not.toHaveAttribute('aria-current')
-    expect(within(nav).getByRole('link', { name: 'Tags in your files' })).toHaveAttribute('href', '/settings/files/scan')
+    expect(within(nav).getByRole('link', { name: 'Folder scan' })).toHaveAttribute('href', '/settings/files/scan')
     expect(within(nav).getByRole('link', { name: 'Tag history' })).toHaveAttribute('href', '/settings/files/history')
     expect(screen.getByRole('heading', { name: /^Music files\s*·\s*Unknown files$/ })).toBeInTheDocument()
   })

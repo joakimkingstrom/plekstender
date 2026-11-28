@@ -177,7 +177,7 @@ export function UnknownFiles({ serverId, canWrite, isAdmin }: { serverId: number
                 <Notice>
                   Allow changing files (
                   <Link to="/settings/files/scan" className="underline">
-                    Settings → Music files → Tags in your files
+                    Settings → Music files → Folder scan
                   </Link>
                   ) to write the matches into the files.
                 </Notice>

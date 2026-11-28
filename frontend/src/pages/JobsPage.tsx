@@ -28,7 +28,7 @@ function more(job: Job): { to: string; label: string } | null {
   if (job.kind === 'edits') return { to: '/settings/files/history', label: 'Tag history' }
   if (job.kind === 'files' && job.subkind === 'lyrics') return { to: '/library/lyrics', label: 'Lyrics' }
   if (job.kind === 'files' && job.subkind === 'identify') return { to: '/settings/files/unknown', label: 'Unknown files' }
-  if (job.kind === 'files' && job.subkind === 'scan') return { to: '/settings/files/scan', label: 'Tags in your files' }
+  if (job.kind === 'files' && job.subkind === 'scan') return { to: '/settings/files/scan', label: 'Folder scan' }
   if (job.kind === 'artwork') return { to: '/library/artwork', label: 'Artwork' }
   if (job.kind === 'sync') return { to: '/settings', label: 'Servers' }
   if (job.kind === 'imports') return { to: '/settings/listening', label: 'Listening history' }

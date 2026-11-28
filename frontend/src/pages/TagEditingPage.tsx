@@ -157,7 +157,7 @@ function TagEditing({ serverId }: { serverId: number }) {
         <Notice tone="warn">
           Writing to the files is off, so you can look but not fix. Turn on tag editing on{' '}
           <Link to="/settings/files/scan" className="underline">
-            Settings → Music files → Tags in your files
+            Settings → Music files → Folder scan
           </Link>
           .
         </Notice>
